@@ -21,20 +21,12 @@ jobs:
           ref: main
           clean: true
 
-      - name: Fix shebang in all scripts (remove trailing backslash)
-        run: |
-          # Corrige toutes les premières lignes qui se terminent par un \ superflu
-          find . -type f -name "*.sh" -exec sed -i '1s/\\$//' {} \;
-
-      - name: Debug shebang
-        run: head -1 host/01-check-host.sh
-
       - name: Install dependencies (including texinfo for makeinfo)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
-            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev ca-certificates
+            xorriso isolinux mtools dosfstools sed tar parted rsync bc cpio libssl-dev libelf-dev ca-certificates
 
       - name: Create lfs user with passwordless sudo
         run: |
