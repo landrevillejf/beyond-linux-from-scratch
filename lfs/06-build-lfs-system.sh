@@ -92,6 +92,9 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
+# LFS temporary tools path (fix #3)
+export PATH=/tools/bin:/bin:/usr/bin
+
 cd /sources
 
 compile_package() {
@@ -173,4 +176,4 @@ run_privileged umount $LFS/proc 2>/dev/null || true
 run_privileged umount $LFS/sys 2>/dev/null || true
 run_privileged umount $LFS/run 2>/dev/null || true
 
-log_success "LFS system build complete (real compilation done)"
+log_success "LFS system build complete"
