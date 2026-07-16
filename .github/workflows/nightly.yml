@@ -3,6 +3,7 @@ name: Nightly Builds
 on:
   schedule:
     - cron: '0 3 * * *'
+  workflow_dispatch:   # <-- permet de lancer manuellement
 
 permissions:
   contents: read
@@ -19,6 +20,11 @@ jobs:
         with:
           ref: main
           clean: true
+
+      - name: Fix shebang in all scripts (remove trailing backslash)
+        run: |
+          # Corrige toutes les premières lignes qui se terminent par un \ superflu
+          find . -type f -name "*.sh" -exec sed -i '1s/\\$//' {} \;
 
       - name: Debug shebang
         run: head -1 host/01-check-host.sh
