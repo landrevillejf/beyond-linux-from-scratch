@@ -16,6 +16,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: true
+
+      - name: Debug shebang
+        run: head -1 host/01-check-host.sh
 
       - name: Install dependencies (including texinfo for makeinfo)
         run: |
