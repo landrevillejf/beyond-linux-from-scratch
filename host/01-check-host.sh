@@ -1,4 +1,4 @@
-#!/usr/bin/env bash\
+#!/usr/bin/env bash
 # 01-check-host.sh
 # Check host system requirements - Compatible with Docker and native
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
