@@ -3,6 +3,7 @@ name: Cross-Compile ARM64
 on:
   schedule:
     - cron: '0 3 * * *'   # 3am daily
+  workflow_dispatch:   # <-- permet de lancer manuellement
 
 permissions:
   contents: read
