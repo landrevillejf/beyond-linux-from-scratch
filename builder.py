@@ -23,6 +23,7 @@ import tarfile
 import tempfile
 import pwd
 import urllib.request
+from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 
 # ============================================================================
@@ -1501,8 +1502,15 @@ class LFSBuilder:
             self.logger.warning("No repository URLs configured, skipping sources update")
             return False
 
-        all_urls = set()
+        urls_by_key: Dict[str, str] = {}
+        override_count = 0
         success_official = False
+
+        def source_key(url: str) -> str:
+            filename = Path(urlparse(url).path).name
+            if filename:
+                return f"file:{filename}"
+            return f"url:{url}"
 
         for repo_url in repo_urls:
             try:
@@ -1512,7 +1520,8 @@ class LFSBuilder:
                     for line in content.splitlines():
                         line = line.strip()
                         if line and not line.startswith('#'):
-                            all_urls.add(line)
+                            key = source_key(line)
+                            urls_by_key.setdefault(key, line)
                     success_official = True
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {repo_url}: {e}")
@@ -1524,10 +1533,14 @@ class LFSBuilder:
                 for line in cf:
                     line = line.strip()
                     if line and not line.startswith('#'):
-                        all_urls.add(line)
+                        key = source_key(line)
+                        previous = urls_by_key.get(key)
+                        if previous and previous != line:
+                            override_count += 1
+                        urls_by_key[key] = line
 
         # Si aucune URL n'a été trouvée, on retourne False
-        if not all_urls:
+        if not urls_by_key:
             self.logger.error("No URLs found from official or custom sources")
             return False
 
@@ -1536,10 +1549,12 @@ class LFSBuilder:
             f.write("# LFS Sources - Automatically generated from official wget-lists\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
             f.write("# DO NOT EDIT MANUALLY – changes will be overwritten\n\n")
-            for url in sorted(all_urls):
+            for url in sorted(urls_by_key.values()):
                 f.write(f"{url}\n")
 
-        self.logger.info(f"Updated sources.list with {len(all_urls)} URLs (official + custom)")
+        if override_count:
+            self.logger.info(f"Applied {override_count} custom source override(s)")
+        self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom)")
         return True
 
     def build(self, resume_from: Optional[str] = None, use_cache: bool = False, cache_only: bool = False) -> bool:
