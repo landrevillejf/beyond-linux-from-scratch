@@ -72,7 +72,6 @@ install_packages() {
 }
 
 ensure_compiler() {
-    # If gcc is already available, nothing to do
     if command -v gcc &>/dev/null; then
         log_info "GCC is already installed: $(gcc --version | head -1)"
         return 0
@@ -136,21 +135,22 @@ check_toolchain() {
     return 1
 }
 
-# Create minimal toolchain for Docker (fallback)
+# Create minimal toolchain (with base tools for chroot)
 create_minimal_toolchain() {
-    log_info "Creating minimal toolchain for Docker"
+    log_info "Creating minimal toolchain with base tools for chroot"
 
     mkdir -pv "$LFS/tools/bin"
 
+    # 1. Compiler and binutils from host
     if command -v gcc &> /dev/null; then
         log_info "Using system GCC: $(gcc --version | head -n1)"
         for tool in gcc g++ ld ar ranlib nm strip; do
             if command -v $tool &> /dev/null; then
-                ln -sfv $(which $tool) "$LFS/tools/bin/$tool"
+                ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
             fi
         done
     else
-        # This should rarely happen after ensure_compiler, but fallback
+        # Fallback wrapper for GCC
         cat > "$LFS/tools/bin/gcc" << 'WRAPPER'
 #!/usr/bin/env bash
 echo "WARNING: Using minimal GCC wrapper"
@@ -181,7 +181,23 @@ WRAPPER
         chmod +x "$LFS/tools/bin/ld"
     fi
 
-    log_success "Minimal toolchain created at $LFS/tools"
+    # 2. Add essential base tools (sed, tar, make, etc.) as symlinks to host
+    log_info "Linking essential build tools from host"
+    for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown; do
+        if command -v $tool &>/dev/null; then
+            ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
+        else
+            log_warning "Host tool '$tool' not found, may cause chroot issues"
+        fi
+    done
+
+    # 3. Ensure ld-linux is available (real copy, not symlink)
+    if [ ! -f "$LFS/lib64/ld-linux-x86-64.so.2" ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
+        mkdir -pv "$LFS/lib64"
+        cp -L /lib64/ld-linux-x86-64.so.2 "$LFS/lib64/"
+    fi
+
+    log_success "Minimal toolchain (with base tools) created at $LFS/tools"
     return 0
 }
 
