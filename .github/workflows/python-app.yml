@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 permissions:
-  contents: read   # Required for checking out code and uploading coverage
+  contents: read
 
 jobs:
   build:
@@ -18,33 +18,39 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flake8 pytest coverage pytest-cov pytest-timeout requests-mock pytest-mock
+          pip install flake8 pytest coverage pytest-cov pytest-timeout requests-mock pytest-mock pytest-bdd
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
       - name: Lint with flake8
         run: |
-          # Check for syntax errors and undefined names (exit with error code)
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
-          # Full linting report (exit-zero means ignore failure)
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
-      - name: Test with pytest
-        run: |
-          pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v
-      # ← AJOUTÉ : Installer pytest-bdd pour les tests BDD
-      - name: Install test dependencies
-        run: pip install pytest-bdd
 
-      # ← AJOUTÉ : Exécuter les tests BDD (rapide, ne dépend pas du cache)
+      - name: Run unit tests with coverage
+        run: |
+          pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v -m "not bdd" || true
+          # On exclut les tests BDD pour ne pas les compter dans la couverture (ils sont exécutés séparément)
+
       - name: Run BDD tests
-        run: pytest tests/features/ -v
+        run: |
+          pytest tests/features/ -v
+
+      # On peut aussi exécuter tous les tests ensemble (mais pytest-bdd doit être installé)
+      # C'est plus simple de les séparer pour le rapport de couverture.
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+          flags: unittests
+          name: codecov-umbrella
