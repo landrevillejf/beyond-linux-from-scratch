@@ -172,6 +172,17 @@ class LFSConfig:
                 "extras": ["firefox", "libreoffice", "gimp", "vlc", "thunar", "xfce4-terminal"]
             },
 
+            "branding": {
+                "preset": "default",
+                "dir": "",
+                "theme_variant": "dark",
+                "gtk_theme": "",
+                "icon_theme": "",
+                "wallpaper": "lfs-wallpaper.png",
+                "apply_desktops": "auto",
+                "strict": False
+            },
+
             "security": {
                 "kernel_hardening": True,
                 "firewall": {"enabled": True, "backend": "nftables", "allow_ssh": True, "allow_http": False},

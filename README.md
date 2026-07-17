@@ -280,6 +280,36 @@ These values are preserved inside built systems in:
 /etc/lfs-builder-params.env
 ```
 
+### Branding configuration
+
+Branding is now fully configurable from `config/build.conf`:
+
+```json
+"branding": {
+  "preset": "default",
+  "dir": "",
+  "theme_variant": "dark",
+  "gtk_theme": "",
+  "icon_theme": "",
+  "wallpaper": "lfs-wallpaper.png",
+  "apply_desktops": "auto",
+  "strict": false
+}
+```
+
+Behavior:
+
+1. `preset` selects `branding/<preset>/`.
+2. `dir` can override with an absolute or repository-relative path.
+3. `theme_variant`, `gtk_theme`, and `icon_theme` control theme identity.
+4. `apply_desktops` accepts `auto`, `all`, or a comma list (`xfce,gnome,kde,lxqt,phosh`).
+5. `strict` turns missing assets into hard errors.
+
+Branding stage outputs:
+
+- `/etc/lfs-builder-params.env`
+- `/etc/lfs-branding-manifest.txt` (installed assets + checksums)
+
 ## Artifacts and outputs
 
 Default output tree (`--output`):
