@@ -1360,14 +1360,35 @@ class LFSBuilder:
         # Update sources.list from official repositories
         self._update_sources_list()
 
-        sources_list = Path('packages/sources.list')
-        checksum_file = Path('packages/md5sums')
+        sources_candidates = [
+            Path('packages/sources.list'),
+            self.output_dir / 'packages' / 'sources.list'
+        ]
+        sources_list = next((p for p in sources_candidates if p.exists()), sources_candidates[0])
+
+        checksum_candidates = [
+            Path('packages/md5sums'),
+            self.output_dir / 'packages' / 'md5sums'
+        ]
+        checksum_file = next((p for p in checksum_candidates if p.exists()), checksum_candidates[0])
 
         if not sources_list.exists():
-            self.logger.error(f"Sources list not found: {sources_list}")
-            return False
+            if not self.config.get('repositories', []):
+                sources_list = self.output_dir / 'packages' / 'sources.list'
+                sources_list.parent.mkdir(parents=True, exist_ok=True)
+                sources_list.write_text("# No repository configured; generated empty sources list\n")
+                self.logger.warning(
+                    f"Sources list not found and no repositories configured; created empty list: {sources_list}"
+                )
+            else:
+                self.logger.error(f"Sources list not found: {sources_list}")
+                return False
 
         success = self.downloader.download_from_list(sources_list, parallel=4)
+
+        if not success and not sources_list.exists():
+            self.logger.error(f"Sources list not found: {sources_list}")
+            return False
 
         if not success:
             self.logger.warning("Some downloads failed, continuing with available sources")
