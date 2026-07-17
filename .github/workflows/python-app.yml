@@ -32,13 +32,12 @@ jobs:
 
       - name: Lint with flake8
         run: |
-          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics || true
-          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics || true
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
 
       - name: Run unit tests with coverage
         run: |
-          pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v -m "not bdd" || true
-          # On exclut les tests BDD pour ne pas les compter dans la couverture (ils sont exécutés séparément)
+          pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v
 
       - name: Run BDD tests
         run: |

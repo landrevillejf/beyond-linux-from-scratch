@@ -10,11 +10,13 @@ permissions:
 
 jobs:
   build-profiles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
     strategy:
       fail-fast: false
       matrix:
-        profile: [minimal, xfce, server, secure]
-    runs-on: ubuntu-latest
+        profile: [minimal, xfce]
+        init: [sysvinit, systemd]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,7 +28,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
-            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev ca-certificates
+            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            squashfs-tools ca-certificates
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
 
       - name: Create lfs user with passwordless sudo
         run: |
@@ -37,45 +45,58 @@ jobs:
 
       - name: Prepare build directory
         run: |
-          sudo mkdir -p /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build /tmp/lfs-output
           sudo cp -a $GITHUB_WORKSPACE/. /tmp/lfs-build/
-          sudo chown -R lfs:lfs /tmp/lfs-build
+          sudo chown -R lfs:lfs /tmp/lfs-build /tmp/lfs-output
 
-      - name: Ensure essential tools in LFS tools
+      - name: Generate sources list
         run: |
-          TOOLS_BIN="/tmp/lfs-build/build-${{ matrix.profile }}/image/tools/bin"
-          sudo mkdir -p "$TOOLS_BIN"
-          for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld; do
-            if command -v $tool &>/dev/null; then
-              sudo ln -sfv "$(which $tool)" "$TOOLS_BIN/$tool"
-            fi
-          done
+          cd /tmp/lfs-build
+          python3 builder.py --generate-sources-list
 
-      - name: Build ${{ matrix.profile }} (as lfs user)
+      - name: Cache LFS sources
+        uses: actions/cache@v4
+        with:
+          path: /tmp/lfs-output/sources
+          key: nightly-sources-${{ matrix.profile }}-${{ matrix.init }}-${{ hashFiles('packages/sources.list') }}
+          restore-keys: |
+            nightly-sources-${{ matrix.profile }}-${{ matrix.init }}-
+            nightly-sources-
+
+      - name: Run tests
+        run: |
+          cd /tmp/lfs-build
+          python3 -m pytest tests/ -q
+
+      - name: Build ${{ matrix.profile }} / ${{ matrix.init }} (as lfs user)
         run: |
           cd /tmp/lfs-build
           sudo -u lfs python3 builder.py \
             --profile ${{ matrix.profile }} \
-            --output ./build-${{ matrix.profile }}
+            --init ${{ matrix.init }} \
+            --output /tmp/lfs-output
 
       - name: Verify kernel presence
         run: |
-          if ! ls /tmp/lfs-build/build-${{ matrix.profile }}/boot/vmlinuz* >/dev/null 2>&1; then
+          if ! ls /tmp/lfs-output/image/boot/vmlinuz* >/dev/null 2>&1; then
             echo "Kernel not found in /boot – build failed!"
-            ls -la /tmp/lfs-build/build-${{ matrix.profile }}/boot || true
+            ls -la /tmp/lfs-output/image/boot || true
             exit 1
           fi
-          echo "Kernel found: $(ls /tmp/lfs-build/build-${{ matrix.profile }}/boot/vmlinuz*)"
+          echo "Kernel found: $(ls /tmp/lfs-output/image/boot/vmlinuz*)"
 
       - name: Upload ISO
         uses: actions/upload-artifact@v4
         with:
-          name: lfs-${{ matrix.profile }}-nightly.iso
-          path: /tmp/lfs-build/build-${{ matrix.profile }}/lfs-installer.iso
+          name: lfs-${{ matrix.profile }}-${{ matrix.init }}-nightly
+          path: |
+            /tmp/lfs-output/lfs-installer.iso
+            /tmp/lfs-output/image/boot/vmlinuz*
+            /tmp/lfs-output/build_info.json
 
       - name: Upload logs on failure or cancellation
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.profile }}
-          path: /tmp/lfs-build/build-${{ matrix.profile }}/logs/
+          name: logs-${{ matrix.profile }}-${{ matrix.init }}
+          path: /tmp/lfs-output/logs/

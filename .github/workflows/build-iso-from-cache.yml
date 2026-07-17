@@ -2,6 +2,16 @@ name: Build ISO from Cache
 
 on:
   workflow_dispatch:
+    inputs:
+      cache_url:
+        description: "Optional direct URL to rootfs cache archive (.tar.zst or .tar.xz)"
+        required: false
+        type: string
+      create_release:
+        description: "Create a GitHub release with ISO + kernel"
+        required: true
+        default: true
+        type: boolean
   schedule:
     - cron: '0 6 * * 1'
 
@@ -11,11 +21,7 @@ permissions:
 jobs:
   build-iso:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        profile: [xfce]
-        init: [sysvinit]
-        arch: [x86_64]
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v4
 
@@ -25,32 +31,45 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
-            squashfs-tools jq cpio ca-certificates sed
-          sudo apt-get install -y busybox-static || true
+            squashfs-tools jq zstd ca-certificates sed
 
       - name: Create lfs user (if needed)
         run: |
           if ! id "lfs" &>/dev/null; then
             sudo useradd -m -s /bin/bash lfs
           fi
+          sudo -u lfs touch /home/lfs/.bashrc
 
-      - name: Get latest release cache URL
+      - name: Resolve cache URL
         id: get_cache
         run: |
-          RELEASE_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest"
-          ASSET_URL=$(curl -s "$RELEASE_URL" | jq -r '.assets[] | select(.name=="rootfs.tar.xz") | .browser_download_url')
+          if [ -n "${{ github.event.inputs.cache_url }}" ]; then
+            echo "cache_url=${{ github.event.inputs.cache_url }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases"
+          ASSET_URL=$(curl -fsSL "$RELEASES_URL" | jq -r '
+            .[]?.assets[]? |
+            select(.name | test("^rootfs-cache-.*\\.(tar\\.zst|tar\\.xz)$")) |
+            .browser_download_url
+          ' | head -n1)
           if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "No rootfs.tar.xz found"
+            echo "No rootfs cache archive found in releases"
             exit 1
           fi
-          echo "cache_url=$ASSET_URL" >> $GITHUB_OUTPUT
+          echo "cache_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
 
       - name: Download and extract cache
         run: |
           sudo mkdir -p /tmp/lfs-build/image
           cd /tmp/lfs-build
-          sudo wget -q --show-progress "${{ steps.get_cache.outputs.cache_url }}" -O rootfs.tar.xz
-          sudo tar -xJf rootfs.tar.xz -C image/
+          sudo wget -q --show-progress "${{ steps.get_cache.outputs.cache_url }}" -O rootfs-cache.tar
+          if file rootfs-cache.tar | grep -qi zstd; then
+            sudo tar --zstd -xf rootfs-cache.tar -C image/
+          else
+            sudo tar -xf rootfs-cache.tar -C image/
+          fi
           sudo chown -R lfs:lfs image/ || true
           ls -lh image/
           
@@ -69,13 +88,13 @@ jobs:
           sudo mkdir -p /tmp/lfs-builder
           sudo cp -a . /tmp/lfs-builder/
           sudo chmod +x /tmp/lfs-builder/final/*.sh
+          sudo chown -R lfs:lfs /tmp/lfs-builder
 
-      - name: Run final stages (as root)
+      - name: Run final stages for ISO generation
         id: build_iso
         run: |
           LFS_PATH="/tmp/lfs-build/image"
           cd /tmp/lfs-builder
-          set -x
           sudo LFS="$LFS_PATH" ./final/12-create-initramfs.sh
           sudo LFS="$LFS_PATH" ./final/13-create-bootloader.sh
           sudo LFS="$LFS_PATH" ./final/14-create-installer.sh
@@ -84,19 +103,39 @@ jobs:
       - name: Generate dynamic release tag and name
         id: release_info
         run: |
-          # Extract builder version from source code
           BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
-          TAG="v${BUILDER_VERSION}-iso-${{ matrix.profile }}-${{ matrix.init }}-$(date +%Y%m%d-%H%M%S)"
+          TAG="v${BUILDER_VERSION}-iso-from-cache-$(date +%Y%m%d-%H%M%S)"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "name=LFS ${{ matrix.profile }} ${{ matrix.init }} ISO v${BUILDER_VERSION} $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          echo "name=LFS ISO from cache v${BUILDER_VERSION} $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+      - name: Verify kernel and ISO
+        run: |
+          ls /tmp/lfs-build/image/boot/vmlinuz*
+          test -s /tmp/lfs-build/lfs-installer.iso
+          sha256sum /tmp/lfs-build/lfs-installer.iso > /tmp/lfs-build/SHA256SUMS
+          sha256sum /tmp/lfs-build/image/boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iso-from-cache
+          path: |
+            /tmp/lfs-build/lfs-installer.iso
+            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/SHA256SUMS
+          if-no-files-found: error
 
       - name: Upload ISO to release
-        if: success() && steps.build_iso.outcome == 'success'
+        if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
-          files: /tmp/lfs-build/lfs-installer.iso
+          files: |
+            /tmp/lfs-build/lfs-installer.iso
+            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/SHA256SUMS
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

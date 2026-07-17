@@ -4,9 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  schedule:
-    - cron: '0 0 * * 0'
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub release"
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,13 +19,9 @@ permissions:
   contents: write
 
 jobs:
-  build-cache:
+  build-live-iso:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        profile: [xfce]
-        init: [sysvinit]
-        arch: [x86_64]
+    timeout-minutes: 480
     steps:
       - uses: actions/checkout@v4
 
@@ -38,150 +37,99 @@ jobs:
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
             squashfs-tools ca-certificates
-          command -v makeinfo || { echo "makeinfo not found"; exit 1; }
 
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip install pytest pytest-cov requests-mock pytest-mock
+          pip install -r tests/requirements-test.txt
 
-      - name: Show disk space
-        run: df -h
-
-      - name: Update sources.list with official LFS/BLFS URLs
+      - name: Create lfs user and build directory
         run: |
-          wget -q https://www.linuxfromscratch.org/lfs/view/stable/wget-list -O /tmp/lfs.list
-          wget -q https://www.linuxfromscratch.org/blfs/view/stable-systemd/wget-list -O /tmp/blfs.list
-          cat /tmp/lfs.list /tmp/blfs.list | sort -u > packages/sources.list
-          cat >> packages/sources.list << 'EOF'
-          # Privacy tools
-          https://dist.torproject.org/tor-0.4.9.7.tar.gz
-          https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-1.0.20210914.tar.xz
-          https://github.com/DNSCrypt/dnscrypt-proxy/archive/refs/tags/2.1.16.tar.gz
-          https://github.com/i2p/i2p.i2p/archive/refs/tags/i2p-2.12.0.tar.gz
-          https://0xacab.org/jvoisin/mat2/-/archive/0.13.4/mat2-0.13.4.tar.gz
-          EOF
-          echo "✅ sources.list mis à jour avec $(wc -l < packages/sources.list) URLs"
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs touch /home/lfs/.bashrc
+          sudo mkdir -p /tmp/lfs-build
+          sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Create output directory
-        run: sudo mkdir -p /tmp/lfs-build
+      - name: Generate sources list
+        run: python3 builder.py --generate-sources-list
 
       - name: Cache LFS sources
         uses: actions/cache@v4
         with:
           path: /tmp/lfs-build/sources
-          key: lfs-sources-${{ matrix.profile }}-${{ hashFiles('packages/sources.list') }}
-          restore-keys: lfs-sources-
+          key: lfs-sources-xfce-live-${{ hashFiles('packages/sources.list') }}
+          restore-keys: |
+            lfs-sources-xfce-live-
+            lfs-sources-
 
-      - name: Run Python tests
-        run: |
-          python3 -m pytest tests/ --cov=builder --cov-report=xml -v --tb=short 2>&1 | tee test_output.log
+      - name: Run tests
+        run: python3 -m pytest tests/ -q
 
-      - name: Check compilation
+      - name: Build live ISO with builder
         run: |
-          python3 -m py_compile builder.py
-          echo "builder.py compiled successfully"
-
-      - name: Patch host-check.sh
-        run: |
-          sed -i '/texinfo/d' host/01-check-host.sh
-          sed -i '/makeinfo/d' host/01-check-host.sh
-
-      - name: Patch toolchain to switch to lfs
-        run: |
-          sed -i '1a if [ "$(whoami)" = "root" ] && id "lfs" &>/dev/null; then\n    echo "Switching to lfs user..."\n    exec sudo -E -u lfs "$0" "$@"\nfi' host/04-build-toolchain.sh
-
-      - name: Prepare host system (as root)
-        run: |
-          sudo -E host/02-prepare-host.sh
-        env:
-          LFS: /tmp/lfs-build/image
-
-      - name: Copy repository to /tmp/lfs-builder
-        run: |
-          sudo mkdir -p /tmp/lfs-builder
-          sudo cp -a . /tmp/lfs-builder/
-          sudo chown -R lfs:lfs /tmp/lfs-builder
-          sudo chmod -R a+rX /tmp/lfs-builder
-
-      - name: Reassign ownership of output directory to lfs
-        run: |
-          sudo chown -R lfs:lfs /tmp/lfs-build
-
-      - name: Build profile (as lfs user) – WITH LIVE ISO
-        id: build
-        # No continue-on-error – we want the job to fail if the build fails
-        run: |
-          cd /tmp/lfs-builder
           sudo -u lfs python3 builder.py \
-            --profile ${{ matrix.profile }} \
-            --init ${{ matrix.init }} \
+            --profile xfce \
+            --init sysvinit \
             --output /tmp/lfs-build
 
-      - name: Verify ISO creation
-        id: check_iso
-        if: success()
+      - name: Verify kernel and ISO
         run: |
-          ISO_PATH="/tmp/lfs-build/lfs-installer.iso"
-          if [ -f "$ISO_PATH" ]; then
-            ISO_SIZE=$(stat -c%s "$ISO_PATH" 2>/dev/null || stat -f%z "$ISO_PATH" 2>/dev/null)
-            if [ "$ISO_SIZE" -gt 1048576 ]; then   # > 1 MB
-              echo "✅ Valid ISO found: $(ls -lh $ISO_PATH)"
-              echo "iso_exists=true" >> $GITHUB_OUTPUT
-            else
-              echo "❌ ISO file is too small (${ISO_SIZE} bytes), build may have failed."
-              echo "iso_exists=false" >> $GITHUB_OUTPUT
-              exit 1
-            fi
+          ls -l /tmp/lfs-build/image/boot
+          ls /tmp/lfs-build/image/boot/vmlinuz*
+          test -s /tmp/lfs-build/lfs-installer.iso
+          ls -lh /tmp/lfs-build/lfs-installer.iso
+
+      - name: Compute checksums
+        run: |
+          sha256sum /tmp/lfs-build/lfs-installer.iso > /tmp/lfs-build/SHA256SUMS
+          sha256sum /tmp/lfs-build/image/boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
+          cat /tmp/lfs-build/SHA256SUMS
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: xfce-sysvinit-live-iso
+          path: |
+            /tmp/lfs-build/lfs-installer.iso
+            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/SHA256SUMS
+
+      - name: Create release tag metadata
+        id: release_info
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        run: |
+          VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          if [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
           else
-            echo "❌ ISO not found"
-            echo "iso_exists=false" >> $GITHUB_OUTPUT
-            exit 1
+            TAG="v${VERSION}-xfce-live-$(date +%Y%m%d-%H%M%S)"
           fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-      - name: Compress rootfs (exclude virtual filesystems)
-        id: compress
-        if: success()   # only if build and ISO check succeeded
-        run: |
-          set -e
-          cd /tmp/lfs-build/image
-          sudo tar -cJf /tmp/rootfs.tar.xz \
-            --exclude='proc' \
-            --exclude='sys' \
-            --exclude='dev' \
-            --exclude='run' \
-            --exclude='sources' \
-            .
-          sudo chown $USER:$USER /tmp/rootfs.tar.xz
-          ls -lh /tmp/rootfs.tar.xz
-
-      - name: Create Release and Upload Artifacts
-        if: success() && steps.check_iso.outputs.iso_exists == 'true'
+      - name: Create release with ISO and kernel
+        if: steps.release_info.outputs.tag != ''
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "LFS Builder ${{ github.ref_name }}"
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: XFCE SYSVINIT Live ISO ${{ steps.release_info.outputs.tag }}
           body: |
-            Live ISO et cache rootfs pour LFS/BLFS 13.0
-            Profil : ${{ matrix.profile }}
-            Init   : ${{ matrix.init }}
-            Arch   : ${{ matrix.arch }}
+            LFS/BLFS build artifact generated by builder.py
+            - Profile: xfce
+            - Init: sysvinit
+            - Includes: live ISO + compiled kernel + SHA256SUMS
           files: |
-            /tmp/rootfs.tar.xz
             /tmp/lfs-build/lfs-installer.iso
-          generate_release_notes: false
+            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/SHA256SUMS
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Show build logs on failure
+      - name: Upload logs on failure
         if: failure()
-        run: |
-          echo "=== Test output ==="
-          tail -n 50 test_output.log 2>/dev/null || echo "test_output.log not found"
-          echo "=== Global build.log (last 100 lines) ==="
-          tail -n 100 /tmp/lfs-build/logs/build.log 2>/dev/null || echo "build.log not found"
-          echo "=== Stage logs (last 20 lines each) ==="
-          for log in /tmp/lfs-build/logs/*.log; do
-            echo "--- $log ---"
-            tail -n 20 "$log" 2>/dev/null || echo "Cannot read $log"
-          done
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-xfce-live-iso
+          path: /tmp/lfs-build/logs/

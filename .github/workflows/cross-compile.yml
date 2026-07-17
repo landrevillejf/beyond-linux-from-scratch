@@ -11,6 +11,7 @@ permissions:
 jobs:
   cross:
     runs-on: ubuntu-latest
+    timeout-minutes: 480
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +41,11 @@ jobs:
           sudo cp -a $GITHUB_WORKSPACE/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
       - name: Build ARM64 (minimal)
         run: |
           cd /tmp/lfs-build
@@ -47,11 +53,26 @@ jobs:
 
       - name: Verify output image
         run: |
-          if [ -f /tmp/lfs-build/build-arm64/lfs-arm64.img ]; then
+          if [ -f /tmp/lfs-build/build-arm64/lfs-installer.img ]; then
+            echo "Found lfs-installer.img"
+          elif [ -f /tmp/lfs-build/build-arm64/lfs-arm64.img ]; then
             echo "Found lfs-arm64.img"
           elif [ -f /tmp/lfs-build/build-arm64/lfs-installer.iso ]; then
-            echo "Found lfs-installer.iso"
+            echo "Found lfs-installer.iso (fallback)"
           else
             echo "No image file found"
             exit 1
           fi
+          ls /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+
+      - name: Upload ARM64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-cross-build
+          path: |
+            /tmp/lfs-build/build-arm64/lfs-installer.img
+            /tmp/lfs-build/build-arm64/lfs-arm64.img
+            /tmp/lfs-build/build-arm64/lfs-installer.iso
+            /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+            /tmp/lfs-build/build-arm64/build_info.json
+          if-no-files-found: warn

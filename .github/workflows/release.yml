@@ -9,24 +9,56 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    timeout-minutes: 480
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
       - name: Install dependencies
         run: |
-          sudo apt update
-          sudo apt install -y build-essential bison flex gawk texinfo wget curl git python3 python3-pip xorriso isolinux mtools dosfstools parted rsync bc cpio kmod libssl-dev libelf-dev
-      - name: Build default profile (xfce)
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
+            libssl-dev libelf-dev squashfs-tools ca-certificates
+
+      - name: Install Python dependencies
         run: |
-          python3 builder.py --profile xfce --output ./build-release
-      - name: Build minimal profile
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Create lfs user
         run: |
-          python3 builder.py --profile minimal --output ./build-minimal
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs touch /home/lfs/.bashrc
+
+      - name: Run tests
+        run: python3 -m pytest tests/ -q
+
+      - name: Build release profile (xfce + sysvinit live)
+        run: |
+          sudo -u lfs python3 builder.py --profile xfce --init sysvinit --output ./build-release
+
+      - name: Verify kernel and ISO
+        run: |
+          ls ./build-release/image/boot/vmlinuz*
+          test -s ./build-release/lfs-installer.iso
+          sha256sum ./build-release/lfs-installer.iso > ./build-release/SHA256SUMS
+          sha256sum ./build-release/image/boot/vmlinuz* >> ./build-release/SHA256SUMS
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ./build-release/lfs-installer.iso
-            ./build-minimal/lfs-installer.iso
+            ./build-release/image/boot/vmlinuz*
+            ./build-release/SHA256SUMS
           generate_release_notes: true

@@ -10,16 +10,12 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-cache:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        profile: [xfce]
-        init: [systemd]
-        arch: [x86_64]
+    timeout-minutes: 480
     steps:
       - uses: actions/checkout@v4
 
@@ -33,136 +29,69 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
-            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev ca-certificates
-          command -v makeinfo || { echo "makeinfo not found"; exit 1; }
+            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            zstd ca-certificates
 
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip install pytest pytest-cov requests-mock pytest-mock
+          pip install -r tests/requirements-test.txt
 
-      - name: Show disk space
-        run: df -h
-
-      - name: Update sources.list with official LFS/BLFS URLs
+      - name: Create lfs user and output directory
         run: |
-          # Télécharge les listes officielles à jour
-          wget -q https://www.linuxfromscratch.org/lfs/view/stable/wget-list -O /tmp/lfs.list
-          wget -q https://www.linuxfromscratch.org/blfs/view/stable-systemd/wget-list -O /tmp/blfs.list
-          
-          # Fusionne, supprime les doublons
-          cat /tmp/lfs.list /tmp/blfs.list | sort -u > packages/sources.list
-          
-          # Ajoute les outils de confidentialité à la fin
-          cat >> packages/sources.list << 'EOF'
-          # Privacy tools
-          https://dist.torproject.org/tor-0.4.9.7.tar.gz
-          https://git.zx2c4.com/wireguard-tools/snapshot/wireguard-tools-1.0.20210914.tar.xz
-          https://github.com/DNSCrypt/dnscrypt-proxy/archive/refs/tags/2.1.16.tar.gz
-          https://github.com/i2p/i2p.i2p/archive/refs/tags/i2p-2.12.0.tar.gz
-          https://0xacab.org/jvoisin/mat2/-/archive/0.13.4/mat2-0.13.4.tar.gz
-          EOF
-          
-          echo "✅ sources.list mis à jour avec $(wc -l < packages/sources.list) URLs"
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs touch /home/lfs/.bashrc
+          sudo mkdir -p /tmp/lfs-build
+          sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Create output directory
-        run: sudo mkdir -p /tmp/lfs-build
+      - name: Generate sources list
+        run: python3 builder.py --generate-sources-list
 
       - name: Cache LFS sources
         uses: actions/cache@v4
         with:
           path: /tmp/lfs-build/sources
-          key: lfs-sources-${{ matrix.profile }}-${{ hashFiles('packages/sources.list') }}
-          restore-keys: lfs-sources-
+          key: lfs-sources-xfce-systemd-x86_64-${{ hashFiles('packages/sources.list') }}
+          restore-keys: |
+            lfs-sources-xfce-systemd-x86_64-
+            lfs-sources-
 
-      - name: Run Python tests
-        run: |
-          python3 -m pytest tests/ --cov=builder --cov-report=xml -v --tb=short 2>&1 | tee test_output.log
+      - name: Run tests
+        run: python3 -m pytest tests/ -q
 
-      - name: Check compilation
+      - name: Build cache rootfs (no live ISO)
         run: |
-          python3 -m py_compile builder.py
-          echo "✅ builder.py compiled successfully"
-
-      - name: Patch host-check.sh
-        run: |
-          sed -i '/texinfo/d' host/01-check-host.sh
-          sed -i '/makeinfo/d' host/01-check-host.sh
-
-      - name: Patch toolchain to switch to lfs
-        run: |
-          sed -i '1a if [ "$(whoami)" = "root" ] && id "lfs" &>/dev/null; then\n    echo "Switching to lfs user..."\n    exec sudo -E -u lfs "$0" "$@"\nfi' host/04-build-toolchain.sh
-
-      - name: Prepare host system (as root)
-        run: |
-          sudo -E host/02-prepare-host.sh
-        env:
-          LFS: /tmp/lfs-build/image
-
-      - name: Copy repository to /tmp/lfs-builder
-        run: |
-          sudo mkdir -p /tmp/lfs-builder
-          sudo cp -a . /tmp/lfs-builder/
-          sudo chown -R lfs:lfs /tmp/lfs-builder
-          sudo chmod -R a+rX /tmp/lfs-builder
-
-      - name: Reassign ownership of output directory to lfs
-        run: |
-          sudo chown -R lfs:lfs /tmp/lfs-build
-
-      - name: Build profile (as lfs user)
-        id: build
-        continue-on-error: true
-        run: |
-          cd /tmp/lfs-builder
           sudo -u lfs python3 builder.py \
-            --profile ${{ matrix.profile }} \
-            --init ${{ matrix.init }} \
+            --profile xfce \
+            --init systemd \
             --no-live \
             --output /tmp/lfs-build
 
-      - name: Compress rootfs (exclude virtual filesystems)
-        id: compress
-        if: success() || failure()
-        continue-on-error: true
+      - name: Verify kernel in cache
         run: |
-          set -e
+          ls -l /tmp/lfs-build/image/boot
+          ls /tmp/lfs-build/image/boot/vmlinuz*
+
+      - name: Create cache archive
+        run: |
           cd /tmp/lfs-build/image
-          sudo tar -cJf /tmp/rootfs.tar.xz \
-            --exclude='proc' \
-            --exclude='sys' \
-            --exclude='dev' \
-            --exclude='run' \
-            --exclude='sources' \
-            .
-          sudo chown $USER:$USER /tmp/rootfs.tar.xz
-          ls -lh /tmp/rootfs.tar.xz
+          sudo tar --zstd -cf /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst \
+            --exclude='proc' --exclude='sys' --exclude='dev' --exclude='run' --exclude='sources' .
+          sudo chown "$USER:$USER" /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst
+          ls -lh /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst
 
-      - name: Create Release and Upload Rootfs
-        if: success() && steps.compress.outcome == 'success'
-        uses: softprops/action-gh-release@v2
+      - name: Upload cache artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: v4.3.0-cache
-          name: Way Beyond LFS Xfce Systemd Cache v4.3.0
-          body: |
-            Cache pour LFS/BLFS 13.0
-            Profil : ${{ matrix.profile }}
-            Init   : ${{ matrix.init }}
-            Arch   : ${{ matrix.arch }}
-          files: /tmp/rootfs.tar.xz
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: rootfs-cache-xfce-systemd-x86_64
+          path: /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst
+          if-no-files-found: error
 
-      - name: Show build logs on failure
+      - name: Upload logs on failure
         if: failure()
-        run: |
-          echo "=== Test output ==="
-          tail -n 50 test_output.log 2>/dev/null || echo "test_output.log not found"
-          echo "=== Global build.log (last 100 lines) ==="
-          tail -n 100 /tmp/lfs-build/logs/build.log 2>/dev/null || echo "build.log not found"
-          echo "=== Stage logs (last 20 lines each) ==="
-          for log in /tmp/lfs-build/logs/*.log; do
-            echo "--- $log ---"
-            tail -n 20 "$log" 2>/dev/null || echo "Cannot read $log"
-          done
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-xfce-systemd-x86_64
+          path: /tmp/lfs-build/logs/
