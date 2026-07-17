@@ -996,6 +996,10 @@ class LFSBuilder:
 
         # Initialize components
         self.downloader = SourceDownloader(self.output_dir / 'sources', self.logger)
+        self.refresh_executor()
+
+    def refresh_executor(self):
+        """Rebuild script executor with up-to-date environment variables."""
         self.executor = ScriptExecutor(self._get_env(), self.output_dir, self.logger)
 
     def _apply_profile_settings(self):
@@ -1156,6 +1160,10 @@ class LFSBuilder:
 
     def detect_host_distro(self) -> str:
         """Returns 'debian', 'fedora', 'arch', or 'unknown'."""
+        override = self.config.get('host.distro_override', 'auto')
+        if override in ('debian', 'fedora', 'arch'):
+            return override
+
         os_release = Path('/etc/os-release')
         if os_release.exists():
             content = os_release.read_text().lower()
@@ -1439,7 +1447,9 @@ class LFSBuilder:
         stages.append(('installer', 'final/14-create-installer.sh'))
 
         # Live system
-        if self.profile_config.get('live_system', True):
+        live_from_profile = self.profile_config.get('live_system', True)
+        live_from_config = self.config.get('live_system.enabled', live_from_profile)
+        if live_from_profile and live_from_config:
             stages.append(('live-system', 'final/15-create-live-system.sh'))
 
         return stages
@@ -1774,26 +1784,33 @@ def main():
         cache_url=args.cache_url
     )
 
+    if args.host_distro:
+        builder.config.set('host.distro_override', args.host_distro)
+
+    refresh_executor = False
+
     if args.init:
         builder.config.set('init_system.choice', args.init)
         builder.logger.info(f"Init system overridden to: {args.init}")
-        # Recreate executor with updated environment
-        builder.executor = ScriptExecutor(builder._get_env(), builder.output_dir, builder.logger)
+        refresh_executor = True
 
     if args.no_live:
         builder.config.set('live_system.enabled', False)
         builder.logger.info("Live system disabled")
+        refresh_executor = True
 
     if args.kernel_type:
         builder.config.set('kernel.type', args.kernel_type)
         builder.logger.info(f"Kernel type overridden to: {args.kernel_type}")
+        refresh_executor = True
 
     if args.bootloader:
         builder.config.set('bootloader.type', args.bootloader)
         builder.logger.info(f"Bootloader overridden to: {args.bootloader}")
-        # Mettre à jour l'environnement pour les scripts, car la config est déjà exportée via flatten
-        # Il faut recréer l'exécuteur pour que les nouvelles variables d'environnement soient prises en compte
-        builder.executor = ScriptExecutor(builder._get_env(), builder.output_dir, builder.logger)
+        refresh_executor = True
+
+    if refresh_executor:
+        builder.refresh_executor()
 
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)

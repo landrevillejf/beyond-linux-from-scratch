@@ -259,6 +259,11 @@ class TestDetectHostDistro:
         with patch.object(Path, 'exists', return_value=False):
             assert builder.detect_host_distro() == "unknown"
 
+    def test_detect_host_distro_with_override(self, builder):
+        builder.config.set('host.distro_override', 'fedora')
+        with patch.object(Path, 'exists', return_value=False):
+            assert builder.detect_host_distro() == "fedora"
+
 
 class TestEnsureLFSUser:
     def test_user_exists_bashrc_ok(self, builder):

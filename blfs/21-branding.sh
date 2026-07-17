@@ -159,6 +159,33 @@ EOF
     log_success "User branding preferences configured"
 }
 
+# Persist all builder-provided parameters for traceability and downstream scripts
+write_builder_parameters_snapshot() {
+    log_info "Saving builder parameter snapshot..."
+    mkdir -p "$LFS/etc"
+    env | LC_ALL=C sort | awk '
+        /^LFS=/ ||
+        /^LFS_TGT=/ ||
+        /^MAKEFLAGS=/ ||
+        /^PROFILE=/ ||
+        /^INIT_SYSTEM=/ ||
+        /^SYSVINIT_STYLE=/ ||
+        /^PARALLEL_STARTUP=/ ||
+        /^AUTO_RESTART=/ ||
+        /^JAVA_DEV=/ ||
+        /^LPM_ENABLED=/ ||
+        /^SECURITY_HARDENING=/ ||
+        /^PRIVACY_TOOLS=/ ||
+        /^LIVE_SYSTEM=/ ||
+        /^KERNEL_TYPE=/ ||
+        /^SYSTEM_UPDATER=/ ||
+        /^LFS_VERSION=/ ||
+        /^LFS_CONFIG_/ ||
+        /^LFS_PROFILE_/
+    ' > "$LFS/etc/lfs-builder-params.env"
+    log_success "Builder parameters saved to /etc/lfs-builder-params.env"
+}
+
 # Install splash screens and logos
 install_branding_assets() {
     log_info "Installing branding assets..."
@@ -181,6 +208,7 @@ configure_xfce_branding
 configure_gnome_branding
 configure_wallpaper
 configure_user_settings
+write_builder_parameters_snapshot
 install_branding_assets
 
 log_success "LFS branding successfully applied!"
