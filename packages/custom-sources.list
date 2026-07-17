@@ -45,52 +45,43 @@ https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz
 https://mirrors.kernel.org/gnu/findutils/findutils-4.10.0.tar.xz
 
 # ============================================================================
-# Paquets non‑GNU (URLs corrigées, mais les noms de fichiers sont inchangés)
+# Paquets non‑GNU
 # ============================================================================
-# docbook (les URLs officielles ont changé, mais les noms de fichiers sont corrects)
+# docbook
 https://docbook.org/xml/5.0/docbook-5.0.zip
 https://docbook.org/sgml/3.1/docbk31.zip
 https://docbook.org/sgml/4.5/docbook-4.5.zip
 https://docbook.org/xml/4.5/docbook-xml-4.5.zip
 
-# cdrdao – le dépôt GitHub a changé, mais le nom du fichier est identique
-https://downloads.sourceforge.net/cdrdao/cdrdao-1.2.5.tar.bz2
+# cdrdao
+https://sourceforge.net/projects/cdrdao/files/cdrdao/1.2.3/cdrdao-1.2.3.tar.bz2/download
 
-# exim – la version 4.98.2 a été remplacée par 4.99.4 sur le serveur, on garde le même nom ? Non, il faut utiliser la version disponible. Mais l'utilisateur a mis exim-4.99.4.tar.gz, c'est bon.
+# exim
 https://ftp.exim.org/pub/exim/exim4/exim-4.99.4.tar.gz
 
-# postfix – même nom de fichier, miroir alternatif
-http://cdn.postfix.johnnywoo.net/postfix-release/official/postfix-3.10.4.tar.gz
+# postfix
+https://mirrors.mit.edu/macports/distfiles/postfix/postfix-3.10.4.tar.gz
 
-# ImageMagick – le nom du fichier est ImageMagick-7.1.2-25.tar.xz, on garde ce nom
-https://imagemagick.org/archive/releases/ImageMagick-7.1.2-25.tar.xz
-
-# zsh – version 5.9.1 (la 5.9 n'existe plus)
-https://www.zsh.org/pub/zsh-5.9.1.tar.xz
-
-# stunnel – version 5.75 (le serveur a peut-être changé, on garde le même nom)
-https://www.stunnel.org/downloads/stunnel-5.75.tar.gz
-
-# paxmirabilis – même nom
-https://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20240817.tgz
+# ImageMagick
+https://download.imagemagick.org/archive/releases/ImageMagick-7.1.2-27.tar.gz
 
 # a52dec – même nom
 https://download.videolan.org/pub/contrib/a52dec/a52dec-0.8.0.tar.gz
 
-# libpipeline et man-db – même nom
+# libpipeline et man-db
 https://download.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz
 https://download-mirror.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz
 
-# ntp – même nom
+# ntp
 https://www.ntp.org/downloads/ntp-4.2.8p18.tar.gz
 
-# xscreensaver – même nom
+# xscreensaver
 https://ftp2.osuosl.org/pub/blfs/conglomeration/xscreensaver/xscreensaver-6.12.tar.gz
 
-# keyutils – même nom
+# keyutils
 https://people.redhat.com/~dhowells/keyutils/keyutils-1.6.3.tar.gz
 
-# mesa – même nom
+# mesa
 https://archive.mesa3d.org/mesa-25.1.8.tar.xz
 
 https://www.linux-libre.fsfla.org/pub/linux-libre/releases/6.12.20-gnu/linux-libre-6.12.20-gnu.tar.xz
