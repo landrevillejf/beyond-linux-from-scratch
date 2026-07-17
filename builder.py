@@ -999,6 +999,7 @@ class LFSBuilder:
             config_file = Path(config_file)
         self.config = LFSConfig(config_file)
         self.system = platform.system()
+        self._detected_system = self.system
         self.logger = self.setup_logging()
         self.profile_config = ProfileManager.get_profile(profile)
         self._cache_url = cache_url or "https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json"
@@ -1217,6 +1218,10 @@ class LFSBuilder:
 
     def check_prerequisites(self) -> bool:
         """Check system prerequisites based on platform"""
+        runtime_system = platform.system()
+        # Honor explicit overrides (e.g., tests forcing builder.system) while still
+        # allowing runtime platform patches when the system was not overridden.
+        self.system = self.system if self.system != self._detected_system else runtime_system
         self.logger.info(f"Checking prerequisites on {self.system}")
         self.logger.info(f"LFS Builder Version: {__version__}")
 
