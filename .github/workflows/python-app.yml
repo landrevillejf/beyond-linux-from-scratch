@@ -47,9 +47,11 @@ jobs:
       # C'est plus simple de les séparer pour le rapport de couverture.
 
       - name: Upload coverage reports to Codecov
+        if: matrix.python-version == '3.13'
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: coverage.xml
           flags: unittests
           name: codecov-umbrella
+          fail_ci_if_error: true
