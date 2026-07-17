@@ -2,1416 +2,413 @@
 
 [![Version](https://img.shields.io/github/v/release/landrevillejf/beyond-linux-from-scratch?color=blue)](https://github.com/landrevillejf/beyond-linux-from-scratch/releases)
 [![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)]()
 ![Tests](https://github.com/landrevillejf/beyond-linux-from-scratch/actions/workflows/python-app.yml/badge.svg)
 [![Coverage](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch/branch/main/graph/badge.svg)](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch)
 
-**Way Beyond Linux From Scratch** is a Python‑based automated build system that creates custom Linux distributions from LFS/BLFS sources. It supports multiple desktop environments, init systems, audio production stacks, security hardening, and cross‑compilation for ARM64, producing bootable ISO images and live USB installers.
+Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`).
 
-## Table of Contents
+This repository is designed for reproducible, profile-driven builds and CI/CD publication workflows that separate:
 
-- [Overview](#overview)
-- [Features](#features)
-- [Build Profiles](#build-profiles)
-- [Java Development](profiles/java-dev/java-dev-doc.md)
-- [lpm - Linux Package Manager](docs/lpm.md)
-- [System Requirements](#system-requirements)
-- [Quick Start](#quick-start)
-- [Installation](#installation)
-- [Usage Guide](#usage-guide)
-- [Configuration](#configuration)
-- [Build Profiles Details](#build-profiles-details)
-- [Audio Production](#audio-production)
-- [Init Systems](#init-systems)
-- [Live USB System](#live-usb-system)
-- [Package Manager (LPM)](#package-manager-lpm)
-- [System Updater](#system-updater)
-- [Security Features](#security-features)
-- [Network Stack](#network-stack)
-- [Cross-Compilation](#cross-compilation)
+1. Cache generation pipelines
+2. Full ISO release pipelines
+3. ISO-from-cache reconstruction pipelines
+
+## Table of contents
+
+- [Project goals and philosophy](#project-goals-and-philosophy)
+- [Architecture](#architecture)
+- [Build pipeline flow](#build-pipeline-flow)
+- [Repository structure](#repository-structure)
+- [System requirements](#system-requirements)
+- [Quick start](#quick-start)
+- [Command line reference](#command-line-reference)
+- [Build profiles](#build-profiles)
+- [Configuration model](#configuration-model)
+- [Artifacts and outputs](#artifacts-and-outputs)
+- [GitHub Actions workflow model](#github-actions-workflow-model)
+- [Testing and quality gates](#testing-and-quality-gates)
 - [Troubleshooting](#troubleshooting)
-- [Directory Structure](#directory-structure)
-- [Roadmap](roadmap.md)
+- [Security and support](#security-and-support)
 - [Contributing](#contributing)
 - [License](#license)
 
-## Overview
+## Project goals and philosophy
 
-Way Beyond Linux From Scratch is an automated toolchain that builds a complete Linux distribution from source code using the Linux From Scratch (LFS) and Beyond Linux From Scratch (BLFS) methodologies. It creates bootable ISO images with live system capability, multiple desktop environments, professional audio production tools, flexible init systems (sysvinit/systemd), development tools, and security hardening.
+This project follows three core principles:
 
-## Features
+1. **LFS first**: builds are aligned with Linux From Scratch and Beyond Linux From Scratch stage sequencing.
+2. **Single orchestrator**: `builder.py` is the source of truth for profile selection, parameter propagation, and stage execution.
+3. **Reproducible automation**: CI workflows produce deterministic outputs (cache archives, kernels, ISO installers) with explicit verification steps.
 
-### Core Features
-- ✅ Complete LFS + BLFS build system
-- ✅ Live USB "Try before install" capability
-- ✅ Automated installer with disk partitioning
-- ✅ Multiple init systems (sysvinit, systemd, OpenRC, runit, s6) with unified `svc` command
+## Architecture
 
-### Audio Production
-- 🎵 **CLI Audio Profile** - Headless, low-latency audio production
-- 🎚️ **Studio Profile** - Full XFCE desktop with professional DAWs
-- 🔥 **Real-time Kernel** - PREEMPT_RT for ultra-low latency
-- 🎹 **DAWs**: Ardour , LMMS , Audacity
-- 🎧 **MIDI Tools**: FluidSynth, TiMidity++ , LinuxSampler
-- 🔊 **Audio Servers**: JACK2, PipeWire, ALSA
-- 🎛️ **Plugins**: Calf Studio Gear, LSP Plugins, Dragonfly Reverb
-- 🎼 **SoundFonts**: FluidR3 GM/GS, Timidity Freepats
-- 🖥️ **GUI Tools**: QjackCtl, Patchage, Qpwgraph
+### High-level component architecture
 
-### Desktop Environments
-- 🖥️ **XFCE ** - Lightweight, fast desktop
-- 🖥️ **GNOME** - Modern, feature-rich desktop
-- 🖥️ **KDE Plasma** - Full-featured, customizable desktop
-- 🖥️ **LXQt** - Extremely lightweight Qt desktop
-- 🖥️ **Minimal** - Command-line only (servers/embedded)
+```mermaid
+graph LR
+    CLI["CLI (builder.py)"] --> CFG["LFSConfig (config/build.conf)"]
+    CLI --> PM["ProfileManager"]
+    CLI --> DL["SourceDownloader"]
+    CLI --> EX["ScriptExecutor"]
 
-### Network Stack
-- 🌐 **Web Browsers**: Firefox, Brave, Chromium
-- 📧 **Email Clients**: Thunderbird, Claws Mail, Mutt 
-- 🖥️ **Terminal Browsers**: Lynx, Links, w3m
-- 📥 **Download Managers**: Wget2, Aria2
-- 🔧 **Network Configuration**: DHCP/static, DNS, Wi-Fi, proxy settings
-- 🚀 **Performance**: TCP BBR congestion control
+    CFG --> ENV["Flattened environment (LFS_CONFIG_*, LFS_PROFILE_*)"]
+    PM --> ENV
+    ENV --> SH["Stage shell scripts"]
 
-### Development Tools
-- ☕ **Java Development** - OpenJDK 21.0.10, Maven 3.9.9, Gradle 8.15
-- 🐳 **Container Support** - Docker 28.3.3, Kubernetes 1.32.4, Podman
-- 📦 **Package Manager** - LPM (LFS Package Manager) with upgrade support
-- 🔄 **System Updater** - `lfs-update` for system updates and rollbacks
+    SH --> HOST["host/*"]
+    SH --> LFS["lfs/*"]
+    SH --> BLFS["blfs/*"]
+    SH --> FINAL["final/*"]
 
-### Security & Privacy
-- 🛡️ **Security Hardening** - Kernel hardening, firewall, fail2ban, auditd
-- 🔒 **Privacy Tools** - DNSCrypt, WireGuard, Tor, telemetry blocking
-- 📊 **Monitoring** - Prometheus, Node Exporter, Netdata, AIDE
-- 💾 **Encryption** - Encrypted swap, LUKS support
+    FINAL --> OUT["Output directory"]
+    OUT --> ISO["lfs-installer.iso"]
+    OUT --> IMG["image/boot/vmlinuz*"]
+    OUT --> LOGS["logs/*.log"]
+    OUT --> META["build_info.json"]
+```
 
-### Cross-Platform & Embedded
-- 📱 **ARM64 Support** - Raspberry Pi, Orange Pi, Pine64
-- 🔄 **Cross-Compilation** - Build for ARM64 from x86_64
-- 🚀 **U-Boot Integration** - Bootloader support for SBCs
+### Runtime responsibility split
 
-## Build Profiles
+| Layer | Responsibility |
+|---|---|
+| `builder.py` | CLI parsing, profile application, environment propagation, stage orchestration |
+| `host/*.sh` | Host checks, host preparation, disk image and toolchain setup |
+| `lfs/*.sh` | Core LFS base and system construction |
+| `blfs/*.sh` | Desktop, applications, package management, hardening, updater layers |
+| `final/*.sh` | Initramfs, bootloader, installer, live ISO generation |
+| `.github/workflows/*.yml` | CI/CD automation: cache pipelines, nightly builds, release publication |
 
-| Profile | Desktop | Size | Build Time | RAM | Init System | Use Case |
-|---------|---------|------|------------|-----|-------------|----------|
-| **minimal** | None | 1GB | 2h | 256MB | sysvinit / systemd      | Servers, embedded |
-| **xfce** | XFCE | 4GB | 4h | 600MB | sysvinit / systemd     | Lightweight desktop |
-| **lxqt** | LXQt | 2GB | 3h | 500MB | sysvinit / systemd       | Very lightweight |
-| **gnome** | GNOME | 8GB | 8h | 1.5GB | sysvinit / systemd       | Modern desktop |
-| **kde** | KDE Plasma | 10GB | 12h | 1.8GB | sysvinit / systemd       | Full-featured desktop |
-| **java-dev** | XFCE | 10GB | 6h | 2GB | sysvinit / systemd       | Java development |
-| **server** | None | 2GB | 3h | 256MB | sysvinit / systemd      | Production server |
-| **secure** | XFCE | 6GB | 5h | 800MB | sysvinit / systemd      | Security-focused |
-| **full** | GNOME | 20GB | 12h | 2GB | sysvinit / systemd       | Complete system |
-| **arm64** | None | 2GB | 3h | 256MB | sysvinit / systemd      | ARM64 SBCs |
-| **audio-cli** | None | 2GB | 3h | 512MB | sysvinit / systemd      | Headless audio production |
-| **audio-studio** | XFCE | 8GB | 6h | 1GB | sysvinit / systemd       | Audio production studio |
-| **custom** | User-defined | Variable | Variable | Variable | User-choice | Custom builds |
+## Build pipeline flow
 
-## System Requirements
+```mermaid
+flowchart TD
+    A["Start builder.py"] --> B["Parse CLI arguments"]
+    B --> C["Load config + profile"]
+    C --> D["Apply overrides (--init, --no-live, --kernel-type, --bootloader, --host-distro)"]
+    D --> E["Refresh script execution environment"]
+    E --> F["Check prerequisites"]
+    F --> G["Prepare output layout"]
+    G --> H["Update and download sources"]
+    H --> I["Execute ordered stage scripts"]
+    I --> J{"Build success?"}
+    J -- No --> K["Stop and inspect logs"]
+    J -- Yes --> L["Generate artifacts (kernel, installer, ISO or cache rootfs)"]
+    L --> M["Optional USB write"]
+```
 
-### Linux (Native Build)
-| Requirement | Minimal | Recommended |
-|-------------|---------|-------------|
-| **Disk Space** | 50 GB | 100 GB |
-| **RAM** | 8 GB | 16 GB |
-| **CPU Cores** | 4 | 8+ |
-| **OS** | Ubuntu (or Debian) | Red Hat, Fedora, Arch, openSUSE, Gentoo, Debian (and other mainstream distributions) |
-| **Architecture** | x86_64 | x86_64 / ARM64 |
+### Default stage order (xfce profile, live enabled)
 
-### Windows (WSL2) -> experimental
-| Requirement | Minimal | Recommended |
-|-------------|---------|-------------|
-| **Disk Space** | 60GB | 100GB |
-| **RAM** | 8GB | 16GB |
-| **WSL2** | Ubuntu 22.04 | Ubuntu 24.04 |
-| **Windows** | Windows 10 2004+ | Windows 11 |
+1. `host-check`
+2. `host-prepare`
+3. `disk-image`
+4. `toolchain`
+5. `lfs-basic`
+6. `lfs-system`
+7. `init-system`
+8. `service-abstraction`
+9. `configure-lfs`
+10. `blfs-base`
+11. `build-kernel`
+12. `desktop`
+13. `applications`
+14. `configure-desktop`
+15. `package-manager`
+16. `base-packages`
+17. `security`
+18. `branding`
+19. `first-boot`
+20. `system-updater`
+21. `package-updater`
+22. `lpm-advanced`
+23. `initramfs`
+24. `bootloader`
+25. `installer`
+26. `live-system` (when enabled)
 
----
+## Repository structure
 
-## Command‑line Options
+```text
+.
+|-- builder.py
+|-- config/
+|   |-- build.conf
+|   |-- build-cross.conf
+|   `-- ...
+|-- host/
+|-- lfs/
+|-- blfs/
+|-- final/
+|-- packages/
+|-- profiles/
+|-- tests/
+|   |-- features/
+|   `-- ...
+`-- .github/workflows/
+```
+
+## System requirements
+
+### Native Linux build host
+
+| Resource | Minimum | Recommended |
+|---|---:|---:|
+| CPU cores | 4 | 8+ |
+| RAM | 8 GB | 16+ GB |
+| Disk | 50 GB free | 100+ GB free |
+| Architecture | x86_64 | x86_64 |
+
+### Supported host distributions
+
+- Debian/Ubuntu
+- Fedora/RHEL-like
+- Arch
+
+Use `--host-distro` if auto detection must be overridden:
+
+```bash
+python3 builder.py --host-distro fedora
+```
+
+### macOS and Windows
+
+- macOS is supported through `mac-lfs-builder.sh` (Docker-based workflow).
+- Windows is supported through WSL2 and Linux tooling.
+
+## Quick start
+
+```bash
+git clone https://github.com/landrevillejf/beyond-linux-from-scratch.git
+cd beyond-linux-from-scratch
+
+# Install Python test/build dependencies
+python3 -m pip install -r tests/requirements-test.txt
+
+# List available profiles
+python3 builder.py --list-profiles
+
+# Build default profile (xfce)
+python3 builder.py
+```
+
+Common variants:
+
+```bash
+# Minimal CLI system
+python3 builder.py --profile minimal
+
+# SysV init build
+python3 builder.py --profile xfce --init sysvinit
+
+# Server rootfs (no live ISO)
+python3 builder.py --profile server --no-live
+
+# ARM64 cross profile
+python3 builder.py --profile arm64 --config config/build-cross.conf
+```
+
+## Command line reference
 
 | Option | Description |
-|--------|-------------|
-| `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`. |
-| `--output` | Output directory (default: `./lfs-build`). |
-| `--config` | Configuration file path (default: `config/build.conf`). |
-| `--resume-from` | Resume build from a specific stage (e.g., `desktop`). |
-| `--write-usb` | Write the generated ISO to a USB device (e.g., `/dev/sdb`). |
-| `--list-profiles` | List all available profiles. |
-| `--profile-info` | Show detailed information about a specific profile. |
-| `--clean` | Delete the build directory (interactive confirmation). |
-| `--verbose` / `-v` | Enable DEBUG logging. |
-| `--init` | Override the init system (`systemd`, `sysvinit`, `openrc`, `runit`, `s6`). |
-| `--no-live` | Disable live system creation (only produce the root filesystem). |
-| `--version` | Show version information. |
-| `--use-cache` | Use a pre‑built cache (skip compilation) if available. |
-| `--cache-only` | Only use the cache; fail if not found. |
-| `--cache-url` | Custom URL for cache metadata (default: a predefined JSON). |
-| `--kernel-type` | Kernel type: `linux`, `linux-libre`, `gnu-hurd`, `freebsd`. |
+|---|---|
+| `--profile` | Build profile (`xfce` by default) |
+| `--output` | Output directory (`./lfs-build` by default) |
+| `--config` | Configuration file path (`config/build.conf`) |
+| `--resume-from` | Resume from a specific stage |
+| `--write-usb <device>` | Write generated ISO to a USB device |
+| `--list-profiles` | Print available profiles |
+| `--profile-info <profile>` | Print profile details |
+| `--clean` | Interactive cleanup of output directory |
+| `--verbose`, `-v` | Enable debug logs |
+| `--init` | Init override (`systemd`, `sysvinit`, `openrc`, `runit`, `s6`) |
+| `--no-live` | Disable live-system stage |
+| `--version` | Print builder version |
+| `--use-cache` | Use cache metadata to restore prebuilt image |
+| `--cache-only` | Require cache hit; fail otherwise |
+| `--cache-url` | Override cache metadata URL |
+| `--kernel-type` | Kernel type (`linux`, `linux-libre`, `gnu-hurd`, `freebsd`) |
+| `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
+| `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
+| `--generate-sources-list` | Generate `packages/sources.list` and exit |
 
----
+## Build profiles
 
-## Quick Start
+Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
+
+| Profile | Description | Desktop | Default init | Arch | Live | Size (GB) | Build time (h) |
+|---|---|---|---|---|---:|---:|---:|
+| `minimal` | Minimal command-line only system | none | sysvinit | x86_64 | No | 1 | 2 |
+| `gnu-free` | 100% free software system | none | sysvinit | x86_64 | No | 3 | 4 |
+| `gnu-free-full` | Full GNU stack | xfce | sysvinit | x86_64 | Yes | 10 | 8 |
+| `xfce` | XFCE desktop environment | xfce | systemd | x86_64 | Yes | 4 | 4 |
+| `gnome` | GNOME desktop environment | gnome | systemd | x86_64 | Yes | 8 | 8 |
+| `kde` | KDE Plasma desktop environment | kde | systemd | x86_64 | Yes | 10 | 12 |
+| `lxqt` | Lightweight LXQt desktop | lxqt | systemd | x86_64 | Yes | 2 | 3 |
+| `java-dev` | Java development stack on XFCE | xfce | systemd | x86_64 | Yes | 10 | 6 |
+| `server` | Server-oriented profile | none | sysvinit | x86_64 | No | 2 | 3 |
+| `secure` | Hardened profile with privacy tools | xfce | sysvinit | x86_64 | Yes | 6 | 5 |
+| `full` | Full feature profile | gnome | systemd | x86_64 | Yes | 20 | 12 |
+| `audio-cli` | Headless audio production | none | sysvinit | x86_64 | No | 2 | 3 |
+| `audio-studio` | Desktop audio production | xfce | systemd | x86_64 | Yes | 8 | 6 |
+| `arm64` | ARM64 server profile | none | sysvinit | aarch64 | No | 2 | 3 |
+| `pinebook` | Pinebook profile | xfce | sysvinit | aarch64 | No | 4 | 4 |
+| `brax3` | Brax3 smartphone profile | phosh | systemd | aarch64 | No | 4 | 5 |
+| `custom` | User-defined profile template | none | sysvinit | x86_64 | No | 5 | 5 |
+
+## Configuration model
+
+Primary configuration file: `config/build.conf` (JSON).
+
+Key sections:
+
+- `init_system`: selected init, service style, restart policy
+- `kernel`: kernel version/type/config and module list
+- `live_system`: live ISO behavior (compression, persistence, default boot)
+- `package_manager`: LPM behavior
+- `system_updater`: update policy
+- `security`: hardening, firewall, auditing, privacy flags
+- `bootloader`: grub/uboot metadata
+- `repositories`: source list endpoints
+
+At runtime, builder exports all configuration and profile values to shell stages:
+
+- Fixed env vars: `LFS`, `PROFILE`, `INIT_SYSTEM`, `KERNEL_TYPE`, etc.
+- Flattened vars: `LFS_CONFIG_*` and `LFS_PROFILE_*`
+
+These values are preserved inside built systems in:
+
+```text
+/etc/lfs-builder-params.env
+```
+
+## Artifacts and outputs
+
+Default output tree (`--output`):
+
+```text
+<output>/
+|-- build_info.json
+|-- logs/
+|-- sources/
+|-- image/
+|   `-- boot/vmlinuz*
+`-- lfs-installer.iso   (if live enabled)
+```
+
+Typical outputs:
+
+- Live builds: ISO + kernel + logs + metadata
+- Non-live builds (`--no-live`): root filesystem image tree + kernel + logs
+- Cache workflows: compressed rootfs cache archive (`.tar.zst`)
+
+## GitHub Actions workflow model
+
+### Workflow architecture
+
+```mermaid
+graph TD
+    A["Cache workflows"] --> A1["xfce-sysvinit-x86_64-build-cache.yml"]
+    A --> A2["xfce-systemd-x86_64-build-cache.yml"]
+
+    B["ISO release workflows"] --> B1["xfce-live-boot-iso.yml"]
+    B --> B2["release.yml"]
+    B --> B3["nightly.yml"]
+
+    C["ISO from cache workflow"] --> C1["build-iso-from-cache.yml"]
+
+    D["CI and governance workflows"] --> D1["python-app.yml"]
+    D --> D2["codeql.yml"]
+    D --> D3["codacy-security-scan.yml"]
+    D --> D4["docs.yml"]
+    D --> D5["benchmark.yml"]
+    D --> D6["pr-labeler.yml"]
+    D --> D7["squash-pr.yml"]
+    D --> D8["cross-compile.yml"]
+    D --> D9["build.yml"]
+```
+
+### Build and release workflow behavior
+
+| Workflow | Purpose | Produces release | Produces ISO | Produces kernel artifact | Cache-only |
+|---|---|---:|---:|---:|---:|
+| `xfce-sysvinit-x86_64-build-cache.yml` | Build reusable cache rootfs | No | No | Verified in cache | Yes |
+| `xfce-systemd-x86_64-build-cache.yml` | Build reusable cache rootfs | No | No | Verified in cache | Yes |
+| `build-iso-from-cache.yml` | Reconstruct ISO from cache archive | Optional | Yes | Yes | No |
+| `xfce-live-boot-iso.yml` | Full live ISO release pipeline | Yes | Yes | Yes | No |
+| `release.yml` | Tagged release build pipeline | Yes | Yes | Yes | No |
+| `nightly.yml` | Scheduled profile matrix builds | Artifact upload | Yes | Yes | No |
+
+All release-capable workflows explicitly verify:
+
+1. ISO presence and non-empty file
+2. Kernel artifact presence (`image/boot/vmlinuz*`)
+3. SHA256 checksum generation for published assets
+
+## Testing and quality gates
+
+Test suite location:
+
+```text
+tests/
+```
+
+Includes:
+
+- Unit tests
+- Integration tests
+- BDD feature tests (`tests/features/*.feature`)
+- Coverage measurement
+
+Current baseline in this repository:
+
+- `builder.py` coverage target: 100%
+- BDD scenarios are executable through pytest + `pytest-bdd`
+
+Run locally:
 
 ```bash
-# Clone the repository
-git clone https://github.com/lfs-builder/lfs-builder.git
-cd lfs-builder
-
-# List all available profiles
-python3 builder.py --list-profiles
-
-# Build with default profile (XFCE + Live USB)
-python3 builder.py
-
-# Build with specific profile
-python3 builder.py --profile kde --output ./lfs-kde
-python3 builder.py --profile java-dev --output ./lfs-java
-python3 builder.py --profile server --output ./lfs-server
-
-# Build for audio production
-python3 builder.py --profile audio-studio           # Full studio with XFCE + systemd
-python3 builder.py --profile audio-cli --init sysvinit  # Headless + sysvinit
-
-# Choose init system
-python3 builder.py --profile minimal --init sysvinit   # LFS classic
-python3 builder.py --profile xfce --init systemd       # Modern desktop
-
-# Build for ARM64 (Raspberry Pi)
-python3 builder.py --profile arm64 --config config/build-cross.conf
-
-# Write to USB (after build completes)
-python3 builder.py --write-usb /dev/sdX
-
-# Build with security hardening
-python3 builder.py --profile secure
-
-# Build full system
-python3 builder.py --profile full --output ./lfs-full
-
-# Resume from failed stage
-python3 builder.py --resume-from desktop
-
-# Show profile information
-python3 builder.py --profile-info audio-studio
-python3 builder.py --profile-info arm64
-
-# Clean build directory
-python3 builder.py --clean --output ./lfs-build
-
-# Disable live system (server builds)
-python3 builder.py --no-live --profile server
-```
-
-### Using Pre‑built Caches
-
-For heavy profiles like `kde`, `gnome`, or `full`, you can save days of compilation time by using our pre‑built cache. The builder will automatically download a ready‑to‑use root filesystem if you enable the `--use-cache` flag.
-
-```bash
-python3 builder.py --profile kde --use-cache
-```
-
-If you want to ensure that only the cache is used (no fallback to compilation), add `--cache-only`:
-
-```bash
-python3 builder.py --profile kde --use-cache --cache-only
-```
-
-## Installation
-
-### Linux (Native)
-
-```bash
-# Install dependencies
-sudo apt update
-sudo apt install -y build-essential bison flex gawk texinfo \
-    wget curl git python3 python3-pip xorriso isolinux \
-    mtools dosfstools parted rsync bc cpio kmod \
-    libssl-dev libelf-dev
-
-# Clone and build
-git clone https://github.com/lfs-builder/lfs-builder.git
-cd lfs-builder
-python3 builder.py --profile xfce
-```
-
----
-
-### 🔹 Fedora / RHEL / CentOS (with `dnf`)
-
-```bash
-sudo dnf groupinstall -y "Development Tools"
-sudo dnf install -y bison flex gawk texinfo wget curl git python3 python3-pip \
-    xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
-    openssl-devel elfutils-libelf-devel
-```
-
-> **Notes**:
-> - `build-essential` is replaced by the `"Development Tools"` group.
-> - `libssl-dev` → `openssl-devel`
-> - `libelf-dev` → `elfutils-libelf-devel`
-> - `isolinux` is part of the `syslinux` package (or `syslinux-tools`). If the command fails, try `syslinux` or `syslinux-tools`.
-
----
-
-### 🔹 Arch Linux (with `pacman`)
-
-```bash
-sudo pacman -S --needed base-devel bison flex gawk texinfo wget curl git python python-pip \
-    xorriso libisoburn mtools dosfstools parted rsync bc cpio kmod \
-    openssl elfutils
-```
-
-> **Notes**:
-> - `base-devel` includes `gcc`, `make`, etc.
-> - `python` and `python-pip` are the Python packages.
-> - `libisoburn` provides `xorriso`; you can install `xorriso` if available.
-> - `openssl` and `elfutils` are development library equivalents (headers are included).
-
----
-
-### 🔹 openSUSE (with `zypper`)
-
-```bash
-sudo zypper install -t pattern devel_basis
-sudo zypper install -y bison flex gawk texinfo wget curl git python3 python3-pip \
-    xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
-    libopenssl-devel elfutils-devel
-```
-
-> **Notes**:
-> - `devel_basis` is the equivalent of `build-essential`.
-> - `libopenssl-devel` corresponds to `libssl-dev`.
-> - `elfutils-devel` provides ELF headers.
-
----
-
-### 🔹 Alpine Linux (with `apk`) – if needed
-
-```bash
-sudo apk add build-base bison flex gawk texinfo wget curl git python3 py3-pip \
-    xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
-    openssl-dev elfutils-dev
-```
-
-> `build-base` replaces `build-essential`, and development libraries have the `-dev` suffix.
-
----
-
-### 🔹 Gentoo (with `emerge`) – for the adventurous
-
-```bash
-sudo emerge -av sys-devel/gcc sys-devel/binutils sys-devel/make sys-devel/bison \
-    sys-devel/flex sys-devel/m4 sys-devel/gawk sys-devel/texinfo net-misc/wget \
-    net-misc/curl dev-vcs/git dev-lang/python dev-python/pip app-cdr/xorriso \
-    sys-boot/syslinux sys-fs/mtools sys-fs/dosfstools sys-block/parted net-misc/rsync \
-    app-alternatives/bc sys-apps/cpio sys-apps/kmod dev-libs/openssl dev-libs/elfutils
-```
-
----
-
-### macOS (Docker) won't produce an iso file, only for testing pipeline
-
-```bash
-# Install Docker Desktop from https://www.docker.com/products/docker-desktop
-
-# Clone and run
-git clone https://github.com/lfs-builder/lfs-builder.git
-cd lfs-builder
-chmod +x mac-lfs-builder.sh
-./mac-lfs-builder.sh
-```
-
-### Windows (WSL2)
-
-```powershell
-# In PowerShell as Administrator
-wsl --install -d Ubuntu-22.04
-
-# In WSL2 terminal
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y build-essential bison flex gawk texinfo \
-    wget curl git python3 xorriso isolinux parted rsync
-
-git clone https://github.com/lfs-builder/lfs-builder.git
-cd lfs-builder
-python3 builder.py --profile xfce
-```
-
-## Usage Guide
-
-### Basic Commands
-
-```bash
-# Build with default profile
-python3 builder.py
-
-# Build with specific profile and output directory
-python3 builder.py --profile kde --output ./my-lfs-build
-
-# Use custom configuration
-python3 builder.py --config config/my-build.conf
-
-# Resume from failed stage
-python3 builder.py --resume-from configure-desktop
-
-# Use cache if available, fallback to full build
-python3 builder.py --profile kde --use-cache
-
-# Use cache only; fail if not found
-python3 builder.py --profile gnome --use-cache --cache-only
-
-# Specify custom cache metadata URL
-python3 builder.py --profile full --use-cache --cache-url https://my-server/cache-metadata.json
-
-# Write ISO to USB
-python3 builder.py --write-usb /dev/sdb
-
-# Clean everything
-python3 builder.py --clean --output ./lfs-build
-
-# Verbose output
-python3 builder.py --verbose
-```
-
-### Profile Management
-
-```bash
-# List all profiles
-python3 builder.py --list-profiles
-
-# Show profile details
-python3 builder.py --profile-info secure
-python3 builder.py --profile-info audio-studio
-python3 builder.py --profile-info arm64
-
-# Build with specific init system
-python3 builder.py --profile minimal --init sysvinit
-python3 builder.py --profile server --init openrc
-python3 builder.py --profile audio-cli --init sysvinit
-
-# Disable live system (faster server build)
-python3 builder.py --profile server --no-live
-```
-
-### Configuration Selection
-
-```bash
-# Interactive configuration selector
-./tools/config-selector.sh
-
-# Copy specific configuration
-cp config/build.conf.java config/build.conf
-cp config/build-cross.conf config/build.conf
-cp config/build.conf.minimal config/build.conf
-```
-
-## Configuration
-
-### Main Configuration (`config/build.conf`)
-
-```json
-{
-  "lfs_version": "13.0",
-  "blfs_version": "13.0",
-  "architecture": "x86_64",
-  "target_triplet": "x86_64-lfs-linux-gnu",
-  "build_threads": 8,
-
-  "init_system": {
-    "choice": "sysvinit",  // or systemd, openrc, runit, s6
-    "service_style": "lfs-classic",  // or bsd-style
-    "parallel_startup": false,
-    "auto_restart": true,
-    "default_runlevel": 3
-  },
-
-  "desktop": {
-    "type": "xfce",
-    "display_manager": "lightdm",
-    "theme": "adwaita",
-    "extras": ["firefox", "libreoffice", "gimp", "vlc"]
-  },
-
-  "security": {
-    "kernel_hardening": true,
-    "firewall": {"enabled": true, "allow_ssh": true},
-    "fail2ban": {"enabled": true}
-  },
-
-  "users": [
-    {"name": "lfsuser", "sudo": true, "autologin": true}
-  ],
-
-  "network": {
-    "dhcp": true,
-    "dns_servers": ["8.8.8.8", "1.1.1.1"],
-    "enable_ipv6": true
-  }
-}
-```
-
-### Audio Profile Configuration (`config/audio-profile.conf`)
-
-```json
-{
-  "audio_profile": "studio-full",  // or cli-minimal, desktop-xfce, desktop-gnome
-  "rt_kernel": true,
-  "sample_rate": 48000,
-  "buffer_size": 128,
-  "rt_priority": 95,
-  "jack2_enabled": true,
-  "pipewire_enabled": false,
-  "soundfonts_level": "medium",
-  "daws": ["ardour", "lmms", "audacity"],
-  "plugins": ["calf", "lsp", "dragonfly-reverb"]
-}
-```
-
-### Network Configuration (`config/network.conf`)
-
-```bash
-# Network interface configuration
-PRIMARY_INTERFACE="eth0"
-INTERFACE_CONFIG="dhcp"  # or static
-
-# Static IP (if INTERFACE_CONFIG=static)
-STATIC_IP="192.168.1.100"
-STATIC_NETMASK="255.255.255.0"
-STATIC_GATEWAY="192.168.1.1"
-DNS_SERVERS="8.8.8.8 1.1.1.1"
-
-# Wi-Fi (if applicable)
-WIFI_ENABLED=false
-WIFI_SSID=""
-WIFI_PSK=""
-
-# Proxy settings
-HTTP_PROXY=""
-HTTPS_PROXY=""
-```
-
-### Cross-Compilation Configuration (`config/build-cross.conf`)
-
-```json
-{
-  "architecture": "aarch64",
-  "target_triplet": "aarch64-lfs-linux-gnu",
-  "cross_compile": true,
-  "cross_prefix": "/usr/bin/aarch64-linux-gnu-",
-  "qemu_user": "qemu-aarch64-static",
-  
-  "bootloader": {
-    "type": "uboot",
-    "uboot_board": "rpi_4"
-  }
-}
-```
-
-## Build Profiles Details
-
-### XFCE Profile
-Lightweight desktop perfect for older hardware or users who prefer speed.
-
-```bash
-python3 builder.py --profile xfce
-```
-- **Desktop**: XFCE 4.20
-- **Panel**: Customizable with plugins
-- **File Manager**: Thunar
-- **Terminal**: XFCE Terminal
-- **Memory**: ~600MB
-- **Init System**: systemd
-
-### GNOME Profile
-Modern, polished desktop with extensive application suite.
-
-```bash
-python3 builder.py --profile gnome
-```
-- **Desktop**: GNOME 46
-- **Display Manager**: GDM with Wayland
-- **File Manager**: Nautilus
-- **Terminal**: GNOME Terminal
-- **Memory**: ~1.5GB
-- **Init System**: systemd
-
-### KDE Plasma Profile
-Full-featured desktop with maximum customization.
-
-```bash
-python3 builder.py --profile kde
-```
-- **Desktop**: KDE Plasma 6.2
-- **Display Manager**: SDDM
-- **File Manager**: Dolphin
-- **Terminal**: Konsole
-- **Memory**: ~1.8GB
-- **Build Time**: 8-12 hours
-- **Init System**: systemd
-
-### LXQt Profile
-Extremely lightweight Qt-based desktop.
-
-```bash
-python3 builder.py --profile lxqt
-```
-- **Desktop**: LXQt 2.1.0
-- **Window Manager**: Openbox
-- **File Manager**: PCManFM-Qt
-- **Terminal**: QTerminal
-- **Memory**: ~500MB
-- **Init System**: systemd
-
-### Java Development Profile
-Complete Java development environment.
-
-```bash
-python3 builder.py --profile java-dev
-```
-- **JDK**: OpenJDK 21.0.10 LTS
-- **Build Tools**: Maven 3.9.9, Gradle 8.15
-- **Servers**: Tomcat 10.1.39, Jenkins 2.500.1
-- **Containers**: Docker 28.3.3, kubectl 1.32.4
-- **Node.js**: 22.15.0 LTS
-- **Init System**: systemd
-
-### Server Profile
-Production-optimized server configuration.
-
-```bash
-python3 builder.py --profile server
-```
-- **Kernel**: Optimized (TCP BBR, tuned sysctl)
-- **Security**: Hardened SSH, firewall, fail2ban
-- **Monitoring**: Prometheus node_exporter, Netdata
-- **Logging**: Centralized rsyslog
-- **Backup**: Automated daily backups
-- **Init System**: sysvinit (LFS classic)
-
-### Secure Profile
-Security-hardened desktop with privacy tools.
-
-```bash
-python3 builder.py --profile secure
-```
-- **Hardening**: Kernel hardening, SELinux/AppArmor
-- **Firewall**: nftables with default deny
-- **Intrusion Detection**: AIDE, rkhunter, Lynis
-- **Privacy**: DNSCrypt, WireGuard, Tor
-- **Audit**: Full auditd configuration
-- **Init System**: sysvinit
-
-### ARM64 Profile
-For Raspberry Pi and ARM64 single-board computers.
-
-```bash
-python3 builder.py --profile arm64 --config config/build-cross.conf
-```
-- **Architecture**: aarch64
-- **Bootloader**: U-Boot
-- **Boards**: Raspberry Pi 4/5, Orange Pi, Pine64
-- **Output**: SD card image (.img)
-- **Cross-Compile**: From x86_64 host
-- **Init System**: sysvinit
-
-## Audio Production
-
-### Audio-CLI Profile (Headless)
-
-Perfect for remote recording studios, batch processing, or embedded audio applications.
-
-```bash
-python3 builder.py --profile audio-cli --init sysvinit
-```
-
-**Features:**
-- No X11/GUI - pure command-line
-- Real-time kernel for low latency
-- JACK2 audio server
-- MIDI tools (FluidSynth, TiMidity++)
-- CLI audio editors (SoX, Ecasound)
-- LV2/LADSPA plugins
-- SoundFont support
-
-**Commands after installation:**
-```bash
-# Start audio system
-start-audio
-
-# Stop audio system
-stop-audio
-
-# List MIDI devices
-midi-ls
-
-# Play MIDI file
-fluidsynth /usr/share/soundfonts/FluidR3_GM.sf2 song.mid
-```
-
-### Audio-Studio Profile
-
-Complete professional audio production workstation with XFCE desktop.
-
-```bash
-python3 builder.py --profile audio-studio
-```
-
-**Features:**
-- XFCE desktop optimized for audio work
-- Ardour 8.12.0 (professional DAW)
-- LMMS 1.2.2 (music production)
-- Audacity 3.8.2 (audio editing)
-- JACK2 with QjackCtl GUI
-- Full LV2/LADSPA plugin suite
-- FluidSynth with soundfonts
-- Real-time kernel
-- Low-latency system tuning
-
-**Commands after installation:**
-```bash
-# Start JACK with GUI
-qjackctl
-
-# Launch Ardour
-ardour
-
-# Start MIDI synth
-fluidsynth -a jack -g 0.5 /usr/share/soundfonts/FluidR3_GM.sf2
-```
-
-## Init Systems
-
-### Unified Service Management (`svc` command)
-
-The `svc` command works identically across all init systems:
-
-```bash
-# Start a service
-svc start sshd
-
-# Stop a service
-svc stop tomcat
-
-# Restart a service
-svc restart network
-
-# Check status
-svc status docker
-
-# Enable service on boot
-svc enable nginx
-
-# Disable service on boot
-svc disable apache2
-
-# List all services
-svc list
-```
-
-### sysvinit (LFS Classic)
-
-Traditional UNIX init system - simple, transparent, lightweight.
-
-```bash
-# Build with sysvinit
-python3 builder.py --profile minimal --init sysvinit
-
-# Boot script styles
-SYSVINIT_STYLE="lfs-classic"  # Original LFS style
-SYSVINIT_STYLE="bsd-style"    # BSD-style init
-
-# Default runlevels
-# 1: single-user, 3: multi-user, 5: X11
-```
-
-### systemd (Modern)
-
-Modern init system with parallel boot, service management, and advanced features.
-
-```bash
-# Build with systemd
-python3 builder.py --profile xfce --init systemd
-
-# Enable services
-systemctl enable docker
-systemctl start nginx
-```
-
-## Live USB System
-
-Your built ISO includes a complete live system:
-
-### Boot Menu Options
-1. **Try LFS Linux (Live mode)** - Boot in RAM, no disk writes
-2. **Try LFS Linux (with Persistence)** - Save changes on USB
-3. **Install LFS Linux** - Permanent installation
-4. **Memory Test** - Diagnostic tool
-5. **Rescue Mode** - System recovery
-
-### Creating Persistence
-
-```bash
-# After writing ISO to USB, create persistence partition
-sudo create-persistence.sh /dev/sdb 4096  # 4GB persistence
-
-# With custom label
-sudo create-persistence.sh -l MYSTORAGE /dev/sdc
-
-# Remove persistence
-sudo create-persistence.sh --remove /dev/sdb
-```
-
-## Package Manager (LPM)
-
-LPM (LFS Package Manager) is included for package management.
-
-### Basic Commands
-
-```bash
-# Update package database
-lpm update
-
-# Install packages
-lpm install firefox
-lpm install /path/to/package.lpm
-
-# List installed packages
-lpm list
-
-# Search packages
-lpm search "java"
-
-# Remove packages
-lpm remove firefox
-
-# Create package from installed files
-lpm create myapp 1.0.0
-```
-
-### Upgrade Commands
-
-```bash
-# List outdated packages
-lpm list-outdated
-
-# Upgrade single package
-lpm upgrade firefox
-
-# Upgrade all packages
-lpm upgrade
-```
-
-## System Updater
-
-`lfs-update` manages system updates and rollbacks.
-
-### Commands
-
-```bash
-# Check for available updates
-lfs-update check
-
-# Show system status
-lfs-update status
-
-# Perform full system upgrade
-lfs-update upgrade
-
-# Rollback to previous state
-lfs-update rollback
-
-# Clean old backups
-lfs-update clean
-```
-
-### Automatic Updates
-- Daily update checks via cron or systemd timer
-- Email notifications when updates available
-- Automatic backup before upgrades
-- Last 5 backups kept by default
-
-## Security Features
-
-### Kernel Hardening
-- ASLR improvements
-- Kernel pointer restriction
-- BPF JIT hardening
-- ptrace scope restriction
-
-### Firewall (nftables)
-- Default deny policy
-- Stateful inspection
-- Rate limiting
-- Logging of dropped packets
-
-### Fail2ban
-- SSH brute force protection
-- Customizable ban times
-- Email alerts
-
-### Intrusion Detection
-- AIDE (file integrity monitoring)
-- Daily security scans
-- Rootkit detection (rkhunter)
-- Security auditing (Lynis)
-
-### User Hardening
-- Password quality enforcement
-- Login delay after failures
-- Account lockout after 5 attempts
-- Root SSH login disabled
-
-## Network Stack
-
-### Web Browsers
-
-```bash
-# Install Firefox (ESR)
-lpm install firefox-128.8.0esr
-
-# Install Brave
-lpm install brave-1.76.82
-
-# Terminal browser
-lynx https://lfs-builder.org
-links https://lfs-builder.org
-w3m https://lfs-builder.org
-```
-
-### Email Clients
-
-```bash
-# Full-featured
-lpm install thunderbird-140.8.0esr
-
-# Lightweight GTK
-lpm install claws-mail-0.4.3
-
-# Terminal-based
-lpm install mutt-2.2.15
-lpm install neomutt-20241212
-```
-
-### Download Managers
-
-```bash
-# High-speed downloads
-lpm install aria2-1.37.0
-
-# Improved wget
-lpm install wget2-2.2.0
-```
-
-### Network Configuration
-
-```bash
-# Configure network (after boot)
-nano /etc/network.conf
-
-# Restart networking
-svc restart network
-```
-
-## Cross-Compilation
-
-Build for ARM64 from x86_64 host.
-
-### Prerequisites
-
-```bash
-# Install cross-compilation toolchain
-sudo apt install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user-static
-
-# For ARM32
-sudo apt install -y gcc-arm-linux-gnueabihf binutils-arm-linux-gnueabihf
-```
-
-### Build for ARM64
-
-```bash
-# Using ARM64 profile
-python3 builder.py --profile arm64 --config config/build-cross.conf
-
-# Custom board selection
-BOARD=rpi_5 python3 builder.py --profile arm64 --config config/build-cross.conf
-
-# Custom output
-python3 builder.py --profile arm64 --config config/build-cross.conf --output ./lfs-arm64
-
-# Create SD card image
-python3 builder.py --profile arm64 --config config/build-cross.conf
-# Output: lfs-arm64.img
-```
-
-### Supported Boards
-
-| Board | Config | Status |
-|-------|--------|--------|
-| Raspberry Pi 4 | `BOARD=rpi_4` | ✅ Full |
-| Raspberry Pi 5 | `BOARD=rpi_5` | ✅ Full |
-| Orange Pi PC | `BOARD=orangepi_pc` | 🧪 Testing |
-| Pine64 | `BOARD=pine64` | 🧪 Testing |
-
-### Common Issues
-
-#### Build fails at toolchain stage
-```bash
-# Check log
-cat lfs-build/logs/toolchain.log
-
-# Resume from failed stage
-python3 builder.py --resume-from toolchain
-```
-
-#### Low disk space
-```bash
-# Clean build directory
-python3 builder.py --clean
-
-# Use external drive
-export LFS_BUILD_DIR=/mnt/external-drive/lfs-build
-```
-
-#### Java download fails
-```bash
-# URLs are automatically updated to Eclipse Temurin
-# Check network connectivity
-curl -I https://github.com/adoptium/
-```
-
-#### Live USB boot issues
-```bash
-# Verify ISO checksum
-sha256sum lfs-installer.iso
-
-# Check USB device
-lsblk
-sudo fdisk -l /dev/sdb
-
-# Re-write with dd
-sudo dd if=lfs-installer.iso of=/dev/sdb bs=4M status=progress
-```
-
-#### Cross-compilation issues
-```bash
-# Verify cross-toolchain
-aarch64-linux-gnu-gcc --version
-
-# Check QEMU registration
-update-binfmts --display
-
-# Manual QEMU setup
-docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-```
-
-#### Audio issues
-```bash
-# Check real-time kernel
-uname -r | grep rt
-
-# Verify audio group
-groups $USER
-
-# Check JACK status
-svc status jack2
-
-# Test audio
-speaker-test -t wav -c 2
-```
-
-## Directory Structure
-
-```
-lfs-builder/
-├── builder.py                 # Main orchestrator
-├── mac-lfs-builder.sh         # macOS Docker build script
-├── Dockerfile.mac             # macOS Docker configuration
-├── config/
-│   ├── build.conf             # Main configuration
-│   ├── build.conf.minimal     # Minimal server config
-│   ├── build-cross.conf       # Cross-compilation config
-│   ├── build-java.conf        # Java-optimized config
-│   ├── audio-profile.conf     # Audio production config
-│   ├── network.conf           # Network configuration
-│   ├── init.conf              # Init system config
-│   ├── kernel-config          # x86_64 kernel config
-│   ├── kernel-config-arm64    # ARM64 kernel config
-│   ├── u-boot.config          # U-Boot configuration
-│   ├── desktop.conf           # Desktop settings
-│   ├── security.conf          # Security settings
-│   ├── lpm.conf               # Package manager config
-│   └── packages.conf.json     # Package definitions
-├── scripts/
-│   ├── host/                  # Host preparation scripts
-│   ├── lfs/                   # LFS build scripts
-│   │   ├── 06a-init-system.sh    # Init system installer
-│   │   ├── 06b-service-management.sh  # Service abstraction
-│   │   ├── 06c-boot-scripts.sh  # SysVinit boot scripts
-│   │   ├── 06d-systemd-config.sh    # Systemd config
-│   │   └── 06e-init-selector.sh     # Init selector wizard
-│   ├── blfs/                  # BLFS build scripts
-│   └── final/                 # ISO creation scripts
-├── profiles/
-│   ├── minimal/               # Minimal profile
-│   ├── xfce/                  # XFCE profile
-│   ├── gnome/                 # GNOME profile
-│   ├── kde/                   # KDE Plasma profile
-│   ├── lxqt/                  # LXQt profile
-│   ├── java-dev/              # Java development profile
-│   ├── server/                # Server profile
-│   ├── secure/                # Security-hardened profile
-│   ├── full/                  # Complete system
-│   ├── arm64/                 # ARM64 profile
-│   ├── audio-cli/             # Headless audio production
-│   ├── audio-studio/          # Audio production studio
-│   └── custom/                # Custom profile template
-├── packages/
-│   ├── sources.list           # Package download URLs
-│   ├── custom-scripts/        # Custom installation scripts
-│   └── md5sums                # Checksum verification
-├── tests/                     # Test suite (105 tests, 84% coverage)
-│   ├── test_config.py
-│   ├── test_builder.py
-│   ├── test_integration.py
-│   ├── test_integration_network.py
-│   └── test_integration_usb.py
-├── tools/
-│   ├── multi-platform/        # Platform-specific tools
-│   ├── build-matrix.sh        # Multi-arch build automation
-│   └── config-selector.sh     # Interactive config selection
-├── README.md                  # This file
-├── CHANGELOG.md               # Version history
-├── CONTRIBUTING.md            # Contribution guidelines
-└── ADVANCED.md                # Advanced usage guide
-```
-
-## Post-Installation
-
-After installation, log into your new LFS system:
-
-```bash
-# Default credentials
-Username: lfsuser
-Password: lfsuser123
-
-# Root password
-root123
-```
-
-### First Boot
-
-The system will automatically:
-1. Detect hardware (CPU, RAM, GPU)
-2. Configure network via DHCP
-3. Set up graphics drivers
-4. Create user directories
-5. Enable appropriate services
-
-### Post-Install Commands
-
-```bash
-# System update
-lfs-update check
-lfs-update upgrade
-
-# Install new packages
-lpm search firefox
-lpm install firefox
-
-# Service management (unified across init systems)
-svc start sshd
-svc status tomcat
-
-# Audio production (if audio profile)
-start-audio
-qjackctl
-ardour
-
-# System status
-status.sh
-
-# Backup system
-backup-system.sh
-```
-
-## Contributing
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-### Quick Contribution Guide
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'feat: add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-### Commit Convention
-
-```
-feat(scope): add new feature
-fix(scope): fix bug
-docs(scope): update documentation
-refactor(scope): code refactor
-test(scope): add tests
-chore(scope): maintenance tasks
-```
-
-## Support
-
-- 📖 **Documentation**: [ADVANCED.md](ADVANCED.md)
-- 📝 **Changelog**: [CHANGELOG.md](CHANGELOG.md)
-- 🐛 **Issues**: [GitHub Issues](https://github.com/lfs-builder/lfs-builder/issues)
-- 🐛 **Troubleshooting**: [Troubleshoot Guide](docs/troubleshoot.md)
-- 💬 **Discussions**: [GitHub Discussions](https://github.com/lfs-builder/lfs-builder/discussions)
-
-## Acknowledgments
-
-- [Linux From Scratch](https://www.linuxfromscratch.org/) - LFS and BLFS books
-- [Adoptium](https://adoptium.net/) - OpenJDK builds
-- [Ardour](https://ardour.org/) - Professional DAW
-- [LMMS](https://lmms.io/) - Music production
-- [JACK](https://jackaudio.org/) - Audio connection kit
-- [PipeWire](https://pipewire.org/) - Audio/Video server
-- [XFCE](https://www.xfce.org/) - Lightweight desktop
-- [GNOME](https://www.gnome.org/) - Modern desktop
-- [KDE](https://kde.org/) - Plasma desktop
-
-## License
-
-This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
-
----
-
-## Quick Reference
-
-### Build Commands
-```bash
-python3 builder.py --list-profiles
-python3 builder.py --profile xfce
-python3 builder.py --profile secure --init sysvinit
-python3 builder.py --profile audio-studio
-python3 builder.py --profile audio-cli --init sysvinitpython3 builder.py --profile arm64 --config config/build-cross.conf
-python3 builder.py --write-usb /dev/sdb
-python3 builder.py --clean
-```
-
-### System Commands (on built system)
-```bash
-# Service management (unified)
-svc start sshd
-svc stop tomcat
-svc list
-
-# System updates
-lfs-update status
-lfs-update upgrade
-
-# Package management
-lpm list
-lpm upgrade firefox
-
-# Audio production (if audio profile)
-start-audio
-stop-audio
-qjackctl
-ardour
-
-# Status
-status.sh
-```
-
-### Useful Aliases (on built system)
-```bash
-# Generic
-alias ll='ls -alF'
-alias grep='grep --color=auto'
-
-# Service management
-alias sv-start='svc start'
-alias sv-stop='svc stop'
-alias sv-status='svc status'
-
-# Audio production (if audio profile)
-alias jack-start='jack_control start'
-alias jack-stop='jack_control stop'
-alias midi-ls='aconnect -l'
-alias audio-start='start-audio'
-
-# Java development
-alias java-build='mvn clean compile'
-alias gradle-build='./gradlew build'
-alias tomcat-start='svc start tomcat'
-
-# Navigation
-alias proj='cd ~/projects'
+python3 -m pip install -r tests/requirements-test.txt
+python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 ```
 
 ## Troubleshooting
 
-For more details, see the [Failed Step](docs/troubleshoot.md).
+### Build stops at prerequisites
 
-### Wallpaper
+- Confirm host dependencies are installed.
+- Use `--host-distro` when distro detection is ambiguous.
 
-## without Logo
-![LFS Wallpaper](images/lfs-wallpaper-1.png)
+### Live ISO missing
 
-## with Logo
-![LFS Wallpaper with Logo](images/lfs-wallpaper-with-logo.png)
+- Check whether `--no-live` was used.
+- Verify final stages logs in `<output>/logs/`.
 
-## more
+### Kernel missing in output
 
-![LFS Wallpaper with Logo](images/lfs-wallpaper-1.png)
+- Inspect `lfs/09-build-kernel.sh` stage log.
+- Confirm `kernel.type` in config and source availability.
 
-![LFS Wallpaper with Logo](images/lfs-wallpaper-2.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-3.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-4.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-5.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-6.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-7.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-8.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-9.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-10.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-11.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-12.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-13.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-14.png)
-
-![LFS Wallpaper with Logo](images/lfs-wallpaper-15.png)
-
----
-
-## tests
-
-mac
-```bash
-# Créer un environnement virtuel
-python3 -m venv venv
-
-# Activer l'environnement virtuel
-source venv/bin/activate
-
-# Installer les dépendances
-pip install -r requirements-test.txt
-
-# Exécuter les tests
-python -m pytest tests/ -v
-
-# Quitter l'environnement virtuel
-deactivate
-
-# Exécuter un test spécifique
-python -m pytest tests/test_config.py -v
-
-# Exécuter un tests avec coverage
-python -m pytest tests/ -v --cov=builder --cov-report=term --cov-report=html
-
-# Pour les tests USB (avec une vraie clé USB - DANGEREUX)
-python -m pytest tests/test_integration_usb.py -v --usb-device=/dev/sdb --dangerous
-
-# Rendre le script exécutable
-chmod +x mac-lfs-builder.sh
-
-# Build par défaut (XFCE)
-./mac-lfs-builder.sh
-
-# Build pour Pinebook
-./mac-lfs-builder.sh --pinebook
-
-# Build pour Brax3
-./mac-lfs-builder.sh --brax3
-
-# Build audio studio
-./mac-lfs-builder.sh --audio-studio
-
-# Build ARM64 (Raspberry Pi)
-./mac-lfs-builder.sh --arm64
-
-# Build minimal avec sysvinit
-./mac-lfs-builder.sh --profile minimal --init sysvinit
-
-# Build complet sans live USB
-./mac-lfs-builder.sh --profile full --no-live
-
-# Nettoyer
-./mac-lfs-builder.sh --clean
-
-# Aide
-./mac-lfs-builder.sh --help
-```
+### Resume after failure
 
 ```bash
-# Run all tests
-python -m pytest tests/ -v --cov=builder --cov-report=term --cov-report=html
+python3 builder.py --resume-from <stage-name> --profile <profile> --output <output-dir>
 ```
 
-## Mac OSX dev
+### Regenerate source list
 
 ```bash
-# Créer un environnement virtuel
-python3 -m venv venv
-
-# Activer l'environnement virtuel
-source venv/bin/activate
-
-# Exécuter les tests
-python -m pytest tests/ -v
-
-# Quitter l'environnement virtuel
-deactivate
-
-# Exécuter un test spécifique
-python -m pytest tests/test_config.py -v  
-
-# Exécuter un tests avec coverage
-python -m pytest tests/ -v --cov=builder --cov-report=term --cov-report=html
-
-# Pour les tests USB (avec une vraie clé USB - DANGEREUX)
-python -m pytest tests/test_integration_usb.py -v --usb-device=/dev/sdb --dangerous
-
-# Rendre le script exécutable
-chmod +x mac-lfs-builder.sh
-
-# Build par défaut (XFCE)
-./mac-lfs-builder.sh
-
-# Build pour Pinebook
-./mac-lfs-builder.sh --pinebook
-
-# Build pour Brax3
-./mac-lfs-builder.sh --brax3
-
-# Build audio studio
-./mac-lfs-builder.sh --audio-studio
-
-# Build ARM64 (Raspberry Pi)
-./mac-lfs-builder.sh --arm64
-
-# Build minimal avec sysvinit
-./mac-lfs-builder.sh --profile minimal --init sysvinit
-
-# Build complet sans live USB
-./mac-lfs-builder.sh --profile full --no-live
-
-# Nettoyer
-./mac-lfs-builder.sh --clean
-
-# Aide
-./mac-lfs-builder.sh --help
+python3 builder.py --generate-sources-list
 ```
 
-**Built with ❤️ for the LFS community**
+## Security and support
+
+- Security policy: [SECURITY.md](SECURITY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Advanced notes: [ADVANCED.md](ADVANCED.md)
+
+## Contributing
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
+
+## License
+
+This project is licensed under GPLv3. See [LICENSE](LICENSE).

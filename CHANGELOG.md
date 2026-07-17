@@ -5,7 +5,39 @@ All notable changes to the LFS/BLFS Builder project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.4.5] – 2026-07-11
+## [0.4.5] - 2026-07-17
+
+### Added
+- **Builder parameter persistence for shell stages**
+  - Added `/etc/lfs-builder-params.env` generation during branding stage.
+  - Captures exported builder parameters (`LFS_*`, `LFS_CONFIG_*`, `LFS_PROFILE_*`) for traceability and post-build inspection.
+
+- **Complete BDD test coverage for build scenarios**
+  - Added `tests/features/test_build.py` to implement and execute `tests/features/build.feature`.
+  - Added `pytest-bdd` to `tests/requirements-test.txt` so BDD suites run consistently in CI and local environments.
+
+- **README full professional rewrite**
+  - Replaced previous README with a complete English guide.
+  - Added architecture, build flow, and workflow topology diagrams (Mermaid).
+  - Added comprehensive CLI reference, profile matrix, outputs contract, and workflow behavior model.
+
+### Changed
+- **Builder runtime synchronization**
+  - Introduced executor refresh flow so shell environment is rebuilt after runtime overrides (`--init`, `--no-live`, `--kernel-type`, `--bootloader`).
+  - Added host distro override handling via config (`host.distro_override`) in host detection logic.
+  - Updated live stage inclusion logic to reflect both profile defaults and runtime config state.
+
+- **GitHub Actions workflow architecture**
+  - Refactored cache workflows to be strictly cache-only (no release publishing).
+  - Standardized release-capable workflows to verify and publish ISO + kernel + SHA256 checksums.
+  - Updated nightly and cross-compile workflows to align with current builder behavior and output paths.
+  - Removed failure-masking behavior in CI test workflows and fixed docs deployment permissions.
+
+### Fixed
+- **End-to-end test reliability**
+  - Restored full test suite execution including BDD collection.
+  - Added missing prerequisite test coverage for host distro override path.
+  - Achieved `builder.py` line coverage at 100% with passing test suite.
 
 #### Added
 - **`--bootloader` option** in builder.py to allow users to specify the bootloader type (GRUB, Syslinux, U-Boot) for cross-compilation builds.
