@@ -94,3 +94,15 @@ https://people.redhat.com/~dhowells/keyutils/keyutils-1.6.3.tar.gz
 https://archive.mesa3d.org/mesa-25.1.8.tar.xz
 
 https://www.linux-libre.fsfla.org/pub/linux-libre/releases/6.12.20-gnu/linux-libre-6.12.20-gnu.tar.xz
+
+# Stunnel - version 5.75
+http://rsync.belnet.be/mirror/ftp.frugalware.org/ftp/pub/frugalware/frugalware-stable/source/network-extra/stunnel/stunnel-5.75.tar.gz
+
+# Zsh - version 5.9
+http://mirror.dotsrc.org/kali/pool/main/z/zsh/zsh_5.9.orig.tar.xz
+
+# Enscript - miroir GNU
+https://mirrors.hust.edu.cn/gnu/enscript/enscript-1.6.6.tar.gz
+
+# Paxmirabilis
+https://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20151013.cpio.gz
