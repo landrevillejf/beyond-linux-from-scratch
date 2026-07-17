@@ -117,7 +117,7 @@ fi
 # ---------- Run tests ----------
 if [ "$RUN_TESTS" = true ] && [ -f "./tools/run-tests.sh" ]; then
     echo -e "${BLUE}Running tests...${NC}"
-    if ! ./tools/run-tests.sh; then
+    if ! bash ./tools/run-tests.sh; then
         echo -e "${RED}Tests failed. Aborting release.${NC}"
         exit 1
     fi
