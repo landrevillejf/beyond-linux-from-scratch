@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+
 # Remove output directories, sources cache, logs, etc.
-rm -rf ./lfs-build ./output ./packages/sources.list ./packages/md5sums
-echo "✅ Build artifacts cleaned."
+rm -rf ./lfs-build ./output ./htmlcov ./coverage.xml ./.coverage
+echo "Build artifacts cleaned."
