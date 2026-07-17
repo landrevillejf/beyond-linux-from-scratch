@@ -1,9 +1,6 @@
 name: XFCE SYSVINIT x86_64 Build Live ISO
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       create_release:

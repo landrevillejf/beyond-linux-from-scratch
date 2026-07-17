@@ -33,6 +33,18 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r tests/requirements-test.txt
 
+      - name: Generate sources.list
+        run: python3 builder.py --generate-sources-list
+
+      - name: Cache sources
+        uses: actions/cache@v4
+        with:
+          path: ./build-release/sources
+          key: lfs-sources-release-${{ hashFiles('packages/sources.list') }}
+          restore-keys: |
+            lfs-sources-release-
+            lfs-sources-
+
       - name: Create lfs user
         run: |
           sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
@@ -45,7 +57,9 @@ jobs:
 
       - name: Build release profile (xfce + sysvinit live)
         run: |
-          sudo -u lfs python3 builder.py --profile xfce --init sysvinit --output ./build-release
+          sudo -u lfs python3 builder.py --profile xfce --init sysvinit --output ./build-release --verbose
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
 
       - name: Verify kernel and ISO
         run: |
@@ -54,11 +68,30 @@ jobs:
           sha256sum ./build-release/lfs-installer.iso > ./build-release/SHA256SUMS
           sha256sum ./build-release/image/boot/vmlinuz* >> ./build-release/SHA256SUMS
 
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: |
+            ./build-release/lfs-installer.iso
+            ./build-release/image/boot/vmlinuz*
+            ./build-release/SHA256SUMS
+            ./build-release/build_info.json
+          if-no-files-found: error
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             ./build-release/lfs-installer.iso
             ./build-release/image/boot/vmlinuz*
+            ./build-release/build_info.json
             ./build-release/SHA256SUMS
           generate_release_notes: true
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-logs
+          path: ./build-release/logs/

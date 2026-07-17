@@ -1,8 +1,6 @@
 name: Build LFS ISO
 
 on:
-  push:
-    tags: [ '*' ]
   workflow_dispatch:
     inputs:
       profile:
@@ -114,17 +112,6 @@ jobs:
         with:
           name: build-info
           path: ${{ inputs.output_dir || './lfs-build' }}/build_info.json
-
-      - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            ${{ inputs.output_dir || './lfs-build' }}/lfs-installer.iso
-            ${{ inputs.output_dir || './lfs-build' }}/build_info.json
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Show last logs on failure
         if: failure()
