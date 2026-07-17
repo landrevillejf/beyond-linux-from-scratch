@@ -208,7 +208,7 @@ class TestLFSBuilderCacheIntegration:
                 profile=builder.profile,
                 init=builder.get_init_system(),
                 arch='x86_64',  # matches the default config architecture
-                builder_version='0.4.4'
+                builder_version='0.4.5'
             )
             mock_cache_instance.download_and_extract.assert_called_once()
 
