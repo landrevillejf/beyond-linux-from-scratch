@@ -1,0 +1,104 @@
+name: Build LFS ISO
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        default: 'minimal'
+        type: choice
+        options:
+          - minimal
+          - xfce
+          - gnome
+          - secure
+          - server
+          - arm64
+      init:
+        description: 'Init system'
+        default: 'sysvinit'
+        type: choice
+        options:
+          - sysvinit
+          - systemd
+      no_live:
+        description: 'Disable live system (faster)'
+        type: boolean
+        default: true
+      output_dir:
+        description: 'Output directory'
+        default: './lfs-build'
+      verbose:
+        description: 'Verbose logging'
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6 heures max
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bison flex gawk texinfo wget \
+            xorriso parted qemu-user-static
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Generate sources.list
+        run: python3 builder.py --generate-sources-list
+
+      - name: Cache sources
+        id: cache-sources
+        uses: actions/cache@v3
+        with:
+          path: ${{ github.workspace }}/lfs-build/sources
+          key: sources-${{ hashFiles('packages/sources.list') }}
+          restore-keys: |
+            sources-
+
+      - name: Build LFS
+        id: build
+        run: |
+          CMD="python3 builder.py --profile ${{ inputs.profile || 'minimal' }} \
+               --init ${{ inputs.init || 'sysvinit' }} \
+               --output ${{ inputs.output_dir || './lfs-build' }}"
+          if [ "${{ inputs.no_live }}" = "true" ]; then CMD="$CMD --no-live"; fi
+          if [ "${{ inputs.verbose }}" = "true" ]; then CMD="$CMD --verbose"; fi
+          sudo -E bash -c "$CMD"
+        env:
+          # Empêche toute interaction (si le script pose des questions)
+          LFS_BUILDER_NONINTERACTIVE: 1
+
+      - name: Upload ISO artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-iso-${{ inputs.profile || 'minimal' }}-${{ inputs.init || 'sysvinit' }}
+          path: ${{ inputs.output_dir || './lfs-build' }}/lfs-installer.iso
+          if-no-files-found: error
+
+      - name: Upload build info
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-info
+          path: ${{ inputs.output_dir || './lfs-build' }}/build_info.json
+
+      - name: Show last logs on failure
+        if: failure()
+        run: |
+          echo "=== Last 100 lines of build.log ==="
+          tail -n 100 ${{ inputs.output_dir || './lfs-build' }}/logs/build.log 2>/dev/null || echo "Log file not found"
+          echo "=== End of log ==="

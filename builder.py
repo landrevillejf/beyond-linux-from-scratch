@@ -1702,6 +1702,9 @@ Examples:
                         default=None,
                         help='Override bootloader type (grub, uboot, aboot)')
 
+    parser.add_argument('--generate-sources-list', action='store_true',
+                        help='Generate packages/sources.list from configured repositories and exit')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -1796,6 +1799,11 @@ def main():
         logging.getLogger().setLevel(logging.DEBUG)
         builder.logger.setLevel(logging.DEBUG)
         builder.logger.info("Verbose logging enabled")
+
+    if args.generate_sources_list:
+        builder._update_sources_list()
+        print("sources.list generated successfully.")
+        return
 
     # --- Calcul des valeurs effectives ---
     effective_init = builder.get_init_system()

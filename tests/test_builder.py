@@ -5,6 +5,7 @@ Tests for LFSBuilder class
 
 import pytest
 import json
+import sys
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from builder import LFSBuilder, ScriptExecutor, SourceDownloader, main
@@ -576,3 +577,12 @@ class TestLFSBuilder:
         # Une autre approche : tester directement l'appel de la logique comme avant.
         # Ici, on se contente de garantir que main() s'exécute sans erreur.
         # La couverture indiquera que les lignes ont été exécutées.
+
+    @patch('builder.LFSBuilder._update_sources_list')
+    @patch('builtins.print')
+    def test_generate_sources_list_option(self, mock_print, mock_update):
+        test_args = ['builder.py', '--generate-sources-list']
+        with patch.object(sys, 'argv', test_args):
+            main()  # Ne lève pas SystemExit, retourne normalement
+        mock_update.assert_called_once()
+        mock_print.assert_any_call("sources.list generated successfully.")
