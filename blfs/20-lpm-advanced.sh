@@ -15,6 +15,7 @@ USE_COLOR=true
 # ----------------------------------------------------------------------
 LPM_VERSION="2.0.0"
 LPM_CONF="/etc/lpm/lpm.conf"
+LPM_ETC="/etc/lpm"
 LPM_DB="/var/lib/lpm"
 LPM_LOGS="/var/log/lpm"
 LPM_PACKAGES_DIR="/usr/local/share/lpm/packages"
@@ -56,12 +57,19 @@ release_lock() {
     flock -u "$LOCK_FD" 2>/dev/null || true
 }
 
+refresh_runtime_paths() {
+    db_file="$LPM_DB/packages.list"
+    installed_file="$LPM_DB/installed.list"
+    file_index="$LPM_DB/file_index"
+}
+
 # Read configuration file (sourced)
 load_config() {
     if [ -f "$LPM_CONF" ]; then
         # shellcheck disable=SC1090
         source "$LPM_CONF"
     fi
+    refresh_runtime_paths
     log_verbose "Configuration loaded from $LPM_CONF"
 }
 
@@ -74,9 +82,7 @@ init_dirs() {
 # ----------------------------------------------------------------------
 # Package database helpers (version:name:description:dep1,dep2:checksum)
 # ----------------------------------------------------------------------
-db_file="$LPM_DB/packages.list"
-installed_file="$LPM_DB/installed.list"
-file_index="$LPM_DB/file_index"
+refresh_runtime_paths
 # installed.list format: name version
 
 # Read package metadata from DB
@@ -242,10 +248,16 @@ install_package() {
 # Package removal
 # ----------------------------------------------------------------------
 remove_package() {
-    local pkg_name="$1"
+    local pkg_name=""
     local keep_files=false
 
-    [ "$pkg_name" = "--keep-files" ] && { keep_files=true; pkg_name="$2"; }
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --keep-files) keep_files=true; shift ;;
+            *) pkg_name="$1"; shift ;;
+        esac
+    done
+
     [ -z "$pkg_name" ] && die "Usage: lpm remove <package>"
 
     if ! is_installed "$pkg_name"; then
@@ -470,8 +482,8 @@ main() {
     local cmd="${1:-help}"
     shift || true
 
-    init_dirs
     load_config
+    init_dirs
 
     if [ "$cmd" != "help" ] && [ "$cmd" != "version" ]; then
         acquire_lock
