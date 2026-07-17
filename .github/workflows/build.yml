@@ -26,14 +26,14 @@ on:
       no_live:
         description: 'Disable live system (faster)'
         type: boolean
-        default: true
+        default: false
       output_dir:
         description: 'Output directory'
         default: './lfs-build'
       verbose:
         description: 'Verbose logging'
         type: boolean
-        default: false
+        default: true
 
 jobs:
   build:
@@ -55,6 +55,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
+      # ← AJOUTÉ : Installer pytest-bdd pour les tests BDD
+      - name: Install test dependencies
+        run: pip install pytest-bdd
+
+      # ← AJOUTÉ : Exécuter les tests BDD (rapide, ne dépend pas du cache)
+      - name: Run BDD tests
+        run: pytest tests/features/ -v
 
       - name: Generate sources.list
         run: python3 builder.py --generate-sources-list
@@ -78,7 +86,6 @@ jobs:
           if [ "${{ inputs.verbose }}" = "true" ]; then CMD="$CMD --verbose"; fi
           sudo -E bash -c "$CMD"
         env:
-          # Empêche toute interaction (si le script pose des questions)
           LFS_BUILDER_NONINTERACTIVE: 1
 
       - name: Upload ISO artifact
