@@ -87,6 +87,20 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      - name: Verify kernel presence
+        run: |
+          IMAGE_DIR="${{ inputs.output_dir || './lfs-build' }}/image"
+          if [ ! -d "$IMAGE_DIR/boot" ]; then
+            echo "Boot directory not found in $IMAGE_DIR – build failed?"
+            exit 1
+          fi
+          if ! ls "$IMAGE_DIR"/boot/vmlinuz* >/dev/null 2>&1; then
+            echo "Kernel not found in $IMAGE_DIR/boot – build failed!"
+            ls -la "$IMAGE_DIR"/boot || true
+            exit 1
+          fi
+          echo "Kernel found: $(ls "$IMAGE_DIR"/boot/vmlinuz*)"
+
       - name: Upload ISO artifact
         if: success()
         uses: actions/upload-artifact@v4
