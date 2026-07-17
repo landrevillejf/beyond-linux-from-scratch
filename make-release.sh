@@ -129,7 +129,7 @@ fi
 # ---------- Clean build artifacts ----------
 if [ "$RUN_CLEAN" = true ] && [ -f "./tools/clean-build.sh" ]; then
     echo -e "${BLUE}Cleaning build artifacts...${NC}"
-    ./tools/clean-build.sh
+    bash ./tools/clean-build.sh
     echo -e "${GREEN}Cleanup done.${NC}"
 elif [ "$RUN_CLEAN" = true ]; then
     echo -e "${YELLOW}No clean script found (tools/clean-build.sh). Skipping.${NC}"
