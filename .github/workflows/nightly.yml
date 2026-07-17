@@ -62,3 +62,10 @@ jobs:
         with:
           name: lfs-${{ matrix.profile }}-nightly.iso
           path: /tmp/lfs-build/build-${{ matrix.profile }}/lfs-installer.iso
+
+      - name: Upload logs on failure or cancellation
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ matrix.profile }}
+          path: /tmp/lfs-build/build-${{ matrix.profile }}/logs/
