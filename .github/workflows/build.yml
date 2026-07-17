@@ -56,13 +56,11 @@ jobs:
         with:
           python-version: '3.10'
 
-      # ← AJOUTÉ : Installer pytest-bdd pour les tests BDD
       - name: Install test dependencies
-        run: pip install pytest-bdd
+        run: pip install pytest-bdd pytest-cov
 
-      # ← AJOUTÉ : Exécuter les tests BDD (rapide, ne dépend pas du cache)
       - name: Run BDD tests
-        run: pytest tests/features/ -v
+        run: pytest tests/features/ -v --no-cov
 
       - name: Generate sources.list
         run: python3 builder.py --generate-sources-list
