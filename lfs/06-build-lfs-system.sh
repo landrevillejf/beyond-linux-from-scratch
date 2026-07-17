@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build LFS system – VRAIE COMPILATION DE GLIBC, BINUTILS, GCC, ETC.
+# Build LFS system – compilation of Glibc, Binutils, GCC, etc.
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -14,13 +14,9 @@ else
     log_success() { echo "[SUCCESS] $*"; }
 fi
 
-# ============================================================================
-# INTÉGRATION DU TYPE DE NOYAU
-# ============================================================================
 KERNEL_TYPE="${KERNEL_TYPE:-linux}"
 export KERNEL_TYPE
 log_info "Kernel type: $KERNEL_TYPE"
-# ============================================================================
 
 IN_DOCKER=false
 if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
@@ -48,7 +44,7 @@ run_privileged() {
 }
 
 log_info "========================================="
-log_info "Building LFS system (REAL COMPILATION)"
+log_info "Building LFS system"
 log_info "========================================="
 
 INIT_SYSTEM=${INIT_SYSTEM:-sysvinit}
@@ -68,13 +64,26 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
+# -----------------------------------------------------------------
+# 🔧 ASSURER LA PRÉSENCE DES OUTILS DE BASE DANS /tools/bin
+# -----------------------------------------------------------------
+log_info "Linking essential host tools to $LFS/tools/bin"
+run_privileged mkdir -pv "$LFS/tools/bin"
+for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld; do
+    if command -v $tool &>/dev/null; then
+        run_privileged ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
+    else
+        log_warning "Host tool '$tool' not found, chroot may fail"
+    fi
+done
+# -----------------------------------------------------------------
+
 run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
 run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
 
-# --- DYNAMIC SOURCE PATH (fix #1) ---
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
@@ -86,13 +95,12 @@ else
     exit 1
 fi
 
-# Create internal compilation script
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-# LFS temporary tools path (fix #3)
+# LFS temporary tools path
 export PATH=/tools/bin:/bin:/usr/bin
 
 cd /sources
@@ -166,7 +174,6 @@ INNEREOF
 
 run_privileged chmod +x "$LFS/build-lfs-system.sh"
 
-# --- Pass INIT_SYSTEM and KERNEL_TYPE inside chroot (fix #2) ---
 log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; /build-lfs-system.sh"
 

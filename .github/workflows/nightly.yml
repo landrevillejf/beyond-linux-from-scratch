@@ -41,6 +41,16 @@ jobs:
           sudo cp -a $GITHUB_WORKSPACE/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
+      - name: Ensure essential tools in LFS tools
+        run: |
+          TOOLS_BIN="/tmp/lfs-build/build-${{ matrix.profile }}/image/tools/bin"
+          sudo mkdir -p "$TOOLS_BIN"
+          for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld; do
+            if command -v $tool &>/dev/null; then
+              sudo ln -sfv "$(which $tool)" "$TOOLS_BIN/$tool"
+            fi
+          done
+
       - name: Build ${{ matrix.profile }} (as lfs user)
         run: |
           cd /tmp/lfs-build
