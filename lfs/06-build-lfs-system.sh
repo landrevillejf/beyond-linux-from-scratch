@@ -67,11 +67,30 @@ fi
 # -----------------------------------------------------------------
 # 🔧 ASSURER LA PRÉSENCE DES OUTILS DE BASE DANS /tools/bin
 # -----------------------------------------------------------------
-log_info "Linking essential host tools to $LFS/tools/bin"
+log_info "Copying essential host tools to $LFS/tools/bin"
 run_privileged mkdir -pv "$LFS/tools/bin"
-for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld; do
-    if command -v $tool &>/dev/null; then
-        run_privileged ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
+
+copy_tool_with_libs() {
+    local tool_path="$1"
+    local tool_name
+    tool_name="$(basename "$tool_path")"
+
+    run_privileged cp -Lv "$tool_path" "$LFS/tools/bin/$tool_name"
+    run_privileged chmod +x "$LFS/tools/bin/$tool_name"
+
+    # Copy dynamic libraries required by the tool into the chroot.
+    ldd "$tool_path" 2>/dev/null | awk '/=> \// {print $3} /^\/lib/ {print $1}' | while read -r lib; do
+        [ -z "$lib" ] && continue
+        local rel_dir
+        rel_dir="$(dirname "$lib")"
+        run_privileged mkdir -pv "$LFS$rel_dir"
+        run_privileged cp -Lv "$lib" "$LFS$lib"
+    done
+}
+
+for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc; do
+    if command -v "$tool" &>/dev/null; then
+        copy_tool_with_libs "$(command -v "$tool")"
     else
         log_warning "Host tool '$tool' not found, chroot may fail"
     fi
