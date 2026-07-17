@@ -36,6 +36,14 @@ jobs:
       - name: Test with pytest
         run: |
           pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v
+      # ← AJOUTÉ : Installer pytest-bdd pour les tests BDD
+      - name: Install test dependencies
+        run: pip install pytest-bdd
+
+      # ← AJOUTÉ : Exécuter les tests BDD (rapide, ne dépend pas du cache)
+      - name: Run BDD tests
+        run: pytest tests/features/ -v
+
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
