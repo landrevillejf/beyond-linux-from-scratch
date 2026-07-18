@@ -81,6 +81,12 @@ copy_tool_with_libs() {
     local tool_name
     tool_name="$(basename "$tool_path")"
 
+    # Never replace tools already provisioned by prior LFS stages.
+    if [ -x "$LFS/tools/bin/$tool_name" ]; then
+        log_info "Keeping existing chroot tool: /tools/bin/$tool_name"
+        return 0
+    fi
+
     run_privileged cp -Lv "$tool_path" "$LFS/tools/bin/$tool_name"
     run_privileged chmod +x "$LFS/tools/bin/$tool_name"
 
