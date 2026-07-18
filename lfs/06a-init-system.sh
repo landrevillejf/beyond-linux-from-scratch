@@ -107,7 +107,8 @@ copy_tool_with_libs() {
     done
 }
 
-for tool in tar head cut xz make nproc sed mktemp rm echo id getconf cc gcc install ln chmod chown mkdir cp mv uname; do
+# Only copy essential utilities; DO NOT copy gcc, cc, install, ln, chmod, etc.
+for tool in tar head cut xz make nproc sed mktemp rm echo id getconf; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"
@@ -122,6 +123,48 @@ if [ ! -x "$LFS/bin/echo" ] && [ -x "$LFS/usr/bin/echo" ]; then
 fi
 # -----------------------------------------------------------------
 
+# -----------------------------------------------------------------
+# Ensure toolchain is functional in chroot (copy cc1 from host if missing)
+# -----------------------------------------------------------------
+fix_chroot_toolchain() {
+    log_info "Checking if gcc works in chroot..."
+    if run_privileged chroot "$LFS" /bin/bash -c "echo 'int main(){}' > /tmp/test.c && gcc /tmp/test.c -o /tmp/test 2>/dev/null && rm -f /tmp/test.c /tmp/test" 2>/dev/null; then
+        log_success "Toolchain OK in chroot."
+        return 0
+    fi
+
+    log_warning "gcc/cc1 missing or broken in chroot. Copying from host..."
+    # Copy host's gcc directories into the chroot
+    if [ -d /usr/lib/gcc ]; then
+        run_privileged mkdir -p "$LFS/usr/lib"
+        run_privileged cp -r /usr/lib/gcc "$LFS/usr/lib/"
+        # Also copy /usr/libexec/gcc if present
+        if [ -d /usr/libexec/gcc ]; then
+            run_privileged mkdir -p "$LFS/usr/libexec"
+            run_privileged cp -r /usr/libexec/gcc "$LFS/usr/libexec/"
+        fi
+        log_success "Copied gcc from host to chroot."
+    else
+        log_error "Cannot find /usr/lib/gcc on host. Cannot repair toolchain."
+        return 1
+    fi
+
+    # Retest
+    if run_privileged chroot "$LFS" /bin/bash -c "echo 'int main(){}' > /tmp/test.c && gcc /tmp/test.c -o /tmp/test 2>/dev/null && rm -f /tmp/test.c /tmp/test" 2>/dev/null; then
+        log_success "Toolchain now works."
+        return 0
+    else
+        log_error "Toolchain still broken after copy. Aborting."
+        return 1
+    fi
+}
+
+if ! fix_chroot_toolchain; then
+    log_error "Cannot proceed with init-system installation."
+    exit 1
+fi
+# -----------------------------------------------------------------
+
 # Sources
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
@@ -131,7 +174,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     run_privileged chown -R lfs:lfs "$LFS/sources"
 fi
 
-# Internal script
+# Internal script (no toolchain repair inside – done externally)
 cat > "$LFS/build-init.sh" << 'INNEREOF'
 #!/bin/bash
 # Force PATH to include /usr/bin, /bin and the temporary toolchain
@@ -143,55 +186,6 @@ set -e
 cd /sources
 
 INIT_SYSTEM="${1:-sysvinit}"
-
-# -----------------------------------------------------------------
-# Toolchain check and repair
-# -----------------------------------------------------------------
-check_and_fix_toolchain() {
-    echo "Checking toolchain in chroot..."
-    # Simple compile test
-    echo 'int main() { return 0; }' > /tmp/test.c
-    if gcc /tmp/test.c -o /tmp/test 2>/dev/null; then
-        rm -f /tmp/test.c /tmp/test
-        echo "Toolchain OK."
-        return 0
-    fi
-
-    echo "WARNING: gcc/cc1 missing or broken. Trying to copy cc1 from host..."
-
-    # Try to copy the entire gcc directory from host to chroot
-    HOST_GCC_DIR="/usr/lib/gcc"
-    if [ -d "$HOST_GCC_DIR" ]; then
-        echo "Copying $HOST_GCC_DIR to chroot (overwriting)"
-        cp -r "$HOST_GCC_DIR" /usr/lib/
-        # Also copy /usr/libexec/gcc if present
-        [ -d /usr/libexec/gcc ] && cp -r /usr/libexec/gcc /usr/libexec/
-        echo "cc1 and related files copied."
-    else
-        echo "ERROR: Cannot find host gcc directory $HOST_GCC_DIR"
-        return 1
-    fi
-
-    # Retry compilation
-    echo 'int main() { return 0; }' > /tmp/test.c
-    if gcc /tmp/test.c -o /tmp/test 2>/dev/null; then
-        rm -f /tmp/test.c /tmp/test
-        echo "Toolchain now works."
-        return 0
-    else
-        echo "ERROR: Toolchain still broken after copying."
-        rm -f /tmp/test.c /tmp/test
-        return 1
-    fi
-}
-
-if ! check_and_fix_toolchain; then
-    echo "ABORTING: init system compilation cannot proceed."
-    echo "Please ensure the final toolchain is correctly installed."
-    echo "You may need to rebuild the LFS system (stage 06)."
-    exit 1
-fi
-# -----------------------------------------------------------------
 
 MAKE_BIN="$(command -v make || true)"
 if [ -z "$MAKE_BIN" ] && [ -x /tools/bin/make ]; then
