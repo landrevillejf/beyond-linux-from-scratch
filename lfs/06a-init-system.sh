@@ -124,45 +124,16 @@ fi
 # -----------------------------------------------------------------
 
 # -----------------------------------------------------------------
-# Ensure toolchain is functional in chroot (copy cc1 from host if missing)
+# Check toolchain in chroot – if broken, abort with clear instruction.
 # -----------------------------------------------------------------
-fix_chroot_toolchain() {
-    log_info "Checking if gcc works in chroot..."
-    if run_privileged chroot "$LFS" /bin/bash -c "echo 'int main(){}' > /tmp/test.c && gcc /tmp/test.c -o /tmp/test 2>/dev/null && rm -f /tmp/test.c /tmp/test" 2>/dev/null; then
-        log_success "Toolchain OK in chroot."
-        return 0
-    fi
-
-    log_warning "gcc/cc1 missing or broken in chroot. Copying from host..."
-    # Copy host's gcc directories into the chroot
-    if [ -d /usr/lib/gcc ]; then
-        run_privileged mkdir -p "$LFS/usr/lib"
-        run_privileged cp -r /usr/lib/gcc "$LFS/usr/lib/"
-        # Also copy /usr/libexec/gcc if present
-        if [ -d /usr/libexec/gcc ]; then
-            run_privileged mkdir -p "$LFS/usr/libexec"
-            run_privileged cp -r /usr/libexec/gcc "$LFS/usr/libexec/"
-        fi
-        log_success "Copied gcc from host to chroot."
-    else
-        log_error "Cannot find /usr/lib/gcc on host. Cannot repair toolchain."
-        return 1
-    fi
-
-    # Retest
-    if run_privileged chroot "$LFS" /bin/bash -c "echo 'int main(){}' > /tmp/test.c && gcc /tmp/test.c -o /tmp/test 2>/dev/null && rm -f /tmp/test.c /tmp/test" 2>/dev/null; then
-        log_success "Toolchain now works."
-        return 0
-    else
-        log_error "Toolchain still broken after copy. Aborting."
-        return 1
-    fi
-}
-
-if ! fix_chroot_toolchain; then
-    log_error "Cannot proceed with init-system installation."
+log_info "Checking if gcc works in chroot..."
+if ! run_privileged chroot "$LFS" /bin/bash -c "echo 'int main(){}' > /tmp/test.c && gcc /tmp/test.c -o /tmp/test 2>/dev/null && rm -f /tmp/test.c /tmp/test" 2>/dev/null; then
+    log_error "gcc/cc1 missing or broken in chroot."
+    log_error "The final toolchain (gcc, glibc, binutils) was not correctly installed."
+    log_error "Please rebuild the LFS system stage (06-lfs-system) and then retry."
     exit 1
 fi
+log_success "Toolchain OK in chroot."
 # -----------------------------------------------------------------
 
 # Sources
@@ -174,7 +145,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     run_privileged chown -R lfs:lfs "$LFS/sources"
 fi
 
-# Internal script (no toolchain repair inside – done externally)
+# Internal script (no toolchain repair; assumes it works)
 cat > "$LFS/build-init.sh" << 'INNEREOF'
 #!/bin/bash
 # Force PATH to include /usr/bin, /bin and the temporary toolchain
