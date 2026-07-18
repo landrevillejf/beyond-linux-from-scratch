@@ -89,7 +89,7 @@ copy_tool() {
     done
 }
 
-for tool in tar head cut xz; do
+for tool in tar head cut xz make nproc; do
     copy_tool "$tool"
 done
 
@@ -113,6 +113,24 @@ cd /sources
 
 INIT_SYSTEM="${1:-sysvinit}"
 
+MAKE_BIN="$(command -v make || true)"
+if [ -z "$MAKE_BIN" ] && [ -x /tools/bin/make ]; then
+    MAKE_BIN="/tools/bin/make"
+fi
+if [ -z "$MAKE_BIN" ]; then
+    echo "ERROR: make command not found in chroot PATH=$PATH"
+    exit 1
+fi
+
+NPROC_BIN="$(command -v nproc || true)"
+if [ -z "$NPROC_BIN" ] && [ -x /usr/bin/nproc ]; then
+    NPROC_BIN="/usr/bin/nproc"
+fi
+JOBS=1
+if [ -n "$NPROC_BIN" ]; then
+    JOBS="$("$NPROC_BIN" 2>/dev/null || echo 1)"
+fi
+
 compile_package() {
     local archive=$1
     if [ ! -f "$archive" ]; then
@@ -128,8 +146,8 @@ compile_package() {
     elif [ -f "Makefile" ]; then
         true
     fi
-    make -j$(nproc)
-    make install
+    "$MAKE_BIN" -j"$JOBS"
+    "$MAKE_BIN" install
     cd /sources
     rm -rf "$dir"
     echo "=== $dir done ==="
