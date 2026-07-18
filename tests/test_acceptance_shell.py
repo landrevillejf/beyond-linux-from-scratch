@@ -8,6 +8,7 @@ import pytest
 import subprocess
 import tempfile
 import os
+import re
 from pathlib import Path
 import shutil
 import time
@@ -148,8 +149,10 @@ exit 1
         """Le script lfs-system doit copier xz pour extraire les archives .tar.xz dans le chroot."""
         script = Path("lfs/06-build-lfs-system.sh")
         content = script.read_text()
-        assert "for tool in" in content
-        assert " xz;" in content
+        tool_list_match = re.search(r"for tool in (.+); do", content)
+        assert tool_list_match, "tool copy loop should exist in lfs-system script"
+        tools = tool_list_match.group(1).split()
+        assert "xz" in tools
 
     def test_blfs_desktop_script_validation(self, temp_dir, test_env):
         """Validation des scripts BLFS desktop"""
