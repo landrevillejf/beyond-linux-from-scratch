@@ -143,7 +143,7 @@ else
 fi
 
 # -----------------------------------------------------------------
-# Internal script with official LFS build steps
+# Internal script with official LFS build steps (fully detailed)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
@@ -157,7 +157,7 @@ export CONFIG_SHELL=/bin/bash
 
 cd /sources
 
-# ----- Helper function to extract and cd -----
+# ---------- Helper functions ----------
 extract() {
     local archive=$1
     local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
@@ -166,125 +166,216 @@ extract() {
     cd "$dir"
 }
 
-# ----- Build glibc (official LFS steps) -----
-build_glibc() {
-    local archive=$(ls glibc-*.tar.xz 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: glibc source not found"
-        return 1
-    fi
-    extract "$archive"
-    mkdir -v build
-    cd build
-    ../configure --prefix=/usr \
-                 --disable-werror \
-                 --enable-kernel=4.14 \
-                 --enable-stack-protector=strong \
-                 --with-headers=/usr/include \
-                 --libdir=/usr/lib \
-                 --enable-cet \
-                 --enable-multi-arch
-    make -j$(nproc)
-    make install
-    cd /sources
-    rm -rf "$(basename "$archive" .tar.xz)"
-    echo "glibc done"
-}
-
-# ----- Build binutils (official LFS steps) -----
-build_binutils() {
-    local archive=$(ls binutils-*.tar.xz 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: binutils source not found"
-        return 1
-    fi
-    extract "$archive"
-    mkdir -v build
-    cd build
-    ../configure --prefix=/usr \
-                 --sysconfdir=/etc \
-                 --enable-gold \
-                 --enable-ld=default \
-                 --enable-plugins \
-                 --enable-shared \
-                 --disable-werror \
-                 --enable-64-bit-bfd \
-                 --with-system-zlib
-    make -j$(nproc) tooldir=/usr
-    make tooldir=/usr install
-    cd /sources
-    rm -rf "$(basename "$archive" .tar.xz)"
-    echo "binutils done"
-}
-
-# ----- Build gcc (official LFS steps) -----
-build_gcc() {
-    local archive=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: gcc source not found"
-        return 1
-    fi
-    extract "$archive"
-    mkdir -v build
-    cd build
-    ../configure --prefix=/usr \
-                 --enable-languages=c,c++ \
-                 --disable-multilib \
-                 --disable-bootstrap \
-                 --with-system-zlib \
-                 --enable-default-pie \
-                 --enable-default-ssp \
-                 --enable-cet=auto
-    make -j$(nproc)
-    make install
-    # Create symlinks for cc and c++
-    ln -sf gcc /usr/bin/cc
-    ln -sf g++ /usr/bin/c++
-    cd /sources
-    rm -rf "$(basename "$archive" .tar.xz)"
-    echo "gcc done"
-}
-
-# ----- Build base packages (simple configure/make) -----
-build_simple() {
-    local pkg=$1
-    local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: $pkg source not found"
-        return 1
-    fi
-    extract "$archive"
-    if [ -f "configure" ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc
-    elif [ -f "Makefile" ]; then
-        : # already has Makefile
-    fi
-    make -j$(nproc)
-    make install
-    cd /sources
-    rm -rf "$(basename "$archive" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
-    echo "$pkg done"
-}
-
-# ----- Main build order -----
+# ---------- Build glibc ----------
 echo "=== Building glibc ==="
-build_glibc
+GLIBC_ARCHIVE=$(ls glibc-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$GLIBC_ARCHIVE" ]; then
+    echo "ERROR: glibc source not found"
+    exit 1
+fi
+extract "$GLIBC_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --disable-werror \
+             --enable-kernel=4.14 \
+             --enable-stack-protector=strong \
+             --with-headers=/usr/include \
+             --libdir=/usr/lib \
+             --enable-cet \
+             --enable-multi-arch
+make -j$(nproc)
+make install
+cd /sources
+rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.xz)"
+echo "glibc done"
 
+# ---------- Build binutils ----------
 echo "=== Building binutils ==="
-build_binutils
+BINUTILS_ARCHIVE=$(ls binutils-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$BINUTILS_ARCHIVE" ]; then
+    echo "ERROR: binutils source not found"
+    exit 1
+fi
+extract "$BINUTILS_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --sysconfdir=/etc \
+             --enable-gold \
+             --enable-ld=default \
+             --enable-plugins \
+             --enable-shared \
+             --disable-werror \
+             --enable-64-bit-bfd \
+             --with-system-zlib
+make -j$(nproc) tooldir=/usr
+make tooldir=/usr install
+cd /sources
+rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
+echo "binutils done"
 
+# ---------- Build gcc ----------
 echo "=== Building gcc ==="
-build_gcc
+GCC_ARCHIVE=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$GCC_ARCHIVE" ]; then
+    echo "ERROR: gcc source not found"
+    exit 1
+fi
+extract "$GCC_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --enable-languages=c,c++ \
+             --disable-multilib \
+             --disable-bootstrap \
+             --with-system-zlib \
+             --enable-default-pie \
+             --enable-default-ssp \
+             --enable-cet=auto
+make -j$(nproc)
+make install
+# Create symlinks for cc and c++
+ln -sf gcc /usr/bin/cc
+ln -sf g++ /usr/bin/c++
+cd /sources
+rm -rf "$(basename "$GCC_ARCHIVE" .tar.xz)"
+echo "gcc done"
 
-# Now the remaining base packages (coreutils, bash, etc.)
-for pkg in coreutils bash make grep sed gawk findutils tar gzip; do
-    echo "=== Building $pkg ==="
-    build_simple "$pkg"
-done
+# ---------- Build coreutils ----------
+echo "=== Building coreutils ==="
+COREUTILS_ARCHIVE=$(ls coreutils-*.tar.* 2>/dev/null | head -1)
+if [ -n "$COREUTILS_ARCHIVE" ]; then
+    extract "$COREUTILS_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$COREUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "coreutils done"
+else
+    echo "WARNING: coreutils source not found"
+fi
 
-# Additional packages that may be needed but not covered by the loop
-# For example, we might add gzip, tar already in loop, but also bzip2, etc.
-# But the loop covers the essentials.
+# ---------- Build bash ----------
+echo "=== Building bash ==="
+BASH_ARCHIVE=$(ls bash-*.tar.* 2>/dev/null | head -1)
+if [ -n "$BASH_ARCHIVE" ]; then
+    extract "$BASH_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$BASH_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "bash done"
+else
+    echo "WARNING: bash source not found"
+fi
+
+# ---------- Build make ----------
+echo "=== Building make ==="
+MAKE_ARCHIVE=$(ls make-*.tar.* 2>/dev/null | head -1)
+if [ -n "$MAKE_ARCHIVE" ]; then
+    extract "$MAKE_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$MAKE_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "make done"
+else
+    echo "WARNING: make source not found"
+fi
+
+# ---------- Build grep ----------
+echo "=== Building grep ==="
+GREP_ARCHIVE=$(ls grep-*.tar.* 2>/dev/null | head -1)
+if [ -n "$GREP_ARCHIVE" ]; then
+    extract "$GREP_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$GREP_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "grep done"
+else
+    echo "WARNING: grep source not found"
+fi
+
+# ---------- Build sed ----------
+echo "=== Building sed ==="
+SED_ARCHIVE=$(ls sed-*.tar.* 2>/dev/null | head -1)
+if [ -n "$SED_ARCHIVE" ]; then
+    extract "$SED_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$SED_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "sed done"
+else
+    echo "WARNING: sed source not found"
+fi
+
+# ---------- Build gawk ----------
+echo "=== Building gawk ==="
+GAWK_ARCHIVE=$(ls gawk-*.tar.* 2>/dev/null | head -1)
+if [ -n "$GAWK_ARCHIVE" ]; then
+    extract "$GAWK_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$GAWK_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "gawk done"
+else
+    echo "WARNING: gawk source not found"
+fi
+
+# ---------- Build findutils ----------
+echo "=== Building findutils ==="
+FINDUTILS_ARCHIVE=$(ls findutils-*.tar.* 2>/dev/null | head -1)
+if [ -n "$FINDUTILS_ARCHIVE" ]; then
+    extract "$FINDUTILS_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$FINDUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "findutils done"
+else
+    echo "WARNING: findutils source not found"
+fi
+
+# ---------- Build tar ----------
+echo "=== Building tar ==="
+TAR_ARCHIVE=$(ls tar-*.tar.* 2>/dev/null | head -1)
+if [ -n "$TAR_ARCHIVE" ]; then
+    extract "$TAR_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$TAR_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "tar done"
+else
+    echo "WARNING: tar source not found"
+fi
+
+# ---------- Build gzip ----------
+echo "=== Building gzip ==="
+GZIP_ARCHIVE=$(ls gzip-*.tar.* 2>/dev/null | head -1)
+if [ -n "$GZIP_ARCHIVE" ]; then
+    extract "$GZIP_ARCHIVE"
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$GZIP_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "gzip done"
+else
+    echo "WARNING: gzip source not found"
+fi
 
 echo "=== Base system compilation complete ==="
 INNEREOF
