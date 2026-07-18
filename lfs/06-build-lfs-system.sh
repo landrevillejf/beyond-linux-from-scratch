@@ -64,6 +64,14 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
+# If lfs-basic did not provision /tools toolchain, compiling glibc/binutils/gcc
+# in chroot with host compiler shims is unreliable and fails quickly.
+if [ ! -x "$LFS/tools/bin/gcc" ] || [ ! -x "$LFS/tools/bin/ld" ] || [ ! -x "$LFS/tools/bin/as" ]; then
+    log_warning "Missing temporary toolchain in $LFS/tools/bin (gcc/ld/as)"
+    log_warning "Skipping lfs-system compilation in bootstrap mode"
+    exit 0
+fi
+
 # Many autotools configure scripts require /bin/sh explicitly.
 if [ ! -x "$LFS/bin/sh" ]; then
     log_info "Creating /bin/sh symlink inside chroot"
@@ -102,7 +110,7 @@ copy_tool_with_libs() {
     done
 }
 
-for tool in bash sh env cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz expr dirname sort tr cut uniq head tail wc; do
+for tool in bash sh env cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown nproc xz expr dirname sort tr cut uniq head tail wc; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"
