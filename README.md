@@ -16,6 +16,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 
 ## Table of contents
 
+- [Documentation pages](#documentation-pages)
 - [Project goals and philosophy](#project-goals-and-philosophy)
 - [Architecture](#architecture)
 - [Build pipeline flow](#build-pipeline-flow)
@@ -32,6 +33,17 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 - [Security and support](#security-and-support)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Documentation pages
+
+- [Overview](docs/content.md)
+- [Stage Timings](docs/stage-timings.md)
+- [LPM Package Manager](docs/lpm.md)
+- [Troubleshooting](docs/troubleshoot.md)
+- [Docker How-To](docs/docker-howto.md)
+- [Release How-To](docs/make-release-how-to.md)
+- [Testing How-To](docs/testing-howto.md)
+- [Wallpaper Generator How-To](docs/wallpaper-generator-howto.md)
 
 ## Project goals and philosophy
 

@@ -8,6 +8,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.4.5] - 2026-07-17
 
 ### Added
+- **LPM interface mode selection**
+  - Added `--mode` to `lpm.py` with `cli` (default) and `text` modes.
+  - Added interactive text menu flow for package operations.
+  - Added dedicated tests in `tests/test_lpm_mode.py`.
+
+- **PR labeler configuration**
+  - Added `.github/labeler.yml` label rules for docs, CI, tests, builder, shell scripts, and LPM scopes.
+
+### Changed
+- **Coverage and CI reporting alignment**
+  - Updated `python-app.yml` to keep a single coverage-producing pytest run before Codecov upload.
+  - Updated README coverage badge URL to remove the stale `unittests` flag view.
+
+- **MkDocs strict documentation navigation**
+  - Replaced invalid `mkdocs.yml` nav references with existing docs pages.
+  - Simplified `docs/troubleshoot.md` and removed broken internal links.
+  - Fixed `docs/content.md` license link target for strict build compatibility.
+
+- **Source download behavior hardening**
+  - `SourceDownloader` now uses config-driven timeout/retry values at runtime.
+  - Default download tuning changed from `300s/3 retries` to `30s/2 retries` in:
+    - `config/default.json`
+    - `config/build.conf`
+    - `config/build.conf.json`
+
+### Fixed
+- **Release pipeline chroot bootstrap reliability**
+  - Hardened `lfs/06-build-lfs-system.sh` tool bootstrap for chroot execution.
+  - Avoids copying shell builtins as host binaries.
+  - Ensures `/bin/sh` and `/usr/bin/env` exist in chroot, preventing `./configure` execution failures.
+
+- **Download failure behavior on dead URLs**
+  - Permanent HTTP errors (e.g. 404) now fail fast instead of consuming all retries.
+  - Prevents long apparent “freeze” periods during source acquisition in release jobs.
+
+- **Coverage completeness**
+  - Added targeted tests for source list key fallback and downloader fast-fail behavior.
+  - Restored `builder.py` coverage to 100% after recent pipeline hardening changes.
+
+### Added
 - **Builder parameter persistence for shell stages**
   - Added `/etc/lfs-builder-params.env` generation during branding stage.
   - Captures exported builder parameters (`LFS_*`, `LFS_CONFIG_*`, `LFS_PROFILE_*`) for traceability and post-build inspection.

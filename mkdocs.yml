@@ -10,6 +10,7 @@ theme:
 
 nav:
   - Overview: content.md
+  - Stage Timings: stage-timings.md
   - LPM Package Manager: lpm.md
   - Troubleshooting: troubleshoot.md
   - Docker How-To: docker-howto.md

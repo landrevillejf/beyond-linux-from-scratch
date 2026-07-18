@@ -90,11 +90,13 @@ copy_tool_with_libs() {
         local rel_dir
         rel_dir="$(dirname "$lib")"
         run_privileged mkdir -pv "$LFS$rel_dir"
-        run_privileged cp -Lv "$lib" "$LFS$lib"
+        if [ ! -e "$LFS$lib" ]; then
+            run_privileged cp -Lv "$lib" "$LFS$lib"
+        fi
     done
 }
 
-for tool in bash sh env cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz; do
+for tool in bash sh env cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz expr dirname; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"
@@ -134,8 +136,8 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-# LFS temporary tools path
-export PATH=/tools/bin:/bin:/usr/bin
+# Prefer native chroot tools first; /tools/bin is fallback only.
+export PATH=/bin:/usr/bin:/tools/bin
 
 cd /sources
 
