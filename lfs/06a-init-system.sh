@@ -89,7 +89,7 @@ copy_tool() {
     done
 }
 
-for tool in tar head cut; do
+for tool in tar head cut xz; do
     copy_tool "$tool"
 done
 
