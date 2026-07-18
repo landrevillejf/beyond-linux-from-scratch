@@ -92,13 +92,18 @@ copy_tool() {
     done
 }
 
-for tool in tar head cut xz make nproc sed mktemp rm echo; do
+for tool in tar head cut xz make nproc sed mktemp rm echo id getconf cc gcc install ln chmod chown mkdir cp mv uname; do
     copy_tool "$tool"
 done
 
 # GNU make may exec simple commands directly; ensure /bin/echo exists.
 if [ ! -x "$LFS/bin/echo" ] && [ -x "$LFS/usr/bin/echo" ]; then
     run_privileged ln -sfn /usr/bin/echo "$LFS/bin/echo"
+fi
+
+# Ensure generic C compiler name is available.
+if [ ! -x "$LFS/usr/bin/cc" ] && [ -x "$LFS/usr/bin/gcc" ]; then
+    run_privileged ln -sfn /usr/bin/gcc "$LFS/usr/bin/cc"
 fi
 
 # Sources
