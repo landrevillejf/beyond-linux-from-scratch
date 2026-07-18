@@ -89,7 +89,7 @@ copy_tool() {
     done
 }
 
-for tool in tar head cut xz make nproc; do
+for tool in tar head cut xz make nproc sed mktemp rm; do
     copy_tool "$tool"
 done
 
