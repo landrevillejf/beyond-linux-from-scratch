@@ -64,6 +64,12 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
+# Many autotools configure scripts require /bin/sh explicitly.
+if [ ! -x "$LFS/bin/sh" ]; then
+    log_info "Creating /bin/sh symlink inside chroot"
+    run_privileged ln -sf bash "$LFS/bin/sh"
+fi
+
 # -----------------------------------------------------------------
 # 🔧 ASSURER LA PRÉSENCE DES OUTILS DE BASE DANS /tools/bin
 # -----------------------------------------------------------------
@@ -88,7 +94,7 @@ copy_tool_with_libs() {
     done
 }
 
-for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz; do
+for tool in bash sh env cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"
@@ -98,6 +104,12 @@ for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find x
         log_warning "Host tool '$tool' not found, chroot may fail"
     fi
 done
+
+if [ ! -x "$LFS/usr/bin/env" ] && [ -x "$LFS/tools/bin/env" ]; then
+    log_info "Creating /usr/bin/env symlink inside chroot"
+    run_privileged mkdir -pv "$LFS/usr/bin"
+    run_privileged ln -sf /tools/bin/env "$LFS/usr/bin/env"
+fi
 # -----------------------------------------------------------------
 
 run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
