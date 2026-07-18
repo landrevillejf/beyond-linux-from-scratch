@@ -89,8 +89,11 @@ copy_tool_with_libs() {
 }
 
 for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc; do
-    if command -v "$tool" &>/dev/null; then
-        copy_tool_with_libs "$(command -v "$tool")"
+    tool_path="$(command -v "$tool" 2>/dev/null || true)"
+    if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
+        copy_tool_with_libs "$tool_path"
+    elif [ -n "$tool_path" ]; then
+        log_info "Skipping shell builtin '$tool' (no standalone binary to copy)"
     else
         log_warning "Host tool '$tool' not found, chroot may fail"
     fi
