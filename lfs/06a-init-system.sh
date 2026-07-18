@@ -105,8 +105,8 @@ fi
 # Script interne
 cat > "$LFS/build-init.sh" << 'INNEREOF'
 #!/bin/bash
-# Force PATH to include /usr/bin and /bin
-export PATH=/bin:/usr/bin:/sbin:/usr/sbin
+# Force PATH to include /usr/bin, /bin and the temporary toolchain
+export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin
 
 set -e
 cd /sources
@@ -173,7 +173,7 @@ run_privileged chmod +x "$LFS/build-init.sh"
 
 # Exécution avec PATH explicite
 log_info "Entering chroot and building init system with argument: $INIT_SYSTEM"
-run_privileged chroot "$LFS" /bin/bash -c "export PATH=/bin:/usr/bin:/sbin:/usr/sbin; /build-init.sh $INIT_SYSTEM"
+run_privileged chroot "$LFS" /bin/bash -c "export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin; /build-init.sh $INIT_SYSTEM"
 
 run_privileged umount $LFS/dev/pts 2>/dev/null || true
 run_privileged umount $LFS/dev 2>/dev/null || true
