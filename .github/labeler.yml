@@ -1,0 +1,45 @@
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - mkdocs.yml
+          - README.md
+          - CHANGELOG.md
+          - CONTRIBUTING.md
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**
+
+builder:
+  - changed-files:
+      - any-glob-to-any-file:
+          - builder.py
+          - config/**
+          - profiles/**
+          - packages/**
+
+shell-scripts:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.sh"
+          - host/**
+          - lfs/**
+          - blfs/**
+          - final/**
+
+lpm:
+  - changed-files:
+      - any-glob-to-any-file:
+          - lpm.py
+          - docs/lpm.md
+          - LPM_DOCUMENTATION.md
+          - blfs/20-lpm-advanced.sh
+          - blfs/13-create-package-manager.sh
+          - blfs/14-create-base-packages.sh
