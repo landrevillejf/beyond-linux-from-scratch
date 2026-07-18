@@ -289,7 +289,7 @@ Contributions are welcome! Please follow these guidelines:
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 – see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 – see the [LICENSE file](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/LICENSE) for details.
 
 ---
 

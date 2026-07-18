@@ -9,15 +9,13 @@ theme:
     - navigation.tabs
 
 nav:
-  - Home: index.md
-  - Quick Start: quickstart.md
-  - Profiles: profiles.md
-  - Configuration: configuration.md
+  - Overview: content.md
   - LPM Package Manager: lpm.md
-  - Java Dev Profile: java-dev.md
-  - Advanced Usage: ADVANCED.md
-  - Changelog: CHANGELOG.md
-  - Contributing: CONTRIBUTING.md
+  - Troubleshooting: troubleshoot.md
+  - Docker How-To: docker-howto.md
+  - Release How-To: make-release-how-to.md
+  - Testing How-To: testing-howto.md
+  - Wallpaper Generator: wallpaper-generator-howto.md
 
 markdown_extensions:
   - admonition
