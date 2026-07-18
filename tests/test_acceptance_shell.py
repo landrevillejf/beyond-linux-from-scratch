@@ -149,7 +149,7 @@ exit 1
         """Le script lfs-system doit copier xz pour extraire les archives .tar.xz dans le chroot."""
         script = Path("lfs/06-build-lfs-system.sh")
         content = script.read_text()
-        tool_list_match = re.search(r"for tool in (.+); do", content)
+        tool_list_match = re.search(r"for tool in ([^;]+); do", content)
         assert tool_list_match, "tool copy loop should exist in lfs-system script"
         tools = tool_list_match.group(1).split()
         assert "xz" in tools
