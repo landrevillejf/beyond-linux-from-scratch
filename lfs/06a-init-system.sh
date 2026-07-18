@@ -69,6 +69,9 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
+# Ensure /bin/sh resolves to a working shell inside chroot for make/autotools.
+run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
+
 run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
 run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
@@ -107,6 +110,8 @@ cat > "$LFS/build-init.sh" << 'INNEREOF'
 #!/bin/bash
 # Force PATH to include /usr/bin, /bin and the temporary toolchain
 export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin
+export SHELL=/bin/bash
+export CONFIG_SHELL=/bin/bash
 
 set -e
 cd /sources
