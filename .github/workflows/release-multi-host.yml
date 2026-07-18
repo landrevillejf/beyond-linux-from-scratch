@@ -1,0 +1,146 @@
+# .github/workflows/release-multi-host.yml
+name: Release Multi-Host
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag to publish to"
+        required: true
+        type: string
+      include_fedora:
+        description: "Build Fedora-host artifact (requires self-hosted runner labels: self-hosted, linux, fedora)"
+        required: false
+        default: false
+        type: boolean
+      include_arch:
+        description: "Build Arch-host artifact (requires self-hosted runner labels: self-hosted, linux, arch)"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  prepare-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        run: |
+          MATRIX='{"include":[{"host":"ubuntu","runs_on":"[\"ubuntu-latest\"]","host_distro":"ubuntu"}'
+          if [ "${{ inputs.include_fedora }}" = "true" ]; then
+            MATRIX="${MATRIX},{\"host\":\"fedora\",\"runs_on\":\"[\\\"self-hosted\\\",\\\"linux\\\",\\\"fedora\\\"]\",\"host_distro\":\"fedora\"}"
+          fi
+          if [ "${{ inputs.include_arch }}" = "true" ]; then
+            MATRIX="${MATRIX},{\"host\":\"arch\",\"runs_on\":\"[\\\"self-hosted\\\",\\\"linux\\\",\\\"arch\\\"]\",\"host_distro\":\"arch\"}"
+          fi
+          MATRIX="${MATRIX}]}"
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+
+  build-host-artifacts:
+    needs: prepare-matrix
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare-matrix.outputs.matrix) }}
+    runs-on: ${{ fromJson(matrix.runs_on) }}
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.host == 'ubuntu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
+            libssl-dev libelf-dev squashfs-tools ca-certificates
+
+      - name: Install dependencies (Fedora self-hosted)
+        if: matrix.host == 'fedora'
+        run: |
+          sudo dnf -y install \
+            gcc gcc-c++ make bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso syslinux mtools dosfstools parted rsync bc cpio kmod \
+            openssl-devel elfutils-libelf-devel squashfs-tools ca-certificates
+
+      - name: Install dependencies (Arch self-hosted)
+        if: matrix.host == 'arch'
+        run: |
+          sudo pacman -Sy --noconfirm --needed \
+            base-devel bison flex gawk texinfo wget git python python-pip \
+            xorriso syslinux mtools dosfstools parted rsync bc cpio kmod \
+            openssl libelf squashfs-tools ca-certificates
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Generate sources.list
+        run: python3 builder.py --generate-sources-list
+
+      - name: Run tests
+        if: matrix.host == 'ubuntu'
+        run: python3 -m pytest tests/ -q
+
+      - name: Build host artifact
+        run: |
+          mkdir -p dist/${{ matrix.host }}
+          OUTPUT_DIR="./build-release-${{ matrix.host }}"
+          python3 builder.py \
+            --profile xfce \
+            --init sysvinit \
+            --host-distro "${{ matrix.host_distro }}" \
+            --output "$OUTPUT_DIR" \
+            --verbose
+          ls "$OUTPUT_DIR"/image/boot/vmlinuz*
+          test -s "$OUTPUT_DIR"/lfs-installer.iso
+          cp "$OUTPUT_DIR"/lfs-installer.iso "dist/${{ matrix.host }}/lfs-installer-${{ matrix.host }}.iso"
+          cp "$OUTPUT_DIR"/build_info.json "dist/${{ matrix.host }}/build_info-${{ matrix.host }}.json"
+          sha256sum "dist/${{ matrix.host }}/lfs-installer-${{ matrix.host }}.iso" > "dist/${{ matrix.host }}/SHA256SUMS-${{ matrix.host }}.txt"
+
+      - name: Upload host artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.host }}
+          path: dist/${{ matrix.host }}/*
+          if-no-files-found: error
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-logs-${{ matrix.host }}
+          path: build-release-${{ matrix.host }}/logs/
+
+  publish-release:
+    needs: build-host-artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download built host artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish all host artifacts to one release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: |
+            dist/*.iso
+            dist/*.txt
+            dist/*.json
+          generate_release_notes: true
