@@ -153,7 +153,9 @@ exit 1
             "",
         )
         assert tool_loop_line, "tool copy loop should exist in lfs-system script"
-        assert " xz;" in tool_loop_line or " xz " in tool_loop_line
+        tools_segment = tool_loop_line.split("for tool in", 1)[1].rsplit("; do", 1)[0]
+        tools = tools_segment.split()
+        assert "xz" in tools
 
     def test_blfs_desktop_script_validation(self, temp_dir, test_env):
         """Validation des scripts BLFS desktop"""
