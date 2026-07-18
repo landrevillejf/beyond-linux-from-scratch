@@ -574,6 +574,37 @@ https://custom.url/source2.tar.xz
         # sources.list ne doit pas avoir été créé
         assert not sources_file.exists()
 
+    def test_update_sources_list_url_without_filename_uses_full_url_key(self, tmp_path, monkeypatch):
+        """Couvre le fallback source_key() quand l'URL n'a pas de nom de fichier."""
+        monkeypatch.chdir(tmp_path)
+        output_dir = tmp_path / "lfs-build"
+        output_dir.mkdir()
+        config_file = tmp_path / "config.json"
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        packages_dir = tmp_path / "packages"
+        packages_dir.mkdir()
+        sources_file = packages_dir / "sources.list"
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = (
+            b"https://repo.example.com\n"
+            b"https://official.url/file1.tar.gz\n"
+        )
+        mock_response.__enter__.return_value = mock_response
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+            assert result is True
+
+        content = sources_file.read_text()
+        assert "https://repo.example.com" in content
+        assert "https://official.url/file1.tar.gz" in content
+
     def test_update_sources_list_no_repositories(self, tmp_path, monkeypatch):
         """Test quand aucune URL de dépôt n'est configurée."""
         monkeypatch.chdir(tmp_path)

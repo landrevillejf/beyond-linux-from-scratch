@@ -35,16 +35,9 @@ jobs:
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
           flake8 . --count --max-complexity=10 --max-line-length=127 --statistics --exit-zero
 
-      - name: Run unit tests with coverage
+      - name: Run tests with coverage
         run: |
           pytest tests/ --cov=builder --cov-report=term --cov-report=xml -v
-
-      - name: Run BDD tests
-        run: |
-          pytest tests/features/ -v
-
-      # On peut aussi exécuter tous les tests ensemble (mais pytest-bdd doit être installé)
-      # C'est plus simple de les séparer pour le rapport de couverture.
 
       - name: Upload coverage reports to Codecov
         if: matrix.python-version == '3.13'
