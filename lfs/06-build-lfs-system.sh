@@ -88,7 +88,7 @@ copy_tool_with_libs() {
     done
 }
 
-for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc; do
+for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown gcc g++ ld nproc xz; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"

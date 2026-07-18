@@ -144,6 +144,19 @@ exit 1
                 assert result.returncode == 0, f"Syntax error in {script_path}"
                 print(f"✅ Syntaxe valide: {script_path}")
 
+    def test_lfs_system_script_copies_xz_tool(self):
+        """Le script lfs-system doit copier xz pour extraire les archives .tar.xz dans le chroot."""
+        script = Path("lfs/06-build-lfs-system.sh")
+        content = script.read_text()
+        tool_loop_line = next(
+            (line for line in content.splitlines() if line.strip().startswith("for tool in ")),
+            "",
+        )
+        assert tool_loop_line, "tool copy loop should exist in lfs-system script"
+        tools_segment = tool_loop_line.split("for tool in", 1)[1].rsplit("; do", 1)[0]
+        tools = tools_segment.split()
+        assert "xz" in tools
+
     def test_blfs_desktop_script_validation(self, temp_dir, test_env):
         """Validation des scripts BLFS desktop"""
         blfs_scripts = [
