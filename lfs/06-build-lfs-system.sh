@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build LFS system – compilation of Glibc, Binutils, GCC, etc.
+# Build LFS system – compilation of Glibc, Binutils, GCC, etc. (official LFS procedure)
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -64,8 +64,7 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
-# If lfs-basic did not provision /tools toolchain, compiling glibc/binutils/gcc
-# in chroot with host compiler shims is unreliable and fails quickly.
+# If lfs-basic did not provision /tools toolchain, we cannot proceed.
 if [ ! -x "$LFS/tools/bin/gcc" ] || [ ! -x "$LFS/tools/bin/ld" ] || [ ! -x "$LFS/tools/bin/as" ]; then
     log_warning "Missing temporary toolchain in $LFS/tools/bin (gcc/ld/as)"
     log_warning "Skipping lfs-system compilation in bootstrap mode"
@@ -79,9 +78,9 @@ if [ ! -x "$LFS/bin/sh" ]; then
 fi
 
 # -----------------------------------------------------------------
-# 🔧 ASSURER LA PRÉSENCE DES OUTILS DE BASE DANS /tools/bin
+# Copy essential host tools to /tools/bin (fallback if missing)
 # -----------------------------------------------------------------
-log_info "Copying essential host tools to $LFS/tools/bin"
+log_info "Copying essential host tools to $LFS/tools/bin (if missing)"
 run_privileged mkdir -pv "$LFS/tools/bin"
 
 copy_tool_with_libs() {
@@ -89,7 +88,6 @@ copy_tool_with_libs() {
     local tool_name
     tool_name="$(basename "$tool_path")"
 
-    # Never replace tools already provisioned by prior LFS stages.
     if [ -x "$LFS/tools/bin/$tool_name" ]; then
         log_info "Keeping existing chroot tool: /tools/bin/$tool_name"
         return 0
@@ -98,7 +96,6 @@ copy_tool_with_libs() {
     run_privileged cp -Lv "$tool_path" "$LFS/tools/bin/$tool_name"
     run_privileged chmod +x "$LFS/tools/bin/$tool_name"
 
-    # Copy dynamic libraries required by the tool into the chroot.
     ldd "$tool_path" 2>/dev/null | awk '/=> \// {print $3} /^\/lib/ {print $1}' | while read -r lib; do
         [ -z "$lib" ] && continue
         local rel_dir
@@ -145,79 +142,149 @@ else
     exit 1
 fi
 
+# -----------------------------------------------------------------
+# Internal script with official LFS build steps
+# -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-# Prefer native chroot tools first; /tools/bin is fallback only.
+# Prefer native chroot tools first; /tools/bin is fallback.
 export PATH=/bin:/usr/bin:/tools/bin
+export SHELL=/bin/bash
+export CONFIG_SHELL=/bin/bash
 
 cd /sources
 
-compile_package() {
+# ----- Helper function to extract and cd -----
+extract() {
     local archive=$1
-    local pkg_name=$(echo "$archive" | sed -E 's/\.tar\.[a-z0-9]+$//')
-    echo "=== Building $pkg_name ==="
+    local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+    echo "Extracting $archive -> $dir"
     tar -xf "$archive"
-    cd "$pkg_name"
-    if [ -d "build" ]; then
-        cd build
-    elif [ -d "build-aux" ]; then
-        cd build-aux
+    cd "$dir"
+}
+
+# ----- Build glibc (official LFS steps) -----
+build_glibc() {
+    local archive=$(ls glibc-*.tar.xz 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: glibc source not found"
+        return 1
     fi
+    extract "$archive"
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr \
+                 --disable-werror \
+                 --enable-kernel=4.14 \
+                 --enable-stack-protector=strong \
+                 --with-headers=/usr/include \
+                 --libdir=/usr/lib \
+                 --enable-cet \
+                 --enable-multi-arch
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$(basename "$archive" .tar.xz)"
+    echo "glibc done"
+}
+
+# ----- Build binutils (official LFS steps) -----
+build_binutils() {
+    local archive=$(ls binutils-*.tar.xz 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: binutils source not found"
+        return 1
+    fi
+    extract "$archive"
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr \
+                 --sysconfdir=/etc \
+                 --enable-gold \
+                 --enable-ld=default \
+                 --enable-plugins \
+                 --enable-shared \
+                 --disable-werror \
+                 --enable-64-bit-bfd \
+                 --with-system-zlib
+    make -j$(nproc) tooldir=/usr
+    make tooldir=/usr install
+    cd /sources
+    rm -rf "$(basename "$archive" .tar.xz)"
+    echo "binutils done"
+}
+
+# ----- Build gcc (official LFS steps) -----
+build_gcc() {
+    local archive=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: gcc source not found"
+        return 1
+    fi
+    extract "$archive"
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr \
+                 --enable-languages=c,c++ \
+                 --disable-multilib \
+                 --disable-bootstrap \
+                 --with-system-zlib \
+                 --enable-default-pie \
+                 --enable-default-ssp \
+                 --enable-cet=auto
+    make -j$(nproc)
+    make install
+    # Create symlinks for cc and c++
+    ln -sf gcc /usr/bin/cc
+    ln -sf g++ /usr/bin/c++
+    cd /sources
+    rm -rf "$(basename "$archive" .tar.xz)"
+    echo "gcc done"
+}
+
+# ----- Build base packages (simple configure/make) -----
+build_simple() {
+    local pkg=$1
+    local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: $pkg source not found"
+        return 1
+    fi
+    extract "$archive"
     if [ -f "configure" ]; then
-        ./configure --prefix=/usr --disable-werror
-    elif [ -f "CMakeLists.txt" ]; then
-        cmake -DCMAKE_INSTALL_PREFIX=/usr .
-    else
-        true
+        ./configure --prefix=/usr --sysconfdir=/etc
+    elif [ -f "Makefile" ]; then
+        : # already has Makefile
     fi
     make -j$(nproc)
     make install
     cd /sources
-    rm -rf "$pkg_name"
-    echo "=== $pkg_name done ==="
+    rm -rf "$(basename "$archive" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
+    echo "$pkg done"
 }
 
-found_glibc=0
-for archive in glibc-*.tar.xz; do
-    if [ -f "$archive" ]; then
-        compile_package "$archive"
-        found_glibc=1
-        break
-    fi
-done
-[ $found_glibc -eq 0 ] && echo "WARNING: glibc source not found"
+# ----- Main build order -----
+echo "=== Building glibc ==="
+build_glibc
 
-found_binutils=0
-for archive in binutils-*.tar.xz; do
-    if [ -f "$archive" ]; then
-        compile_package "$archive"
-        found_binutils=1
-        break
-    fi
-done
-[ $found_binutils -eq 0 ] && echo "WARNING: binutils source not found"
+echo "=== Building binutils ==="
+build_binutils
 
-found_gcc=0
-for archive in gcc-*.tar.xz; do
-    if [ -f "$archive" ]; then
-        compile_package "$archive"
-        found_gcc=1
-        break
-    fi
-done
-[ $found_gcc -eq 0 ] && echo "WARNING: gcc source not found"
+echo "=== Building gcc ==="
+build_gcc
 
+# Now the remaining base packages (coreutils, bash, etc.)
 for pkg in coreutils bash make grep sed gawk findutils tar gzip; do
-    for archive in "$pkg"-*.tar.*; do
-        if [ -f "$archive" ]; then
-            compile_package "$archive"
-            break
-        fi
-    done
+    echo "=== Building $pkg ==="
+    build_simple "$pkg"
 done
+
+# Additional packages that may be needed but not covered by the loop
+# For example, we might add gzip, tar already in loop, but also bzip2, etc.
+# But the loop covers the essentials.
 
 echo "=== Base system compilation complete ==="
 INNEREOF
