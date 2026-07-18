@@ -5,6 +5,7 @@ Tests for SourceDownloader class
 
 import pytest
 import hashlib
+import urllib.error
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from builder import SourceDownloader
@@ -61,6 +62,23 @@ class TestSourceDownloader:
 
         assert result is False
         assert mock_urlretrieve.call_count == 2
+
+    @patch('urllib.request.urlretrieve')
+    def test_download_http_404_fails_fast(self, mock_urlretrieve, sources_dir, mock_logger):
+        """Test permanent HTTP errors do not consume all retries"""
+        mock_urlretrieve.side_effect = urllib.error.HTTPError(
+            url="https://example.com/missing.tar.gz",
+            code=404,
+            msg="Not Found",
+            hdrs=None,
+            fp=None,
+        )
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        result = downloader.download("https://example.com/missing.tar.gz", "missing.tar.gz", retries=3)
+
+        assert result is False
+        assert mock_urlretrieve.call_count == 1
 
     def test_download_from_list(self, sources_dir, mock_logger, sample_sources_list):
         """Test downloading from sources list"""

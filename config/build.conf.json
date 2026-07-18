@@ -194,8 +194,8 @@
     "strip_binaries": true,
     "checksum_verification": true,
     "verbose_logging": false,
-    "download_timeout": 300,
-    "retry_downloads": 3
+    "download_timeout": 30,
+    "retry_downloads": 2
   },
   "logging": {
     "level": "INFO",

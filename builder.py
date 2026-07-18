@@ -15,6 +15,7 @@ import subprocess
 import platform
 import shutil
 import hashlib
+import socket
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
@@ -23,6 +24,7 @@ import tarfile
 import tempfile
 import pwd
 import urllib.request
+import urllib.error
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor
 
@@ -613,9 +615,11 @@ class ProfileManager:
 class SourceDownloader:
     """Download and verify LFS/BLFS sources"""
 
-    def __init__(self, sources_dir: Path, logger: logging.Logger):
+    def __init__(self, sources_dir: Path, logger: logging.Logger, timeout: int = 30, retries: int = 2):
         self.sources_dir = sources_dir
         self.logger = logger
+        self.timeout = max(1, int(timeout))
+        self.retries = max(1, int(retries))
         self.session = self._create_session()
 
     def _create_session(self):
@@ -630,12 +634,13 @@ class SourceDownloader:
         urllib.request.install_opener(opener)
         return opener
 
-    def download(self, url: str, filename: Optional[str] = None, retries: int = 3) -> bool:
+    def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with retry"""
         if filename is None:
             filename = url.split('/')[-1]
 
         dest = self.sources_dir / filename
+        retries = self.retries if retries is None else max(1, int(retries))
 
         if dest.exists():
             self.logger.info(f"Already exists: {filename}")
@@ -644,16 +649,23 @@ class SourceDownloader:
         for attempt in range(retries):
             self.logger.info(f"Downloading: {filename} (attempt {attempt + 1}/{retries})")
             try:
-                urllib.request.urlretrieve(url, dest)
+                previous_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(self.timeout)
+                try:
+                    urllib.request.urlretrieve(url, dest)
+                finally:
+                    socket.setdefaulttimeout(previous_timeout)
                 return True
+            except urllib.error.HTTPError as e:
+                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                self.logger.error(f"Failed to download {url}: {e}")
+                return False
             except Exception as e:
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < retries - 1:
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
                 return False
-        return False
-
     def download_from_list(self, list_file: Path, parallel: int = 4) -> bool:
         """Download multiple sources in parallel"""
         if not list_file.exists():
@@ -1008,7 +1020,12 @@ class LFSBuilder:
         self._apply_profile_settings()
 
         # Initialize components
-        self.downloader = SourceDownloader(self.output_dir / 'sources', self.logger)
+        self.downloader = SourceDownloader(
+            self.output_dir / 'sources',
+            self.logger,
+            timeout=self.config.get('build_options.download_timeout', 30),
+            retries=self.config.get('build_options.retry_downloads', 2),
+        )
         self.refresh_executor()
 
     def refresh_executor(self):
