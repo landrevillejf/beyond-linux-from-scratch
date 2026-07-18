@@ -92,9 +92,14 @@ copy_tool() {
     done
 }
 
-for tool in tar head cut xz make nproc sed mktemp rm; do
+for tool in tar head cut xz make nproc sed mktemp rm echo; do
     copy_tool "$tool"
 done
+
+# GNU make may exec simple commands directly; ensure /bin/echo exists.
+if [ ! -x "$LFS/bin/echo" ] && [ -x "$LFS/usr/bin/echo" ]; then
+    run_privileged ln -sfn /usr/bin/echo "$LFS/bin/echo"
+fi
 
 # Sources
 SOURCES_HOST="$(dirname "$LFS")/sources"
