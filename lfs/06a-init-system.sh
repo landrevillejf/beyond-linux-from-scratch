@@ -107,7 +107,7 @@ copy_tool_with_libs() {
     done
 }
 
-for tool in tar head cut xz make nproc sed mktemp rm echo id getconf; do
+for tool in tar head cut xz make nproc sed mktemp rm echo id getconf cc gcc install ln chmod chown mkdir cp mv uname; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
     if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
         copy_tool_with_libs "$tool_path"
