@@ -582,6 +582,12 @@ Examples:
     info_parser.add_argument('package', help='Package name')
 
     # Global options
+    parser.add_argument(
+        '--mode',
+        choices=['cli', 'text'],
+        default='cli',
+        help='Interface mode: cli (direct command) or text (interactive menu)'
+    )
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     parser.add_argument('--db-dir', type=Path, default=LPM_DB_DIR, help='Database directory')
     parser.add_argument('--version', action='version', version=f'LPM v{LPM_VERSION}')
@@ -589,10 +595,183 @@ Examples:
     return parser
 
 
+def execute_command(lpm: LPM, args: argparse.Namespace):
+    """Execute one parsed command"""
+    if args.command == 'update':
+        lpm.update()
+
+    elif args.command == 'search':
+        results = lpm.search(args.query)
+        if not results:
+            print(f"No packages found matching '{args.query}'")
+        else:
+            print(f"\nFound {len(results)} package(s):\n")
+            for pkg in results:
+                print(f"  {pkg.name} ({pkg.version})")
+                print(f"    {pkg.description}")
+
+    elif args.command == 'list':
+        if getattr(args, 'installed', False):
+            packages = lpm.list_installed()
+            print(f"\n{len(packages)} installed package(s):\n")
+            for pkg in packages:
+                print(f"  {pkg.name:<20} {pkg.version:<15} (installed: {pkg.install_date})")
+        else:
+            packages = lpm.list_packages()
+            print(f"\n{len(packages)} available package(s):\n")
+            for pkg in packages:
+                print(f"  {pkg.name:<20} {pkg.version:<15} {pkg.description}")
+
+    elif args.command == 'list-installed':
+        packages = lpm.list_installed()
+        print(f"\n{len(packages)} installed package(s):\n")
+        for pkg in packages:
+            print(f"  {pkg.name:<20} {pkg.version:<15} (installed: {pkg.install_date})")
+
+    elif args.command == 'install':
+        lpm.install(args.package, getattr(args, 'source', None))
+
+    elif args.command == 'remove':
+        lpm.remove(args.package, getattr(args, 'purge', False))
+
+    elif args.command == 'upgrade':
+        lpm.upgrade(getattr(args, 'package', None))
+
+    elif args.command == 'list-outdated':
+        outdated = lpm.list_outdated()
+        if not outdated:
+            print("All packages are up to date!")
+        else:
+            print(f"\n{len(outdated)} outdated package(s):\n")
+            for name, current, available in outdated:
+                print(f"  {name:<20} {current:<15} → {available}")
+
+    elif args.command == 'create':
+        lpm.create_package(
+            args.name, args.version,
+            getattr(args, 'description', ''),
+            getattr(args, 'license', 'GPL-3.0')
+        )
+
+    elif args.command == 'info':
+        pkg = lpm.db.get_package(args.package)
+        if not pkg:
+            print(f"Package not found: {args.package}")
+            return
+        print(f"\n{pkg.name} v{pkg.version}")
+        print(f"  Description: {pkg.description}")
+        print(f"  Maintainer: {pkg.maintainer}")
+        print(f"  License: {pkg.license}")
+        print(f"  Size: {pkg.size_mb} MB")
+        if pkg.dependencies:
+            print(f"  Dependencies: {', '.join(pkg.dependencies)}")
+
+
+def run_text_interface(lpm: LPM):
+    """Run interactive text interface"""
+    print("LPM text interface started. Type the number of an action.")
+
+    while True:
+        print(
+            "\n1) Update database\n"
+            "2) Search package\n"
+            "3) List packages\n"
+            "4) List installed\n"
+            "5) Install package\n"
+            "6) Remove package\n"
+            "7) Upgrade package/all\n"
+            "8) List outdated\n"
+            "9) Package info\n"
+            "10) Create package\n"
+            "0) Quit"
+        )
+        try:
+            choice = input("lpm[text]> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nExiting text interface.")
+            return
+
+        if choice in ('0', 'q', 'quit', 'exit'):
+            print("Exiting text interface.")
+            return
+        if choice == '1':
+            execute_command(lpm, argparse.Namespace(command='update'))
+        elif choice == '2':
+            query = input("Search query: ").strip()
+            if query:
+                execute_command(lpm, argparse.Namespace(command='search', query=query))
+        elif choice == '3':
+            execute_command(lpm, argparse.Namespace(command='list', installed=False))
+        elif choice == '4':
+            execute_command(lpm, argparse.Namespace(command='list-installed'))
+        elif choice == '5':
+            package = input("Package name: ").strip()
+            source = input("Source URL/path (optional): ").strip()
+            if package:
+                execute_command(
+                    lpm,
+                    argparse.Namespace(
+                        command='install',
+                        package=package,
+                        source=source or None
+                    )
+                )
+        elif choice == '6':
+            package = input("Package name: ").strip()
+            purge_answer = input("Purge cache too? [y/N]: ").strip().lower()
+            if package:
+                execute_command(
+                    lpm,
+                    argparse.Namespace(
+                        command='remove',
+                        package=package,
+                        purge=purge_answer in ('y', 'yes')
+                    )
+                )
+        elif choice == '7':
+            package = input("Package name (leave empty for all): ").strip()
+            execute_command(
+                lpm,
+                argparse.Namespace(command='upgrade', package=package or None)
+            )
+        elif choice == '8':
+            execute_command(lpm, argparse.Namespace(command='list-outdated'))
+        elif choice == '9':
+            package = input("Package name: ").strip()
+            if package:
+                execute_command(lpm, argparse.Namespace(command='info', package=package))
+        elif choice == '10':
+            name = input("Package name: ").strip()
+            version = input("Package version: ").strip()
+            description = input("Description (optional): ").strip()
+            license_name = input("License [GPL-3.0]: ").strip() or "GPL-3.0"
+            if name and version:
+                execute_command(
+                    lpm,
+                    argparse.Namespace(
+                        command='create',
+                        name=name,
+                        version=version,
+                        description=description,
+                        license=license_name
+                    )
+                )
+        else:
+            print("Invalid choice.")
+
+
 def main():
     """Main entry point"""
     parser = create_parser()
     args = parser.parse_args()
+
+    if args.mode == 'text':
+        lpm = LPM(db_dir=args.db_dir, verbose=args.verbose)
+        if args.command:
+            execute_command(lpm, args)
+        else:
+            run_text_interface(lpm)
+        return
 
     if not args.command:
         parser.print_help()
@@ -601,67 +780,7 @@ def main():
     lpm = LPM(db_dir=args.db_dir, verbose=args.verbose)
 
     try:
-        if args.command == 'update':
-            success = lpm.update()
-
-        elif args.command == 'search':
-            results = lpm.search(args.query)
-            if not results:
-                print(f"No packages found matching '{args.query}'")
-            else:
-                print(f"\nFound {len(results)} package(s):\n")
-                for pkg in results:
-                    print(f"  {pkg.name} ({pkg.version})")
-                    print(f"    {pkg.description}")
-
-        elif args.command == 'list':
-            packages = lpm.list_packages()
-            print(f"\n{len(packages)} available package(s):\n")
-            for pkg in packages:
-                print(f"  {pkg.name:<20} {pkg.version:<15} {pkg.description}")
-
-        elif args.command == 'list-installed':
-            packages = lpm.list_installed()
-            print(f"\n{len(packages)} installed package(s):\n")
-            for pkg in packages:
-                print(f"  {pkg.name:<20} {pkg.version:<15} (installed: {pkg.install_date})")
-
-        elif args.command == 'install':
-            success = lpm.install(args.package, args.source)
-
-        elif args.command == 'remove':
-            success = lpm.remove(args.package, args.purge)
-
-        elif args.command == 'upgrade':
-            success = lpm.upgrade(args.package)
-
-        elif args.command == 'list-outdated':
-            outdated = lpm.list_outdated()
-            if not outdated:
-                print("All packages are up to date!")
-            else:
-                print(f"\n{len(outdated)} outdated package(s):\n")
-                for name, current, available in outdated:
-                    print(f"  {name:<20} {current:<15} → {available}")
-
-        elif args.command == 'create':
-            success = lpm.create_package(
-                args.name, args.version,
-                args.description, args.license
-            )
-
-        elif args.command == 'info':
-            pkg = lpm.db.get_package(args.package)
-            if not pkg:
-                print(f"Package not found: {args.package}")
-                return
-            print(f"\n{pkg.name} v{pkg.version}")
-            print(f"  Description: {pkg.description}")
-            print(f"  Maintainer: {pkg.maintainer}")
-            print(f"  License: {pkg.license}")
-            print(f"  Size: {pkg.size_mb} MB")
-            if pkg.dependencies:
-                print(f"  Dependencies: {', '.join(pkg.dependencies)}")
+        execute_command(lpm, args)
 
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -670,4 +789,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

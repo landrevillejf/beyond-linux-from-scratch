@@ -51,6 +51,19 @@ LPM is included in the LFS builder by default.
 
 ### Basic Commands
 
+#### Interface Mode
+```bash
+# Standard command-line mode (default)
+lpm --mode cli list
+
+# Interactive text interface
+lpm --mode text
+```
+
+`--mode` supports:
+- `cli` for direct one-shot commands
+- `text` for menu-driven terminal interaction
+
 #### Update Package Database
 ```bash
 lpm update
@@ -502,4 +515,3 @@ For issues, feature requests, or contributions:
 
 **Last Updated:** 2026-05-15  
 **Maintained By:** LFS Community
-

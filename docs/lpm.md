@@ -124,10 +124,18 @@ These options can be placed before the command:
 
 | Option       | Description |
 |--------------|-------------|
+| `--mode`     | Interface mode: `cli` (direct command) or `text` (interactive text interface). |
 | `--dry-run`  | Simulate the operation (do not install or remove anything). |
 | `--force`    | Force reinstallation even if a package is already installed. |
 | `--quiet`    | Suppress all non‑error output. |
 | `--verbose`  | Show detailed debug messages. |
+
+Example:
+
+```bash
+# Start the interactive text interface
+lpm --mode text
+```
 
 ## Hooks
 
