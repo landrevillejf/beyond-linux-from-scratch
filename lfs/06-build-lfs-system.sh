@@ -44,7 +44,7 @@ run_privileged() {
 }
 
 log_info "========================================="
-log_info "Building LFS system"
+log_info "Building LFS system (official LFS compilation)"
 log_info "========================================="
 
 INIT_SYSTEM=${INIT_SYSTEM:-sysvinit}
@@ -55,6 +55,7 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
+# Pre-flight checks
 if [ ! -f "$LFS/bin/bash" ]; then
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
     exit 1
@@ -64,7 +65,7 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
-# Check for temporary toolchain
+# Ensure temporary toolchain exists
 if [ ! -x "$LFS/tools/bin/gcc" ] || [ ! -x "$LFS/tools/bin/ld" ] || [ ! -x "$LFS/tools/bin/as" ]; then
     log_error "Missing temporary toolchain in $LFS/tools/bin (gcc/ld/as)"
     log_error "Cannot proceed – run lfs-basic first"
@@ -76,18 +77,14 @@ if [ ! -x "$LFS/bin/sh" ]; then
     run_privileged ln -sf bash "$LFS/bin/sh"
 fi
 
-# -----------------------------------------------------------------
-# Mount filesystems
-# -----------------------------------------------------------------
+# Mount virtual filesystems
 run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
 run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
 
-# -----------------------------------------------------------------
-# Copy sources into chroot
-# -----------------------------------------------------------------
+# Copy sources into chroot (if not already there)
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
@@ -100,7 +97,7 @@ else
 fi
 
 # -----------------------------------------------------------------
-# Internal compilation script (official LFS steps)
+# Internal script (compilation steps for glibc, binutils, gcc, coreutils, etc.)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
@@ -113,13 +110,37 @@ export CONFIG_SHELL=/bin/bash
 
 cd /sources
 
-# ----- Helper: extract and cd -----
+# Helper: extract and cd
 extract() {
     local archive=$1
     local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
     echo "Extracting $archive -> $dir"
     tar -xf "$archive"
     cd "$dir"
+}
+
+# Helper: build simple packages
+build_simple() {
+    local pkg=$1
+    local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: $pkg source not found, skipping"
+        return 0
+    fi
+    local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+    echo "=== Building $dir ==="
+    tar -xf "$archive"
+    cd "$dir"
+    if [ -f "configure" ]; then
+        ./configure --prefix=/usr --sysconfdir=/etc
+    elif [ -f "Makefile" ]; then
+        true
+    fi
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$dir"
+    echo "=== $dir done ==="
 }
 
 # ============================================================
@@ -204,31 +225,8 @@ rm -rf "$(basename "$GCC_ARCHIVE" .tar.xz)"
 echo "gcc done"
 
 # ============================================================
-# 4. BUILD BASE PACKAGES (coreutils, bash, etc.)
+# 4. BUILD BASE PACKAGES (official LFS order)
 # ============================================================
-build_simple() {
-    local pkg=$1
-    local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: $pkg source not found, skipping"
-        return 0
-    fi
-    local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-    echo "=== Building $dir ==="
-    tar -xf "$archive"
-    cd "$dir"
-    if [ -f "configure" ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc
-    elif [ -f "Makefile" ]; then
-        true
-    fi
-    make -j$(nproc)
-    make install
-    cd /sources
-    rm -rf "$dir"
-    echo "=== $dir done ==="
-}
-
 for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
     build_simple "$pkg"
 done
