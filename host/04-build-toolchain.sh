@@ -135,182 +135,165 @@ check_toolchain() {
     return 1
 }
 
-# Create minimal toolchain (with base tools for chroot)
+# Create minimal toolchain (only used if sources are missing)
 create_minimal_toolchain() {
-    log_info "Creating minimal toolchain with base tools for chroot"
-
+    log_warning "Creating minimal toolchain with symlinks to host tools (NOT for LFS final build!)"
     mkdir -pv "$LFS/tools/bin"
 
-    # 1. Compiler and binutils from host
-    if command -v gcc &> /dev/null; then
-        log_info "Using system GCC: $(gcc --version | head -n1)"
-        for tool in gcc g++ ld ar ranlib nm strip; do
-            if command -v $tool &> /dev/null; then
-                ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
-            fi
-        done
-    else
-        # Fallback wrapper for GCC
-        cat > "$LFS/tools/bin/gcc" << 'WRAPPER'
-#!/usr/bin/env bash
-echo "WARNING: Using minimal GCC wrapper"
-if [ "$1" = "--version" ]; then
-    echo "gcc (LFS Minimal) 13.0"
-else
-    if command -v gcc &> /dev/null; then
-        exec gcc "$@"
-    fi
-fi
-exit 0
-WRAPPER
-        chmod +x "$LFS/tools/bin/gcc"
-        ln -sfv gcc "$LFS/tools/bin/cc"
-        ln -sfv gcc "$LFS/tools/bin/g++"
-    fi
-
-    if [ ! -f "$LFS/tools/bin/ld" ]; then
-        cat > "$LFS/tools/bin/ld" << 'WRAPPER'
-#!/usr/bin/env bash
-if command -v ld &> /dev/null; then
-    exec ld "$@"
-else
-    echo "WARNING: No ld available"
-    exit 0
-fi
-WRAPPER
-        chmod +x "$LFS/tools/bin/ld"
-    fi
-
-    # 2. Add essential base tools (sed, tar, make, etc.) as symlinks to host
-    log_info "Linking essential build tools from host"
+    # Symlink host compiler and binutils
+    for tool in gcc g++ ld ar ranlib nm strip; do
+        if command -v $tool &>/dev/null; then
+            ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
+        fi
+    done
+    # Symlink basic tools
     for tool in bash cat cp echo grep ls make mkdir mv rm sed tar touch uname find xargs chmod chown; do
         if command -v $tool &>/dev/null; then
             ln -sfv "$(which $tool)" "$LFS/tools/bin/$tool"
-        else
-            log_warning "Host tool '$tool' not found, may cause chroot issues"
         fi
     done
-
-    # 3. Ensure ld-linux is available (real copy, not symlink)
+    # Ensure ld-linux is present
     if [ ! -f "$LFS/lib64/ld-linux-x86-64.so.2" ] && [ -f /lib64/ld-linux-x86-64.so.2 ]; then
         mkdir -pv "$LFS/lib64"
         cp -L /lib64/ld-linux-x86-64.so.2 "$LFS/lib64/"
     fi
-
-    log_success "Minimal toolchain (with base tools) created at $LFS/tools"
+    log_success "Minimal toolchain created (host symlinks)."
     return 0
 }
 
-# Build toolchain from sources
+# -------------------------------------------------------------------
+# CORRECTED build_toolchain() – official LFS pass 1
+# -------------------------------------------------------------------
 build_toolchain() {
-    log_info "Building toolchain from sources"
+    log_info "Building temporary toolchain from sources (LFS pass 1)"
 
     cd "$LFS/sources" || {
         log_error "Sources directory not found: $LFS/sources"
-        log_info "Creating minimal toolchain instead"
         create_minimal_toolchain
         return $?
     }
 
-    if ! ls -1 binutils-*.tar.xz &>/dev/null; then
-        log_warning "No source files found in $LFS/sources"
-        log_info "Creating minimal toolchain instead"
-        create_minimal_toolchain
-        return $?
-    fi
+    # Check required source archives
+    for pkg in binutils gcc linux glibc; do
+        if ! ls -1 "$pkg"-*.tar.* &>/dev/null; then
+            log_error "Source for $pkg not found in $LFS/sources"
+            create_minimal_toolchain
+            return 1
+        fi
+    done
 
-    # Binutils
-    log_info "Building binutils"
+    # ---- 1. Binutils (pass 1) ----
+    log_info "Building binutils (pass 1)"
     BINUTILS_TAR=$(ls -1 binutils-*.tar.xz 2>/dev/null | head -n1)
-    if [ -n "$BINUTILS_TAR" ]; then
-        tar -xf "$BINUTILS_TAR"
-        BINUTILS_DIR=$(ls -1d binutils-* 2>/dev/null | grep -v '\.tar' | head -n1)
-        if [ -n "$BINUTILS_DIR" ]; then
-            cd "$BINUTILS_DIR"
-            mkdir -pv build
-            cd build
-            ../configure --prefix="$LFS/tools" \
-                         --with-sysroot="$LFS" \
-                         --target="$LFS_TGT" \
-                         --disable-nls \
-                         --enable-gprofng=no \
-                         --disable-werror 2>/dev/null || {
-                log_warning "Binutils configure failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            make -j"$NUM_JOBS" 2>/dev/null || {
-                log_warning "Binutils make failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            make install 2>/dev/null || {
-                log_warning "Binutils install failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            cd ../..
-        fi
-    fi
+    tar -xf "$BINUTILS_TAR"
+    BINUTILS_DIR=$(ls -1d binutils-* 2>/dev/null | grep -v '\.tar' | head -n1)
+    cd "$BINUTILS_DIR"
+    mkdir -v build
+    cd build
+    ../configure --prefix="$LFS/tools" \
+                 --with-sysroot="$LFS" \
+                 --target="$LFS_TGT" \
+                 --disable-nls \
+                 --enable-gprofng=no \
+                 --disable-werror
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$BINUTILS_DIR"
+    log_success "binutils (pass 1) done"
 
-    # GCC
-    log_info "Building GCC"
+    # ---- 2. GCC (pass 1) ----
+    log_info "Building GCC (pass 1)"
     GCC_TAR=$(ls -1 gcc-*.tar.xz 2>/dev/null | head -n1)
-    if [ -n "$GCC_TAR" ]; then
-        tar -xf "$GCC_TAR"
-        GCC_DIR=$(ls -1d gcc-* 2>/dev/null | grep -v '\.tar' | head -n1)
-        if [ -n "$GCC_DIR" ]; then
-            cd "$GCC_DIR"
-            mkdir -pv build
-            cd build
-            ../configure --target="$LFS_TGT" \
-                         --prefix="$LFS/tools" \
-                         --with-glibc-version=2.38 \
-                         --with-sysroot="$LFS" \
-                         --with-newlib \
-                         --without-headers \
-                         --enable-default-pie \
-                         --enable-default-ssp \
-                         --disable-nls \
-                         --disable-shared \
-                         --disable-multilib \
-                         --disable-threads \
-                         --disable-libatomic \
-                         --disable-libgomp \
-                         --disable-libquadmath \
-                         --disable-libssp \
-                         --disable-libvtv \
-                         --disable-libstdcxx \
-                         --enable-languages=c,c++ 2>/dev/null || {
-                log_warning "GCC configure failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            make -j"$NUM_JOBS" 2>/dev/null || {
-                log_warning "GCC make failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            make install 2>/dev/null || {
-                log_warning "GCC install failed"
-                cd ../..
-                create_minimal_toolchain
-                return $?
-            }
-            cd ../..
-        fi
-    fi
-
-    if [ -f "$LFS/tools/bin/gcc" ] && [ ! -f "$LFS/tools/bin/cc" ]; then
+    tar -xf "$GCC_TAR"
+    GCC_DIR=$(ls -1d gcc-* 2>/dev/null | grep -v '\.tar' | head -n1)
+    cd "$GCC_DIR"
+    mkdir -v build
+    cd build
+    ../configure --target="$LFS_TGT" \
+                 --prefix="$LFS/tools" \
+                 --with-glibc-version=2.38 \
+                 --with-sysroot="$LFS" \
+                 --with-newlib \
+                 --without-headers \
+                 --enable-default-pie \
+                 --enable-default-ssp \
+                 --disable-nls \
+                 --disable-shared \
+                 --disable-multilib \
+                 --disable-threads \
+                 --disable-libatomic \
+                 --disable-libgomp \
+                 --disable-libquadmath \
+                 --disable-libssp \
+                 --disable-libvtv \
+                 --disable-libstdcxx \
+                 --enable-languages=c,c++
+    make -j"$NUM_JOBS"
+    make install
+    # Create cc symlink
+    if [ ! -f "$LFS/tools/bin/cc" ]; then
         ln -sfv gcc "$LFS/tools/bin/cc"
     fi
+    cd "$LFS/sources"
+    rm -rf "$GCC_DIR"
+    log_success "GCC (pass 1) done"
 
-    log_success "Toolchain build complete"
+    # ---- 3. Linux API headers ----
+    log_info "Installing Linux API headers"
+    LINUX_TAR=$(ls -1 linux-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$LINUX_TAR"
+    LINUX_DIR=$(ls -1d linux-* 2>/dev/null | grep -v '\.tar' | head -n1)
+    cd "$LINUX_DIR"
+    make mrproper
+    make headers
+    find usr/include -name '.*' -delete
+    rm -f usr/include/Makefile
+    cp -rv usr/include "$LFS/tools/include"
+    cd "$LFS/sources"
+    rm -rf "$LINUX_DIR"
+    log_success "Linux API headers installed"
+
+    # ---- 4. Glibc ----
+    log_info "Building glibc"
+    GLIBC_TAR=$(ls -1 glibc-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$GLIBC_TAR"
+    GLIBC_DIR=$(ls -1d glibc-* 2>/dev/null | grep -v '\.tar' | head -n1)
+    cd "$GLIBC_DIR"
+    mkdir -v build
+    cd build
+    ../configure --prefix="$LFS/tools" \
+                 --host="$LFS_TGT" \
+                 --build="$(../scripts/config.guess)" \
+                 --enable-kernel=4.14 \
+                 --with-headers="$LFS/tools/include"
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$GLIBC_DIR"
+    log_success "glibc done"
+
+    # ---- 5. Libstdc++ (from GCC sources, re-extract) ----
+    log_info "Building libstdc++"
+    tar -xf "$GCC_TAR"   # re-extract GCC (we removed it earlier)
+    GCC_DIR=$(ls -1d gcc-* 2>/dev/null | grep -v '\.tar' | head -n1)
+    cd "$GCC_DIR"
+    mkdir -v build-libstdc++
+    cd build-libstdc++
+    ../libstdc++-v3/configure --host="$LFS_TGT" \
+                              --build="$(../config.guess)" \
+                              --prefix="$LFS/tools" \
+                              --disable-multilib \
+                              --disable-nls \
+                              --disable-libstdcxx-pch \
+                              --with-gxx-include-dir="$LFS/tools/$LFS_TGT/include/c++/$(cat ../gcc/BASE-VER)"
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$GCC_DIR"
+    log_success "libstdc++ done"
+
+    log_success "Full temporary toolchain built successfully."
     return 0
 }
 
@@ -319,36 +302,34 @@ main() {
     # Ensure a working compiler is present (try to install if missing)
     ensure_compiler
 
-    if [ "$IN_DOCKER" = true ]; then
-        log_info "Running in Docker"
-        if check_toolchain; then
-            log_success "Toolchain already exists, skipping"
-            exit 0
-        fi
-        log_info "Building toolchain for Docker"
-        build_toolchain || create_minimal_toolchain
-        log_success "Toolchain setup complete"
-        exit 0
-    fi
-
+    # If toolchain already exists, skip
     if check_toolchain; then
         log_success "Toolchain already exists, skipping"
         exit 0
     fi
 
+    # If running as root or in Docker, we can build directly (as lfs user is created)
+    if [ "$IN_DOCKER" = true ]; then
+        log_info "Running in Docker – building toolchain"
+        build_toolchain || create_minimal_toolchain
+        log_success "Toolchain setup complete"
+        exit 0
+    fi
+
+    # Native mode: switch to lfs user if not already
     if [ "$(whoami)" != "lfs" ]; then
-        log_warning "Not running as lfs user. Switch to lfs user first:"
+        log_warning "Not running as lfs user. Please run as 'lfs' user or use --force."
         log_info "  su - lfs"
         log_info "  cd $LFS/sources"
         log_info "  $0"
         if [ "$1" = "--force" ]; then
-            log_info "Force mode enabled - building anyway"
-            build_toolchain
+            log_info "Force mode enabled – building anyway (may fail if not lfs)"
+            build_toolchain || create_minimal_toolchain
         else
             exit 1
         fi
     else
-        build_toolchain
+        build_toolchain || create_minimal_toolchain
     fi
 
     log_success "Cross-toolchain build complete!"

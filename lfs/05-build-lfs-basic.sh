@@ -96,11 +96,9 @@ fi
 
 # Build the temporary toolchain as user 'lfs' (on the host, not inside chroot)
 log_info "Building temporary toolchain (this may take a while)..."
-
-# Use the expanded LFS path inside the command
 run_privileged su - lfs -c "
 set -e
-cd ${LFS}/sources
+cd \"$LFS/sources\"    # <-- FIX: change to the sources directory
 
 # ----- Binutils (pass 1) -----
 echo 'Building binutils (pass 1)'
@@ -109,14 +107,14 @@ cd binutils-*
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --with-sysroot=${LFS}      \
+             --with-sysroot=$LFS        \
              --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
              --enable-gprofng=no        \
              --disable-werror
 make -j\$(nproc)
 make install
-cd ${LFS}/sources
+cd $LFS/sources
 rm -rf binutils-*
 
 # ----- GCC (pass 1) -----
@@ -126,7 +124,7 @@ cd gcc-*
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --with-sysroot=${LFS}      \
+             --with-sysroot=$LFS        \
              --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
              --enable-languages=c,c++   \
@@ -135,7 +133,7 @@ cd build
              --with-system-zlib
 make -j\$(nproc)
 make install
-cd ${LFS}/sources
+cd $LFS/sources
 rm -rf gcc-*
 
 # ----- Linux API headers -----
@@ -147,7 +145,7 @@ make headers
 find usr/include -name '.*' -delete
 rm usr/include/Makefile
 cp -rv usr/include /tools/include
-cd ${LFS}/sources
+cd $LFS/sources
 rm -rf linux-*
 
 # ----- Glibc -----
@@ -163,7 +161,7 @@ cd build
              --with-headers=/tools/include
 make -j\$(nproc)
 make install
-cd ${LFS}/sources
+cd $LFS/sources
 rm -rf glibc-*
 
 # ----- Libstdc++ (from GCC) -----
@@ -181,7 +179,7 @@ cd build-libstdc++
                           --with-gxx-include-dir=/tools/\$(uname -m)-lfs-linux-gnu/include/c++/\$(cat ../gcc/BASE-VER)
 make -j\$(nproc)
 make install
-cd ${LFS}/sources
+cd $LFS/sources
 rm -rf gcc-*
 
 # ----- Essential utilities -----
@@ -201,7 +199,7 @@ for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
     fi
     make -j\$(nproc)
     make install
-    cd ${LFS}/sources
+    cd $LFS/sources
     rm -rf \"\$dir\"
 done
 
