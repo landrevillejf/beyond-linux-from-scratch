@@ -43,22 +43,30 @@ log_info "========================================="
 log_info "Building temporary toolchain in /tools"
 log_info "========================================="
 
-# Create required directories
+# Create required directories inside $LFS
 run_privileged mkdir -pv $LFS/{bin,etc,lib,lib64,usr,var,tools}
 run_privileged mkdir -pv $LFS/usr/{bin,lib,include,share}
 run_privileged mkdir -pv $LFS/tools/{bin,lib,libexec,include,share}
 
-# Create 'lfs' user (if not exists) and set ownership
+# Ensure the lfs user exists on the host (not inside chroot)
 if ! id -u lfs &>/dev/null; then
     run_privileged groupadd lfs
     run_privileged useradd -s /bin/bash -g lfs -m -k /dev/null lfs
 fi
+
+# Set ownership of tools and sources directories to lfs user
 run_privileged chown -v lfs:lfs $LFS/tools
 run_privileged chown -v lfs:lfs $LFS/sources
 run_privileged chown -v lfs:lfs $LFS
 
-# Set up the LFS environment for the lfs user
-cat > $LFS/home/lfs/.bashrc << 'EOF'
+# Create the environment file for the lfs user on the host
+LFS_HOME="/home/lfs"
+if [ ! -d "$LFS_HOME" ]; then
+    run_privileged mkdir -p "$LFS_HOME"
+    run_privileged chown lfs:lfs "$LFS_HOME"
+fi
+
+cat > $LFS_HOME/.bashrc << 'EOF'
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -68,9 +76,11 @@ PATH=/tools/bin:/bin:/usr/bin
 export LFS LC_ALL LFS_TGT PATH
 EOF
 
-cat > $LFS/home/lfs/.bash_profile << 'EOF'
+cat > $LFS_HOME/.bash_profile << 'EOF'
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 EOF
+
+run_privileged chown lfs:lfs $LFS_HOME/.bashrc $LFS_HOME/.bash_profile
 
 # Copy sources (if they exist)
 SOURCES_HOST="$(dirname "$LFS")/sources"
@@ -84,50 +94,50 @@ else
     exit 1
 fi
 
-# Build the temporary toolchain as user 'lfs'
+# Build the temporary toolchain as user 'lfs' (on the host, not inside chroot)
 log_info "Building temporary toolchain (this may take a while)..."
-run_privileged chroot --userspec=lfs:lfs $LFS /bin/bash << 'INNEREOF'
+run_privileged su - lfs -c "
 set -e
 cd /sources
 
 # ----- Binutils (pass 1) -----
-echo "Building binutils (pass 1)"
+echo 'Building binutils (pass 1)'
 tar -xf binutils-*.tar.xz
 cd binutils-*
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --with-sysroot=$LFS        \
-             --target=$LFS_TGT          \
+             --with-sysroot=/mnt/lfs        \
+             --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
              --enable-gprofng=no        \
              --disable-werror
-make -j$(nproc)
+make -j\$(nproc)
 make install
 cd /sources
 rm -rf binutils-*
 
 # ----- GCC (pass 1) -----
-echo "Building gcc (pass 1)"
+echo 'Building gcc (pass 1)'
 tar -xf gcc-*.tar.xz
 cd gcc-*
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --with-sysroot=$LFS        \
-             --target=$LFS_TGT          \
+             --with-sysroot=/mnt/lfs        \
+             --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
              --enable-languages=c,c++   \
              --disable-multilib         \
              --disable-bootstrap        \
              --with-system-zlib
-make -j$(nproc)
+make -j\$(nproc)
 make install
 cd /sources
 rm -rf gcc-*
 
 # ----- Linux API headers -----
-echo "Installing Linux API headers"
+echo 'Installing Linux API headers'
 tar -xf linux-*.tar.xz
 cd linux-*
 make mrproper
@@ -139,62 +149,62 @@ cd /sources
 rm -rf linux-*
 
 # ----- Glibc -----
-echo "Building glibc"
+echo 'Building glibc'
 tar -xf glibc-*.tar.xz
 cd glibc-*
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
-             --host=$LFS_TGT            \
-             --build=$(../scripts/config.guess) \
+             --host=\$(uname -m)-lfs-linux-gnu            \
+             --build=\$(../scripts/config.guess) \
              --enable-kernel=4.14       \
              --with-headers=/tools/include
-make -j$(nproc)
+make -j\$(nproc)
 make install
 cd /sources
 rm -rf glibc-*
 
 # ----- Libstdc++ (from GCC) -----
-echo "Building libstdc++"
+echo 'Building libstdc++'
 tar -xf gcc-*.tar.xz
 cd gcc-*
 mkdir -v build-libstdc++
 cd build-libstdc++
-../libstdc++-v3/configure --host=$LFS_TGT \
-                          --build=$(../config.guess) \
+../libstdc++-v3/configure --host=\$(uname -m)-lfs-linux-gnu \
+                          --build=\$(../config.guess) \
                           --prefix=/tools \
                           --disable-multilib \
                           --disable-nls \
                           --disable-libstdcxx-pch \
-                          --with-gxx-include-dir=/tools/$LFS_TGT/include/c++/$(cat ../gcc/BASE-VER)
-make -j$(nproc)
+                          --with-gxx-include-dir=/tools/\$(uname -m)-lfs-linux-gnu/include/c++/\$(cat ../gcc/BASE-VER)
+make -j\$(nproc)
 make install
 cd /sources
 rm -rf gcc-*
 
 # ----- Essential utilities -----
-echo "Installing essential utilities (make, sed, grep, etc.)"
+echo 'Installing essential utilities (make, sed, grep, etc.)'
 for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
-    archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        echo "WARNING: $pkg source not found, skipping"
+    archive=\$(ls \"\$pkg\"-*.tar.* 2>/dev/null | head -1)
+    if [ -z \"\$archive\" ]; then
+        echo \"WARNING: \$pkg source not found, skipping\"
         continue
     fi
-    dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-    echo "Building $dir"
-    tar -xf "$archive"
-    cd "$dir"
-    if [ -f "configure" ]; then
+    dir=\$(tar -tf \"\$archive\" | head -1 | cut -d/ -f1)
+    echo \"Building \$dir\"
+    tar -xf \"\$archive\"
+    cd \"\$dir\"
+    if [ -f \"configure\" ]; then
         ./configure --prefix=/tools
     fi
-    make -j$(nproc)
+    make -j\$(nproc)
     make install
     cd /sources
-    rm -rf "$dir"
+    rm -rf \"\$dir\"
 done
 
-echo "Temporary toolchain built successfully."
-INNEREOF
+echo 'Temporary toolchain built successfully.'
+"
 
 # Finalize: ensure /tools/bin is in PATH for future steps
 log_success "Temporary toolchain installed in $LFS/tools"
