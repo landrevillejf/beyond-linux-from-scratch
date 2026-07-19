@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build basic LFS system – COPIE COMPLÈTE DE BASH ET PRÉPARATION DU CHROOT
+# Build temporary cross-toolchain (binutils, gcc, glibc) into /tools
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -40,92 +40,164 @@ run_privileged() {
 }
 
 log_info "========================================="
-log_info "Building basic LFS system (REAL SETUP)"
+log_info "Building temporary toolchain in /tools"
 log_info "========================================="
 
-# Docker mode – structure minimale
-if [ "$IN_DOCKER" = true ]; then
-    mkdir -pv $LFS/{bin,boot,dev,etc,home,lib,lib64,media,mnt,opt,proc,root,run,sbin,srv,sys,tmp,usr,var}
-    mkdir -pv $LFS/usr/{bin,include,lib,lib64,sbin,share,src}
-    mkdir -pv $LFS/var/{cache,lib,local,lock,log,opt,run,spool,tmp}
-    mkdir -pv $LFS/etc/{profile.d,sysconfig,skel,init.d}
-    chmod -v 1777 $LFS/tmp 2>/dev/null || true
-    chmod -v 1777 $LFS/var/tmp 2>/dev/null || true
-    cat > $LFS/etc/passwd << 'PASSWD'
-root:x:0:0:root:/root:/bin/bash
-nobody:x:65534:65534:nobody:/:/bin/false
-PASSWD
-    cat > $LFS/etc/group << 'GROUP'
-root:x:0:
-nobody:x:65534:
-GROUP
-    cat > $LFS/etc/hosts << 'HOSTS'
-127.0.0.1 localhost
-::1 localhost
-HOSTS
-    log_success "Minimal LFS system structure created in Docker"
-    exit 0
+# Create required directories
+run_privileged mkdir -pv $LFS/{bin,etc,lib,lib64,usr,var,tools}
+run_privileged mkdir -pv $LFS/usr/{bin,lib,include,share}
+run_privileged mkdir -pv $LFS/tools/{bin,lib,libexec,include,share}
+
+# Create 'lfs' user (if not exists) and set ownership
+if ! id -u lfs &>/dev/null; then
+    run_privileged groupadd lfs
+    run_privileged useradd -s /bin/bash -g lfs -m -k /dev/null lfs
 fi
+run_privileged chown -v lfs:lfs $LFS/tools
+run_privileged chown -v lfs:lfs $LFS/sources
+run_privileged chown -v lfs:lfs $LFS
 
-# Native mode – copie forcée de bash et des libs
-log_info "Native mode - setting up chroot environment"
+# Set up the LFS environment for the lfs user
+cat > $LFS/home/lfs/.bashrc << 'EOF'
+set +h
+umask 022
+LFS=/mnt/lfs
+LC_ALL=POSIX
+LFS_TGT=$(uname -m)-lfs-linux-gnu
+PATH=/tools/bin:/bin:/usr/bin
+export LFS LC_ALL LFS_TGT PATH
+EOF
 
-mkdir -pv $LFS/{dev,proc,sys,run,etc,home,root,boot,usr,var,lib64,bin,sbin,tmp}
-mkdir -pv $LFS/usr/{bin,lib,sbin,include,share}
-mkdir -pv $LFS/etc/{profile.d,sysconfig,skel,init.d}
-mkdir -pv $LFS/var/{cache,lib,local,lock,log,opt,run,spool,tmp}
+cat > $LFS/home/lfs/.bash_profile << 'EOF'
+if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
+EOF
 
-# Copier bash (suivre les liens)
-BASH_SRC="/bin/bash"
-[ ! -f "$BASH_SRC" ] && BASH_SRC="/usr/bin/bash"
-if [ ! -f "$BASH_SRC" ]; then
-    log_error "bash not found on host"
+# Copy sources (if they exist)
+SOURCES_HOST="$(dirname "$LFS")/sources"
+if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
+    log_info "Copying sources to $LFS/sources"
+    run_privileged mkdir -p $LFS/sources
+    run_privileged cp -rv $SOURCES_HOST/* $LFS/sources/
+    run_privileged chown -R lfs:lfs $LFS/sources
+else
+    log_error "No sources found in $SOURCES_HOST – cannot build toolchain"
     exit 1
 fi
-rm -f "$LFS/bin/bash"
-cp -L -v "$BASH_SRC" "$LFS/bin/bash"
-chmod +x "$LFS/bin/bash"
 
-# Copier toutes les bibliothèques (vider les destinations pour éviter les liens pendants)
-rm -rf "$LFS/lib" "$LFS/lib64" 2>/dev/null || true
-mkdir -p "$LFS/lib" "$LFS/lib64"
-cp -rvL /lib/x86_64-linux-gnu/* "$LFS/lib/" 2>/dev/null || true
-cp -rvL /lib64/* "$LFS/lib64/" 2>/dev/null || true
+# Build the temporary toolchain as user 'lfs'
+log_info "Building temporary toolchain (this may take a while)..."
+run_privileged chroot --userspec=lfs:lfs $LFS /bin/bash << 'INNEREOF'
+set -e
+cd /sources
 
-# Copier ld-linux explicitement (vrai fichier, pas un lien)
-if [ -f "/lib64/ld-linux-x86-64.so.2" ]; then
-    rm -f "$LFS/lib64/ld-linux-x86-64.so.2"
-    cp -L -v /lib64/ld-linux-x86-64.so.2 "$LFS/lib64/"
-elif [ -f "/lib/ld-linux-x86-64.so.2" ]; then
-    rm -f "$LFS/lib/ld-linux-x86-64.so.2"
-    cp -L -v /lib/ld-linux-x86-64.so.2 "$LFS/lib/"
-fi
+# ----- Binutils (pass 1) -----
+echo "Building binutils (pass 1)"
+tar -xf binutils-*.tar.xz
+cd binutils-*
+mkdir -v build
+cd build
+../configure --prefix=/tools            \
+             --with-sysroot=$LFS        \
+             --target=$LFS_TGT          \
+             --disable-nls              \
+             --enable-gprofng=no        \
+             --disable-werror
+make -j$(nproc)
+make install
+cd /sources
+rm -rf binutils-*
 
-# Vérifier la présence des fichiers critiques
-[ ! -f "$LFS/bin/bash" ] && { log_error "bash missing"; exit 1; }
-[ ! -f "$LFS/lib64/ld-linux-x86-64.so.2" ] && [ ! -f "$LFS/lib/ld-linux-x86-64.so.2" ] && { log_error "ld-linux missing"; exit 1; }
+# ----- GCC (pass 1) -----
+echo "Building gcc (pass 1)"
+tar -xf gcc-*.tar.xz
+cd gcc-*
+mkdir -v build
+cd build
+../configure --prefix=/tools            \
+             --with-sysroot=$LFS        \
+             --target=$LFS_TGT          \
+             --disable-nls              \
+             --enable-languages=c,c++   \
+             --disable-multilib         \
+             --disable-bootstrap        \
+             --with-system-zlib
+make -j$(nproc)
+make install
+cd /sources
+rm -rf gcc-*
 
-# Tester le chroot
-log_info "Testing chroot"
-if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot test failed"
-    exit 1
-fi
-log_success "chroot ready"
+# ----- Linux API headers -----
+echo "Installing Linux API headers"
+tar -xf linux-*.tar.xz
+cd linux-*
+make mrproper
+make headers
+find usr/include -name '.*' -delete
+rm usr/include/Makefile
+cp -rv usr/include /tools/include
+cd /sources
+rm -rf linux-*
 
-# Monter les FS virtuels
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
+# ----- Glibc -----
+echo "Building glibc"
+tar -xf glibc-*.tar.xz
+cd glibc-*
+mkdir -v build
+cd build
+../configure --prefix=/tools            \
+             --host=$LFS_TGT            \
+             --build=$(../scripts/config.guess) \
+             --enable-kernel=4.14       \
+             --with-headers=/tools/include
+make -j$(nproc)
+make install
+cd /sources
+rm -rf glibc-*
 
-# Copier les fichiers de config
-cp -v /etc/passwd "$LFS/etc/" 2>/dev/null || true
-cp -v /etc/group "$LFS/etc/" 2>/dev/null || true
-cp -v /etc/hosts "$LFS/etc/" 2>/dev/null || true
+# ----- Libstdc++ (from GCC) -----
+echo "Building libstdc++"
+tar -xf gcc-*.tar.xz
+cd gcc-*
+mkdir -v build-libstdc++
+cd build-libstdc++
+../libstdc++-v3/configure --host=$LFS_TGT \
+                          --build=$(../config.guess) \
+                          --prefix=/tools \
+                          --disable-multilib \
+                          --disable-nls \
+                          --disable-libstdcxx-pch \
+                          --with-gxx-include-dir=/tools/$LFS_TGT/include/c++/$(cat ../gcc/BASE-VER)
+make -j$(nproc)
+make install
+cd /sources
+rm -rf gcc-*
 
-# Créer un fichier de marque pour indiquer que le basic est prêt
-touch $LFS/var/log/lfs-basic-ready
+# ----- Essential utilities -----
+echo "Installing essential utilities (make, sed, grep, etc.)"
+for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
+    archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        echo "WARNING: $pkg source not found, skipping"
+        continue
+    fi
+    dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+    echo "Building $dir"
+    tar -xf "$archive"
+    cd "$dir"
+    if [ -f "configure" ]; then
+        ./configure --prefix=/tools
+    fi
+    make -j$(nproc)
+    make install
+    cd /sources
+    rm -rf "$dir"
+done
 
-log_success "Basic LFS system prepared (bash + libs + mounts) – ready for real compilation"
+echo "Temporary toolchain built successfully."
+INNEREOF
+
+# Finalize: ensure /tools/bin is in PATH for future steps
+log_success "Temporary toolchain installed in $LFS/tools"
+
+# Create a marker file so later stages know /tools exists
+touch $LFS/var/log/toolchain-ready
