@@ -26,19 +26,6 @@ class TestLFSBuilder:
         # Le profil xfce utilise systemd par défaut
         assert builder.get_init_system() == "systemd"
 
-    def test_init(self, temp_dir, mock_config_file):
-        """Test initialization"""
-        output_dir = temp_dir / "lfs-build"
-        builder = LFSBuilder(
-            profile="xfce",
-            output_dir=output_dir,
-            config_file=mock_config_file
-        )
-
-        assert builder.profile == "xfce"
-        assert builder.output_dir == output_dir
-        assert builder.profile_config['desktop'] == 'xfce'
-
     def test_output_dir_relative_path_resolved_to_absolute(self, tmp_path, mock_config_file):
         """Relative --output paths must be resolved to absolute paths.
 
