@@ -70,11 +70,11 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     exit 1
 fi
 
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # --- DYNAMIC SOURCE PATH ---
 SOURCES_HOST="$(dirname "$LFS")/sources"
@@ -129,10 +129,10 @@ run_privileged chmod +x "$LFS/build-blfs-base.sh"
 # --- Pass KERNEL_TYPE inside chroot ---
 run_privileged chroot "$LFS" /bin/bash -c "export KERNEL_TYPE=$KERNEL_TYPE; /build-blfs-base.sh"
 
-run_privileged umount $LFS/dev/pts 2>/dev/null || true
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
-run_privileged umount $LFS/run 2>/dev/null || true
+run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
+run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "BLFS base packages built successfully"

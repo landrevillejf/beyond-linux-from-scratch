@@ -37,7 +37,7 @@ if [ ! -d "$SOURCES_HOST" ]; then
 fi
 
 cd "$SOURCES_HOST"
-KERNEL_TARBALL=$(ls -1 "${KERNEL_TYPE}"-*.tar.xz 2>/dev/null | head -n1)
+KERNEL_TARBALL=$(find . -maxdepth 1 -name "${KERNEL_TYPE}-*.tar.xz" -print -quit 2>/dev/null | head -n1)
 if [ -z "$KERNEL_TARBALL" ]; then
     log_error "No kernel source found for type '$KERNEL_TYPE'"
     exit 1
@@ -84,7 +84,7 @@ log_info "Resolving new config symbols with olddefconfig"
 $MAKE_CMD olddefconfig
 
 log_info "Compiling kernel (using -j$(nproc))"
-$MAKE_CMD ${CROSS_COMPILE:+CROSS_COMPILE="$CROSS_COMPILE"} -j$(nproc)
+$MAKE_CMD ${CROSS_COMPILE:+CROSS_COMPILE="$CROSS_COMPILE"} -j"$(nproc)"
 
 log_info "Installing modules to $LFS"
 $MAKE_CMD ${CROSS_COMPILE:+CROSS_COMPILE="$CROSS_COMPILE"} modules_install INSTALL_MOD_PATH="$LFS"

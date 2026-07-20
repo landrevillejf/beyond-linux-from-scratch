@@ -60,9 +60,9 @@ fi
 log_info "Native mode – installing first-boot service"
 
 # Monter les FS
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
 # Créer le répertoire et le script dans le chroot
 run_privileged mkdir -pv "$LFS/usr/local/sbin"
@@ -109,8 +109,8 @@ INIT
     run_privileged chroot "$LFS" update-rc.d first-boot defaults 2>/dev/null || true
 fi
 
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
 
 log_success "First-boot service installed"

@@ -44,9 +44,9 @@ log_info "Building temporary toolchain in /tools"
 log_info "========================================="
 
 # Create required directories inside $LFS
-run_privileged mkdir -pv $LFS/{bin,etc,lib,lib64,usr,var,tools}
-run_privileged mkdir -pv $LFS/usr/{bin,lib,include,share}
-run_privileged mkdir -pv $LFS/tools/{bin,lib,libexec,include,share}
+run_privileged mkdir -pv "$LFS"/{bin,etc,lib,lib64,usr,var,tools}
+run_privileged mkdir -pv "$LFS"/usr/{bin,lib,include,share}
+run_privileged mkdir -pv "$LFS"/tools/{bin,lib,libexec,include,share}
 
 # Ensure the lfs user exists on the host (not inside chroot)
 if ! id -u lfs &>/dev/null; then
@@ -55,9 +55,9 @@ if ! id -u lfs &>/dev/null; then
 fi
 
 # Set ownership of tools and sources directories to lfs user
-run_privileged chown -v lfs:lfs $LFS/tools
-run_privileged chown -v lfs:lfs $LFS/sources
-run_privileged chown -v lfs:lfs $LFS
+run_privileged chown -v lfs:lfs "$LFS"/tools
+run_privileged chown -v lfs:lfs "$LFS"/sources
+run_privileged chown -v lfs:lfs "$LFS"
 
 # Create the environment file for the lfs user on the host
 LFS_HOME="/home/lfs"
@@ -66,7 +66,7 @@ if [ ! -d "$LFS_HOME" ]; then
     run_privileged chown lfs:lfs "$LFS_HOME"
 fi
 
-cat > $LFS_HOME/.bashrc << 'EOF'
+cat > "$LFS_HOME"/.bashrc << 'EOF'
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -76,19 +76,19 @@ PATH=/tools/bin:/bin:/usr/bin
 export LFS LC_ALL LFS_TGT PATH
 EOF
 
-cat > $LFS_HOME/.bash_profile << 'EOF'
+cat > "$LFS_HOME"/.bash_profile << 'EOF'
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 EOF
 
-run_privileged chown lfs:lfs $LFS_HOME/.bashrc $LFS_HOME/.bash_profile
+run_privileged chown lfs:lfs "$LFS_HOME"/.bashrc "$LFS_HOME"/.bash_profile
 
 # Copy sources (if they exist)
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources to $LFS/sources"
-    run_privileged mkdir -p $LFS/sources
-    run_privileged cp -rv $SOURCES_HOST/* $LFS/sources/
-    run_privileged chown -R lfs:lfs $LFS/sources
+    run_privileged mkdir -p "$LFS"/sources
+    run_privileged cp -rv "$SOURCES_HOST"/* "$LFS"/sources/
+    run_privileged chown -R lfs:lfs "$LFS"/sources
 else
     log_error "No sources found in $SOURCES_HOST – cannot build toolchain"
     exit 1
@@ -210,4 +210,4 @@ echo 'Temporary toolchain built successfully.'
 log_success "Temporary toolchain installed in $LFS/tools"
 
 # Create a marker file so later stages know /tools exists
-touch $LFS/var/log/toolchain-ready
+touch "$LFS"/var/log/toolchain-ready

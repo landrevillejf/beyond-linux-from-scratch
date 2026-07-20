@@ -79,11 +79,11 @@ fi
 # -----------------------------------------------------------------
 # Mount filesystems
 # -----------------------------------------------------------------
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # -----------------------------------------------------------------
 # Copy sources into chroot
@@ -241,10 +241,10 @@ run_privileged chmod +x "$LFS/build-lfs-system.sh"
 log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; /build-lfs-system.sh"
 
-run_privileged umount $LFS/dev/pts 2>/dev/null || true
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
-run_privileged umount $LFS/run 2>/dev/null || true
+run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
+run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "LFS system build complete"

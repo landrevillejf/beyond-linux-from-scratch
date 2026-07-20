@@ -33,9 +33,9 @@ for tool in xorriso mksquashfs grub-install mkfs.vfat mount; do
 done
 
 # Trouver noyau et initramfs
-KERNEL=$(ls -1 "$LFS/boot/vmlinuz"* 2>/dev/null | head -n1)
+KERNEL=$(find "$LFS/boot" -name "vmlinuz*" -type f 2>/dev/null | head -n1)
 [ -z "$KERNEL" ] && KERNEL=$(find "$LFS/boot" -name "vmlinuz*" -type f | head -n1)
-INITRAMFS=$(ls -1 "$LFS/boot/initramfs.img" 2>/dev/null | head -n1)
+INITRAMFS=$(find "$LFS/boot" -name "initramfs.img" -type f 2>/dev/null | head -n1)
 [ -z "$INITRAMFS" ] && INITRAMFS=$(find "$LFS/boot" -name "initramfs*" -type f | head -n1)
 
 if [ -z "$KERNEL" ] || [ -z "$INITRAMFS" ]; then

@@ -72,11 +72,11 @@ fi
 # Ensure /bin/sh resolves to a working shell inside chroot for make/autotools.
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
 
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # -----------------------------------------------------------------
 # Copy necessary host tools into the chroot (utilities ONLY, NOT the compiler)
@@ -238,10 +238,10 @@ run_privileged chmod +x "$LFS/build-init.sh"
 log_info "Entering chroot and building init system with argument: $INIT_SYSTEM"
 run_privileged chroot "$LFS" /bin/bash -c "export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin; /build-init.sh $INIT_SYSTEM"
 
-run_privileged umount $LFS/dev/pts 2>/dev/null || true
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
-run_privileged umount $LFS/run 2>/dev/null || true
+run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
+run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "Init system ($INIT_SYSTEM) installed successfully"

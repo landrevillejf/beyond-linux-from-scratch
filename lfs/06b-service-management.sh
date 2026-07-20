@@ -70,9 +70,9 @@ fi
 log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
 # Créer le répertoire profile.d dans le chroot
 run_privileged mkdir -p "$LFS/etc/profile.d"
@@ -109,8 +109,8 @@ if [ "$INIT_SYSTEM" = "systemd" ]; then
 fi
 
 # Nettoyer les montages
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
 
 log_success "Service management abstraction layer installed"

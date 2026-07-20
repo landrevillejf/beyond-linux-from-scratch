@@ -108,11 +108,11 @@ fi
 log_info "Native mode – full configuration"
 
 # Monter les systèmes de fichiers virtuels
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts $LFS/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs $LFS/run 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # Copier les binaires essentiels dans le chroot
 log_info "Copying essential binaries to chroot"
@@ -207,10 +207,10 @@ log_info "Running configuration in chroot..."
 run_privileged chroot "$LFS" /bin/bash /configure-system.sh
 
 # Démontage
-run_privileged umount $LFS/dev/pts 2>/dev/null || true
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
-run_privileged umount $LFS/run 2>/dev/null || true
+run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
+run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "LFS configuration complete!"

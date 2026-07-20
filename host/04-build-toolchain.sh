@@ -161,9 +161,9 @@ build_toolchain() {
     done
 
     log_info "Building binutils (pass 1)"
-    BINUTILS_TAR=$(ls -1 binutils-*.tar.xz 2>/dev/null | head -n1)
+    BINUTILS_TAR=$(find . -maxdepth 1 -name "binutils-*.tar.xz" -print -quit)
     tar -xf "$BINUTILS_TAR"
-    BINUTILS_DIR=$(ls -1d binutils-* | grep -v '\.tar' | head -n1)
+    BINUTILS_DIR=$(find . -maxdepth 1 -type d -name "binutils-*" -print -quit | sed 's|^\./||')
     cd "$BINUTILS_DIR"
     mkdir -v build
     cd build
@@ -180,9 +180,9 @@ build_toolchain() {
     log_success "binutils (pass 1) done"
 
     log_info "Building GCC (pass 1)"
-    GCC_TAR=$(ls -1 gcc-*.tar.xz 2>/dev/null | head -n1)
+    GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
     tar -xf "$GCC_TAR"
-    GCC_DIR=$(ls -1d gcc-* | grep -v '\.tar' | head -n1)
+    GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
     mkdir -v build
     cd build
@@ -215,9 +215,9 @@ build_toolchain() {
     log_success "GCC (pass 1) done"
 
     log_info "Installing Linux API headers"
-    LINUX_TAR=$(ls -1 linux-*.tar.xz 2>/dev/null | head -n1)
+    LINUX_TAR=$(find . -maxdepth 1 -name "linux-*.tar.xz" -print -quit)
     tar -xf "$LINUX_TAR"
-    LINUX_DIR=$(ls -1d linux-* | grep -v '\.tar' | head -n1)
+    LINUX_DIR=$(find . -maxdepth 1 -type d -name "linux-*" -print -quit | sed 's|^\./||')
     cd "$LINUX_DIR"
     make mrproper
     make headers
@@ -229,9 +229,9 @@ build_toolchain() {
     log_success "Linux headers installed"
 
     log_info "Building glibc"
-    GLIBC_TAR=$(ls -1 glibc-*.tar.xz 2>/dev/null | head -n1)
+    GLIBC_TAR=$(find . -maxdepth 1 -name "glibc-*.tar.xz" -print -quit)
     tar -xf "$GLIBC_TAR"
-    GLIBC_DIR=$(ls -1d glibc-* | grep -v '\.tar' | head -n1)
+    GLIBC_DIR=$(find . -maxdepth 1 -type d -name "glibc-*" -print -quit | sed 's|^\./||')
     cd "$GLIBC_DIR"
     mkdir -v build
     cd build
@@ -248,7 +248,7 @@ build_toolchain() {
 
     log_info "Building libstdc++"
     tar -xf "$GCC_TAR"   # re-extract GCC
-    GCC_DIR=$(ls -1d gcc-* | grep -v '\.tar' | head -n1)
+    GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
     mkdir -v build-libstdc++
     cd build-libstdc++

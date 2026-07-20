@@ -66,7 +66,7 @@ if [ -e /proc/sys/fs/binfmt_misc/register ]; then
         fi
     else
         log_info "Manual registration via /proc"
-        echo ":${TARGET_ARCH}:M::\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7::${INTERPRETER}:OCF" | \
+        printf ":${TARGET_ARCH}:M::\\x7f\\x45\\x4c\\x46\\x02\\x01\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\xb7::${INTERPRETER}:OCF\n" | \
             sudo tee /proc/sys/fs/binfmt_misc/register >/dev/null 2>&1 || true
     fi
 else

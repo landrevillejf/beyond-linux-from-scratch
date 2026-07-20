@@ -64,9 +64,9 @@ if [ ! -f "$LFS/bin/bash" ]; then
     exit 1
 fi
 
-run_privileged mount --bind /dev $LFS/dev 2>/dev/null || true
-run_privileged mount -t proc proc $LFS/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs $LFS/sys 2>/dev/null || true
+run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
+run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
 cat > "$LFS/configure-desktop.sh" << 'INNEREOF'
 #!/bin/bash
@@ -86,8 +86,8 @@ INNEREOF
 run_privileged chmod +x "$LFS/configure-desktop.sh"
 run_privileged chroot "$LFS" /bin/bash /configure-desktop.sh
 
-run_privileged umount $LFS/dev 2>/dev/null || true
-run_privileged umount $LFS/proc 2>/dev/null || true
-run_privileged umount $LFS/sys 2>/dev/null || true
+run_privileged umount "$LFS"/dev 2>/dev/null || true
+run_privileged umount "$LFS"/proc 2>/dev/null || true
+run_privileged umount "$LFS"/sys 2>/dev/null || true
 
 log_success "Desktop configuration complete"

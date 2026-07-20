@@ -33,7 +33,7 @@ case "$BOOTLOADER" in
         if [ -x "$LFS/sbin/lilo" ] || [ -x "$LFS/usr/sbin/lilo" ]; then
             # Créer un lilo.conf basique si absent
             if [ ! -f "$LFS/etc/lilo.conf" ]; then
-                KERNEL_VERSION=$(ls "$LFS/lib/modules" 2>/dev/null | head -n1)
+                KERNEL_VERSION=$(find "$LFS/lib/modules" -maxdepth 1 -type d 2>/dev/null | head -n1)
                 cat > "$LFS/etc/lilo.conf" << EOF
 boot=/dev/sda
 map=/boot/map

@@ -26,7 +26,7 @@ for tool in mksquashfs xorriso; do
 done
 
 # Trouver noyau et initramfs
-KERNEL=$(ls -1 "$LFS/boot/vmlinuz-"* 2>/dev/null | head -1)
+KERNEL=$(find "$LFS/boot" -name "vmlinuz-*" -type f 2>/dev/null | head -1)
 if [ -z "$KERNEL" ]; then
     echo "[ERROR] Kernel not found in $LFS/boot"
     exit 1
@@ -101,7 +101,7 @@ xorriso -as mkisofs \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \
     -boot-load-size 4 -boot-info-table -no-emul-boot \
-    $EFI_OPTION \
+    "$EFI_OPTION" \
     -o "$ISO_OUT" "$ISO_DIR"
 
 # Nettoyage
