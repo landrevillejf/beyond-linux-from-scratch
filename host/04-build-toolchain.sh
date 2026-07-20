@@ -232,7 +232,8 @@ build_toolchain() {
     make headers
     find usr/include -name '.*' -delete
     rm -f usr/include/Makefile
-    cp -rv usr/include "$LFS/tools/include"
+    mkdir -p "$LFS/usr"
+    cp -rv usr/include "$LFS/usr"
     cd "$LFS/sources"
     rm -rf "$LINUX_DIR"
     log_success "Linux headers installed"
@@ -248,7 +249,7 @@ build_toolchain() {
                  --host="$LFS_TGT" \
                  --build="$(../scripts/config.guess)" \
                  --enable-kernel=4.14 \
-                 --with-headers="$LFS/tools/include"
+                 --with-headers="$LFS/usr/include"
     make -j"$NUM_JOBS"
     make install
     cd "$LFS/sources"
