@@ -1007,7 +1007,7 @@ class LFSBuilder:
 
     def __init__(self, profile: str, output_dir: Path, config_file: Path, cache_url: Optional[str] = None):
         self.profile = profile
-        self.output_dir = Path(output_dir)
+        self.output_dir = Path(output_dir).resolve()
         if isinstance(config_file, str):
             config_file = Path(config_file)
         self.config = LFSConfig(config_file)
