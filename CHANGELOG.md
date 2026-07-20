@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **LFS absolute path requirement (Critical)**
+  - Configure scripts require absolute paths for --prefix
+  - LFS now uses Path.resolve() to convert to absolute path
+  - Fixes: "configure: error: expected an absolute directory name for --prefix"
+
 - **LFS directory structure alignment (Critical)**
   - Fixed "Source for binutils not found" error at build stage 4
   - LFS now correctly points to output_dir (not output_dir/image)
