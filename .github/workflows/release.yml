@@ -46,7 +46,7 @@ jobs:
       - name: Prepare lfs build directory
         run: |
           sudo rm -rf /tmp/lfs-build
-          sudo mkdir -p /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build /tmp/lfs-build/build-release/sources
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
