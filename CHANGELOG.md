@@ -7,6 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Professional Branding System (Complete Implementation)**
+  - ✅ **Installer Branding** (NEW - Complete)
+    - GRUB boot menu with branded background gradient (800x600)
+    - Custom GRUB color scheme (Forest Green primary, Light Green highlight)
+    - Branded ISO volume label: `BLFS-0.4.5-LIVE`
+    - Publisher metadata: `Beyond Linux From Scratch`
+    - Installer splash screen (1024x768 professional gradient)
+    - Automatic image generation at ISO build time
+  - ✅ **Live System Branding**
+    - Desktop themes (LFS-Dark, LFS-Light)
+    - Icon packs (Papirus Dark/Light)
+    - Professional wallpapers (custom/generated)
+    - Configuration files with branding manifest
+  - ✅ **Branding Configuration & Management**
+    - Central TOML configuration (`branding/branding.toml`)
+    - Branding manager Python module for config export
+    - Support for multiple presets (default, custom)
+    - Desktop-specific customization (XFCE, GNOME, KDE, LXQt)
+  - ✅ **Wallpaper Generation System**
+    - Python generator for dynamic wallpaper creation
+    - Integrated into build process
+    - Optional feature controlled via environment variables
+    - Fallback to default wallpapers if generation fails
+  - ✅ **Image Asset Generation**
+    - PPM format images (zero dependencies, GRUB-native)
+    - Automatic PNG conversion if ImageMagick/Pillow available
+    - Gradient backgrounds with accent elements
+    - Professional color palette throughout
+
+- **Updated Installer Script (final/14-create-installer.sh)**
+  - Load branding configuration during ISO creation
+  - Generate branded images at build time
+  - Embed GRUB background in boot configuration
+  - Apply branded colors to boot menu
+  - Set custom ISO volume label and publisher
+  - Create branding manifest in ISO filesystem
+
+- **Comprehensive Branding Documentation**
+  - `docs/BRANDING.md` - System branding guidelines and usage
+  - `docs/INSTALLER_BRANDING.md` - Installer branding implementation details
+  - `docs/branding-visual-mockup.html` - Interactive desktop mockup
+  - `branding/installer/README.md` - Installer-specific configuration guide
+
+### Changed
+- **Profile Parameter Architecture (Hardcoding Fix)**
+  - Removed hardcoded `--init systemd` from `profiles/brax3/build.sh`
+  - Removed hardcoded `--init sysvinit` from `profiles/pinebook/build.sh`
+  - Removed hardcoded `--desktop pcmanfm-qt` from `profiles/lxqt/customization.sh`
+  - Profiles now receive init_system and desktop via CLI arguments from builder
+  - Enables flexible profile reuse with different configurations
+
+- **LFS Path Resolution (macOS Compatibility)**
+  - Changed `Path.resolve()` to `Path.absolute()` in `builder.py`
+  - Handles macOS symlink behavior consistently
+  - Prevents `/private/` prefix injection from resolve()
+  - Maintains absolute path requirement for autotools
+
+- **Release Pipeline Dependencies**
+  - Added missing build dependencies to `.github/workflows/release.yml`
+  - `libgmp-dev`, `libmpfr-dev`, `libmpc-dev` required for GCC compilation
+  - Fixes "Building GCC requires GMP/MPFR/MPC" errors in CI
+
 ### Fixed
 - **LFS absolute path requirement (Critical)**
   - Configure scripts require absolute paths for --prefix
@@ -39,13 +102,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced CI/CD compatibility for Docker and automated environments
 
 ### Files Modified
-- `builder.py`: Corrected SourceDownloader initialization path
-- `.github/workflows/release.yml`: Updated directory creation and cache paths
+- `builder.py`: Corrected SourceDownloader initialization path, absolute path handling
+- `.github/workflows/release.yml`: Updated directory creation, cache paths, build dependencies
+- `final/14-create-installer.sh`: Added branding integration, GRUB configuration
+- `profiles/brax3/build.sh`, `profiles/pinebook/build.sh`, `profiles/lxqt/customization.sh`: Removed hardcoding
+- `blfs/21-branding.sh`: Integration of wallpaper generation and branding application
+- `.gitignore`: Added PPM files (auto-generated large images)
 - `host/00-setup-qemu.sh`, `host/04-build-toolchain.sh`
 - `lfs/05-build-lfs-basic.sh`, `lfs/06-build-lfs-system.sh`, `lfs/06a-init-system.sh`
 - `lfs/06b-service-management.sh`, `lfs/07-configure-lfs.sh`, `lfs/09-build-kernel.sh`
 - `blfs/08-build-blfs-base.sh` through `blfs/17-first-boot-service.sh`
 - `final/13-create-bootloader.sh`, `final/14-create-installer.sh`, `final/15-create-live-system.sh`
+
+### Files Created
+- `branding/installer/installer-branding.conf` - Installer branding configuration
+- `branding/installer/generate-installer-branding.py` - Image generation script (PPM format)
+- `branding/installer/backgrounds/` - Generated GRUB and splash backgrounds
+- `docs/BRANDING.md` - Comprehensive branding documentation
+- `docs/INSTALLER_BRANDING.md` - Installer branding implementation guide
+- `docs/branding-visual-mockup.html` - Interactive desktop mockup
 
 ## [0.4.5] - 2026-07-17
 

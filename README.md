@@ -38,6 +38,9 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 
 - [Overview](docs/content.md)
 - [Stage Timings](docs/stage-timings.md)
+- [Professional Branding System](docs/BRANDING.md)
+- [Installer Branding](docs/INSTALLER_BRANDING.md)
+- [Branding Visual Reference](docs/branding-visual-mockup.html)
 - [LPM Package Manager](docs/lpm.md)
 - [Troubleshooting](docs/troubleshoot.md)
 - [Docker How-To](docs/docker-howto.md)
