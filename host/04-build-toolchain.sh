@@ -246,13 +246,22 @@ build_toolchain() {
     cd "$GLIBC_DIR"
     mkdir -v build
     cd build
-    ../configure --prefix="$LFS/tools" \
+    # Use --prefix=/usr with DESTDIR=$LFS so glibc is installed into the sysroot
+    # (the cross-compiler has --with-sysroot=$LFS, so it looks for libc at $LFS/usr/lib).
+    # libc_cv_slibdir and libc_cv_forced_unwind are provided as cache variables to
+    # bypass link tests that fail under GCC_NO_EXECUTABLES in a cross-compile environment.
+    ../configure --prefix=/usr \
                  --host="$LFS_TGT" \
                  --build="$(../scripts/config.guess)" \
                  --enable-kernel=4.14 \
-                 --with-headers="$LFS/usr/include"
+                 --with-headers="$LFS/usr/include" \
+                 --disable-nscd \
+                 libc_cv_slibdir=/usr/lib \
+                 libc_cv_forced_unwind=yes
     make -j"$NUM_JOBS"
-    make install
+    make DESTDIR="$LFS" install
+    # Fix hard-coded path in ldd script
+    sed '/RTLDLIST=/s@/usr@@g' -i "$LFS/usr/bin/ldd"
     cd "$LFS/sources"
     rm -rf "$GLIBC_DIR"
     log_success "glibc done"
