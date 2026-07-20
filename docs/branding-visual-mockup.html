@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WBLFS Professional Branding - Visual Mockup</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Helvetica', Arial, sans-serif;
+            background: #0d0d14;
+            color: #f0f0f0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1, h2, h3 {
+            margin-top: 30px;
+            margin-bottom: 15px;
+            color: #3CB371;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 42px;
+            margin-bottom: 10px;
+            color: #2E8B57;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #cccccc;
+            margin-bottom: 40px;
+            font-size: 18px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .mockup {
+            border: 2px solid #236B43;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(46, 139, 87, 0.1);
+        }
+
+        .mockup-title {
+            background: linear-gradient(135deg, #236B43, #2E8B57);
+            padding: 12px 16px;
+            font-weight: 600;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .mockup-content {
+            padding: 20px;
+        }
+
+        /* SPLASH SCREEN */
+        .splash-screen {
+            background: linear-gradient(135deg, #0d0d14 0%, #1a1a2e 100%);
+            min-height: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .splash-screen::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 50%, rgba(46, 139, 87, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .splash-logo {
+            font-size: 64px;
+            margin-bottom: 20px;
+            z-index: 1;
+        }
+
+        .splash-title {
+            font-size: 36px;
+            font-weight: 700;
+            color: #3CB371;
+            margin-bottom: 10px;
+            text-align: center;
+            z-index: 1;
+        }
+
+        .splash-subtitle {
+            font-size: 16px;
+            color: #cccccc;
+            text-align: center;
+            margin-bottom: 40px;
+            z-index: 1;
+        }
+
+        .progress-bar {
+            width: 200px;
+            height: 4px;
+            background: #252535;
+            border-radius: 2px;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 45%;
+            background: linear-gradient(90deg, #2E8B57, #3CB371);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { width: 20%; }
+            50% { width: 70%; }
+        }
+
+        .splash-version {
+            position: absolute;
+            bottom: 20px;
+            font-size: 12px;
+            color: #8a8a9a;
+            z-index: 1;
+        }
+
+        /* INSTALLER SCREEN */
+        .installer-screen {
+            background: linear-gradient(to right, #1a1a2e, #252535);
+            display: flex;
+            min-height: 500px;
+        }
+
+        .installer-sidebar {
+            width: 250px;
+            background: #236B43;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .installer-steps {
+            flex: 1;
+        }
+
+        .installer-step {
+            padding: 12px 16px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .installer-step.active {
+            background: #2E8B57;
+            font-weight: 600;
+            border-left: 3px solid #90EE90;
+        }
+
+        .installer-step:not(.active) {
+            color: #cccccc;
+            opacity: 0.7;
+        }
+
+        .installer-content {
+            flex: 1;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .installer-content h3 {
+            font-size: 24px;
+            margin-bottom: 15px;
+            color: #3CB371;
+        }
+
+        .installer-content p {
+            color: #cccccc;
+            margin-bottom: 10px;
+        }
+
+        /* BOOT SCREEN */
+        .boot-screen {
+            background: #0d0d14;
+            padding: 40px;
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+
+        .boot-line {
+            color: #2E8B57;
+            margin: 4px 0;
+            white-space: pre;
+        }
+
+        .boot-line.info {
+            color: #3CB371;
+        }
+
+        .boot-line.success {
+            color: #27AE60;
+        }
+
+        .boot-line.wait {
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        /* DESKTOP ENVIRONMENTS */
+        .desktop-env {
+            background: linear-gradient(135deg, #1a1a2e 0%, #252535 100%);
+            min-height: 400px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .de-taskbar {
+            background: #1a1a2e;
+            border-top: 1px solid #236B43;
+            padding: 8px 12px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .de-taskbar-item {
+            width: 40px;
+            height: 40px;
+            background: #252535;
+            border: 1px solid #236B43;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .de-taskbar-item:hover {
+            background: #2E8B57;
+            border-color: #3CB371;
+        }
+
+        .de-content {
+            flex: 1;
+            background: linear-gradient(135deg, #0d0d14 0%, #1a1a2e 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .de-window {
+            background: #252535;
+            border: 1px solid #3a3a4a;
+            border-radius: 6px;
+            width: 80%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .de-titlebar {
+            background: linear-gradient(90deg, #236B43, #2E8B57);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-radius: 6px 6px 0 0;
+        }
+
+        .de-title {
+            flex: 1;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .de-buttons {
+            display: flex;
+            gap: 4px;
+        }
+
+        .de-button {
+            width: 16px;
+            height: 16px;
+            background: #3a3a4a;
+            border-radius: 2px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .de-button:hover {
+            background: #f0f0f0;
+        }
+
+        .de-window-content {
+            padding: 20px;
+        }
+
+        /* COLOR PALETTE */
+        .palette {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .color-swatch {
+            border-radius: 6px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-preview {
+            height: 80px;
+        }
+
+        .color-info {
+            background: #1a1a2e;
+            padding: 12px;
+            font-size: 12px;
+        }
+
+        .color-name {
+            font-weight: 600;
+            color: #3CB371;
+            margin-bottom: 4px;
+        }
+
+        .color-hex {
+            color: #cccccc;
+            font-family: 'Courier New', monospace;
+        }
+
+        /* TYPOGRAPHY */
+        .typography-sample {
+            margin: 20px 0;
+            padding: 16px;
+            background: #1a1a2e;
+            border-left: 3px solid #2E8B57;
+            border-radius: 4px;
+        }
+
+        .typography-label {
+            font-size: 12px;
+            color: #8a8a9a;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+
+        /* COMPONENTS */
+        .components {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .component-box {
+            background: #1a1a2e;
+            padding: 20px;
+            border-radius: 6px;
+            border: 1px solid #3a3a4a;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid #3a3a4a;
+            background: #252535;
+            color: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 4px;
+        }
+
+        .btn:hover {
+            background: #2E8B57;
+            border-color: #3CB371;
+        }
+
+        .btn.primary {
+            background: #2E8B57;
+            border-color: #2E8B57;
+        }
+
+        .btn.primary:hover {
+            background: #3CB371;
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, #236B43, transparent);
+            margin: 40px 0;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 30px;
+            color: #8a8a9a;
+            border-top: 1px solid #3a3a4a;
+            margin-top: 40px;
+        }
+
+        @media print {
+            body {
+                background: white;
+                color: #000;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐧 Way Beyond Linux From Scratch</h1>
+        <p class="subtitle">Professional Branding Visual Mockup - v0.4.5</p>
+
+        <!-- SPLASH SCREEN -->
+        <h2>Splash Screen</h2>
+        <div class="grid">
+            <div class="mockup">
+                <div class="mockup-title">Boot Splash</div>
+                <div class="mockup-content">
+                    <div class="splash-screen">
+                        <div class="splash-logo">🐧</div>
+                        <div class="splash-title">Way Beyond Linux From Scratch</div>
+                        <div class="splash-subtitle">Building your custom Linux distribution</div>
+                        <div class="progress-bar">
+                            <div class="progress-fill"></div>
+                        </div>
+                        <div class="splash-version">v0.4.5</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- INSTALLER -->
+        <h2>Installation Screen</h2>
+        <div class="grid">
+            <div class="mockup">
+                <div class="mockup-title">WBLFS Installer</div>
+                <div class="mockup-content">
+                    <div class="installer-screen">
+                        <div class="installer-sidebar">
+                            <div style="color: #f0f0f0; font-weight: 600; margin-bottom: 20px; font-size: 13px;">Installation Steps</div>
+                            <div class="installer-steps">
+                                <div class="installer-step active">✓ Welcome</div>
+                                <div class="installer-step active">✓ Disk Configuration</div>
+                                <div class="installer-step active">→ Profile Selection</div>
+                                <div class="installer-step">• Desktop Environment</div>
+                                <div class="installer-step">• Package Selection</div>
+                                <div class="installer-step">• Confirmation</div>
+                            </div>
+                        </div>
+                        <div class="installer-content">
+                            <h3>Select Build Profile</h3>
+                            <p>Choose the profile that best fits your needs:</p>
+                            <div style="margin-top: 15px;">
+                                <div style="padding: 8px; margin: 4px 0; background: #1a1a2e; border-left: 2px solid #2E8B57; cursor: pointer;">
+                                    • Minimal (CLI only)
+                                </div>
+                                <div style="padding: 8px; margin: 4px 0; background: #1a1a2e; border-left: 2px solid #2E8B57; cursor: pointer;">
+                                    • XFCE Desktop
+                                </div>
+                                <div style="padding: 8px; margin: 4px 0; background: #252535; border-left: 3px solid #2E8B57; cursor: pointer; border-radius: 2px;">
+                                    ✓ GNOME Desktop (Selected)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- BOOT SCREEN -->
+        <h2>Boot Screen</h2>
+        <div class="grid">
+            <div class="mockup">
+                <div class="mockup-title">System Boot Messages</div>
+                <div class="mockup-content">
+                    <div class="boot-screen">
+                        <div class="boot-line">WBLFS Kernel 6.10.0 #1 x86_64 GNU/Linux</div>
+                        <div class="boot-line info">[  OK  ] Started WBLFS Build System.</div>
+                        <div class="boot-line info">[  OK  ] Started LSB: LFS custom profile.</div>
+                        <div class="boot-line info">[  OK  ] Started Network configuration.</div>
+                        <div class="boot-line success">[  OK  ] Started System initialization (4.2s).</div>
+                        <div class="boot-line">                    </div>
+                        <div class="boot-line">WBLFS Linux v0.4.5 ready</div>
+                        <div class="boot-line wait">login: _</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- DESKTOP ENVIRONMENT -->
+        <h2>Desktop Environment - XFCE with WBLFS Branding</h2>
+        <div class="grid">
+            <div class="mockup">
+                <div class="mockup-title">XFCE Dark Theme</div>
+                <div class="mockup-content">
+                    <div class="desktop-env">
+                        <div class="de-content">
+                            <div class="de-window">
+                                <div class="de-titlebar">
+                                    <div class="de-title">About WBLFS</div>
+                                    <div class="de-buttons">
+                                        <div class="de-button"></div>
+                                        <div class="de-button"></div>
+                                        <div class="de-button"></div>
+                                    </div>
+                                </div>
+                                <div class="de-window-content">
+                                    <div style="color: #3CB371; font-weight: 600; margin-bottom: 10px;">Way Beyond Linux From Scratch</div>
+                                    <div style="color: #cccccc; font-size: 13px; line-height: 1.6;">
+                                        <p>A professional Linux distribution built from source</p>
+                                        <p style="margin-top: 10px;">Version: 0.4.5</p>
+                                        <p>License: GPL v2</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="de-taskbar">
+                            <div class="de-taskbar-item">⊞</div>
+                            <div class="de-taskbar-item">📁</div>
+                            <div class="de-taskbar-item">📝</div>
+                            <div class="de-taskbar-item">🌐</div>
+                            <div style="flex: 1;"></div>
+                            <div class="de-taskbar-item">🔊</div>
+                            <div class="de-taskbar-item">🔋</div>
+                            <div class="de-taskbar-item">🕐</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- COLOR PALETTE -->
+        <h2>Color Palette</h2>
+        <div class="palette">
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #2E8B57;"></div>
+                <div class="color-info">
+                    <div class="color-name">Primary</div>
+                    <div class="color-hex">#2E8B57</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #236B43;"></div>
+                <div class="color-info">
+                    <div class="color-name">Primary Dark</div>
+                    <div class="color-hex">#236B43</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #3CB371;"></div>
+                <div class="color-info">
+                    <div class="color-name">Primary Light</div>
+                    <div class="color-hex">#3CB371</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #1a1a2e;"></div>
+                <div class="color-info">
+                    <div class="color-name">Secondary</div>
+                    <div class="color-hex">#1a1a2e</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #252535;"></div>
+                <div class="color-info">
+                    <div class="color-name">Secondary Light</div>
+                    <div class="color-hex">#252535</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #f0f0f0;"></div>
+                <div class="color-info">
+                    <div class="color-name">Text Primary</div>
+                    <div class="color-hex">#f0f0f0</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #90EE90;"></div>
+                <div class="color-info">
+                    <div class="color-name">Accent</div>
+                    <div class="color-hex">#90EE90</div>
+                </div>
+            </div>
+            <div class="color-swatch">
+                <div class="color-preview" style="background: #27AE60;"></div>
+                <div class="color-info">
+                    <div class="color-name">Success</div>
+                    <div class="color-hex">#27AE60</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- TYPOGRAPHY -->
+        <h2>Typography & Components</h2>
+        
+        <h3>Font Family: Inter</h3>
+        <div class="typography-sample">
+            <div class="typography-label">Heading 1 (42px)</div>
+            <div style="font-size: 42px; font-weight: 700; color: #2E8B57;">Way Beyond Linux From Scratch</div>
+        </div>
+
+        <div class="typography-sample">
+            <div class="typography-label">Heading 2 (36px)</div>
+            <div style="font-size: 36px; font-weight: 700; color: #3CB371;">Professional Branding System</div>
+        </div>
+
+        <div class="typography-sample">
+            <div class="typography-label">Body (16px)</div>
+            <div style="font-size: 16px; color: #f0f0f0;">A professional Linux distribution built from source, featuring customizable profiles, modern desktop environments, and professional branding throughout the entire system.</div>
+        </div>
+
+        <div class="typography-sample">
+            <div class="typography-label">Monospace (14px) - Code/Terminal</div>
+            <div style="font-size: 14px; font-family: 'Courier New', monospace; color: #2E8B57;">$ python3 builder.py --profile xfce --init sysvinit</div>
+        </div>
+
+        <h3>UI Components</h3>
+        <div class="components">
+            <div class="component-box">
+                <div style="margin-bottom: 10px; color: #8a8a9a; font-size: 12px; text-transform: uppercase;">Buttons</div>
+                <button class="btn">Default</button>
+                <button class="btn primary">Primary</button>
+            </div>
+
+            <div class="component-box">
+                <div style="margin-bottom: 10px; color: #8a8a9a; font-size: 12px; text-transform: uppercase;">Input Field</div>
+                <input type="text" placeholder="Enter text..." style="
+                    background: #252535;
+                    border: 1px solid #3a3a4a;
+                    color: #f0f0f0;
+                    padding: 8px;
+                    border-radius: 4px;
+                    width: 100%;
+                    font-family: 'Inter', Arial, sans-serif;
+                ">
+            </div>
+
+            <div class="component-box">
+                <div style="margin-bottom: 10px; color: #8a8a9a; font-size: 12px; text-transform: uppercase;">Alert</div>
+                <div style="
+                    background: rgba(39, 174, 96, 0.1);
+                    border-left: 3px solid #27AE60;
+                    padding: 10px;
+                    border-radius: 4px;
+                    color: #27AE60;
+                    font-size: 13px;
+                ">✓ Build completed successfully</div>
+            </div>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- BRANDING GUIDELINES -->
+        <h2>Branding Guidelines</h2>
+
+        <div style="background: #1a1a2e; padding: 20px; border-radius: 6px; border: 1px solid #3a3a4a; margin-bottom: 20px;">
+            <h3>Color Usage</h3>
+            <ul style="margin-left: 20px; color: #cccccc;">
+                <li style="margin: 8px 0;"><strong style="color: #3CB371;">Primary (#2E8B57)</strong> - Main actions, headers, highlights</li>
+                <li style="margin: 8px 0;"><strong style="color: #236B43;">Primary Dark (#236B43)</strong> - Hover states, darker backgrounds</li>
+                <li style="margin: 8px 0;"><strong style="color: #3CB371;">Primary Light (#3CB371)</strong> - Active states, secondary highlights</li>
+                <li style="margin: 8px 0;"><strong style="color: #90EE90;">Accent (#90EE90)</strong> - Borders, active indicators</li>
+                <li style="margin: 8px 0;"><strong style="color: #27AE60;">Success (#27AE60)</strong> - Positive feedback, completed actions</li>
+            </ul>
+        </div>
+
+        <div style="background: #1a1a2e; padding: 20px; border-radius: 6px; border: 1px solid #3a3a4a; margin-bottom: 20px;">
+            <h3>Typography Rules</h3>
+            <ul style="margin-left: 20px; color: #cccccc;">
+                <li style="margin: 8px 0;">Use <strong>Inter</strong> font family for all UI text and documentation</li>
+                <li style="margin: 8px 0;">Use <strong>Courier New/Monospace</strong> for code snippets and terminal output</li>
+                <li style="margin: 8px 0;">Maintain at least <strong>1.5 line-height</strong> for body text</li>
+                <li style="margin: 8px 0;">Headers should use <strong>font-weight: 700</strong> (bold)</li>
+                <li style="margin: 8px 0;">Primary text color is <strong>#f0f0f0</strong>, secondary is <strong>#cccccc</strong></li>
+            </ul>
+        </div>
+
+        <div style="background: #1a1a2e; padding: 20px; border-radius: 6px; border: 1px solid #3a3a4a;">
+            <h3>Component Standards</h3>
+            <ul style="margin-left: 20px; color: #cccccc;">
+                <li style="margin: 8px 0;">All components use <strong>4px border-radius</strong> for subtle rounding</li>
+                <li style="margin: 8px 0;">Hover states should change background to primary color</li>
+                <li style="margin: 8px 0;">Active states use accent color border (left or bottom)</li>
+                <li style="margin: 8px 0;">Disabled states use opacity 0.5 and desaturated colors</li>
+                <li style="margin: 8px 0;">All transitions use <strong>0.2-0.3s duration</strong> with ease</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>Way Beyond Linux From Scratch - Professional Branding System v0.4.5</p>
+            <p style="margin-top: 10px; font-size: 12px;">Configuration: branding/branding.toml | Manager: branding/branding-manager.py</p>
+            <p style="margin-top: 10px; font-size: 12px;">© 2026 Linux From Scratch Project - GPL v2</p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,1 +1,4 @@
 __pycache__/
+*.ppm
+*.ppm.placeholder
+branding/installer/backgrounds/*.png
