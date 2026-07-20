@@ -154,7 +154,7 @@ build_toolchain() {
     cd "$LFS/sources" || { log_error "Sources directory missing"; exit 1; }
 
     for pkg in binutils gcc linux glibc; do
-        if ! ls -1 "$pkg"-*.tar.* &>/dev/null; then
+        if ! find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit | grep -q .; then
             log_error "Source for $pkg not found"
             exit 1
         fi
