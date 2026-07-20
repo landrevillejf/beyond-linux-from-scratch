@@ -32,7 +32,6 @@ build_lfs() {
         --profile minimal \
         --config config/build-pinebook.conf \
         --output "$OUTPUT_DIR/lfs-system" \
-        --init sysvinit \
         --no-live
 
     log_success "LFS system built for Pinebook"

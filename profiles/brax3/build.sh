@@ -31,7 +31,6 @@ build_lfs() {
         --profile minimal \
         --config config/build-brax3.conf \
         --output "$OUTPUT_DIR/lfs-system" \
-        --init systemd \
         --no-live
 
     log_success "LFS system built for Brax3"

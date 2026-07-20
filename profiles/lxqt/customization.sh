@@ -207,7 +207,6 @@ lxqt-panel &
 lxqt-config &
 lxqt-runner &
 lxqt-notificationd &
-pcmanfm-qt --desktop &
 
 # Set wallpaper if available
 if [ -f /usr/share/backgrounds/lxqt-default.png ]; then
