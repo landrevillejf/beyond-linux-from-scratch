@@ -183,6 +183,15 @@ build_toolchain() {
     GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
+    # Embed GMP, MPFR, and MPC inside the GCC source tree (required by GCC configure)
+    for lib in gmp mpfr mpc; do
+        LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print -quit)
+        if [ -n "$LIB_TAR" ]; then
+            tar -xf "$LIB_TAR"
+            LIB_DIR=$(find . -maxdepth 1 -type d -name "${lib}-*" -print -quit | sed 's|^\./||')
+            mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+        fi
+    done
     cd "$GCC_DIR"
     mkdir -v build
     cd build
