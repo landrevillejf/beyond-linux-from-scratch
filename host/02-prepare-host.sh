@@ -1,6 +1,6 @@
 #!/bin/bash
 # 02-prepare-host.sh
-# Prepare host system for LFS build - Compatible with Docker and native
+# Prepare host system for LFS build
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
