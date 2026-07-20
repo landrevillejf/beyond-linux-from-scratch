@@ -39,6 +39,37 @@ class TestLFSBuilder:
         assert builder.output_dir == output_dir
         assert builder.profile_config['desktop'] == 'xfce'
 
+    def test_output_dir_relative_path_resolved_to_absolute(self, tmp_path, mock_config_file):
+        """Relative --output paths must be resolved to absolute paths.
+
+        configure scripts require absolute --prefix values.  When builder.py is
+        invoked with '--output ./build-release', Path('./build-release') normalises
+        to the relative string 'build-release'.  If that string is exported as the
+        LFS env var the toolchain configure step fails with:
+          configure: error: expected an absolute directory name for --prefix: build-release/tools
+        """
+        import os
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp_path)
+            builder = LFSBuilder(
+                profile="minimal",
+                output_dir="./lfs-output",
+                config_file=mock_config_file,
+            )
+            # output_dir must always be an absolute path
+            assert builder.output_dir.is_absolute(), (
+                f"output_dir must be absolute, got: {builder.output_dir}"
+            )
+            # The LFS env var passed to scripts must also be absolute
+            env = builder._get_env()
+            lfs_path = Path(env["LFS"])
+            assert lfs_path.is_absolute(), (
+                f"LFS env var must be an absolute path, got: {env['LFS']}"
+            )
+        finally:
+            os.chdir(original_cwd)
+
     def test_is_cross_compile_default(self, builder):
         """Test cross-compilation disabled by default"""
         assert builder.is_cross_compile() is False
