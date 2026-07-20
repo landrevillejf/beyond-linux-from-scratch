@@ -1129,7 +1129,7 @@ class LFSBuilder:
     def _get_env(self) -> Dict:
         """Get environment variables for scripts"""
         env = {
-            'LFS': str(self.output_dir / 'image'),
+            'LFS': str(self.output_dir),
             'LFS_TGT': self.config.get('target_triplet'),
             'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
             'MAKEFLAGS': f"-j{self.config.get('build_threads', os.cpu_count())}",
