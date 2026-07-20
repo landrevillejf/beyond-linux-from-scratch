@@ -1,0 +1,235 @@
+# Beyond Linux From Scratch - Professional Branding Configuration
+# This file centralizes all branding assets, colors, and customization
+
+[brand]
+name = "Beyond Linux From Scratch"
+short_name = "BLFS"
+organization = "Linux From Scratch Project"
+description = "A professional Linux distribution built from source"
+version = "0.4.5"
+website = "https://www.linuxfromscratch.org"
+contact_email = "info@linuxfromscratch.org"
+license = "GPL v2"
+
+[colors.primary]
+name = "Forest Green"
+hex = "#2E8B57"
+rgb = [46, 139, 87]
+
+[colors.primary_dark]
+name = "Dark Green"
+hex = "#236B43"
+rgb = [35, 107, 67]
+
+[colors.primary_light]
+name = "Light Green"
+hex = "#3CB371"
+rgb = [60, 179, 113]
+
+[colors.secondary]
+name = "Dark Blue"
+hex = "#1a1a2e"
+rgb = [26, 26, 46]
+
+[colors.secondary_light]
+name = "Light Blue-Dark"
+hex = "#252535"
+rgb = [37, 37, 53]
+
+[colors.accent]
+name = "Light Green Accent"
+hex = "#90EE90"
+rgb = [144, 238, 144]
+
+[colors.text_primary]
+name = "Light Text"
+hex = "#f0f0f0"
+rgb = [240, 240, 240]
+
+[colors.text_secondary]
+name = "Medium Text"
+hex = "#cccccc"
+rgb = [204, 204, 204]
+
+[colors.background]
+name = "Very Dark Background"
+hex = "#0d0d14"
+rgb = [13, 13, 20]
+
+[colors.success]
+hex = "#27AE60"
+name = "Success Green"
+
+[colors.warning]
+hex = "#F39C12"
+name = "Warning Orange"
+
+[colors.error]
+hex = "#E74C3C"
+name = "Error Red"
+
+[typography.fonts]
+sans = ["Inter", "Helvetica", "Arial", "sans-serif"]
+mono = ["JetBrains Mono", "Courier New", "monospace"]
+serif = ["Georgia", "serif"]
+
+[typography.sizes]
+h1 = 42
+h2 = 36
+h3 = 28
+h4 = 24
+body = 16
+small = 12
+mono = 14
+
+[wallpapers]
+generator_script = "wblfs-wallpaper-generator.py"
+generate_on_build = true
+variants = 15
+default_wallpaper = "branding/default/wallpaper/lfs-wallpaper.png"
+fallback_dir = "branding/default/wallpaper/"
+custom_dir = "branding/custom/wallpaper/"
+
+[wallpapers.generator_config]
+enabled = true
+variants = 15
+include_logo = true
+include_branding = true
+resolutions = [
+    "1920x1080",
+    "2560x1440",
+    "3840x2160",
+    "1366x768",
+    "1024x768"
+]
+styles = [
+    "minimal",
+    "geometric",
+    "gradient",
+    "abstract",
+    "modern"
+]
+
+[logo]
+primary = "branding/default/logo/logo.svg"
+favicon = "branding/default/logo/favicon.ico"
+icon_sizes = [16, 32, 64, 128, 256, 512]
+text_logo = "branding/default/logo/text-logo.svg"
+horizontal_logo = "branding/default/logo/horizontal-logo.svg"
+vertical_logo = "branding/default/logo/vertical-logo.svg"
+
+[themes]
+default_theme = "LFS-Dark"
+available_themes = ["LFS-Dark", "LFS-Light"]
+gtk_version = "3.20"
+icon_theme = "Papirus"
+
+[themes.directories]
+gtk3 = "branding/default/themes/gtk-3.20/"
+gtk4 = "branding/default/themes/gtk-4.0/"
+xfce = "branding/default/themes/xfce.xml"
+
+[themes.dark]
+gtk_theme = "LFS-Dark"
+icon_theme = "Papirus-Dark"
+cursor_theme = "Adwaita"
+background_color = "#0d0d14"
+text_color = "#f0f0f0"
+
+[themes.light]
+gtk_theme = "LFS-Light"
+icon_theme = "Papirus"
+cursor_theme = "Adwaita"
+background_color = "#f5f5f5"
+text_color = "#1a1a2e"
+
+[splash_screen]
+enabled = true
+background = "branding/default/wallpaper/lfs-wallpaper-with-logo.png"
+logo = "branding/default/logo/logo.svg"
+duration_ms = 3000
+fade_in_ms = 500
+fade_out_ms = 500
+
+[splash_screen.text]
+title = "Beyond Linux From Scratch"
+subtitle = "Building your custom Linux distribution"
+version_prefix = "Version"
+
+[boot_screen]
+enabled = true
+background_color = "#0d0d14"
+text_color = "#f0f0f0"
+theme = "dark"
+logo_enabled = true
+progress_bar_color = "#2E8B57"
+timeout_seconds = 5
+
+[installer]
+branding_enabled = true
+use_custom_theme = true
+show_logo = true
+show_progress_info = true
+text_alignment = "center"
+background_image = "branding/default/wallpaper/lfs-wallpaper.png"
+
+[desktop_environments.xfce]
+theme = "LFS-Dark"
+icon_theme = "Papirus-Dark"
+wallpaper = "branding/default/wallpaper/lfs-wallpaper.png"
+cursor_theme = "Adwaita"
+font_name = "Inter 10"
+panel_color = "#1a1a2e"
+panel_font_color = "#f0f0f0"
+
+[desktop_environments.gnome]
+theme = "LFS-Dark"
+icon_theme = "Papirus-Dark"
+wallpaper = "branding/default/wallpaper/lfs-wallpaper.png"
+cursor_theme = "Adwaita"
+font_name = "Inter 10"
+shell_theme = "LFS-Dark"
+
+[desktop_environments.kde]
+theme = "LFS-Dark"
+icon_theme = "Papirus-Dark"
+wallpaper = "branding/default/wallpaper/lfs-wallpaper.png"
+cursor_theme = "Breeze"
+font_name = "Noto Sans 10"
+plasma_theme = "LFS-Dark"
+decoration = "org.kde.breeze"
+
+[desktop_environments.lxqt]
+theme = "LFS-Dark"
+icon_theme = "Papirus-Dark"
+wallpaper = "branding/default/wallpaper/lfs-wallpaper.png"
+cursor_theme = "Adwaita"
+font_name = "Inter 10"
+style = "Fusion"
+
+[assets.logos]
+full = "branding/default/logo/logo.svg"
+icon = "branding/default/logo/icon.svg"
+text = "branding/default/logo/text-logo.svg"
+horizontal = "branding/default/logo/horizontal-logo.svg"
+vertical = "branding/default/logo/vertical-logo.svg"
+
+[assets.directories]
+screenshots = "branding/default/screenshots/"
+documentation = "branding/default/docs/"
+icons = "branding/default/icons/"
+fonts = "branding/default/fonts/"
+
+[customization]
+allow_user_customization = true
+preserve_defaults = true
+
+[customization.custom_paths]
+wallpapers = "branding/custom/wallpaper/"
+themes = "branding/custom/themes/"
+logos = "branding/custom/logo/"
+
+[customization.override_rules]
+user_wallpaper_priority = true
+user_theme_priority = true
+merge_with_defaults = true

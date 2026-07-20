@@ -1,0 +1,176 @@
+{
+  "brand": {
+    "name": "Beyond Linux From Scratch",
+    "short_name": "BLFS",
+    "organization": "Linux From Scratch Project",
+    "description": "A professional Linux distribution built from source",
+    "version": "0.4.5",
+    "website": "https://www.linuxfromscratch.org",
+    "contact_email": "info@linuxfromscratch.org",
+    "license": "GPL v2"
+  },
+  "colors": {
+    "primary": {
+      "name": "Forest Green",
+      "hex": "#2E8B57",
+      "rgb": [
+        46,
+        139,
+        87
+      ]
+    },
+    "primary_dark": {
+      "name": "Dark Green",
+      "hex": "#236B43",
+      "rgb": [
+        35,
+        107,
+        67
+      ]
+    },
+    "primary_light": {
+      "name": "Light Green",
+      "hex": "#3CB371",
+      "rgb": [
+        60,
+        179,
+        113
+      ]
+    },
+    "secondary": {
+      "name": "Dark Blue",
+      "hex": "#1a1a2e",
+      "rgb": [
+        26,
+        26,
+        46
+      ]
+    },
+    "secondary_light": {
+      "name": "Light Blue-Dark",
+      "hex": "#252535",
+      "rgb": [
+        37,
+        37,
+        53
+      ]
+    },
+    "accent": {
+      "name": "Light Green Accent",
+      "hex": "#90EE90",
+      "rgb": [
+        144,
+        238,
+        144
+      ]
+    },
+    "text_primary": {
+      "name": "Light Text",
+      "hex": "#f0f0f0",
+      "rgb": [
+        240,
+        240,
+        240
+      ]
+    },
+    "text_secondary": {
+      "name": "Medium Text",
+      "hex": "#cccccc",
+      "rgb": [
+        204,
+        204,
+        204
+      ]
+    },
+    "background": {
+      "name": "Very Dark Background",
+      "hex": "#0d0d14",
+      "rgb": [
+        13,
+        13,
+        20
+      ]
+    },
+    "success": {
+      "hex": "#27AE60",
+      "name": "Success Green"
+    },
+    "warning": {
+      "hex": "#F39C12",
+      "name": "Warning Orange"
+    },
+    "error": {
+      "hex": "#E74C3C",
+      "name": "Error Red"
+    }
+  },
+  "wallpapers": {
+    "default": "branding/default/wallpaper/lfs-wallpaper.png",
+    "dir": "branding/default/wallpaper/",
+    "generate_on_build": true
+  },
+  "themes": {
+    "default_theme": "LFS-Dark",
+    "available_themes": [
+      "LFS-Dark",
+      "LFS-Light"
+    ],
+    "gtk_version": "3.20",
+    "icon_theme": "Papirus",
+    "directories": {
+      "gtk3": "branding/default/themes/gtk-3.20/",
+      "gtk4": "branding/default/themes/gtk-4.0/",
+      "xfce": "branding/default/themes/xfce.xml"
+    },
+    "dark": {
+      "gtk_theme": "LFS-Dark",
+      "icon_theme": "Papirus-Dark",
+      "cursor_theme": "Adwaita",
+      "background_color": "#0d0d14",
+      "text_color": "#f0f0f0"
+    },
+    "light": {
+      "gtk_theme": "LFS-Light",
+      "icon_theme": "Papirus",
+      "cursor_theme": "Adwaita",
+      "background_color": "#f5f5f5",
+      "text_color": "#1a1a2e"
+    }
+  },
+  "desktop_environments": {
+    "xfce": {
+      "theme": "LFS-Dark",
+      "icon_theme": "Papirus-Dark",
+      "wallpaper": "branding/default/wallpaper/lfs-wallpaper.png",
+      "cursor_theme": "Adwaita",
+      "font_name": "Inter 10",
+      "panel_color": "#1a1a2e",
+      "panel_font_color": "#f0f0f0"
+    },
+    "gnome": {
+      "theme": "LFS-Dark",
+      "icon_theme": "Papirus-Dark",
+      "wallpaper": "branding/default/wallpaper/lfs-wallpaper.png",
+      "cursor_theme": "Adwaita",
+      "font_name": "Inter 10",
+      "shell_theme": "LFS-Dark"
+    },
+    "kde": {
+      "theme": "LFS-Dark",
+      "icon_theme": "Papirus-Dark",
+      "wallpaper": "branding/default/wallpaper/lfs-wallpaper.png",
+      "cursor_theme": "Breeze",
+      "font_name": "Noto Sans 10",
+      "plasma_theme": "LFS-Dark",
+      "decoration": "org.kde.breeze"
+    },
+    "lxqt": {
+      "theme": "LFS-Dark",
+      "icon_theme": "Papirus-Dark",
+      "wallpaper": "branding/default/wallpaper/lfs-wallpaper.png",
+      "cursor_theme": "Adwaita",
+      "font_name": "Inter 10",
+      "style": "Fusion"
+    }
+  }
+}

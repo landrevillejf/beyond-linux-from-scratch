@@ -318,6 +318,32 @@ install_branding_assets() {
     fi
 }
 
+generate_wallpapers_if_needed() {
+    local repo_root="$SCRIPT_DIR/.."
+    local generator="$repo_root/wblfs-wallpaper-generator.py"
+    local output_dir="$BRANDING_DIR/wallpaper"
+
+    if [ ! -f "$generator" ]; then
+        log_warning "Wallpaper generator not found: $generator"
+        return 0
+    fi
+
+    if is_true "${LFS_CONFIG_BRANDING_GENERATE_WALLPAPERS:-false}"; then
+        log_info "Generating wallpapers with $generator..."
+        if python3 "$generator" \
+            --output "$output_dir" \
+            --variants "${LFS_CONFIG_BRANDING_WALLPAPER_VARIANTS:-15}" \
+            --include-logo \
+            --include-branding 2>&1 | while read -r line; do
+                log_info "  $line"
+            done; then
+            log_success "Wallpapers generated successfully"
+        else
+            log_warning "Wallpaper generation failed, continuing with existing wallpapers"
+        fi
+    fi
+}
+
 write_builder_parameters_snapshot() {
     log_info "Saving builder parameter snapshot..."
     mkdir -p "$LFS/etc"
@@ -372,6 +398,7 @@ write_branding_manifest() {
 
 log_info "Applying LFS branding and customizations"
 resolve_branding_settings
+generate_wallpapers_if_needed
 resolve_wallpaper_path
 
 log_info "LFS: $LFS"
