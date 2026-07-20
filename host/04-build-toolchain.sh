@@ -118,15 +118,15 @@ fi
 # Set up environment for lfs user
 LFS_HOME="/home/lfs"
 mkdir -p "$LFS_HOME"
-cat > "$LFS_HOME/.bashrc" << EOF
-set +h
-umask 022
-LFS=$LFS
-LC_ALL=POSIX
-LFS_TGT=$(uname -m)-lfs-linux-gnu
-PATH=$LFS/tools/bin:/bin:/usr/bin
-export LFS LC_ALL LFS_TGT PATH
-EOF
+{
+    echo "set +h"
+    echo "umask 022"
+    printf 'LFS=%q\n' "$LFS"
+    echo "LC_ALL=POSIX"
+    echo 'LFS_TGT=$(uname -m)-lfs-linux-gnu'
+    echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
+    echo "export LFS LC_ALL LFS_TGT PATH"
+} > "$LFS_HOME/.bashrc"
 cat > "$LFS_HOME/.bash_profile" << 'EOF'
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 EOF
