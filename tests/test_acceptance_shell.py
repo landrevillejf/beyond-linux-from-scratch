@@ -162,6 +162,13 @@ exit 1
                 assert result.returncode == 0, f"Syntax error in {script_path}"
                 print(f"✅ Syntaxe valide: {script_path}")
 
+    def test_toolchain_script_exports_lfs_tools_path(self):
+        """Le script toolchain doit utiliser les outils cross dans $LFS/tools/bin."""
+        toolchain_script = Path('host/04-build-toolchain.sh')
+        assert toolchain_script.exists()
+        content = toolchain_script.read_text()
+        assert 'PATH="$LFS/tools/bin:/usr/bin:/bin"' in content
+
     def test_shellcheck_on_scripts(self):
         """Exécuter shellcheck sur tous les scripts (si installé)"""
         try:
