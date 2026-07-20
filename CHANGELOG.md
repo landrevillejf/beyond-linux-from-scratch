@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Source download path alignment (Critical)**
+  - Fixed "Source for binutils not found" error in CI builds (Issues #35, #36, #37)
+  - SourceDownloader now saves sources to `{output_dir}/image/sources` (not `{output_dir}/sources`)
+  - Ensures sources directory matches LFS=$LFS/sources expectation
+  - Updated GitHub Actions workflow to create correct directory structure
+  - Fixed cache restore path to align with actual source location
+  - CI builds can now progress past stage 4 (toolchain)
+
 - **Shell script robustness and portability (Issue #35)**
   - Fixed 350+ shell scripting issues across 22 scripts for production-ready quality
   - **SC2086**: Added proper quoting for all variables (150+ occurrences)
@@ -27,6 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced CI/CD compatibility for Docker and automated environments
 
 ### Files Modified
+- `builder.py`: Corrected SourceDownloader initialization path
+- `.github/workflows/release.yml`: Updated directory creation and cache paths
 - `host/00-setup-qemu.sh`, `host/04-build-toolchain.sh`
 - `lfs/05-build-lfs-basic.sh`, `lfs/06-build-lfs-system.sh`, `lfs/06a-init-system.sh`
 - `lfs/06b-service-management.sh`, `lfs/07-configure-lfs.sh`, `lfs/09-build-kernel.sh`
