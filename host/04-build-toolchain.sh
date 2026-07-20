@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build temporary cross-toolchain (LFS pass 1) – sans fallback vers l'hôte
+# Build cross-toolchain - Compatible with Docker and native
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -14,10 +14,79 @@ else
     log_success() { echo "[SUCCESS] $*"; }
 fi
 
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "$ID"
+    elif [ -f /etc/debian_version ]; then
+        echo "debian"
+    elif [ -f /etc/redhat-release ]; then
+        echo "rhel"
+    elif [ -f /etc/alpine-release ]; then
+        echo "alpine"
+    else
+        echo "unknown"
+    fi
+}
+
+install_packages() {
+    local distro="$1"
+    shift
+    local packages=("$@")
+    log_info "Installing packages: ${packages[*]}"
+    case "$distro" in
+        debian|ubuntu)
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "${packages[@]}"
+            ;;
+        fedora|rhel|centos|rocky)
+            if command -v dnf &>/dev/null; then
+                sudo dnf install -y "${packages[@]}"
+            else
+                sudo yum install -y "${packages[@]}"
+            fi
+            ;;
+        opensuse*|sles)
+            sudo zypper install -y "${packages[@]}"
+            ;;
+        arch|manjaro)
+            sudo pacman -Syu --noconfirm "${packages[@]}"
+            ;;
+        alpine)
+            sudo apk add "${packages[@]}"
+            ;;
+        *)
+            log_error "Unknown distribution. Please install: ${packages[*]}"
+            exit 1
+            ;;
+    esac
+}
+
+ensure_compiler() {
+    if command -v gcc &>/dev/null; then
+        log_info "GCC installed: $(gcc --version | head -1)"
+        return 0
+    fi
+    log_warning "GCC not found, installing..."
+    local distro
+    distro=$(detect_distro)
+    case "$distro" in
+        debian|ubuntu) install_packages "$distro" gcc ;;
+        fedora|rhel|centos|rocky) install_packages "$distro" gcc ;;
+        arch|manjaro) install_packages "$distro" gcc ;;
+        opensuse*|sles) install_packages "$distro" gcc ;;
+        *) log_error "Install GCC manually."; exit 1 ;;
+    esac
+    if ! command -v gcc &>/dev/null; then
+        log_error "GCC installation failed"
+        exit 1
+    fi
+    log_success "GCC installed"
+}
+
 IN_DOCKER=false
 if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
     IN_DOCKER=true
-    log_info "Running in Docker container"
 fi
 
 if [ "$IN_DOCKER" = true ]; then
@@ -27,21 +96,25 @@ else
 fi
 
 if [ -z "$LFS" ]; then
-    log_error "LFS variable not set"
+    log_error "LFS not set"
     exit 1
 fi
 
 LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}
-export LFS LFS_TGT
-log_info "LFS=$LFS, TARGET=$LFS_TGT"
+NUM_JOBS=${NUM_JOBS:-$(nproc 2>/dev/null || echo 4)}
+export LFS LFS_TGT LC_ALL=POSIX
 
-# Ensure lfs user exists and has proper environment
+log_info "LFS=$LFS, TARGET=$LFS_TGT, JOBS=$NUM_JOBS"
+
+mkdir -pv "$LFS"/tools "$LFS"/sources
+
+# Ensure lfs user exists
 if ! id -u lfs &>/dev/null; then
-    log_info "Creating lfs user"
     groupadd lfs
     useradd -s /bin/bash -g lfs -m -k /dev/null lfs
 fi
 
+# Set up environment for lfs user
 LFS_HOME="/home/lfs"
 mkdir -p "$LFS_HOME"
 cat > "$LFS_HOME/.bashrc" << 'EOF'
@@ -58,174 +131,183 @@ if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
 EOF
 chown -R lfs:lfs "$LFS_HOME"
 
-# Ensure directories exist
-mkdir -pv "$LFS"/tools "$LFS"/sources
 chown -v lfs:lfs "$LFS"/tools "$LFS"/sources
 
-# -------------------------------------------------------------------
-# Vérification robuste : le toolchain existe-t-il vraiment ?
-# -------------------------------------------------------------------
 check_toolchain() {
-    # Vérifier que gcc est un cross-compilateur pour $LFS_TGT
     if [ -x "$LFS/tools/bin/gcc" ] && [ -x "$LFS/tools/bin/ld" ] && [ -x "$LFS/tools/bin/as" ]; then
-        # Tester que gcc peut compiler un programme simple avec --target
         if echo 'int main(){}' | "$LFS/tools/bin/gcc" -x c - -o /dev/null 2>/dev/null; then
-            log_success "Toolchain exists and appears functional."
             return 0
-        else
-            log_warning "Toolchain binaries exist but are broken (cannot compile)."
-            return 1
         fi
     fi
     return 1
 }
 
 if check_toolchain; then
-    log_info "Skipping toolchain build (already functional)."
+    log_success "Toolchain already exists and works. Skipping build."
     exit 0
 fi
 
 # -------------------------------------------------------------------
-# Construction réelle (officielle LFS pass 1)
+# Build logic (to be run as lfs)
 # -------------------------------------------------------------------
-log_info "Building temporary toolchain from sources (this will take time)."
+build_toolchain() {
+    cd "$LFS/sources" || { log_error "Sources directory missing"; exit 1; }
 
-# On exécute tout en tant que lfs
-su - lfs -c "
-set -e
-cd $LFS/sources
+    for pkg in binutils gcc linux glibc; do
+        if ! ls -1 "$pkg"-*.tar.* &>/dev/null; then
+            log_error "Source for $pkg not found"
+            exit 1
+        fi
+    done
 
-# Vérifier que les sources existent
-for pkg in binutils gcc linux glibc; do
-    if ! ls -1 \"\$pkg\"-*.tar.* >/dev/null 2>&1; then
-        echo \"ERROR: source for \$pkg not found in $LFS/sources\"
+    log_info "Building binutils (pass 1)"
+    BINUTILS_TAR=$(ls -1 binutils-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$BINUTILS_TAR"
+    BINUTILS_DIR=$(ls -1d binutils-* | grep -v '\.tar' | head -n1)
+    cd "$BINUTILS_DIR"
+    mkdir -v build
+    cd build
+    ../configure --prefix="$LFS/tools" \
+                 --with-sysroot="$LFS" \
+                 --target="$LFS_TGT" \
+                 --disable-nls \
+                 --enable-gprofng=no \
+                 --disable-werror
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$BINUTILS_DIR"
+    log_success "binutils (pass 1) done"
+
+    log_info "Building GCC (pass 1)"
+    GCC_TAR=$(ls -1 gcc-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$GCC_TAR"
+    GCC_DIR=$(ls -1d gcc-* | grep -v '\.tar' | head -n1)
+    cd "$GCC_DIR"
+    mkdir -v build
+    cd build
+    ../configure --target="$LFS_TGT" \
+                 --prefix="$LFS/tools" \
+                 --with-glibc-version=2.38 \
+                 --with-sysroot="$LFS" \
+                 --with-newlib \
+                 --without-headers \
+                 --enable-default-pie \
+                 --enable-default-ssp \
+                 --disable-nls \
+                 --disable-shared \
+                 --disable-multilib \
+                 --disable-threads \
+                 --disable-libatomic \
+                 --disable-libgomp \
+                 --disable-libquadmath \
+                 --disable-libssp \
+                 --disable-libvtv \
+                 --disable-libstdcxx \
+                 --enable-languages=c,c++
+    make -j"$NUM_JOBS"
+    make install
+    if [ ! -f "$LFS/tools/bin/cc" ]; then
+        ln -sfv gcc "$LFS/tools/bin/cc"
+    fi
+    cd "$LFS/sources"
+    rm -rf "$GCC_DIR"
+    log_success "GCC (pass 1) done"
+
+    log_info "Installing Linux API headers"
+    LINUX_TAR=$(ls -1 linux-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$LINUX_TAR"
+    LINUX_DIR=$(ls -1d linux-* | grep -v '\.tar' | head -n1)
+    cd "$LINUX_DIR"
+    make mrproper
+    make headers
+    find usr/include -name '.*' -delete
+    rm -f usr/include/Makefile
+    cp -rv usr/include "$LFS/tools/include"
+    cd "$LFS/sources"
+    rm -rf "$LINUX_DIR"
+    log_success "Linux headers installed"
+
+    log_info "Building glibc"
+    GLIBC_TAR=$(ls -1 glibc-*.tar.xz 2>/dev/null | head -n1)
+    tar -xf "$GLIBC_TAR"
+    GLIBC_DIR=$(ls -1d glibc-* | grep -v '\.tar' | head -n1)
+    cd "$GLIBC_DIR"
+    mkdir -v build
+    cd build
+    ../configure --prefix="$LFS/tools" \
+                 --host="$LFS_TGT" \
+                 --build="$(../scripts/config.guess)" \
+                 --enable-kernel=4.14 \
+                 --with-headers="$LFS/tools/include"
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$GLIBC_DIR"
+    log_success "glibc done"
+
+    log_info "Building libstdc++"
+    tar -xf "$GCC_TAR"   # re-extract GCC
+    GCC_DIR=$(ls -1d gcc-* | grep -v '\.tar' | head -n1)
+    cd "$GCC_DIR"
+    mkdir -v build-libstdc++
+    cd build-libstdc++
+    ../libstdc++-v3/configure --host="$LFS_TGT" \
+                              --build="$(../config.guess)" \
+                              --prefix="$LFS/tools" \
+                              --disable-multilib \
+                              --disable-nls \
+                              --disable-libstdcxx-pch \
+                              --with-gxx-include-dir="$LFS/tools/$LFS_TGT/include/c++/$(cat ../gcc/BASE-VER)"
+    make -j"$NUM_JOBS"
+    make install
+    cd "$LFS/sources"
+    rm -rf "$GCC_DIR"
+    log_success "libstdc++ done"
+
+    touch "$LFS/var/log/toolchain-ready"
+    log_success "Temporary toolchain built successfully."
+}
+
+# -------------------------------------------------------------------
+# Main execution
+# -------------------------------------------------------------------
+main() {
+    ensure_compiler
+
+    # If we are not lfs, re‑execute as lfs using sudo
+    if [ "$(whoami)" != "lfs" ]; then
+        log_info "Re‑executing as lfs user"
+        exec sudo -u lfs bash "$0" --force
+    fi
+
+    # Now running as lfs
+    build_toolchain
+
+    # Verify
+    if check_toolchain; then
+        log_success "Toolchain verified after build."
+    else
+        log_error "Toolchain verification failed after build."
         exit 1
     fi
-done
+}
 
-# ----- 1. Binutils (pass 1) -----
-echo '=== Building binutils (pass 1) ==='
-BINUTILS_TAR=\$(ls -1 binutils-*.tar.xz 2>/dev/null | head -n1)
-tar -xf \"\$BINUTILS_TAR\"
-BINUTILS_DIR=\$(echo \"\$BINUTILS_TAR\" | sed 's/\.tar\.xz$//')
-cd \"\$BINUTILS_DIR\"
-mkdir -v build
-cd build
-../configure --prefix=/tools            \
-             --with-sysroot=$LFS        \
-             --target=$LFS_TGT          \
-             --disable-nls              \
-             --enable-gprofng=no        \
-             --disable-werror
-make -j\$(nproc)
-make install
-cd $LFS/sources
-rm -rf \"\$BINUTILS_DIR\"
-echo 'binutils (pass 1) done'
-
-# ----- 2. GCC (pass 1) -----
-echo '=== Building GCC (pass 1) ==='
-GCC_TAR=\$(ls -1 gcc-*.tar.xz 2>/dev/null | head -n1)
-tar -xf \"\$GCC_TAR\"
-GCC_DIR=\$(echo \"\$GCC_TAR\" | sed 's/\.tar\.xz$//')
-cd \"\$GCC_DIR\"
-mkdir -v build
-cd build
-../configure --target=$LFS_TGT          \
-             --prefix=/tools            \
-             --with-glibc-version=2.38  \
-             --with-sysroot=$LFS        \
-             --with-newlib              \
-             --without-headers          \
-             --enable-default-pie       \
-             --enable-default-ssp       \
-             --disable-nls              \
-             --disable-shared           \
-             --disable-multilib         \
-             --disable-threads          \
-             --disable-libatomic        \
-             --disable-libgomp          \
-             --disable-libquadmath      \
-             --disable-libssp           \
-             --disable-libvtv           \
-             --disable-libstdcxx        \
-             --enable-languages=c,c++
-make -j\$(nproc)
-make install
-if [ ! -f /tools/bin/cc ]; then
-    ln -sf gcc /tools/bin/cc
-fi
-cd $LFS/sources
-rm -rf \"\$GCC_DIR\"
-echo 'GCC (pass 1) done'
-
-# ----- 3. Linux API headers -----
-echo '=== Installing Linux API headers ==='
-LINUX_TAR=\$(ls -1 linux-*.tar.xz 2>/dev/null | head -n1)
-tar -xf \"\$LINUX_TAR\"
-LINUX_DIR=\$(echo \"\$LINUX_TAR\" | sed 's/\.tar\.xz$//')
-cd \"\$LINUX_DIR\"
-make mrproper
-make headers
-find usr/include -name '.*' -delete
-rm -f usr/include/Makefile
-cp -rv usr/include /tools/include
-cd $LFS/sources
-rm -rf \"\$LINUX_DIR\"
-echo 'Linux headers installed'
-
-# ----- 4. Glibc -----
-echo '=== Building glibc ==='
-GLIBC_TAR=\$(ls -1 glibc-*.tar.xz 2>/dev/null | head -n1)
-tar -xf \"\$GLIBC_TAR\"
-GLIBC_DIR=\$(echo \"\$GLIBC_TAR\" | sed 's/\.tar\.xz$//')
-cd \"\$GLIBC_DIR\"
-mkdir -v build
-cd build
-../configure --prefix=/tools            \
-             --host=$LFS_TGT            \
-             --build=\$(../scripts/config.guess) \
-             --enable-kernel=4.14       \
-             --with-headers=/tools/include
-make -j\$(nproc)
-make install
-cd $LFS/sources
-rm -rf \"\$GLIBC_DIR\"
-echo 'glibc done'
-
-# ----- 5. Libstdc++ (from GCC) -----
-echo '=== Building libstdc++ ==='
-# Re-extract GCC source
-tar -xf \"\$GCC_TAR\"
-GCC_DIR=\$(echo \"\$GCC_TAR\" | sed 's/\.tar\.xz$//')
-cd \"\$GCC_DIR\"
-mkdir -v build-libstdc++
-cd build-libstdc++
-../libstdc++-v3/configure --host=$LFS_TGT       \
-                          --build=\$(../config.guess) \
-                          --prefix=/tools       \
-                          --disable-multilib    \
-                          --disable-nls         \
-                          --disable-libstdcxx-pch \
-                          --with-gxx-include-dir=/tools/$LFS_TGT/include/c++/\$(cat ../gcc/BASE-VER)
-make -j\$(nproc)
-make install
-cd $LFS/sources
-rm -rf \"\$GCC_DIR\"
-echo 'libstdc++ done'
-
-echo '============================================'
-echo 'Temporary toolchain built successfully!'
-echo '============================================'
-"
-
-# Vérification post-construction
-if check_toolchain; then
-    log_success "Toolchain built and verified."
-    touch "$LFS/var/log/toolchain-ready"
+# Handle --force flag to skip user checks (used for re‑execution)
+if [ "$1" = "--force" ]; then
+    shift
+    # We are already lfs; skip the re‑execution
+    if [ "$(whoami)" != "lfs" ]; then
+        log_error "Cannot use --force without sudo; not lfs user"
+        exit 1
+    fi
+    build_toolchain
+    if check_toolchain; then
+        log_success "Toolchain verified after build."
+    else
+        log_error "Toolchain verification failed."
+        exit 1
+    fi
 else
-    log_error "Toolchain build failed verification."
-    exit 1
+    main "$@"
 fi
-
-exit 0
