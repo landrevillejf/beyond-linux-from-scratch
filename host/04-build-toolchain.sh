@@ -278,7 +278,7 @@ main() {
     # If we are not lfs, re‑execute as lfs using sudo
     if [ "$(whoami)" != "lfs" ]; then
         log_info "Re‑executing as lfs user"
-        exec sudo -u lfs bash "$0" --force
+        exec sudo -n -u lfs bash "$0" --force
     fi
 
     # Now running as lfs
