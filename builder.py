@@ -1021,7 +1021,7 @@ class LFSBuilder:
 
         # Initialize components
         self.downloader = SourceDownloader(
-            self.output_dir / 'image' / 'sources',
+            self.output_dir / 'sources',
             self.logger,
             timeout=self.config.get('build_options.download_timeout', 30),
             retries=self.config.get('build_options.retry_downloads', 2),

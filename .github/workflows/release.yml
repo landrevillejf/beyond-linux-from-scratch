@@ -46,14 +46,14 @@ jobs:
       - name: Prepare lfs build directory
         run: |
           sudo rm -rf /tmp/lfs-build
-          sudo mkdir -p /tmp/lfs-build /tmp/lfs-build/build-release/image/sources
+          sudo mkdir -p /tmp/lfs-build /tmp/lfs-build/build-release/sources
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
       - name: Cache sources
         uses: actions/cache@v4
         with:
-          path: /tmp/lfs-build/build-release/image/sources
+          path: /tmp/lfs-build/build-release/sources
           key: lfs-sources-release-${{ hashFiles('packages/sources.list') }}
           restore-keys: |
             lfs-sources-release-
