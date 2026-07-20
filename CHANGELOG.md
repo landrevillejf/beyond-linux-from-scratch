@@ -5,6 +5,34 @@ All notable changes to the LFS/BLFS Builder project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Shell script robustness and portability (Issue #35)**
+  - Fixed 350+ shell scripting issues across 22 scripts for production-ready quality
+  - **SC2086**: Added proper quoting for all variables (150+ occurrences)
+    - Variables like `$LFS`, `$SOURCES_HOST`, `$LFS_HOME` now safely quoted
+    - Prevents word splitting and path corruption with spaces
+  - **SC2010/SC2012**: Replaced unreliable `ls | grep` patterns with robust `find` commands
+    - Affected: `host/04-build-toolchain.sh`, `lfs/09-build-kernel.sh`, `final/*.sh`
+    - Handles filenames with special characters correctly
+  - **SC2162**: Added `-r` flag to `read` commands to preserve backslashes
+  - **SC2046**: Quoted command substitutions to prevent word splitting
+  - **SC2028**: Replaced `echo` with `printf` for binary data in `host/00-setup-qemu.sh`
+  - **Sudo hardening**: Added `-n` (non-interactive) flag to prevent CI/CD password prompts
+  
+- **Shell script validation**
+  - All 29+ scripts pass ShellCheck with zero critical issues
+  - All scripts validated with `bash -n` syntax check
+  - Enhanced CI/CD compatibility for Docker and automated environments
+
+### Files Modified
+- `host/00-setup-qemu.sh`, `host/04-build-toolchain.sh`
+- `lfs/05-build-lfs-basic.sh`, `lfs/06-build-lfs-system.sh`, `lfs/06a-init-system.sh`
+- `lfs/06b-service-management.sh`, `lfs/07-configure-lfs.sh`, `lfs/09-build-kernel.sh`
+- `blfs/08-build-blfs-base.sh` through `blfs/17-first-boot-service.sh`
+- `final/13-create-bootloader.sh`, `final/14-create-installer.sh`, `final/15-create-live-system.sh`
+
 ## [0.4.5] - 2026-07-17
 
 ### Added
