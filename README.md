@@ -246,6 +246,35 @@ python3 builder.py --profile arm64 --config config/build-cross.conf
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
 | `--generate-sources-list` | Generate `packages/sources.list` and exit |
 
+## Professional Branding System
+
+The builder includes a complete professional branding system spanning the entire distribution lifecycle:
+
+### Features
+- **🎨 Installer Branding**
+  - Branded GRUB boot menu with custom backgrounds
+  - Forest Green color scheme (primary) with Light Green accents
+  - Custom ISO volume label and publisher metadata
+  - Professional splash screens
+  
+- **🖼️ Live System Branding**
+  - Professional desktop themes (LFS-Dark, LFS-Light)
+  - Branded icon packs (Papirus Dark/Light)
+  - Custom wallpapers with system colors
+  - Configuration files with branding manifest
+  
+- **🎯 Complete Customization**
+  - Central TOML configuration (`branding/branding.toml`)
+  - Profile-specific presets (default, custom)
+  - Desktop-specific customization (XFCE, GNOME, KDE, LXQt)
+  - Automatic image generation (PPM format, zero dependencies)
+  - Environment variable controls
+
+### Documentation
+See the [Professional Branding System](docs/BRANDING.md) and [Installer Branding](docs/INSTALLER_BRANDING.md) documentation for detailed information.
+
+View the [Desktop Branding Mockup](docs/branding-visual-mockup.html) for a visual reference.
+
 ## Build profiles
 
 Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
