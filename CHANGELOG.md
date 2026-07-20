@@ -8,13 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- **Source download path alignment (Critical)**
-  - Fixed "Source for binutils not found" error in CI builds (Issues #35, #36, #37)
-  - SourceDownloader now saves sources to `{output_dir}/image/sources` (not `{output_dir}/sources`)
-  - Ensures sources directory matches LFS=$LFS/sources expectation
-  - Updated GitHub Actions workflow to create correct directory structure
-  - Fixed cache restore path to align with actual source location
-  - CI builds can now progress past stage 4 (toolchain)
+- **LFS directory structure alignment (Critical)**
+  - Fixed "Source for binutils not found" error at build stage 4
+  - LFS now correctly points to output_dir (not output_dir/image)
+  - Ensures $LFS/sources resolves to the actual sources directory
+  - Scripts now find all downloaded packages as expected
+  - CI builds can now complete the toolchain stage successfully
 
 - **Shell script robustness and portability (Issue #35)**
   - Fixed 350+ shell scripting issues across 22 scripts for production-ready quality
