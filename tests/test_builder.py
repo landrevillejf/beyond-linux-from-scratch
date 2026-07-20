@@ -43,7 +43,7 @@ class TestLFSBuilder:
         """Relative --output paths must be resolved to absolute paths.
 
         configure scripts require absolute --prefix values.  When builder.py is
-        invoked with '--output ./build-release', Path('./build-release') normalises
+        invoked with '--output ./build-release', Path('./build-release') normalizes
         to the relative string 'build-release'.  If that string is exported as the
         LFS env var the toolchain configure step fails with:
           configure: error: expected an absolute directory name for --prefix: build-release/tools
