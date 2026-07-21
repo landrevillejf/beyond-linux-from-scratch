@@ -188,6 +188,9 @@ exit 1
         assert 'PATH=$LFS/tools/bin:/bin:/usr/bin' in normalized
         assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in normalized
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in normalized
+        assert 'rm -rf "$GCC_DIR"' in normalized
+        assert 'rm -rf "$GCC_DIR2"' in normalized
+        assert 'rm -rf gcc-*' not in normalized
         assert '--prefix=/tools' not in content
         assert '--with-headers=/tools/include' not in content
 
