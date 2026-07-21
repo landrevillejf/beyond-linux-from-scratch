@@ -80,6 +80,46 @@ class TestSourceDownloader:
         assert result is False
         assert mock_urlretrieve.call_count == 1
 
+    @patch('urllib.request.urlretrieve')
+    def test_download_cleans_up_partial_file_on_exception(self, mock_urlretrieve, sources_dir, mock_logger):
+        """Partial files created before an exception should be removed."""
+        dest = sources_dir / "partial.tar.gz"
+
+        def create_partial_and_raise(*args, **kwargs):
+            dest.write_bytes(b"partial data")
+            raise Exception("Connection reset")
+
+        mock_urlretrieve.side_effect = create_partial_and_raise
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        result = downloader.download("https://example.com/partial.tar.gz", "partial.tar.gz", retries=1)
+
+        assert result is False
+        assert not dest.exists(), "Partial file should have been cleaned up"
+
+    @patch('urllib.request.urlretrieve')
+    def test_download_cleans_up_partial_file_on_http_error(self, mock_urlretrieve, sources_dir, mock_logger):
+        """Partial files created before an HTTP error should be removed."""
+        dest = sources_dir / "http_error.tar.gz"
+
+        def create_partial_and_raise(*args, **kwargs):
+            dest.write_bytes(b"partial data")
+            raise urllib.error.HTTPError(
+                url="https://example.com/http_error.tar.gz",
+                code=503,
+                msg="Service Unavailable",
+                hdrs=None,
+                fp=None,
+            )
+
+        mock_urlretrieve.side_effect = create_partial_and_raise
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        result = downloader.download("https://example.com/http_error.tar.gz", "http_error.tar.gz", retries=1)
+
+        assert result is False
+        assert not dest.exists(), "Partial file should have been cleaned up"
+
     def test_download_from_list(self, sources_dir, mock_logger, sample_sources_list):
         """Test downloading from sources list"""
         downloader = SourceDownloader(sources_dir, mock_logger)

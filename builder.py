@@ -8,6 +8,7 @@ Contributors: Realmit kirills1
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -658,10 +659,14 @@ class SourceDownloader:
                 return True
             except urllib.error.HTTPError as e:
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if dest.exists():
+                    dest.unlink()
                 self.logger.error(f"Failed to download {url}: {e}")
                 return False
             except Exception as e:
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if dest.exists():
+                    dest.unlink()
                 if attempt < retries - 1:
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
@@ -1526,7 +1531,31 @@ class LFSBuilder:
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                return f"file:{filename}"
+                # Strip the version number (and the trailing file extension that comes
+                # after it) from the archive filename so that different versions of the
+                # same package share the same key.  This lets custom-sources.list
+                # override the official version even when the version numbers differ.
+                #
+                # The regex matches the first occurrence of an optional separator
+                # (hyphen or underscore), an optional 'v' prefix, a leading digit,
+                # then any remaining digits/dots/plus signs, and finally `.*$` which
+                # strips the rest of the string — including any sub-version suffixes
+                # and the file extension (e.g. '.tar.xz').
+                #
+                # Examples (filename → key base):
+                #   gawk-5.3.2.tar.xz        → gawk
+                #   gawk-5.4.0.tar.xz        → gawk  (same key, custom version wins)
+                #   node-v22.18.0.tar.xz     → node
+                #   ImageMagick-7.1.2-27.tar.gz → ImageMagick
+                #   sqlite-autoconf-3500400.tar.gz → sqlite-autoconf
+                base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
+                if not base:
+                    self.logger.warning(
+                        f"source_key: regex stripped entire filename '{filename}'; "
+                        "using full filename as key"
+                    )
+                    return f"pkg:{filename}"
+                return f"pkg:{base}"
             return f"url:{url}"
 
         for repo_url in repo_urls:
