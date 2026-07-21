@@ -2,17 +2,16 @@
 Final coverage tests to reach 100% - covering remaining 36 lines
 """
 
-import pytest
-import tempfile
 import json
-import os
-import sys
 import logging
+import os
+import subprocess
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open, call
-import subprocess
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+import pytest
+
 from builder import (
     LFSBuilder, ProfileManager, SourceDownloader, ScriptExecutor,
     USBWriter, clean_build_directory, create_parser, main
@@ -63,7 +62,8 @@ class TestRemainingCoverageLines:
         stage_names = [name for name, _ in stages]
         assert 'privacy' in stage_names
 
-    def test_get_qemu_user_for_different_architectures(self, tmp_path):
+    @staticmethod
+    def test_get_qemu_user_for_different_architectures(tmp_path):
         """Test get_qemu_user returns correct values for different architectures"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
@@ -130,7 +130,8 @@ class TestRemainingCoverageLines:
         assert 'system-updater' in stage_names
         assert 'package-updater' in stage_names
 
-    def test_build_stages_without_live_system(self, tmp_path):
+    @staticmethod
+    def test_build_stages_without_live_system(tmp_path):
         """Test get_build_stages excludes live-system when disabled (line 1082-1083)"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
@@ -153,7 +154,8 @@ class TestRemainingCoverageLines:
         stage_names = [name for name, _ in stages]
         assert 'uboot' in stage_names
 
-    def test_build_stages_with_cross_compile_qemu(self, tmp_path):
+    @staticmethod
+    def test_build_stages_with_cross_compile_qemu(tmp_path):
         """Test get_build_stages includes qemu-setup for cross-compile (line 1019-1020)"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
@@ -213,7 +215,8 @@ class TestRemainingCoverageLines:
         assert logger is not None
         assert logger.name == 'builder'
 
-    def test_build_stages_qemu_mapping(self, tmp_path):
+    @staticmethod
+    def test_build_stages_qemu_mapping(tmp_path):
         """Test _get_env sets correct QEMU mapping"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
@@ -225,7 +228,8 @@ class TestRemainingCoverageLines:
         assert 'QEMU_USER' in env
         assert 'aarch64' in env.get('QEMU_USER', '')
 
-    def test_profile_info_output(self, tmp_path):
+    @staticmethod
+    def test_profile_info_output(tmp_path):
         """Test ProfileManager.get_profile_info returns formatted string (line 428-446)"""
         info = ProfileManager.get_profile_info('xfce')
 
@@ -266,7 +270,8 @@ class TestRemainingCoverageLines:
             # Should be called for stage2 and stage3 (not stage1)
             assert mock_run.call_count >= 2
 
-    def test_usb_writer_darwin_raw_device_conversion(self, tmp_path):
+    @staticmethod
+    def test_usb_writer_darwin_raw_device_conversion(tmp_path):
         """Test USBWriter.write_iso converts disk to rdisk on Darwin (line 715)"""
         logger = logging.getLogger('test')
         iso_file = tmp_path / "test.iso"
@@ -279,7 +284,8 @@ class TestRemainingCoverageLines:
                     # Call should be made with rdisk conversion
                     assert True  # If we got here, the function worked
 
-    def test_usb_writer_linux_umount_devices(self, tmp_path):
+    @staticmethod
+    def test_usb_writer_linux_umount_devices(tmp_path):
         """Test USBWriter.write_iso unmounts partitions on Linux (line 712)"""
         logger = logging.getLogger('test')
         iso_file = tmp_path / "test.iso"
@@ -304,8 +310,8 @@ class TestRemainingCoverageLines:
         build_info_file = tmp_path / 'build_info.json'
         assert build_info_file.exists()
 
-        with open(build_info_file) as f:
-            data = json.load(f)
+        with open(build_info_file) as file_obj:
+            data = json.load(file_obj)
             assert data['profile'] == 'xfce'
             assert 'build_date' in data
             assert 'builder_version' in data
@@ -316,7 +322,8 @@ class TestRemainingCoverageLines:
 class TestUSBWriterEdgeCases:
     """Additional USB writer edge case tests"""
 
-    def test_list_devices_empty_lsblk(self, tmp_path):
+    @staticmethod
+    def test_list_devices_empty_lsblk(tmp_path):
         """Test list_devices when lsblk returns empty"""
         with patch('platform.system', return_value='Linux'):
             with patch('subprocess.run', return_value=MagicMock(stdout='', stderr='')):
@@ -334,7 +341,8 @@ class TestUSBWriterEdgeCases:
 class TestProfileManagerAllProfiles:
     """Test all profiles can be instantiated"""
 
-    def test_all_profiles_work_with_builder(self, tmp_path):
+    @staticmethod
+    def test_all_profiles_work_with_builder(tmp_path):
         """Test all profiles can be used to instantiate LFSBuilder"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")

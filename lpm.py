@@ -97,8 +97,8 @@ class PackageDatabase:
         if not self.db_file.exists():
             return {}
 
-        with open(self.db_file, 'r') as f:
-            data = json.load(f)
+        with open(self.db_file, 'r') as file_obj:
+            data = json.load(file_obj)
 
         return {name: Package.from_dict(pkg) for name, pkg in data.items()}
 
@@ -121,8 +121,8 @@ class PackageDatabase:
     def save_installed(self, packages: Dict[str, Package]):
         """Save installed packages"""
         data = {name: pkg.to_dict() for name, pkg in packages.items()}
-        with open(self.installed_file, 'w') as f:
-            json.dump(data, f, indent=2)
+        with open(self.installed_file, 'w') as file_obj:
+            json.dump(data, file_obj, indent=2)
 
     def add_package(self, package: Package):
         """Add package to database"""
@@ -368,8 +368,8 @@ class LPM:
             self.logger.info(f"✓ {name} installed successfully")
             return True
 
-        except Exception as e:
-            self.logger.error(f"Installation failed: {e}")
+        except Exception as exc:
+            self.logger.error(f"Installation failed: {exc}")
             return False
 
     def remove(self, package_name: str, purge: bool = False) -> bool:
