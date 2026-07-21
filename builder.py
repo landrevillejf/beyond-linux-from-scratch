@@ -599,12 +599,12 @@ class ProfileManager:
     ║ Init System:   {effective_init}
     ║ Architecture:  {profile.get('architecture', 'x86_64')}
     ║ Bootloader:    {profile.get('bootloader', 'grub')}
-    ║ Java Dev:      {'✓' if profile['java_dev'] else '✗'}
-    ║ Package Mgr:   {'✓' if profile['package_manager'] else '✗'}
-    ║ Security:      {'✓' if effective_security else '✗'}
-    ║ Privacy:       {'✓' if effective_privacy else '✗'}
-    ║ Live System:   {'✓' if effective_live else '✗'}
-    ║ Auto Updates:  {'✓' if profile.get('system_updater', False) else '✗'}
+    ║ Java Dev:      {'yes' if profile['java_dev'] else 'no'}
+    ║ Package Mgr:   {'yes' if profile['package_manager'] else 'no'}
+    ║ Security:      {'yes' if effective_security else 'no'}
+    ║ Privacy:       {'yes' if effective_privacy else 'no'}
+    ║ Live System:   {'yes' if effective_live else 'no'}
+    ║ Auto Updates:  {'yes' if profile.get('system_updater', False) else 'no'}
     ╚══════════════════════════════════════════════════════════════════╝
     """
 
@@ -792,11 +792,11 @@ class ScriptExecutor:
                 )
 
             if result.returncode == 0:
-                self.logger.info(f"✓ Stage completed: {stage_name}")
+                self.logger.info(f"Stage completed: {stage_name}")
                 self.completed_stages.append(stage_name)
                 return True
             else:
-                self.logger.error(f"✗ Stage failed: {stage_name} (exit code: {result.returncode})")
+                self.logger.error(f"Stage failed: {stage_name} (exit code: {result.returncode})")
                 self.logger.info(f"  Check log: {log_file}")
 
                 # Show last 10 lines of log for quick debugging
@@ -873,7 +873,7 @@ class USBWriter:
         if not device.startswith('/dev/'):
             device = f"/dev/{device}"
 
-        logger.warning(f"⚠️ This will overwrite ALL data on {device}")
+        logger.warning(f"This will overwrite ALL data on {device}")
         response = input("Type 'YES' to continue: ")
 
         if response != 'YES':
@@ -903,7 +903,7 @@ class USBWriter:
         try:
             logger.info(f"Writing ISO to {device}...")
             subprocess.run(cmd, check=True)
-            logger.info(f"✓ Successfully written to {device}")
+            logger.info(f"Successfully written to {device}")
 
             subprocess.run(['sync'], check=False)
             if system == "Linux":
