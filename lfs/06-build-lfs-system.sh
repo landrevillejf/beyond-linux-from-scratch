@@ -88,14 +88,17 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 # -----------------------------------------------------------------
 # Copy sources into chroot
 # -----------------------------------------------------------------
-SOURCES_HOST="$(dirname "$LFS")/sources"
-if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
-    log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
-    run_privileged mkdir -p "$LFS/sources"
-    run_privileged cp -rv "$SOURCES_HOST"/* "$LFS/sources/"
-    run_privileged chown -R lfs:lfs "$LFS/sources"
+SOURCES_DIR="$LFS/sources"
+LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
+if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Using existing sources in $SOURCES_DIR"
+elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+    log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
+    run_privileged mkdir -p "$SOURCES_DIR"
+    run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
+    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $SOURCES_HOST – cannot compile"
+    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
     exit 1
 fi
 

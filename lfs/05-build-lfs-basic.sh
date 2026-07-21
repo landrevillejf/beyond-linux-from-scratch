@@ -82,15 +82,18 @@ EOF
 
 run_privileged chown lfs:lfs "$LFS_HOME"/.bashrc "$LFS_HOME"/.bash_profile
 
-# Copy sources (if they exist)
-SOURCES_HOST="$(dirname "$LFS")/sources"
-if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
-    log_info "Copying sources to $LFS/sources"
-    run_privileged mkdir -p "$LFS"/sources
-    run_privileged cp -rv "$SOURCES_HOST"/* "$LFS"/sources/
-    run_privileged chown -R lfs:lfs "$LFS"/sources
+# Ensure sources are available
+SOURCES_DIR="$LFS/sources"
+LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
+if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Using existing sources in $SOURCES_DIR"
+elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+    log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
+    run_privileged mkdir -p "$SOURCES_DIR"
+    run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
+    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $SOURCES_HOST – cannot build toolchain"
+    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot build toolchain"
     exit 1
 fi
 
