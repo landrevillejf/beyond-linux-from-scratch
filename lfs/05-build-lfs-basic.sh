@@ -105,8 +105,9 @@ cd \"$LFS/sources\"    # <-- FIX: change to the sources directory
 
 # ----- Binutils (pass 1) -----
 echo 'Building binutils (pass 1)'
+BINUTILS_DIR=\$(tar -tf binutils-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf binutils-*.tar.xz
-cd binutils-*
+cd \"\$BINUTILS_DIR\"
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
@@ -122,8 +123,9 @@ rm -rf binutils-*
 
 # ----- GCC (pass 1) -----
 echo 'Building gcc (pass 1)'
+GCC_DIR=\$(tar -tf gcc-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf gcc-*.tar.xz
-cd gcc-*
+cd \"\$GCC_DIR\"
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
@@ -141,8 +143,9 @@ rm -rf gcc-*
 
 # ----- Linux API headers -----
 echo 'Installing Linux API headers'
+LINUX_DIR=\$(tar -tf linux-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf linux-*.tar.xz
-cd linux-*
+cd \"\$LINUX_DIR\"
 make mrproper
 make headers
 find usr/include -name '.*' -delete
@@ -153,8 +156,9 @@ rm -rf linux-*
 
 # ----- Glibc -----
 echo 'Building glibc'
+GLIBC_DIR=\$(tar -tf glibc-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf glibc-*.tar.xz
-cd glibc-*
+cd \"\$GLIBC_DIR\"
 mkdir -v build
 cd build
 ../configure --prefix=/tools            \
@@ -169,8 +173,9 @@ rm -rf glibc-*
 
 # ----- Libstdc++ (from GCC) -----
 echo 'Building libstdc++'
+GCC_DIR2=\$(tar -tf gcc-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf gcc-*.tar.xz
-cd gcc-*
+cd \"\$GCC_DIR2\"
 mkdir -v build-libstdc++
 cd build-libstdc++
 ../libstdc++-v3/configure --host=\$(uname -m)-lfs-linux-gnu \
