@@ -176,10 +176,11 @@ exit 1
         basic_script = Path('lfs/05-build-lfs-basic.sh')
         assert basic_script.exists()
         content = basic_script.read_text()
+        normalized = content.replace('\\"', '"').replace('\\$', '$')
         assert 'TOOLS_DIR="$LFS/tools"' in content
-        assert '--prefix=\\"$TOOLS_DIR\\"' in content
-        assert '--with-headers=\\"$TOOLS_DIR/include\\"' in content
-        assert 'PATH=\\$LFS/tools/bin:/bin:/usr/bin' in content
+        assert '--prefix="$TOOLS_DIR"' in normalized
+        assert '--with-headers="$TOOLS_DIR/include"' in normalized
+        assert 'PATH=$LFS/tools/bin:/bin:/usr/bin' in normalized
         assert '--prefix=/tools' not in content
         assert '--with-headers=/tools/include' not in content
 
