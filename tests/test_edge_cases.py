@@ -4,12 +4,9 @@ Tests for edge cases and error handling
 Covers the remaining uncovered lines in builder.py
 """
 
-import pytest
 import logging
 import subprocess
-import os
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from builder import (
     SourceDownloader, ScriptExecutor, USBWriter, LFSBuilder
@@ -35,7 +32,10 @@ class TestNetworkExceptions:
         logger = logging.getLogger('test')
         downloader = SourceDownloader(tmp_path, logger)
 
-        with patch('urllib.request.urlretrieve', side_effect=Exception("SSL: CERTIFICATE_VERIFY_FAILED")):
+        with patch(
+            'urllib.request.urlretrieve',
+            side_effect=Exception("SSL: CERTIFICATE_VERIFY_FAILED"),
+        ):
             with patch.object(logger, 'warning') as mock_warning:
                 result = downloader.download("https://example.com/file.tar.gz", retries=2)
                 assert result is False
@@ -170,6 +170,7 @@ class TestDockerEnvironment:
     """Test Docker environment detection (line ~891)"""
 
     def test_docker_environment_detection(self, tmp_path):
+        """Test Docker environment detection."""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
 
@@ -179,9 +180,12 @@ class TestDockerEnvironment:
             with patch.object(builder.logger, 'info') as mock_info:
                 result = builder.check_prerequisites()
                 assert result is True
-                mock_info.assert_called_with("Docker container detected - skipping host prerequisites check")
+                mock_info.assert_called_with(
+                    "Docker container detected - skipping host prerequisites check"
+                )
 
     def test_non_docker_environment(self, tmp_path):
+        """Test normal prerequisite checks outside Docker."""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
 
@@ -190,12 +194,16 @@ class TestDockerEnvironment:
         with patch('os.path.exists', return_value=False):
             with patch('platform.system', return_value='Linux'):
                 with patch('shutil.which', return_value='/usr/bin/gcc'):
-                    with patch('shutil.disk_usage', return_value=MagicMock(free=100*1024**3)):
+                    with patch(
+                        'shutil.disk_usage',
+                        return_value=MagicMock(free=100 * 1024**3),
+                    ):
                         with patch.object(builder, 'ensure_lfs_user', return_value=True):
                             result = builder.check_prerequisites()
                             assert result is True
 
     def test_docker_environment_with_cross_compile(self, tmp_path):
+        """Test Docker detection for cross-compilation builds."""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
 
@@ -233,6 +241,7 @@ class TestCombinedEdgeCases:
             assert result is True
 
     def test_verify_checksums_with_missing_file_and_invalid_line(self, tmp_path):
+        """Test checksum verification with malformed and missing entries."""
         logger = logging.getLogger('test')
         downloader = SourceDownloader(tmp_path, logger)
 
@@ -248,6 +257,7 @@ def456 another_missing.tar.gz
         assert result is False
 
     def test_run_script_with_exception_during_log_read(self, tmp_path):
+        """Test script failures when reading the log also raises an exception."""
         logger = logging.getLogger('test')
         env = {}
         output_dir = tmp_path / "output"
