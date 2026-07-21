@@ -135,8 +135,10 @@ chown -R lfs:lfs "$LFS_HOME"
 chown -v lfs:lfs "$LFS"/tools "$LFS"/sources
 
 check_toolchain() {
-    if [ -x "$LFS/tools/bin/gcc" ] && [ -x "$LFS/tools/bin/ld" ] && [ -x "$LFS/tools/bin/as" ]; then
-        if echo 'int main(){}' | "$LFS/tools/bin/gcc" -x c - -o /dev/null 2>/dev/null; then
+    if [ -x "$LFS/tools/bin/$LFS_TGT-gcc" ] && \
+       [ -x "$LFS/tools/bin/$LFS_TGT-ld" ] && \
+       [ -x "$LFS/tools/bin/$LFS_TGT-as" ]; then
+        if echo 'int main(){}' | "$LFS/tools/bin/$LFS_TGT-gcc" -x c - -o /dev/null 2>/dev/null; then
             return 0
         fi
     fi
@@ -218,7 +220,7 @@ build_toolchain() {
     make -j"$NUM_JOBS"
     make install
     if [ ! -f "$LFS/tools/bin/cc" ]; then
-        ln -sfv gcc "$LFS/tools/bin/cc"
+        ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
     fi
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
@@ -285,6 +287,7 @@ build_toolchain() {
     rm -rf "$GCC_DIR"
     log_success "libstdc++ done"
 
+    mkdir -p "$LFS/var/log"
     touch "$LFS/var/log/toolchain-ready"
     log_success "Temporary toolchain built successfully."
 }
