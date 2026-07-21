@@ -143,7 +143,7 @@ cd build
 make -j\$(nproc)
 make install
 cd $LFS/sources
-rm -rf gcc-*
+rm -rf "$GCC_DIR"
 
 # ----- Linux API headers -----
 echo 'Installing Linux API headers'
@@ -197,7 +197,7 @@ cd build-libstdc++
 make -j\$(nproc)
 make install
 cd $LFS/sources
-rm -rf gcc-*
+rm -rf "$GCC_DIR2"
 
 # ----- Essential utilities -----
 echo 'Installing essential utilities (make, sed, grep, etc.)'
