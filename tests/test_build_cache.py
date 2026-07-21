@@ -8,7 +8,7 @@ import tarfile
 import shutil
 import sys
 
-from builder import BuildCache, LFSBuilder, SourceDownloader
+from builder import BuildCache, LFSBuilder, SourceDownloader, __version__
 
 
 class TestBuildCache:
@@ -208,7 +208,7 @@ class TestLFSBuilderCacheIntegration:
                 profile=builder.profile,
                 init=builder.get_init_system(),
                 arch='x86_64',  # matches the default config architecture
-                builder_version='0.4.5'
+                builder_version=__version__
             )
             mock_cache_instance.download_and_extract.assert_called_once()
 
