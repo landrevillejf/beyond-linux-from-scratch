@@ -3,10 +3,11 @@
 Tests for ScriptExecutor class
 """
 
-import pytest
-import subprocess
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+import shutil
+import subprocess
+from unittest.mock import MagicMock, patch
+
 from builder import ScriptExecutor
 
 
@@ -46,7 +47,6 @@ class TestScriptExecutor:
             assert script_path.name == "test-script.sh"
 
         # Clean up
-        import shutil
         if scripts_dir.exists():
             shutil.rmtree(scripts_dir)
 
@@ -105,7 +105,6 @@ class TestScriptExecutor:
 
     def test_resume_from_stage(self, output_dir, mock_logger, temp_dir):
         """Test resuming build from specific stage"""
-        import subprocess
 
         # Créer de vrais scripts temporaires
         scripts_dir = temp_dir / "scripts"
