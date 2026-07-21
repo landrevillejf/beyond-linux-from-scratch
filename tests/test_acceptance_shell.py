@@ -167,9 +167,12 @@ exit 1
         toolchain_script = Path('host/04-build-toolchain.sh')
         assert toolchain_script.exists()
         content = toolchain_script.read_text()
+        assert 'KERNEL_TYPE=${KERNEL_TYPE:-linux}' in content
         assert 'PATH="$LFS/tools/bin:/usr/bin:/bin"' in content
         assert "export LFS LFS_TGT LC_ALL=POSIX PATH" in content
         assert "export LFS LC_ALL LFS_TGT PATH" in content
+        assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in content
+        assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in content
 
     def test_lfs_basic_script_uses_build_root_local_tools_path(self):
         """lfs-basic must install the temporary toolchain into $LFS/tools."""
@@ -177,10 +180,13 @@ exit 1
         assert basic_script.exists()
         content = basic_script.read_text()
         normalized = content.replace('\\"', '"').replace('\\$', '$')
+        assert 'KERNEL_TYPE=${KERNEL_TYPE:-linux}' in content
         assert 'TOOLS_DIR="$LFS/tools"' in content
         assert '--prefix="$TOOLS_DIR"' in normalized
         assert '--with-headers="$TOOLS_DIR/include"' in normalized
         assert 'PATH=$LFS/tools/bin:/bin:/usr/bin' in normalized
+        assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in normalized
+        assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in normalized
         assert '--prefix=/tools' not in content
         assert '--with-headers=/tools/include' not in content
 

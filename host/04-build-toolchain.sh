@@ -14,6 +14,8 @@ else
     log_success() { echo "[SUCCESS] $*"; }
 fi
 
+KERNEL_TYPE=${KERNEL_TYPE:-linux}
+
 detect_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -227,9 +229,13 @@ build_toolchain() {
     log_success "GCC (pass 1) done"
 
     log_info "Installing Linux API headers"
-    LINUX_TAR=$(find . -maxdepth 1 -name "linux-*.tar.xz" -print -quit)
+    LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
+    if [ -z "$LINUX_TAR" ]; then
+        log_error "No kernel source found for type '$KERNEL_TYPE'"
+        exit 1
+    fi
     tar -xf "$LINUX_TAR"
-    LINUX_DIR=$(find . -maxdepth 1 -type d -name "linux-*" -print -quit | sed 's|^\./||')
+    LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
     cd "$LINUX_DIR"
     make mrproper
     make headers
