@@ -79,7 +79,7 @@ https://www.ntp.org/downloads/ntp-4.2.8p18.tar.gz
 https://ftp2.osuosl.org/pub/blfs/conglomeration/xscreensaver/xscreensaver-6.12.tar.gz
 
 # keyutils
-https://people.redhat.com/~dhowells/keyutils/keyutils-1.6.3.tar.gz
+https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot/keyutils-1.6.3.tar.gz
 
 # mesa
 https://archive.mesa3d.org/mesa-25.1.8.tar.xz

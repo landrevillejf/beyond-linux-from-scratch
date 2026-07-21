@@ -550,6 +550,43 @@ https://custom.url/source2.tar.xz
         assert "https://old.lfs.org/linux-6.12.20.tar.xz" not in content
         assert "https://official.url/bash-5.3.tar.gz" in content
 
+    def test_update_sources_list_custom_overrides_different_version(self, tmp_path, monkeypatch):
+        """Custom URL with a different version should override official URL for the same package."""
+        monkeypatch.chdir(tmp_path)
+        output_dir = tmp_path / "lfs-build"
+        output_dir.mkdir()
+        config_file = tmp_path / "config.json"
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        packages_dir = tmp_path / "packages"
+        packages_dir.mkdir()
+        sources_file = packages_dir / "sources.list"
+        custom_file = packages_dir / "custom-sources.list"
+        # Custom source uses a newer version of gawk
+        custom_file.write_text("https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz\n")
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = (
+            b"https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz\n"
+            b"https://official.url/bash-5.3.tar.gz\n"
+        )
+        mock_response.__enter__.return_value = mock_response
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+            assert result is True
+
+        content = sources_file.read_text()
+        # The custom (newer) version should win
+        assert "https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz" in content
+        # The official (older) version should be replaced
+        assert "https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz" not in content
+        assert "https://official.url/bash-5.3.tar.gz" in content
+
     def test_update_sources_list_official_all_fail_no_custom(self, tmp_path, monkeypatch):
         """Test quand officiel échoue et custom n'existe pas -> doit retourner False."""
         monkeypatch.chdir(tmp_path)

@@ -8,6 +8,7 @@ Contributors: Realmit kirills1
 """
 
 import os
+import re
 import sys
 import json
 import argparse
@@ -658,10 +659,14 @@ class SourceDownloader:
                 return True
             except urllib.error.HTTPError as e:
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if dest.exists():
+                    dest.unlink()
                 self.logger.error(f"Failed to download {url}: {e}")
                 return False
             except Exception as e:
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if dest.exists():
+                    dest.unlink()
                 if attempt < retries - 1:
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
@@ -1526,7 +1531,12 @@ class LFSBuilder:
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                return f"file:{filename}"
+                # Strip version numbers so different versions of the same package
+                # share a key, allowing custom-sources.list to override the official
+                # version even when the version number differs.
+                # e.g. gawk-5.4.0.tar.xz and gawk-5.3.2.tar.xz both map to pkg:gawk
+                base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
+                return f"pkg:{base or filename}"
             return f"url:{url}"
 
         for repo_url in repo_urls:
