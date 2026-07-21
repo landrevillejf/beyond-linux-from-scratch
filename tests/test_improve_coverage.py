@@ -665,3 +665,44 @@ https://custom.url/source2.tar.xz
         # Le fichier existant n'est pas modifié
         content = sources_file.read_text()
         assert "https://existing.source/file1.tar.gz" in content
+    def test_update_sources_list_filename_completely_stripped_by_regex(self, tmp_path, monkeypatch):
+        """
+        Test when filename is completely stripped by regex (triggers warning).
+        This covers lines 1553-1557 in builder.py.
+        Filenames like '-5.3.2.tar.xz' match the pattern and become empty strings.
+        """
+        monkeypatch.chdir(tmp_path)
+        output_dir = tmp_path / "lfs-build"
+        output_dir.mkdir()
+        config_file = tmp_path / "config.json"
+        config = LFSConfig(config_file)
+        # URL with a filename that starts with a hyphen and digit
+        config.set('repositories', ['https://example.com/sources'])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        packages_dir = tmp_path / "packages"
+        packages_dir.mkdir()
+        sources_file = packages_dir / "sources.list"
+
+        mock_response = MagicMock()
+        # Include URLs with filenames that will be completely stripped by regex:
+        # -5.3.2.tar.xz matches [-_][v]?\d[\d.+]*.*$ and becomes empty string
+        mock_response.read.return_value = (
+            b"https://repo.example.com/-5.3.2.tar.xz\n"
+            b"https://repo2.example.com/_v7.1.0.tar.gz\n"
+            b"https://normal.example.com/package-1.0.tar.gz\n"
+        )
+        mock_response.__enter__.return_value = mock_response
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+            assert result is True
+
+        # Verify sources.list was created and contains all URLs
+        # The completely-stripped filenames should fall back to pkg:{full_filename} keys
+        content = sources_file.read_text()
+        assert "https://repo.example.com/-5.3.2.tar.xz" in content
+        assert "https://repo2.example.com/_v7.1.0.tar.gz" in content
+        assert "https://normal.example.com/package-1.0.tar.gz" in content
