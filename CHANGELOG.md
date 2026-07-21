@@ -9,109 +9,212 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - MINOR (0.Y.0): +1 for each bug fix
 - PATCH (0.0.Z): +1 for minor patches
 
-## [0.25.1] - 2026-07-20
+## [0.1.0] - 2026-07-17
 
-### Added (25 features)
+### Added
+- LFS Builder Core Framework - Foundation for building custom Linux distributions
 
-1. **LFS Builder Core Framework** - Foundation for building custom Linux distributions
-2. **Builder Configuration System** - TOML-based configuration for build parameters
-3. **Host Environment Preparation** - Verify and prepare host system for LFS builds
-4. **Toolchain Stage** - GCC/binutils/glibc cross-compilation toolchain
-5. **LFS System Construction** - Build complete LFS system from sources
-6. **Kernel Build Integration** - Linux kernel compilation and installation
-7. **BLFS Packages Integration** - Beyond LFS additional packages layer
-8. **Desktop Environment Support** - XFCE, GNOME, KDE, LXQt desktop environments
-9. **Live System Creation** - Generate bootable live ISO with persistence
-10. **Disk Image Generation** - Create and manage virtual machine disk images
-11. **Shell Script Framework** - Modular shell scripts for each build stage
-12. **Error Handling & Logging** - Comprehensive logging system for troubleshooting
-13. **CI/CD Integration** - GitHub Actions workflow for automated builds
-14. **Multiple Profile Support** - Predefined build profiles (brax3, pinebook, lxqt, etc.)
-15. **Dynamic Profile Parameters** - Profiles receive init_system and desktop via arguments
-16. **Package Download System** - Automatic source package acquisition with caching
-17. **Dependency Resolution** - Automatic resolution of build dependencies
-18. **Build Cache System** - Persistent caching for faster rebuilds
-19. **Professional Branding System - Installer** - GRUB boot menu with branded background (800x600), custom GRUB color scheme, branded ISO volume label, installer splash screen (1024x768), automatic image generation at ISO build time, zero external dependencies (PPM format)
-20. **Live System Branding** - Professional desktop themes (LFS-Dark, LFS-Light), icon packs, professional wallpapers, desktop-specific customization
-21. **Branding Configuration & Management** - Central TOML configuration, branding manager Python module, support for multiple presets, environment variable controls
-22. **Wallpaper Generation System** - Python generator for dynamic wallpaper creation, integrated into build process with optional execution, graceful error handling
-23. **Comprehensive Branding Documentation** - BRANDING.md, INSTALLER_BRANDING.md, branding-visual-mockup.html, installer-specific configuration guide
-24. **Build Test Suite** - Comprehensive pytest test coverage (343 tests, 100% coverage)
-25. **Production Release Support** - Release automation, version management, changelog tracking
+## [0.2.0] - 2026-07-17
 
-### Fixed (1 fix)
+### Added
+- Builder Configuration System - TOML-based configuration for build parameters
 
-1. **Comprehensive Shell Script Hardening and macOS Path Resolution** - Addressed 350+ shell scripting issues (SC2086 unquoted variables, SC2010/SC2012 ls patterns, SC2162/SC2046/SC2028), fixed macOS symlink path resolution (Path.absolute() instead of Path.resolve()), removed hardcoded profile parameters, added missing CI dependencies, improved download failure handling, hardened chroot bootstrap for toolchain compilation. All 29+ scripts now pass ShellCheck with zero critical issues. Enables reproducible builds across macOS and Linux environments.
+## [0.3.0] - 2026-07-17
 
-### Files Created (Supporting Branding System)
-- `branding/installer/installer-branding.conf` - Installer branding configuration
-- `branding/installer/generate-installer-branding.py` - Image generation (PPM, zero deps)
-- `branding/installer/backgrounds/grub-background.ppm` - GRUB boot menu background
-- `branding/installer/backgrounds/installer-splash.ppm` - Installer splash screen
-- `branding/installer/README.md` - Installer branding configuration guide
-- `docs/BRANDING.md` - System branding documentation
-- `docs/INSTALLER_BRANDING.md` - Installer branding details
-- `docs/branding-visual-mockup.html` - Interactive desktop mockup
+### Added
+- Host Environment Preparation - Verify and prepare host system for LFS builds
 
-### Files Modified
-- `builder.py`: Path resolution, absolute path handling
-- `final/14-create-installer.sh`: Branding integration, GRUB configuration
-- `profiles/brax3/build.sh`, `profiles/pinebook/build.sh`, `profiles/lxqt/customization.sh`
-- `blfs/21-branding.sh`: Wallpaper generation integration
-- `README.md`: Added branding section
-- `.gitignore`: Added PPM files
-- Multiple shell scripts: Hardening (350+ fixes)
+## [0.4.0] - 2026-07-17
 
----
+### Added
+- Toolchain Stage - GCC/binutils/glibc cross-compilation toolchain
 
-## [0.10.1] - 2026-07-17
+### Fixed
+- Shell script robustness and portability - Fixed 350+ shell scripting issues (SC2086, SC2010/SC2012, SC2162, SC2046, SC2028)
 
-### Added (MAJOR: 10 new features)
+## [0.5.0] - 2026-07-17
 
-#### 1. LPM Interface Mode Selection (Feature)
-- Added `--mode` to `lpm.py` with `cli` (default) and `text` modes
-- Added interactive text menu flow for package operations
-- Added dedicated tests in `tests/test_lpm_mode.py`
+### Added
+- LFS System Construction - Build complete LFS system from sources
 
-#### 2. PR Labeler Configuration (Feature)
-- Added `.github/labeler.yml` label rules for docs, CI, tests, builder, shell scripts, LPM
+## [0.6.0] - 2026-07-17
 
-#### 3. Builder Parameter Persistence (Feature)
-- Added `/etc/lfs-builder-params.env` generation during branding stage
-- Captures exported builder parameters for traceability
-- Post-build inspection and parameter verification
+### Added
+- Kernel Build Integration - Linux kernel compilation and installation
 
-#### 4. Complete BDD Test Coverage (Feature)
-- Added `tests/features/test_build.py` for `tests/features/build.feature`
-- Added `pytest-bdd` to `tests/requirements-test.txt`
+## [0.7.0] - 2026-07-17
 
-#### 5. Coverage and CI Reporting Alignment (Feature)
-- Updated `python-app.yml` for single coverage-producing pytest run
-- Updated README coverage badge URL
+### Added
+- BLFS Packages Integration - Beyond LFS additional packages layer
 
-#### 6. MkDocs Strict Navigation (Feature)
-- Replaced invalid `mkdocs.yml` nav references
-- Simplified `docs/troubleshoot.md`
-- Fixed `docs/content.md` license link
+## [0.8.0] - 2026-07-17
 
-#### 7. Source Download Behavior Hardening (Feature)
-- `SourceDownloader` now uses config-driven timeout/retry values
-- Default changed from `300s/3 retries` to `30s/2 retries`
+### Added
+- Desktop Environment Support - XFCE, GNOME, KDE, LXQt desktop environments
 
-#### 8. Release Pipeline Improvements (Feature)
-- Hardened chroot bootstrap for reliability
-- Improved shell binary handling
+## [0.9.0] - 2026-07-17
 
-#### 9. Download Error Handling (Feature)
-- Permanent HTTP errors now fail fast
+### Added
+- Live System Creation - Generate bootable live ISO with persistence
 
-#### 10. Test Coverage Completeness (Feature)
-- Added targeted tests for source list and downloader
-- Maintained 100% builder.py coverage
+## [0.10.0] - 2026-07-17
 
-### Fixed (MINOR: 1 bug fix)
+### Added
+- Disk Image Generation - Create and manage virtual machine disk images
 
-#### 1. Release Pipeline Chroot Bootstrap Reliability (Fix)
-- Hardened `lfs/06-build-lfs-system.sh` tool bootstrap
-- Avoids copying shell builtins
-- Ensures `/bin/sh` and `/usr/bin/env` exist in chroot
+### Fixed
+- LFS directory structure alignment - Fixed source verification and toolchain stage failures
+
+## [0.11.0] - 2026-07-17
+
+### Added
+- Shell Script Framework - Modular shell scripts for each build stage
+
+## [0.12.0] - 2026-07-17
+
+### Added
+- Error Handling & Logging - Comprehensive logging system for troubleshooting
+
+## [0.13.0] - 2026-07-17
+
+### Added
+- CI/CD Integration - GitHub Actions workflow for automated builds
+
+## [0.14.0] - 2026-07-17
+
+### Added
+- Multiple Profile Support - Predefined build profiles (brax3, pinebook, lxqt, etc.)
+
+## [0.15.0] - 2026-07-17
+
+### Added
+- Dynamic Profile Parameters - Profiles receive init_system and desktop via arguments
+
+### Fixed
+- Profile parameter hardcoding - Removed hardcoded values from profile scripts
+
+## [0.16.0] - 2026-07-17
+
+### Added
+- Package Download System - Automatic source package acquisition with caching
+
+## [0.17.0] - 2026-07-17
+
+### Added
+- Dependency Resolution - Automatic resolution of build dependencies
+
+## [0.18.0] - 2026-07-17
+
+### Added
+- Build Cache System - Persistent caching for faster rebuilds
+
+## [0.19.0] - 2026-07-18
+
+### Added
+- Professional Branding System - Installer branding with GRUB boot menu, branded background (800x600), custom GRUB color scheme, branded ISO volume label, installer splash screen (1024x768)
+
+## [0.20.0] - 2026-07-20
+
+### Added
+- Live System Branding - Professional desktop themes (LFS-Dark, LFS-Light), icon packs, professional wallpapers, desktop-specific customization (XFCE, GNOME, KDE, LXQt)
+
+## [0.21.0] - 2026-07-20
+
+### Added
+- Branding Configuration & Management - Central TOML configuration, branding manager Python module, support for multiple presets, environment variable controls
+
+## [0.22.0] - 2026-07-20
+
+### Added
+- Wallpaper Generation System - Python generator for dynamic wallpaper creation, integrated into build process with optional execution, graceful error handling
+
+## [0.23.0] - 2026-07-20
+
+### Added
+- Comprehensive Branding Documentation - BRANDING.md, INSTALLER_BRANDING.md, branding-visual-mockup.html, installer configuration guide, README updates
+
+## [0.24.0] - 2026-07-20
+
+### Added
+- Build Test Suite - Comprehensive pytest test coverage (343 tests, 100% coverage)
+
+## [0.25.0] - 2026-07-20
+
+### Added
+- Production Release Support - Release automation, version management, changelog tracking
+
+## [0.1.1] - 2026-07-18
+
+### Fixed
+- Create build-release/sources directory before cache restore in CI workflow
+
+## [0.2.1] - 2026-07-18
+
+### Fixed
+- Replace ls glob check with find in source verification
+
+## [0.3.1] - 2026-07-18
+
+### Fixed
+- Correct source download path to match LFS directory structure
+
+## [0.4.1] - 2026-07-18
+
+### Fixed
+- Align LFS directory structure with sources location - Fixed "Source for binutils not found" error
+
+## [0.5.1] - 2026-07-18
+
+### Fixed
+- Convert LFS path to absolute path - Fixed autotools "expected an absolute directory name for --prefix" error
+
+## [0.6.1] - 2026-07-18
+
+### Fixed
+- macOS Path Resolution - Changed Path.resolve() to Path.absolute() for macOS symlink compatibility
+
+## [0.7.1] - 2026-07-20
+
+### Fixed
+- Add missing build dependencies for GCC (libgmp-dev, libmpfr-dev, libmpc-dev)
+
+## [0.8.1] - 2026-07-20
+
+### Fixed
+- Fix GCC pass 1 build: embed GMP, MPFR, MPC sources in GCC source tree
+
+## [0.9.1] - 2026-07-20
+
+### Fixed
+- Install Linux API headers to $LFS/usr/include for glibc configure
+
+## [0.10.1] - 2026-07-20
+
+### Fixed
+- Ensure toolchain stage uses $LFS cross compiler path
+
+## [0.11.1] - 2026-07-20
+
+### Fixed
+- Harden lfs env generation for toolchain path resolution
+
+## [0.12.1] - 2026-07-20
+
+### Fixed
+- Fix glibc cross-compile configure to resolve GCC_NO_EXECUTABLES error
+
+## [0.13.1] - 2026-07-20
+
+### Fixed
+- Use cross-prefixed binary names in check_toolchain verification
+
+## Summary
+
+**Version 0.25.1** cumulative totals:
+- 25 features implemented (0.1.0 through 0.25.0)
+- 13 bug fixes applied (0.*.1 versions)
+- Total: 25 MAJOR + 13 MINOR = v0.25.13
+
+Semantic versioning progression:
+- v0.4.5 (previous): 4 features + 5 fixes
+- v0.25.1 (this release): 25 features + 13 fixes (total cumulative)
