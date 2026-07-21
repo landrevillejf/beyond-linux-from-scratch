@@ -1534,9 +1534,19 @@ class LFSBuilder:
                 # Strip version numbers so different versions of the same package
                 # share a key, allowing custom-sources.list to override the official
                 # version even when the version number differs.
-                # e.g. gawk-5.4.0.tar.xz and gawk-5.3.2.tar.xz both map to pkg:gawk
+                # Pattern matches an optional hyphen/underscore, optional 'v', then a
+                # digit, followed by any combination of digits, dots, and '+', then
+                # everything else (including file extensions like .tar.xz).
+                # Examples: gawk-5.3.2.tar.xz → gawk, node-v22.18.0.tar.xz → node,
+                #           ImageMagick-7.1.2-27.tar.gz → ImageMagick
                 base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
-                return f"pkg:{base or filename}"
+                if not base:
+                    self.logger.warning(
+                        f"source_key: regex stripped entire filename '{filename}'; "
+                        "using full filename as key"
+                    )
+                    return f"pkg:{filename}"
+                return f"pkg:{base}"
             return f"url:{url}"
 
         for repo_url in repo_urls:
