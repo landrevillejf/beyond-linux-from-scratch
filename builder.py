@@ -1531,14 +1531,23 @@ class LFSBuilder:
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                # Strip version numbers so different versions of the same package
-                # share a key, allowing custom-sources.list to override the official
-                # version even when the version number differs.
-                # Pattern matches an optional hyphen/underscore, optional 'v', then a
-                # digit, followed by any combination of digits, dots, and '+', then
-                # everything else (including file extensions like .tar.xz).
-                # Examples: gawk-5.3.2.tar.xz → gawk, node-v22.18.0.tar.xz → node,
-                #           ImageMagick-7.1.2-27.tar.gz → ImageMagick
+                # Strip the version number (and the trailing file extension that comes
+                # after it) from the archive filename so that different versions of the
+                # same package share the same key.  This lets custom-sources.list
+                # override the official version even when the version numbers differ.
+                #
+                # The regex matches the first occurrence of an optional separator
+                # (hyphen or underscore), an optional 'v' prefix, a leading digit,
+                # then any remaining digits/dots/plus signs, and finally `.*$` which
+                # strips the rest of the string — including any sub-version suffixes
+                # and the file extension (e.g. '.tar.xz').
+                #
+                # Examples (filename → key base):
+                #   gawk-5.3.2.tar.xz        → gawk
+                #   gawk-5.4.0.tar.xz        → gawk  (same key, custom version wins)
+                #   node-v22.18.0.tar.xz     → node
+                #   ImageMagick-7.1.2-27.tar.gz → ImageMagick
+                #   sqlite-autoconf-3500400.tar.gz → sqlite-autoconf
                 base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
                 if not base:
                     self.logger.warning(
