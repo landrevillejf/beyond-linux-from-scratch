@@ -121,7 +121,11 @@ cd build
              --enable-gprofng=no        \
              --disable-werror
 make -j\$(nproc)
-make install
+if [ \"\$pkg\" = \"bzip2\" ]; then
+    make PREFIX=\"$TOOLS_DIR\" install
+else
+    make install
+fi
 cd $LFS/sources
 rm -rf binutils-*
 

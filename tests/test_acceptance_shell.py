@@ -190,6 +190,8 @@ exit 1
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in normalized
         assert 'rm -rf "$GCC_DIR"' in normalized
         assert 'rm -rf "$GCC_DIR2"' in normalized
+        assert 'if [ "$pkg" = "bzip2" ]; then' in normalized
+        assert 'make PREFIX="$TOOLS_DIR" install' in normalized
         assert 'rm -rf gcc-*' not in normalized
         assert '--prefix=/tools' not in content
         assert '--with-headers=/tools/include' not in content
