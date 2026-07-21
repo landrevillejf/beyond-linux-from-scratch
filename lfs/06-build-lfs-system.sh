@@ -95,7 +95,7 @@ if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
 elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
-    run_privileged cp -rv "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
+    run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
     run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
     log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
