@@ -171,6 +171,18 @@ exit 1
         assert "export LFS LFS_TGT LC_ALL=POSIX PATH" in content
         assert "export LFS LC_ALL LFS_TGT PATH" in content
 
+    def test_lfs_basic_script_uses_build_root_local_tools_path(self):
+        """lfs-basic must install the temporary toolchain into $LFS/tools."""
+        basic_script = Path('lfs/05-build-lfs-basic.sh')
+        assert basic_script.exists()
+        content = basic_script.read_text()
+        assert 'TOOLS_DIR="$LFS/tools"' in content
+        assert '--prefix=\\"$TOOLS_DIR\\"' in content
+        assert '--with-headers=\\"$TOOLS_DIR/include\\"' in content
+        assert 'PATH=\\$LFS/tools/bin:/bin:/usr/bin' in content
+        assert '--prefix=/tools' not in content
+        assert '--with-headers=/tools/include' not in content
+
     def test_shellcheck_on_scripts(self):
         """Exécuter shellcheck sur tous les scripts (si installé)"""
         try:
