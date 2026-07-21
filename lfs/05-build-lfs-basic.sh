@@ -31,6 +31,8 @@ if [ -z "$LFS" ]; then
     exit 1
 fi
 
+KERNEL_TYPE=${KERNEL_TYPE:-linux}
+
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
         "$@"
@@ -145,8 +147,13 @@ rm -rf gcc-*
 
 # ----- Linux API headers -----
 echo 'Installing Linux API headers'
-LINUX_DIR=\$(tar -tf linux-*.tar.xz | head -1 | cut -d/ -f1)
-tar -xf linux-*.tar.xz
+LINUX_TAR=\$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
+if [ -z "\$LINUX_TAR" ]; then
+    echo "No kernel source found for type '$KERNEL_TYPE'" >&2
+    exit 1
+fi
+LINUX_DIR=\$(tar -tf "\$LINUX_TAR" | head -1 | cut -d/ -f1)
+tar -xf "\$LINUX_TAR"
 cd \"\$LINUX_DIR\"
 make mrproper
 make headers
