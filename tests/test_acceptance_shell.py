@@ -184,6 +184,7 @@ exit 1
         assert 'TOOLS_DIR="$LFS/tools"' in content
         assert '--prefix="$TOOLS_DIR"' in normalized
         assert '--with-headers="$TOOLS_DIR/include"' in normalized
+        assert 'cp -rv usr/include/. "$TOOLS_DIR/include/"' in normalized
         assert 'PATH=$LFS/tools/bin:/bin:/usr/bin' in normalized
         assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in normalized
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in normalized
