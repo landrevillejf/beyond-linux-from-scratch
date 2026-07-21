@@ -39,14 +39,16 @@ run_privileged() {
     fi
 }
 
+TOOLS_DIR="$LFS/tools"
+
 log_info "========================================="
-log_info "Building temporary toolchain in /tools"
+log_info "Building temporary toolchain in $TOOLS_DIR"
 log_info "========================================="
 
 # Create required directories inside $LFS
 run_privileged mkdir -pv "$LFS"/{bin,etc,lib,lib64,usr,var,tools}
 run_privileged mkdir -pv "$LFS"/usr/{bin,lib,include,share}
-run_privileged mkdir -pv "$LFS"/tools/{bin,lib,libexec,include,share}
+run_privileged mkdir -pv "$TOOLS_DIR"/{bin,lib,libexec,include,share}
 
 # Ensure the lfs user exists on the host (not inside chroot)
 if ! id -u lfs &>/dev/null; then
@@ -66,15 +68,15 @@ if [ ! -d "$LFS_HOME" ]; then
     run_privileged chown lfs:lfs "$LFS_HOME"
 fi
 
-cat > "$LFS_HOME"/.bashrc << 'EOF'
-set +h
-umask 022
-LFS=/mnt/lfs
-LC_ALL=POSIX
-LFS_TGT=$(uname -m)-lfs-linux-gnu
-PATH=/tools/bin:/bin:/usr/bin
-export LFS LC_ALL LFS_TGT PATH
-EOF
+{
+    echo "set +h"
+    echo "umask 022"
+    printf 'LFS=%q\n' "$LFS"
+    echo "LC_ALL=POSIX"
+    echo 'LFS_TGT=$(uname -m)-lfs-linux-gnu'
+    echo 'PATH=$LFS/tools/bin:/bin:/usr/bin'
+    echo "export LFS LC_ALL LFS_TGT PATH"
+} > "$LFS_HOME"/.bashrc
 
 cat > "$LFS_HOME"/.bash_profile << 'EOF'
 if [ -f ~/.bashrc ]; then . ~/.bashrc; fi
@@ -101,7 +103,7 @@ fi
 log_info "Building temporary toolchain (this may take a while)..."
 run_privileged su - lfs -c "
 set -e
-cd \"$LFS/sources\"    # <-- FIX: change to the sources directory
+cd \"$LFS/sources\"
 
 # ----- Binutils (pass 1) -----
 echo 'Building binutils (pass 1)'
@@ -110,7 +112,7 @@ tar -xf binutils-*.tar.xz
 cd \"\$BINUTILS_DIR\"
 mkdir -v build
 cd build
-../configure --prefix=/tools            \
+../configure --prefix=\"$TOOLS_DIR\"    \
              --with-sysroot=$LFS        \
              --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
@@ -128,7 +130,7 @@ tar -xf gcc-*.tar.xz
 cd \"\$GCC_DIR\"
 mkdir -v build
 cd build
-../configure --prefix=/tools            \
+../configure --prefix=\"$TOOLS_DIR\"    \
              --with-sysroot=$LFS        \
              --target=\$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
@@ -150,7 +152,7 @@ make mrproper
 make headers
 find usr/include -name '.*' -delete
 rm usr/include/Makefile
-cp -rv usr/include /tools/include
+cp -rv usr/include \"$TOOLS_DIR/include\"
 cd $LFS/sources
 rm -rf linux-*
 
@@ -161,11 +163,11 @@ tar -xf glibc-*.tar.xz
 cd \"\$GLIBC_DIR\"
 mkdir -v build
 cd build
-../configure --prefix=/tools            \
+../configure --prefix=\"$TOOLS_DIR\"    \
              --host=\$(uname -m)-lfs-linux-gnu            \
              --build=\$(../scripts/config.guess) \
              --enable-kernel=4.14       \
-             --with-headers=/tools/include
+             --with-headers=\"$TOOLS_DIR/include\"
 make -j\$(nproc)
 make install
 cd $LFS/sources
@@ -180,11 +182,11 @@ mkdir -v build-libstdc++
 cd build-libstdc++
 ../libstdc++-v3/configure --host=\$(uname -m)-lfs-linux-gnu \
                           --build=\$(../config.guess) \
-                          --prefix=/tools \
+                          --prefix=\"$TOOLS_DIR\" \
                           --disable-multilib \
                           --disable-nls \
                           --disable-libstdcxx-pch \
-                          --with-gxx-include-dir=/tools/\$(uname -m)-lfs-linux-gnu/include/c++/\$(cat ../gcc/BASE-VER)
+                          --with-gxx-include-dir=\"$TOOLS_DIR\"/\$(uname -m)-lfs-linux-gnu/include/c++/\$(cat ../gcc/BASE-VER)
 make -j\$(nproc)
 make install
 cd $LFS/sources
@@ -203,7 +205,7 @@ for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
     tar -xf \"\$archive\"
     cd \"\$dir\"
     if [ -f \"configure\" ]; then
-        ./configure --prefix=/tools
+        ./configure --prefix=\"$TOOLS_DIR\"
     fi
     make -j\$(nproc)
     make install
