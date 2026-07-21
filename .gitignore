@@ -1,4 +1,8 @@
 __pycache__/
+.coverage
+coverage.xml
+htmlcov/
+lfs-build/
 *.ppm
 *.ppm.placeholder
 branding/installer/backgrounds/*.png
