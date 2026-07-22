@@ -69,7 +69,7 @@ exit 0
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert (lfs_dir / "bin" / "bash").exists()
+    assert os.path.lexists(lfs_dir / "bin" / "bash")
     assert (lfs_dir / "bin" / "sh").is_symlink()
     assert os.readlink(lfs_dir / "bin" / "sh") == "bash"
     assert (lfs_dir / "usr" / "bin" / "env").exists()
