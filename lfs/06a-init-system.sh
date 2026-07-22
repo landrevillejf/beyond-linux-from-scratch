@@ -96,7 +96,7 @@ copy_tool_with_libs() {
     run_privileged chmod +x "$LFS/usr/bin/$tool_name"
 
     # Copy dynamic libraries required by the tool into the chroot.
-    ldd "$tool_path" 2>/dev/null | awk '/=> \// {print $3} /^\/lib/ {print $1}' | while read -r lib; do
+    ldd "$tool_path" 2>/dev/null | awk '/=> \// {print $3} $1 ~ /^\/lib/ {print $1}' | while read -r lib; do
         [ -z "$lib" ] && continue
         local rel_dir
         rel_dir="$(dirname "$lib")"
