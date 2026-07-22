@@ -60,7 +60,7 @@ copy_tool_with_libs() {
     run_privileged cp -Lv "$source_path" "$dest_path"
     run_privileged chmod +x "$dest_path"
 
-    ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} /^\/lib/ {print $1}' | while read -r lib; do
+    ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} $1 ~ /^\/lib/ {print $1}' | while read -r lib; do
         [ -z "$lib" ] && continue
         run_privileged mkdir -p "$LFS$(dirname "$lib")"
         if [ ! -e "$LFS$lib" ]; then
