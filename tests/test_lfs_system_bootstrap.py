@@ -73,6 +73,7 @@ exit 0
     assert (lfs_dir / "bin" / "sh").is_symlink()
     assert os.readlink(lfs_dir / "bin" / "sh") == "bash"
     assert (lfs_dir / "usr" / "bin" / "env").exists()
+    assert (lfs_dir / "usr" / "bin" / "env").exists()
 
 
 def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
