@@ -75,7 +75,7 @@ exit 0
     assert (lfs_dir / "usr" / "bin" / "env").exists()
 
 
-def test_lfs_system_supports_image_root_layout(temp_dir):
+def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "06-build-lfs-system.sh"
     output_dir = temp_dir / "build-output"
