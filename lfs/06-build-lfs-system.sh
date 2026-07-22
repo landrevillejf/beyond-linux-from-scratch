@@ -43,6 +43,58 @@ run_privileged() {
     fi
 }
 
+copy_tool_with_libs() {
+    local source_path="$1"
+    local dest_path="$2"
+
+    if [ ! -x "$source_path" ]; then
+        return 1
+    fi
+
+    run_privileged mkdir -p "$(dirname "$dest_path")"
+    run_privileged cp -Lv "$source_path" "$dest_path"
+    run_privileged chmod +x "$dest_path"
+
+    ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} /^\/lib/ {print $1}' | while read -r lib; do
+        [ -z "$lib" ] && continue
+        run_privileged mkdir -p "$LFS$(dirname "$lib")"
+        if [ ! -e "$LFS$lib" ]; then
+            run_privileged cp -Lv "$lib" "$LFS$lib"
+        fi
+    done
+}
+
+ensure_bootstrap_chroot_shell() {
+    if [ ! -x "$LFS/bin/bash" ]; then
+        log_info "Bootstrapping /bin/bash into chroot"
+        if [ -x "$LFS/usr/bin/bash" ]; then
+            run_privileged mkdir -p "$LFS/bin"
+            run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
+        else
+            local host_bash
+            host_bash="$(command -v bash 2>/dev/null || true)"
+            if [ -z "$host_bash" ] || [ ! -x "$host_bash" ]; then
+                log_error "Unable to locate a host bash binary for chroot bootstrap"
+                exit 1
+            fi
+            copy_tool_with_libs "$host_bash" "$LFS/bin/bash"
+        fi
+    fi
+
+    if [ ! -e "$LFS/bin/sh" ]; then
+        run_privileged ln -sfn bash "$LFS/bin/sh"
+    fi
+
+    if [ ! -x "$LFS/usr/bin/env" ]; then
+        log_info "Bootstrapping /usr/bin/env into chroot"
+        local host_env
+        host_env="$(command -v env 2>/dev/null || true)"
+        if [ -n "$host_env" ] && [ -x "$host_env" ]; then
+            copy_tool_with_libs "$host_env" "$LFS/usr/bin/env"
+        fi
+    fi
+}
+
 log_info "========================================="
 log_info "Building LFS system"
 log_info "========================================="
@@ -54,6 +106,8 @@ if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – skipping compilation"
     exit 0
 fi
+
+ensure_bootstrap_chroot_shell
 
 if [ ! -f "$LFS/bin/bash" ]; then
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
@@ -243,6 +297,11 @@ run_privileged chmod +x "$LFS/build-lfs-system.sh"
 
 log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; /build-lfs-system.sh"
+
+if [ -x "$LFS/usr/bin/bash" ]; then
+    run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
+    run_privileged ln -sfn bash "$LFS/bin/sh"
+fi
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
 run_privileged umount "$LFS"/dev 2>/dev/null || true
