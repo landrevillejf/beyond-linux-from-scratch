@@ -10,8 +10,6 @@ import json
 import random
 import argparse
 import logging
-from typing import List, Tuple, Optional, Dict, Any
-
 from PIL import Image, ImageDraw, ImageFont
 
 # ====================== COULEURS DE BASE ======================
