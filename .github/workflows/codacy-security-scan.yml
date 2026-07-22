@@ -34,7 +34,8 @@ jobs:
       - name: Run Bandit security scan
         run: |
           pip install bandit
-          bandit -r . -f sarif -o results.sarif || \
+          bandit -r . -f sarif -o results.sarif \
+            --exclude './venv,./node_modules,./.pytest_cache,./.idea,__pycache__,tests/venv' || \
             echo '{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"Bandit"}},"results":[]}]}' > results.sarif
         continue-on-error: true
 

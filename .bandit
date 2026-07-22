@@ -1,0 +1,13 @@
+[bandit]
+# Exclude deleted files and test directories
+exclude_dirs = [
+    './venv',
+    './node_modules',
+    './.pytest_cache',
+    './.idea',
+    '__pycache__',
+    'tests/venv'
+]
+
+# Skip specific test IDs that generate false positives
+skips = []
