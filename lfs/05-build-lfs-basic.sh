@@ -121,11 +121,7 @@ cd build
              --enable-gprofng=no        \
              --disable-werror
 make -j\$(nproc)
-if [ \"\$pkg\" = \"bzip2\" ]; then
-    make PREFIX=\"$TOOLS_DIR\" install
-else
-    make install
-fi
+make install
 cd $LFS/sources
 rm -rf binutils-*
 
@@ -219,7 +215,11 @@ for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
         ./configure --prefix=\"$TOOLS_DIR\"
     fi
     make -j\$(nproc)
-    make install
+    if [ \"\$pkg\" = \"bzip2\" ]; then
+        make PREFIX=\"$TOOLS_DIR\" install
+    else
+        make install
+    fi
     cd $LFS/sources
     rm -rf \"\$dir\"
 done
