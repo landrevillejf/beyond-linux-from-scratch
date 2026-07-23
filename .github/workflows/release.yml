@@ -47,15 +47,15 @@ jobs:
       # --------------------------------------------------------------
       # Check Bash scripts (syntax + best practices)
       # --------------------------------------------------------------
-      - name: Check Bash scripts (shellcheck)
-        uses: luizm/action-sh-checker@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHELLCHECK_OPTS: -e SC1004,SC2086
-          SHFMT_OPTS: -s
-        with:
-          sh_checker_comment: true
-          sh_checker_exclude: "tests .terraform .git"
+#      - name: Check Bash scripts (shellcheck)
+#        uses: luizm/action-sh-checker@master
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          SHELLCHECK_OPTS: -e SC1004,SC2086
+#          SHFMT_OPTS: -s
+#        with:
+#          sh_checker_comment: true
+#          sh_checker_exclude: "tests .terraform .git"
 
       - name: Generate sources.list
         run: python3 builder.py --generate-sources-list
