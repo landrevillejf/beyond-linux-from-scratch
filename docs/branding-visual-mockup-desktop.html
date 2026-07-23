@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BLFS Desktop - Professional Branding</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            font-family: 'Inter', 'Helvetica', Arial, sans-serif;
+            background: #0d0d14;
+            color: #f0f0f0;
+            overflow: hidden;
+        }
+
+        /* DESKTOP LAYOUT */
+        .desktop {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #0d0d14 center/cover no-repeat;
+            background-image: url('../branding/default/wallpaper/lfs-wallpaper-with-logo.png');
+            transition: background-image 0.25s ease-in-out;
+        }
+
+        /* WALLPAPER SELECTOR */
+        .wallpaper-selector {
+            position: fixed;
+            top: 44px;
+            right: 12px;
+            z-index: 9999;
+            background: rgba(26, 26, 46, 0.92);
+            border: 1px solid #3CB371;
+            border-radius: 6px;
+            padding: 8px 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #f0f0f0;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+            font-family: 'Inter', Arial, sans-serif;
+        }
+
+        .wallpaper-selector label {
+            font-weight: 600;
+            color: #3CB371;
+        }
+
+        .wallpaper-selector select {
+            background: #0d0d14;
+            color: #f0f0f0;
+            border: 1px solid #236B43;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 12px;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .wallpaper-selector select:focus {
+            border-color: #3CB371;
+        }
+
+        /* TOP PANEL */
+        .top-panel {
+            background: linear-gradient(90deg, #1a1a2e 0%, #236B43 50%, #1a1a2e 100%);
+            border-bottom: 2px solid #3CB371;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+            font-size: 13px;
+        }
+
+        .panel-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .panel-menu {
+            display: flex;
+            gap: 10px;
+            font-weight: 500;
+        }
+
+        .panel-menu span {
+            padding: 4px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .panel-menu span:hover {
+            background: rgba(60, 179, 113, 0.3);
+        }
+
+        .panel-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .system-icons {
+            display: flex;
+            gap: 10px;
+            font-size: 11px;
+        }
+
+        .system-icon {
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(60, 179, 113, 0.2);
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .system-icon:hover {
+            background: rgba(60, 179, 113, 0.5);
+            color: #3CB371;
+        }
+
+        /* MAIN CONTENT */
+        .desktop-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* TASKBAR */
+        .taskbar {
+            background: rgba(26, 26, 46, 0.95);
+            border-top: 1px solid #236B43;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            gap: 5px;
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5);
+        }
+
+        .taskbar-button {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #236B43, #2E8B57);
+            border: 1px solid #3CB371;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .taskbar-button:hover {
+            background: linear-gradient(135deg, #2E8B57, #3CB371);
+            box-shadow: 0 0 8px rgba(60, 179, 113, 0.5);
+        }
+
+        .taskbar-spacer {
+            flex: 1;
+        }
+
+        .taskbar-tray {
+            display: flex;
+            gap: 5px;
+            padding-left: 10px;
+            border-left: 1px solid #236B43;
+        }
+
+        .tray-icon {
+            width: 24px;
+            height: 24px;
+            background: rgba(46, 139, 87, 0.2);
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tray-icon:hover {
+            background: rgba(46, 139, 87, 0.5);
+        }
+
+        /* DESKTOP ICONS */
+        .desktop-icons {
+            position: absolute;
+            top: 60px;
+            left: 20px;
+            display: grid;
+            grid-template-columns: repeat(1, 80px);
+            gap: 20px;
+        }
+
+        .icon {
+            width: 80px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+
+        .icon-image {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #236B43, #2E8B57);
+            border: 2px solid #3CB371;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            transition: all 0.2s;
+        }
+
+        .icon:hover .icon-image {
+            background: linear-gradient(135deg, #2E8B57, #3CB371);
+            box-shadow: 0 0 12px rgba(60, 179, 113, 0.6);
+            transform: scale(1.05);
+        }
+
+        .icon-label {
+            font-size: 11px;
+            text-align: center;
+            max-width: 80px;
+            word-wrap: break-word;
+            color: #f0f0f0;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        /* WINDOW */
+        .window {
+            position: absolute;
+            top: 100px;
+            right: 40px;
+            width: 500px;
+            background: #1a1a2e;
+            border: 1px solid #236B43;
+            border-radius: 6px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            max-height: 400px;
+        }
+
+        .window-titlebar {
+            background: linear-gradient(90deg, #236B43, #2E8B57);
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #3CB371;
+            border-radius: 6px 6px 0 0;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .window-controls {
+            display: flex;
+            gap: 6px;
+        }
+
+        .window-control {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .control-minimize {
+            background: #F39C12;
+        }
+
+        .control-maximize {
+            background: #27AE60;
+        }
+
+        .control-close {
+            background: #E74C3C;
+        }
+
+        .window-control:hover {
+            transform: scale(1.1);
+        }
+
+        .window-content {
+            padding: 15px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .file-item {
+            padding: 8px 10px;
+            margin-bottom: 5px;
+            background: rgba(46, 139, 87, 0.1);
+            border-left: 3px solid #3CB371;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+        }
+
+        .file-item:hover {
+            background: rgba(46, 139, 87, 0.25);
+            padding-left: 15px;
+        }
+
+        .file-icon {
+            width: 16px;
+            height: 16px;
+            background: linear-gradient(135deg, #236B43, #2E8B57);
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+        }
+
+        /* BRANDING INFO */
+        .branding-info {
+            position: fixed;
+            bottom: 60px;
+            right: 20px;
+            background: rgba(26, 26, 46, 0.9);
+            border: 1px solid #236B43;
+            border-radius: 6px;
+            padding: 12px 15px;
+            font-size: 11px;
+            max-width: 250px;
+            backdrop-filter: blur(10px);
+        }
+
+        .branding-info h3 {
+            color: #3CB371;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+
+        .branding-line {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+            color: #cccccc;
+        }
+
+        .branding-line strong {
+            color: #3CB371;
+        }
+
+        .color-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            vertical-align: middle;
+            margin-left: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* RESPONSIVE */
+        @media (max-width: 1024px) {
+            .window {
+                width: 60%;
+                right: 20px;
+            }
+
+            .branding-info {
+                max-width: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wallpaper-selector">
+        <label for="wallpaper-select">Wallpaper:</label>
+        <select id="wallpaper-select"></select>
+    </div>
+    <div class="desktop">
+        <!-- Top Panel -->
+        <div class="top-panel">
+            <div class="panel-left">
+                <div class="panel-menu">
+                    <span>🐧 Applications</span>
+                    <span>📁 Files</span>
+                    <span>🛠️ Tools</span>
+                    <span>ℹ️ Help</span>
+                </div>
+            </div>
+            <div class="panel-right">
+                <div class="system-icons">
+                    <div class="system-icon" title="Volume">🔊</div>
+                    <div class="system-icon" title="Network">📡</div>
+                    <div class="system-icon" title="Power">🔋</div>
+                </div>
+                <span id="time">12:34</span>
+            </div>
+        </div>
+
+        <!-- Desktop Content -->
+        <div class="desktop-content">
+            <!-- Desktop Icons -->
+            <div class="desktop-icons">
+                <div class="icon">
+                    <div class="icon-image">📁</div>
+                    <div class="icon-label">Home</div>
+                </div>
+                <div class="icon">
+                    <div class="icon-image">🎨</div>
+                    <div class="icon-label">Pictures</div>
+                </div>
+                <div class="icon">
+                    <div class="icon-image">📄</div>
+                    <div class="icon-label">Documents</div>
+                </div>
+                <div class="icon">
+                    <div class="icon-image">🖥️</div>
+                    <div class="icon-label">Settings</div>
+                </div>
+            </div>
+
+            <!-- File Manager Window -->
+            <div class="window">
+                <div class="window-titlebar">
+                    <span>📁 File Manager - Home Directory</span>
+                    <div class="window-controls">
+                        <div class="window-control control-minimize"></div>
+                        <div class="window-control control-maximize"></div>
+                        <div class="window-control control-close"></div>
+                    </div>
+                </div>
+                <div class="window-content">
+                    <div class="file-item">
+                        <div class="file-icon">📁</div>
+                        <span>Desktop</span>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon">📁</div>
+                        <span>Documents</span>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon">📁</div>
+                        <span>Downloads</span>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon">📁</div>
+                        <span>Pictures</span>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon">📄</div>
+                        <span>README.txt</span>
+                    </div>
+                    <div class="file-item">
+                        <div class="file-icon">📄</div>
+                        <span>branding-guide.md</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Taskbar -->
+        <div class="taskbar">
+            <div class="taskbar-button" title="Applications">≡</div>
+            <div class="taskbar-button" title="Files">📁</div>
+            <div class="taskbar-button" title="Terminal">❯_</div>
+            <div class="taskbar-button" title="Editor">📝</div>
+            <div class="taskbar-spacer"></div>
+            <div class="taskbar-tray">
+                <div class="tray-icon" title="Display">🖥️</div>
+                <div class="tray-icon" title="Sound">🔊</div>
+                <div class="tray-icon" title="Network">📡</div>
+                <div class="tray-icon" title="Power">🔌</div>
+            </div>
+        </div>
+
+        <!-- Branding Information -->
+        <div class="branding-info">
+            <h3>🎨 Branding Applied</h3>
+            <div class="branding-line">
+                <strong>Theme:</strong>
+                <span>LFS-Dark</span>
+            </div>
+            <div class="branding-line">
+                <strong>Icons:</strong>
+                <span>Papirus-Dark</span>
+            </div>
+            <div class="branding-line">
+                <strong>Primary:</strong>
+                <span class="color-swatch" style="background: #2E8B57;"></span>
+            </div>
+            <div class="branding-line">
+                <strong>Accent:</strong>
+                <span class="color-swatch" style="background: #3CB371;"></span>
+            </div>
+            <div class="branding-line">
+                <strong>Background:</strong>
+                <span class="color-swatch" style="background: #0d0d14;"></span>
+            </div>
+            <div class="branding-line">
+                <strong>Version:</strong>
+                <span>v0.4.5</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('time').textContent = 
+                now.toLocaleTimeString('en-US', { 
+                    hour: '2-digit', 
+                    minute: '2-digit',
+                    hour12: true 
+                });
+        }
+        updateTime();
+        setInterval(updateTime, 30000);
+
+        // Interactive elements
+        document.querySelectorAll('.icon').forEach(icon => {
+            icon.addEventListener('click', function() {
+                this.style.opacity = '0.7';
+                setTimeout(() => {
+                    this.style.opacity = '1';
+                }, 200);
+            });
+        });
+
+        document.querySelectorAll('.taskbar-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = 'scale(1)';
+                }, 100);
+            });
+        });
+
+        // Wallpaper selector
+        (function initWallpaperSelector() {
+            const wallpapers = [
+                { file: 'lfs-wallpaper-with-logo.png', label: 'Default (with logo)' },
+                { file: 'lfs-wallpaper.png', label: 'Default (no logo)' },
+                { file: 'lfs-wallpaper-1.png', label: 'Variant 1' },
+                { file: 'lfs-wallpaper-2.png', label: 'Variant 2' },
+                { file: 'lfs-wallpaper-3.png', label: 'Variant 3' },
+                { file: 'lfs-wallpaper-4.png', label: 'Variant 4' },
+                { file: 'lfs-wallpaper-5.png', label: 'Variant 5' },
+                { file: 'lfs-wallpaper-6.png', label: 'Variant 6' },
+                { file: 'lfs-wallpaper-7.png', label: 'Variant 7' },
+                { file: 'lfs-wallpaper-8.png', label: 'Variant 8' },
+                { file: 'lfs-wallpaper-9.png', label: 'Variant 9' },
+                { file: 'lfs-wallpaper-10.png', label: 'Variant 10' },
+                { file: 'lfs-wallpaper-11.png', label: 'Variant 11' },
+                { file: 'lfs-wallpaper-12.png', label: 'Variant 12' },
+                { file: 'lfs-wallpaper-13.png', label: 'Variant 13' },
+                { file: 'lfs-wallpaper-14.png', label: 'Variant 14' },
+                { file: 'lfs-wallpaper-15.png', label: 'Variant 15' },
+            ];
+
+            const select = document.getElementById('wallpaper-select');
+            const desktop = document.querySelector('.desktop');
+            const basePath = '../branding/default/wallpaper/';
+
+            wallpapers.forEach(w => {
+                const opt = document.createElement('option');
+                opt.value = basePath + w.file;
+                opt.textContent = w.label;
+                select.appendChild(opt);
+            });
+
+            const saved = localStorage.getItem('blfs-mockup-wallpaper');
+            if (saved && wallpapers.some(w => basePath + w.file === saved)) {
+                select.value = saved;
+                desktop.style.backgroundImage = `url('${saved}')`;
+            }
+
+            select.addEventListener('change', () => {
+                desktop.style.backgroundImage = `url('${select.value}')`;
+                localStorage.setItem('blfs-mockup-wallpaper', select.value);
+            });
+        })();
+    </script>
+</body>
+</html>
