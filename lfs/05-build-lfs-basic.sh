@@ -123,7 +123,7 @@ cd build
 make -j\$(nproc)
 make install
 cd $LFS/sources
-rm -rf binutils-*
+rm -rf \$BINUTILS_DIR
 
 # ----- GCC (pass 1) -----
 echo 'Building gcc (pass 1)'
@@ -178,7 +178,7 @@ cd build
 make -j\$(nproc)
 make install
 cd $LFS/sources
-rm -rf glibc-*
+rm -rf \$GLIBC_DIR
 
 # ----- Libstdc++ (from GCC) -----
 echo 'Building libstdc++'
