@@ -173,7 +173,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 - **Do not modify stage execution order** without understanding downstream dependencies. Stages are tightly sequenced.
 - **Do not add Python package dependencies** unless strictly necessary; `builder.py` is designed to run on a minimal host with only the Python standard library.
 - **Do not commit secrets or credentials**. The build system uses shell variables; ensure no API keys, tokens, or passwords are hardcoded.
-- **Do not break shell portability** — stage scripts target bash; avoid bashisms not available on a minimal LFS chroot environment.
+- **Do not rely on bash features unavailable in a minimal LFS chroot** — stage scripts target bash, but should avoid features that require a fully installed distro environment (e.g. bash completion libraries, `/etc/profile.d` sourcing). Prefer POSIX-compatible constructs where there is no functional reason to use bash-specific syntax.
 - **Do not alter the branding directory structure** without updating `branding/branding.toml` and the branding stage script.
 - **Do not remove or skip existing tests** to increase coverage artificially.
 
