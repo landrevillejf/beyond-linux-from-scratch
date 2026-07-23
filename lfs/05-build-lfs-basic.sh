@@ -200,8 +200,8 @@ cd $LFS/sources
 rm -rf "$GCC_DIR2"
 
 # ----- Essential utilities -----
-echo 'Installing essential utilities (make, sed, grep, etc.)'
-for pkg in make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
+echo 'Installing essential utilities (coreutils, make, sed, grep, etc.)'
+for pkg in coreutils make sed grep gawk findutils tar gzip bzip2 diffutils patch; do
     archive=\$(ls \"\$pkg\"-*.tar.* 2>/dev/null | head -1)
     if [ -z \"\$archive\" ]; then
         echo \"WARNING: \$pkg source not found, skipping\"
