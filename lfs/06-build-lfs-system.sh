@@ -18,6 +18,8 @@ KERNEL_TYPE="${KERNEL_TYPE:-linux}"
 export KERNEL_TYPE
 log_info "Kernel type: $KERNEL_TYPE"
 
+LFS_TGT="${LFS_TGT:-$(uname -m)-lfs-linux-gnu}"
+
 IN_DOCKER=false
 if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
     IN_DOCKER=true
@@ -124,8 +126,8 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
 fi
 
 # Check for temporary toolchain
-if [ ! -x "$LFS/tools/bin/gcc" ] || [ ! -x "$LFS/tools/bin/ld" ] || [ ! -x "$LFS/tools/bin/as" ]; then
-    log_error "Missing temporary toolchain in $LFS/tools/bin (gcc/ld/as)"
+if [ ! -x "$LFS/tools/bin/${LFS_TGT}-gcc" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-ld" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-as" ]; then
+    log_error "Missing temporary toolchain in $LFS/tools/bin (${LFS_TGT}-gcc/${LFS_TGT}-ld/${LFS_TGT}-as)"
     log_error "Cannot proceed – run lfs-basic first"
     exit 1
 fi

@@ -10,6 +10,7 @@ def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     script = repo_root / "lfs" / "06-build-lfs-system.sh"
     lfs_dir = temp_dir / "lfs-root"
     fake_bin = temp_dir / "fake-bin"
+    lfs_tgt = f"{os.uname().machine}-lfs-linux-gnu"
 
     (lfs_dir / "tools" / "bin").mkdir(parents=True, exist_ok=True)
     (lfs_dir / "sources").mkdir(parents=True, exist_ok=True)
@@ -18,7 +19,7 @@ def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     (lfs_dir / "sources" / "placeholder.txt").write_text("ok\n")
 
     for tool in ("gcc", "ld", "as"):
-        tool_path = lfs_dir / "tools" / "bin" / tool
+        tool_path = lfs_dir / "tools" / "bin" / f"{lfs_tgt}-{tool}"
         tool_path.write_text("#!/bin/sh\nexit 0\n")
         tool_path.chmod(0o755)
 
@@ -56,6 +57,7 @@ exit 0
     env = {
         **os.environ,
         "LFS": str(lfs_dir),
+        "LFS_TGT": lfs_tgt,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
     }
 
@@ -81,6 +83,7 @@ def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
     output_dir = temp_dir / "build-output"
     lfs_dir = output_dir / "image"
     fake_bin = temp_dir / "fake-bin"
+    lfs_tgt = f"{os.uname().machine}-lfs-linux-gnu"
 
     (lfs_dir / "tools" / "bin").mkdir(parents=True, exist_ok=True)
     (lfs_dir / "sources").mkdir(parents=True, exist_ok=True)
@@ -91,7 +94,7 @@ def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
     (output_dir / "sources" / "placeholder.txt").write_text("ok\n")
 
     for tool in ("gcc", "ld", "as"):
-        tool_path = lfs_dir / "tools" / "bin" / tool
+        tool_path = lfs_dir / "tools" / "bin" / f"{lfs_tgt}-{tool}"
         tool_path.write_text("#!/bin/sh\nexit 0\n")
         tool_path.chmod(0o755)
 
@@ -129,6 +132,7 @@ exit 0
     env = {
         **os.environ,
         "LFS": str(output_dir),
+        "LFS_TGT": lfs_tgt,
         "PATH": f"{fake_bin}:{os.environ['PATH']}",
     }
 
