@@ -100,6 +100,24 @@ ensure_bootstrap_chroot_shell() {
             copy_tool_with_libs "$host_env" "$LFS/usr/bin/env"
         fi
     fi
+
+    if [ ! -x "$LFS/usr/bin/xz" ] && [ ! -x "$LFS/bin/xz" ]; then
+        log_info "Bootstrapping /usr/bin/xz into chroot"
+        local host_xz
+        host_xz="$(command -v xz 2>/dev/null || true)"
+        if [ -n "$host_xz" ] && [ -x "$host_xz" ]; then
+            copy_tool_with_libs "$host_xz" "$LFS/usr/bin/xz"
+        fi
+    fi
+
+    if [ ! -x "$LFS/usr/bin/bzip2" ] && [ ! -x "$LFS/bin/bzip2" ]; then
+        log_info "Bootstrapping /usr/bin/bzip2 into chroot"
+        local host_bzip2
+        host_bzip2="$(command -v bzip2 2>/dev/null || true)"
+        if [ -n "$host_bzip2" ] && [ -x "$host_bzip2" ]; then
+            copy_tool_with_libs "$host_bzip2" "$LFS/usr/bin/bzip2"
+        fi
+    fi
 }
 
 log_info "========================================="
