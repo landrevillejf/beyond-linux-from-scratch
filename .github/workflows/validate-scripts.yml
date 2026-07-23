@@ -1,0 +1,28 @@
+name: Shell script validation
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  sh-checker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the sh-checker
+        uses: luizm/action-sh-checker@v0.10.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHELLCHECK_OPTS: -e SC1004 -e SC2086 -e SC2164
+          SHFMT_OPTS: -s
+        with:
+          sh_checker_comment: true
+          sh_checker_only_diff: true
+          sh_checker_exclude: "tests packages .git"
+          sh_checker_checkbashisms_enable: true
+          sh_checker_shfmt_disable: false
+          sh_checker_shellcheck_disable: false
