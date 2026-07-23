@@ -258,6 +258,71 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
 echo "binutils done"
 
 # ============================================================
+# 2.5 BUILD GMP (GCC prerequisite)
+# ============================================================
+echo "=== Building gmp ==="
+GMP_ARCHIVE=$(ls gmp-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$GMP_ARCHIVE" ]; then
+    echo "ERROR: gmp source not found"
+    exit 1
+fi
+extract "$GMP_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --enable-cxx \
+             --disable-static
+make -j$(nproc)
+make install
+ldconfig
+cd /sources
+rm -rf "$(basename "$GMP_ARCHIVE" .tar.xz)"
+echo "gmp done"
+
+# ============================================================
+# 2.6 BUILD MPFR (GCC prerequisite)
+# ============================================================
+echo "=== Building mpfr ==="
+MPFR_ARCHIVE=$(ls mpfr-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$MPFR_ARCHIVE" ]; then
+    echo "ERROR: mpfr source not found"
+    exit 1
+fi
+extract "$MPFR_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --disable-static \
+             --enable-thread-safe
+make -j$(nproc)
+make install
+ldconfig
+cd /sources
+rm -rf "$(basename "$MPFR_ARCHIVE" .tar.xz)"
+echo "mpfr done"
+
+# ============================================================
+# 2.7 BUILD MPC (GCC prerequisite)
+# ============================================================
+echo "=== Building mpc ==="
+MPC_ARCHIVE=$(ls mpc-*.tar.gz 2>/dev/null | head -1)
+if [ -z "$MPC_ARCHIVE" ]; then
+    echo "ERROR: mpc source not found"
+    exit 1
+fi
+extract "$MPC_ARCHIVE"
+mkdir -v build
+cd build
+../configure --prefix=/usr \
+             --disable-static
+make -j$(nproc)
+make install
+ldconfig
+cd /sources
+rm -rf "$(basename "$MPC_ARCHIVE" .tar.gz)"
+echo "mpc done"
+
+# ============================================================
 # 3. BUILD GCC (official LFS)
 # ============================================================
 echo "=== Building gcc ==="

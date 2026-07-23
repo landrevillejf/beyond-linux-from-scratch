@@ -212,7 +212,11 @@ for pkg in coreutils make sed grep gawk findutils tar gzip bzip2 diffutils patch
     tar -xf \"\$archive\"
     cd \"\$dir\"
     if [ -f \"configure\" ]; then
-        ./configure --prefix=\"$TOOLS_DIR\"
+        if [ \"\$pkg\" = \"coreutils\" ]; then
+            ./configure --prefix=\"$TOOLS_DIR\" --without-gmp
+        else
+            ./configure --prefix=\"$TOOLS_DIR\"
+        fi
     fi
     make -j\$(nproc)
     if [ \"\$pkg\" = \"bzip2\" ]; then
