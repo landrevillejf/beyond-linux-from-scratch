@@ -47,17 +47,15 @@ jobs:
       # --------------------------------------------------------------
       # Check Bash scripts (syntax + best practices)
       # --------------------------------------------------------------
-      - name: Check Bash scripts (shellcheck + shfmt)
+      - name: Run the sh-checker
         uses: luizm/action-sh-checker@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SHELLCHECK_OPTS: -e SC1004   # ignore les warnings que tu veux
-          SHFMT_OPTS: -s               # arguments pour shfmt
+          SHELLCHECK_OPTS: -e SC1004 # exclude some shellcheck warnings.
+          SHFMT_OPTS: -s # arguments to shfmt.
         with:
-          sh_checker_comment: true        # poste un commentaire sur la PR
-          sh_checker_only_diff: false     # vérifie tous les fichiers (ou true pour uniquement les modifiés)
-          sh_checker_exclude: "tests docs"  # dossiers à ignorer
-          sh_checker_checkbashisms_enable: true   # détecte les bashismes (utile pour la compatibilité sh)
+          sh_checker_comment: true
+          sh_checker_exclude: ".terraform ^dir/example.sh"
 
       - name: Generate sources.list
         run: python3 builder.py --generate-sources-list
