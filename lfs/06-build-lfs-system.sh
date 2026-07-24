@@ -171,7 +171,7 @@ fi
 # Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
-cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
+cat > "$LFS/build-lfs-system.sh" << INNEREOF
 #!/bin/bash
 set -e
 
