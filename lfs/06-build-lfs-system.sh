@@ -193,9 +193,9 @@ extract() {
 # ----- Helper: find archive (supports .tar.xz, .tar.gz, .tgz, etc.) -----
 find_archive() {
     local base=$1
-    local archive=$(ls "$base".tar.* 2>/dev/null | head -1)
+    local archive=$(ls "$base"*.tar.* 2>/dev/null | head -1)
     if [ -z "$archive" ]; then
-        archive=$(ls "$base".tgz 2>/dev/null | head -1)
+        archive=$(ls "$base"*.tgz 2>/dev/null | head -1)
     fi
     echo "$archive"
 }
