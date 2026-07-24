@@ -118,6 +118,23 @@ ensure_bootstrap_chroot_shell() {
             copy_tool_with_libs "$host_bzip2" "$LFS/usr/bin/bzip2"
         fi
     fi
+
+    # Ajout : copier un expr statique pour éviter la dépendance à libgmp
+    if [ ! -x "$LFS/usr/bin/expr" ]; then
+        log_info "Bootstrapping /usr/bin/expr into chroot (statically linked)"
+        local host_expr
+        host_expr="$(command -v expr 2>/dev/null || true)"
+        if [ -n "$host_expr" ] && [ -x "$host_expr" ]; then
+            # Vérifier si expr est statique
+            if file "$host_expr" | grep -q "statically linked"; then
+                copy_tool_with_libs "$host_expr" "$LFS/usr/bin/expr"
+            else
+                # Si dynamique, copier quand même les libs (mais mieux vaut un expr statique)
+                log_warning "Host expr is dynamically linked, may cause issues"
+                copy_tool_with_libs "$host_expr" "$LFS/usr/bin/expr"
+            fi
+        fi
+    fi
 }
 
 log_info "========================================="
@@ -182,14 +199,13 @@ else
 fi
 
 # -----------------------------------------------------------------
-# Internal compilation script (official LFS steps, with GMP/MPFR/MPC built first)
+# Internal compilation script (official LFS steps)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-# /sbin is needed for ldconfig
 export PATH=/bin:/usr/bin:/sbin:/tools/bin
 export SHELL=/bin/bash
 export CONFIG_SHELL=/bin/bash
@@ -204,71 +220,6 @@ extract() {
     tar -xf "$archive"
     cd "$dir"
 }
-
-# ============================================================
-# 0. BUILD GMP (needed for glibc configure and expr)
-# ============================================================
-echo "=== Building gmp ==="
-GMP_ARCHIVE=$(ls gmp-*.tar.xz 2>/dev/null | head -1)
-if [ -z "$GMP_ARCHIVE" ]; then
-    echo "ERROR: gmp source not found"
-    exit 1
-fi
-extract "$GMP_ARCHIVE"
-mkdir -v build
-cd build
-../configure --prefix=/usr \
-             --enable-cxx \
-             --disable-static
-make -j$(nproc)
-make install
-/sbin/ldconfig
-cd /sources
-rm -rf "$(basename "$GMP_ARCHIVE" .tar.xz)"
-echo "gmp done"
-
-# ============================================================
-# 0.1 BUILD MPFR (GCC prerequisite)
-# ============================================================
-echo "=== Building mpfr ==="
-MPFR_ARCHIVE=$(ls mpfr-*.tar.xz 2>/dev/null | head -1)
-if [ -z "$MPFR_ARCHIVE" ]; then
-    echo "ERROR: mpfr source not found"
-    exit 1
-fi
-extract "$MPFR_ARCHIVE"
-mkdir -v build
-cd build
-../configure --prefix=/usr \
-             --disable-static \
-             --enable-thread-safe
-make -j$(nproc)
-make install
-/sbin/ldconfig
-cd /sources
-rm -rf "$(basename "$MPFR_ARCHIVE" .tar.xz)"
-echo "mpfr done"
-
-# ============================================================
-# 0.2 BUILD MPC (GCC prerequisite)
-# ============================================================
-echo "=== Building mpc ==="
-MPC_ARCHIVE=$(ls mpc-*.tar.gz 2>/dev/null | head -1)
-if [ -z "$MPC_ARCHIVE" ]; then
-    echo "ERROR: mpc source not found"
-    exit 1
-fi
-extract "$MPC_ARCHIVE"
-mkdir -v build
-cd build
-../configure --prefix=/usr \
-             --disable-static
-make -j$(nproc)
-make install
-/sbin/ldconfig
-cd /sources
-rm -rf "$(basename "$MPC_ARCHIVE" .tar.gz)"
-echo "mpc done"
 
 # ============================================================
 # 1. BUILD GLIBC (official LFS)
@@ -324,7 +275,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
 echo "binutils done"
 
 # ============================================================
-# 3. BUILD GCC (official LFS, with explicit paths to gmp/mpfr/mpc)
+# 3. BUILD GCC (official LFS) – avec intégration de GMP, MPFR, MPC
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
@@ -333,6 +284,16 @@ if [ -z "$GCC_ARCHIVE" ]; then
     exit 1
 fi
 extract "$GCC_ARCHIVE"
+
+# Intégration de GMP, MPFR, MPC dans l'arborescence de GCC (méthode LFS officielle)[reference:5]
+echo "Integrating GMP, MPFR, MPC into GCC source tree"
+tar -xf ../gmp-*.tar.xz
+mv -v gmp-* gmp
+tar -xf ../mpfr-*.tar.xz
+mv -v mpfr-* mpfr
+tar -xf ../mpc-*.tar.gz
+mv -v mpc-* mpc
+
 mkdir -v build
 cd build
 ../configure --prefix=/usr \
@@ -343,9 +304,7 @@ cd build
              --enable-default-pie \
              --enable-default-ssp \
              --enable-cet=auto \
-             --with-gmp=/usr \
-             --with-mpfr=/usr \
-             --with-mpc=/usr
+             --enable-linker-build-id
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
