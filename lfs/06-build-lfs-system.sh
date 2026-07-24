@@ -171,7 +171,7 @@ fi
 # Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
-cat > "$LFS/build-lfs-system.sh" << INNEREOF
+cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
@@ -190,20 +190,33 @@ extract() {
     cd "$dir"
 }
 
+# ----- Helper: find archive (supports .tar.xz, .tar.gz, .tgz, etc.) -----
+find_archive() {
+    local base=$1
+    local archive=$(ls "$base".tar.* 2>/dev/null | head -1)
+    if [ -z "$archive" ]; then
+        archive=$(ls "$base".tgz 2>/dev/null | head -1)
+    fi
+    echo "$archive"
+}
+
 # ---- Install Linux API headers into /usr/include ----
 echo "Installing Linux API headers"
-LINUX_ARCHIVE=$(ls linux-*.tar.xz 2>/dev/null | head -1)
+LINUX_ARCHIVE=$(find_archive linux)
 if [ -z "$LINUX_ARCHIVE" ]; then
     echo "ERROR: linux source not found"
+    echo "Available source archives:"
+    ls -la
     exit 1
 fi
-tar -xf "$LINUX_ARCHIVE"
-LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed 's/\.tar\.xz$//')
+extract "$LINUX_ARCHIVE"
+# Le nom du répertoire extrait est le nom sans extension
+LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
 cd "$LINUX_DIR"
 make mrproper
 make headers
 find usr/include -name '.*' -delete
-rm usr/include/Makefile
+rm -f usr/include/Makefile
 cp -rv usr/include /usr/include
 cd /sources
 rm -rf "$LINUX_DIR"
@@ -220,7 +233,7 @@ export CC CXX LD AS
 # 1. BUILD GLIBC (official LFS)
 # ============================================================
 echo "=== Building glibc ==="
-GLIBC_ARCHIVE=$(ls glibc-*.tar.xz 2>/dev/null | head -1)
+GLIBC_ARCHIVE=$(find_archive glibc)
 if [ -z "$GLIBC_ARCHIVE" ]; then
     echo "ERROR: glibc source not found"
     exit 1
@@ -241,14 +254,14 @@ cd build
 make -j$(nproc)
 make install
 cd /sources
-rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.xz)"
+rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
 
 # ============================================================
 # 2. BUILD BINUTILS (official LFS)
 # ============================================================
 echo "=== Building binutils ==="
-BINUTILS_ARCHIVE=$(ls binutils-*.tar.xz 2>/dev/null | head -1)
+BINUTILS_ARCHIVE=$(find_archive binutils)
 if [ -z "$BINUTILS_ARCHIVE" ]; then
     echo "ERROR: binutils source not found"
     exit 1
@@ -270,14 +283,14 @@ cd build
 make -j$(nproc) tooldir=/usr
 make tooldir=/usr install
 cd /sources
-rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
+rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "binutils done"
 
 # ============================================================
 # 3. BUILD GCC (official LFS) – with GMP, MPFR, MPC integrated
 # ============================================================
 echo "=== Building gcc ==="
-GCC_ARCHIVE=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
+GCC_ARCHIVE=$(find_archive gcc)
 if [ -z "$GCC_ARCHIVE" ]; then
     echo "ERROR: gcc source not found"
     exit 1
@@ -286,12 +299,32 @@ extract "$GCC_ARCHIVE"
 
 # Integrate GMP, MPFR, MPC
 echo "Integrating GMP, MPFR, MPC into GCC source tree"
-tar -xf ../gmp-*.tar.xz
-mv -v gmp-* gmp
-tar -xf ../mpfr-*.tar.xz
-mv -v mpfr-* mpfr
-tar -xf ../mpc-*.tar.gz
-mv -v mpc-* mpc
+GMP_ARCHIVE=$(find_archive gmp)
+if [ -n "$GMP_ARCHIVE" ]; then
+    tar -xf "$GMP_ARCHIVE"
+    GMP_DIR=$(echo "$GMP_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$GMP_DIR" gmp
+else
+    echo "WARNING: GMP source not found – GCC may fail"
+fi
+
+MPFR_ARCHIVE=$(find_archive mpfr)
+if [ -n "$MPFR_ARCHIVE" ]; then
+    tar -xf "$MPFR_ARCHIVE"
+    MPFR_DIR=$(echo "$MPFR_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$MPFR_DIR" mpfr
+else
+    echo "WARNING: MPFR source not found – GCC may fail"
+fi
+
+MPC_ARCHIVE=$(find_archive mpc)
+if [ -n "$MPC_ARCHIVE" ]; then
+    tar -xf "$MPC_ARCHIVE"
+    MPC_DIR=$(echo "$MPC_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$MPC_DIR" mpc
+else
+    echo "WARNING: MPC source not found – GCC may fail"
+fi
 
 mkdir -v build
 cd build
@@ -311,7 +344,7 @@ make install
 ln -sf gcc /usr/bin/cc
 ln -sf g++ /usr/bin/c++
 cd /sources
-rm -rf "$(basename "$GCC_ARCHIVE" .tar.xz)"
+rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
 
 # ============================================================
@@ -322,7 +355,7 @@ unset CC CXX LD AS
 
 build_simple() {
     local pkg=$1
-    local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
+    local archive=$(find_archive "$pkg")
     if [ -z "$archive" ]; then
         echo "WARNING: $pkg source not found, skipping"
         return 0
