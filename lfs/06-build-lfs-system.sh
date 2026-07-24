@@ -119,22 +119,19 @@ ensure_bootstrap_chroot_shell() {
         fi
     fi
 
-    # Ajout : copier un expr statique pour éviter la dépendance à libgmp
-    if [ ! -x "$LFS/usr/bin/expr" ]; then
-        log_info "Bootstrapping /usr/bin/expr into chroot (statically linked)"
-        local host_expr
-        host_expr="$(command -v expr 2>/dev/null || true)"
-        if [ -n "$host_expr" ] && [ -x "$host_expr" ]; then
-            # Vérifier si expr est statique
-            if file "$host_expr" | grep -q "statically linked"; then
-                copy_tool_with_libs "$host_expr" "$LFS/usr/bin/expr"
+    # Copie des outils essentiels avec leurs bibliothèques
+    for tool in grep sed awk find xargs cut head tail wc tr sort uniq dirname basename; do
+        if [ ! -x "$LFS/usr/bin/$tool" ]; then
+            log_info "Bootstrapping /usr/bin/$tool into chroot"
+            local host_tool
+            host_tool="$(command -v "$tool" 2>/dev/null || true)"
+            if [ -n "$host_tool" ] && [ -x "$host_tool" ]; then
+                copy_tool_with_libs "$host_tool" "$LFS/usr/bin/$tool"
             else
-                # Si dynamique, copier quand même les libs (mais mieux vaut un expr statique)
-                log_warning "Host expr is dynamically linked, may cause issues"
-                copy_tool_with_libs "$host_expr" "$LFS/usr/bin/expr"
+                log_warning "Host tool '$tool' not found, chroot may fail"
             fi
         fi
-    fi
+    done
 }
 
 log_info "========================================="
@@ -275,7 +272,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
 echo "binutils done"
 
 # ============================================================
-# 3. BUILD GCC (official LFS) – avec intégration de GMP, MPFR, MPC
+# 3. BUILD GCC (official LFS) – intégration de GMP, MPFR, MPC
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
@@ -285,7 +282,7 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
-# Intégration de GMP, MPFR, MPC dans l'arborescence de GCC (méthode LFS officielle)[reference:5]
+# Intégration GMP, MPFR, MPC dans l'arborescence GCC
 echo "Integrating GMP, MPFR, MPC into GCC source tree"
 tar -xf ../gmp-*.tar.xz
 mv -v gmp-* gmp
