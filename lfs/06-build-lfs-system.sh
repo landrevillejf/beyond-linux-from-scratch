@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build LFS system – official LFS compilation of Glibc, Binutils, GCC, and base packages
+# Build LFS system – official LFS compilation with cross-toolchain
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -92,35 +92,7 @@ ensure_bootstrap_chroot_shell() {
         run_privileged ln -sfn bash "$LFS/bin/sh"
     fi
 
-    if [ ! -x "$LFS/usr/bin/env" ]; then
-        log_info "Bootstrapping /usr/bin/env into chroot"
-        local host_env
-        host_env="$(command -v env 2>/dev/null || true)"
-        if [ -n "$host_env" ] && [ -x "$host_env" ]; then
-            copy_tool_with_libs "$host_env" "$LFS/usr/bin/env"
-        fi
-    fi
-
-    if [ ! -x "$LFS/usr/bin/xz" ] && [ ! -x "$LFS/bin/xz" ]; then
-        log_info "Bootstrapping /usr/bin/xz into chroot"
-        local host_xz
-        host_xz="$(command -v xz 2>/dev/null || true)"
-        if [ -n "$host_xz" ] && [ -x "$host_xz" ]; then
-            copy_tool_with_libs "$host_xz" "$LFS/usr/bin/xz"
-        fi
-    fi
-
-    if [ ! -x "$LFS/usr/bin/bzip2" ] && [ ! -x "$LFS/bin/bzip2" ]; then
-        log_info "Bootstrapping /usr/bin/bzip2 into chroot"
-        local host_bzip2
-        host_bzip2="$(command -v bzip2 2>/dev/null || true)"
-        if [ -n "$host_bzip2" ] && [ -x "$host_bzip2" ]; then
-            copy_tool_with_libs "$host_bzip2" "$LFS/usr/bin/bzip2"
-        fi
-    fi
-
-    # Copie des outils essentiels avec leurs bibliothèques
-    for tool in grep sed awk find xargs cut head tail wc tr sort uniq dirname basename; do
+    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename; do
         if [ ! -x "$LFS/usr/bin/$tool" ]; then
             log_info "Bootstrapping /usr/bin/$tool into chroot"
             local host_tool
@@ -196,7 +168,7 @@ else
 fi
 
 # -----------------------------------------------------------------
-# Internal compilation script (official LFS steps)
+# Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
@@ -218,6 +190,32 @@ extract() {
     cd "$dir"
 }
 
+# ---- Install Linux API headers into /usr/include ----
+echo "Installing Linux API headers"
+LINUX_ARCHIVE=$(ls linux-*.tar.xz 2>/dev/null | head -1)
+if [ -z "$LINUX_ARCHIVE" ]; then
+    echo "ERROR: linux source not found"
+    exit 1
+fi
+tar -xf "$LINUX_ARCHIVE"
+LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed 's/\.tar\.xz$//')
+cd "$LINUX_DIR"
+make mrproper
+make headers
+find usr/include -name '.*' -delete
+rm usr/include/Makefile
+cp -rv usr/include /usr/include
+cd /sources
+rm -rf "$LINUX_DIR"
+echo "Linux headers installed"
+
+# ---- Set cross-compiler variables ----
+CC="${LFS_TGT}-gcc"
+CXX="${LFS_TGT}-g++"
+LD="${LFS_TGT}-ld"
+AS="${LFS_TGT}-as"
+export CC CXX LD AS
+
 # ============================================================
 # 1. BUILD GLIBC (official LFS)
 # ============================================================
@@ -231,6 +229,8 @@ extract "$GLIBC_ARCHIVE"
 mkdir -v build
 cd build
 ../configure --prefix=/usr \
+             --host=$LFS_TGT \
+             --build=$(uname -m)-linux-gnu \
              --disable-werror \
              --enable-kernel=4.14 \
              --enable-stack-protector=strong \
@@ -257,6 +257,8 @@ extract "$BINUTILS_ARCHIVE"
 mkdir -v build
 cd build
 ../configure --prefix=/usr \
+             --host=$LFS_TGT \
+             --build=$(uname -m)-linux-gnu \
              --sysconfdir=/etc \
              --enable-gold \
              --enable-ld=default \
@@ -272,7 +274,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.xz)"
 echo "binutils done"
 
 # ============================================================
-# 3. BUILD GCC (official LFS) – intégration de GMP, MPFR, MPC
+# 3. BUILD GCC (official LFS) – with GMP, MPFR, MPC integrated
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(ls gcc-*.tar.xz 2>/dev/null | head -1)
@@ -282,7 +284,7 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
-# Intégration GMP, MPFR, MPC dans l'arborescence GCC
+# Integrate GMP, MPFR, MPC
 echo "Integrating GMP, MPFR, MPC into GCC source tree"
 tar -xf ../gmp-*.tar.xz
 mv -v gmp-* gmp
@@ -294,6 +296,8 @@ mv -v mpc-* mpc
 mkdir -v build
 cd build
 ../configure --prefix=/usr \
+             --host=$LFS_TGT \
+             --build=$(uname -m)-linux-gnu \
              --enable-languages=c,c++ \
              --disable-multilib \
              --disable-bootstrap \
@@ -311,8 +315,11 @@ rm -rf "$(basename "$GCC_ARCHIVE" .tar.xz)"
 echo "gcc done"
 
 # ============================================================
-# 4. BUILD BASE PACKAGES (coreutils, bash, etc.)
+# 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
 # ============================================================
+# After gcc is installed, we switch to the native compiler
+unset CC CXX LD AS
+
 build_simple() {
     local pkg=$1
     local archive=$(ls "$pkg"-*.tar.* 2>/dev/null | head -1)
@@ -346,7 +353,7 @@ INNEREOF
 run_privileged chmod +x "$LFS/build-lfs-system.sh"
 
 log_info "Entering chroot and compiling..."
-run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; /build-lfs-system.sh"
+run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
 if [ -x "$LFS/usr/bin/bash" ]; then
     run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
