@@ -1,0 +1,162 @@
+[
+  {
+    "name": "Mona Lisa - Sepia Classic",
+    "gradient": ["horizontal", ["#8B7355", "#D4A574", "#F5DEB3", "#8B7355"]],
+    "circles": [[0.45, 0.4], [0.55, 0.45]],
+    "circle_radius": 0.12,
+    "circle_color": "#C4A882",
+    "triangles": [
+      [[0.4, 0.2], [0.5, 0.1], [0.6, 0.2], "#B8956A", "#8B7355", 2],
+      [[0.35, 0.55], [0.45, 0.65], [0.55, 0.55], "#D4A574", "#8B7355", 1]
+    ],
+    "text": ["Mona Lisa", [0.5, 0.88], "#5C4033"],
+    "text_shadow": true,
+    "text_glow": false,
+    "dots": 100,
+    "dot_color": "#C4A882",
+    "extra_lines": true,
+    "rounded_rects": [
+      [[0.1, 0.15, 0.9, 0.85], 20, "rgba(139,115,85,0.15)", "#8B7355", 2]
+    ],
+    "metadata": "Renaissance Collection - Mona Lisa"
+  },
+  {
+    "name": "Mona Lisa - Renaissance Gold",
+    "gradient": ["diagonal", ["#1a0e0a", "#5C3D2E", "#8B6914", "#D4A017"]],
+    "circles": [[0.5, 0.3], [0.5, 0.65]],
+    "circle_radius": 0.08,
+    "circle_color": "#C9A84C",
+    "triangles": [
+      [[0.35, 0.25], [0.5, 0.15], [0.65, 0.25], "#8B6914", "#D4A017", 2],
+      [[0.3, 0.6], [0.5, 0.7], [0.7, 0.6], "#C9A84C", "#8B6914", 1]
+    ],
+    "text": ["La Gioconda", [0.5, 0.88], "#D4A017"],
+    "text_shadow": true,
+    "text_glow": true,
+    "dots": 150,
+    "dot_color": "#C9A84C",
+    "extra_lines": false,
+    "grid": [80, "rgba(201,168,76,0.1)"],
+    "concentric": [[0.5, 0.5], 0.3, 12, "rgba(201,168,76,0.05)"],
+    "metadata": "Renaissance Collection - Mona Lisa Gold"
+  },
+  {
+    "name": "Mona Lisa - Oil Painting",
+    "gradient": ["vertical", ["#2C1810", "#5C3D2E", "#8B7355", "#A0845C"]],
+    "circles": [[0.3, 0.35], [0.7, 0.65]],
+    "circle_radius": 0.15,
+    "circle_color": "#B8956A",
+    "triangles": [
+      [[0.3, 0.4], [0.5, 0.3], [0.7, 0.4], "#8B7355", "#6B5B4E", 2],
+      [[0.25, 0.65], [0.5, 0.75], [0.75, 0.65], "#A0845C", "#8B7355", 1],
+      [[0.4, 0.1], [0.5, 0.05], [0.6, 0.1], "#C4A882", "#B8956A", 2]
+    ],
+    "text": ["Mona Lisa", [0.5, 0.88], "#F5DEB3"],
+    "text_shadow": true,
+    "text_glow": false,
+    "dots": 200,
+    "dot_color": "#B8956A",
+    "extra_lines": true,
+    "waves": [[0.03, 0.3, "rgba(139,115,85,0.2)", 0]],
+    "noise": 0.03,
+    "blur": 0.5,
+    "metadata": "Oil Painting Collection - Mona Lisa"
+  },
+  {
+    "name": "Mona Lisa - Dark Renaissance",
+    "gradient": ["diagonal", ["#0a0808", "#1a0e0a", "#2C1810", "#3D2317"]],
+    "circles": [[0.5, 0.4], [0.3, 0.6], [0.7, 0.3]],
+    "circle_radius": 0.05,
+    "circle_color": "#8B6914",
+    "triangles": [
+      [[0.2, 0.3], [0.4, 0.2], [0.3, 0.5], "#5C3D2E", "#8B6914", 2],
+      [[0.8, 0.3], [0.6, 0.2], [0.7, 0.5], "#5C3D2E", "#8B6914", 2],
+      [[0.5, 0.1], [0.55, 0.2], [0.45, 0.2], "#8B6914", "#5C3D2E", 1]
+    ],
+    "text": ["Leonardo da Vinci", [0.5, 0.88], "#8B6914"],
+    "text_shadow": true,
+    "text_glow": false,
+    "dots": 100,
+    "dot_color": "#8B6914",
+    "extra_lines": true,
+    "checks": [120, "#5C3D2E", "#2C1810"],
+    "metadata": "Dark Renaissance - Mona Lisa"
+  },
+  {
+    "name": "Mona Lisa - Sky & Earth",
+    "gradient": ["vertical", ["#87CEEB", "#A4C8E1", "#8B7355", "#5C3D2E"]],
+    "circles": [[0.5, 0.25], [0.3, 0.7], [0.7, 0.7]],
+    "circle_radius": 0.06,
+    "circle_color": "#C4A882",
+    "triangles": [
+      [[0.2, 0.1], [0.5, 0.05], [0.8, 0.1], "#A4C8E1", "#87CEEB", 2],
+      [[0.3, 0.8], [0.5, 0.9], [0.7, 0.8], "#8B7355", "#5C3D2E", 2]
+    ],
+    "text": ["Mona Lisa", [0.5, 0.88], "#F5DEB3"],
+    "text_shadow": true,
+    "text_glow": false,
+    "dots": 80,
+    "dot_color": "#C4A882",
+    "extra_lines": false,
+    "waves": [[0.02, 0.2, "rgba(135,206,235,0.3)", 0]],
+    "metadata": "Mona Lisa - Sky & Earth"
+  },
+  {
+    "name": "Mona Lisa - Minimalist",
+    "gradient": ["horizontal", ["#2C1810", "#4A3728", "#6B5B4E", "#8B7355"]],
+    "circles": [[0.5, 0.45]],
+    "circle_radius": 0.18,
+    "circle_color": "#B8956A",
+    "triangles": [
+      [[0.45, 0.35], [0.5, 0.25], [0.55, 0.35], "#8B7355", "#6B5B4E", 2],
+      [[0.45, 0.55], [0.5, 0.65], [0.55, 0.55], "#A0845C", "#8B7355", 2]
+    ],
+    "text": ["Mona", [0.5, 0.5], "#F5DEB3"],
+    "text_shadow": true,
+    "text_glow": true,
+    "dots": 0,
+    "dot_color": "#B8956A",
+    "extra_lines": false,
+    "metadata": "Minimalist - Mona Lisa"
+  },
+  {
+    "name": "Mona Lisa - Vintage Sepia",
+    "gradient": ["diagonal", ["#4A3520", "#6B4F3A", "#8B6F50", "#A0846A"]],
+    "circles": [[0.35, 0.3], [0.65, 0.6]],
+    "circle_radius": 0.1,
+    "circle_color": "#C4A882",
+    "triangles": [
+      [[0.3, 0.45], [0.5, 0.35], [0.7, 0.45], "#8B6F50", "#6B4F3A", 2],
+      [[0.4, 0.7], [0.5, 0.8], [0.6, 0.7], "#A0846A", "#8B6F50", 2]
+    ],
+    "text": ["La Joconde", [0.5, 0.88], "#D4A574"],
+    "text_shadow": true,
+    "text_glow": false,
+    "dots": 120,
+    "dot_color": "#C4A882",
+    "extra_lines": true,
+    "noise": 0.05,
+    "metadata": "Vintage Sepia - Mona Lisa"
+  },
+  {
+    "name": "Mona Lisa - Golden Frame",
+    "gradient": ["vertical", ["#1a0e0a", "#3D2317", "#5C3D2E", "#8B6914"]],
+    "circles": [[0.5, 0.5]],
+    "circle_radius": 0.22,
+    "circle_color": "#C9A84C",
+    "triangles": [
+      [[0.4, 0.2], [0.5, 0.1], [0.6, 0.2], "#D4A017", "#8B6914", 2],
+      [[0.4, 0.8], [0.5, 0.9], [0.6, 0.8], "#D4A017", "#8B6914", 2]
+    ],
+    "text": ["Mona Lisa", [0.5, 0.88], "#F5DEB3"],
+    "text_shadow": true,
+    "text_glow": true,
+    "dots": 60,
+    "dot_color": "#C9A84C",
+    "extra_lines": true,
+    "rounded_rects": [
+      [[0.05, 0.05, 0.95, 0.95], 30, "rgba(201,168,76,0.05)", "#8B6914", 3]
+    ],
+    "metadata": "Golden Frame - Mona Lisa"
+  }
+]
