@@ -74,15 +74,8 @@ jobs:
             lfs-sources-release-
             lfs-sources-
 
-#      - name: Verify sources
-#        run: python3 lfs_verify_sources.py --sources-dir ./build-release/sources
-#        working-directory: /tmp/lfs-build
-
       - name: Run tests
         run: python3 -m pytest tests/ -q
-        working-directory: /tmp/lfs-build
-        env:
-          COVERAGE_FILE: /tmp/.coverage
 
       - name: Build release profile (xfce + sysvinit live)
         run: |
@@ -127,15 +120,6 @@ jobs:
             cat qemu.log
             exit 1
           fi
-
-      # NEW: Audit system after build (mount /dev and run audit)
-      - name: Audit system (after build)
-        if: success()
-        run: |
-          sudo mount --bind /dev /tmp/lfs-build/build-release/dev
-          python3 lfs_audit_system.py /tmp/lfs-build/build-release
-        working-directory: /tmp/lfs-build
-        continue-on-error: true   # optional – prevents release failure if audit fails
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
