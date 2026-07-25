@@ -6,6 +6,7 @@ Tests for LFSBuilder class
 import pytest
 import json
 import sys
+import os
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from builder import LFSBuilder, ScriptExecutor, SourceDownloader, main
@@ -82,6 +83,9 @@ class TestLFSBuilder:
                 qemu = builder.get_qemu_user()
                 assert qemu == 'qemu-aarch64-static'
 
+    SKIP_CI = os.environ.get("CI") == "true"
+
+    @pytest.mark.skipif(SKIP_CI, reason="Skipping host-dependent tests in CI")
     def test_check_prerequisites_linux(self, builder):
         """Test prerequisites check on Linux"""
         with patch('platform.system', return_value='Linux'):
