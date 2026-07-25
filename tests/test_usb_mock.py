@@ -3,11 +3,12 @@
 Tests USB avec mocks complets - Version FINALE CORRECTE
 """
 
-import pytest
 import logging
 import subprocess
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+
+import pytest
 
 from builder import USBWriter
 
@@ -15,8 +16,10 @@ from builder import USBWriter
 class TestUSBWriterFullCoverage:
     """Tests USBWriter avec mocks - Couverture à 100%"""
 
+    @staticmethod
     @pytest.fixture
-    def iso_file(self, tmp_path):
+    def iso_file(tmp_path):
+        """Create a temporary fake ISO file for testing."""
         iso = tmp_path / "test.iso"
         iso.write_text("FAKE ISO CONTENT")
         return iso
@@ -29,7 +32,9 @@ class TestUSBWriterFullCoverage:
     # Tests Linux
     # ========================================================================
 
-    def test_write_iso_linux_success(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_linux_success(iso_file, logger):
+        """Test successful ISO write on Linux."""
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Linux'):
                 with patch('subprocess.run') as mock_run:
@@ -37,7 +42,8 @@ class TestUSBWriterFullCoverage:
                     result = USBWriter.write_iso(iso_file, "/dev/sdb", logger)
                     assert result is True
 
-    def test_write_iso_linux_dd_fails(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_linux_dd_fails(iso_file, logger):
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Linux'):
                 with patch('subprocess.run') as mock_run:
@@ -50,6 +56,7 @@ class TestUSBWriterFullCoverage:
                     assert result is False
 
     def test_write_iso_linux_sync_fails(self, iso_file, logger):
+        """Test ISO write failure when sync command fails on Linux."""
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Linux'):
                 with patch('subprocess.run') as mock_run:
@@ -66,6 +73,7 @@ class TestUSBWriterFullCoverage:
     # ========================================================================
 
     def test_write_iso_darwin_success(self, iso_file, logger):
+        """Test successful ISO write on macOS (Darwin)."""
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Darwin'):
                 with patch('subprocess.run') as mock_run:
@@ -73,7 +81,9 @@ class TestUSBWriterFullCoverage:
                     result = USBWriter.write_iso(iso_file, "disk2", logger)
                     assert result is True
 
-    def test_write_iso_darwin_dd_fails(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_darwin_dd_fails(iso_file, logger):
+        """Test ISO write failure when dd command fails on macOS."""
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Darwin'):
                 with patch('subprocess.run', side_effect=subprocess.CalledProcessError(1, 'dd')):
@@ -84,7 +94,8 @@ class TestUSBWriterFullCoverage:
     # Tests Windows
     # ========================================================================
 
-    def test_write_iso_windows_not_supported(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_windows_not_supported(iso_file, logger):
         with patch('platform.system', return_value='Windows'):
             with patch('builtins.input', return_value='YES'):
                 result = USBWriter.write_iso(iso_file, "E:", logger)
@@ -95,11 +106,14 @@ class TestUSBWriterFullCoverage:
     # ========================================================================
 
     def test_write_iso_file_not_found(self, tmp_path, logger):
+        """Test ISO write failure when the ISO file does not exist."""
         iso_path = tmp_path / "nonexistent.iso"
         result = USBWriter.write_iso(iso_path, "/dev/sdb", logger)
         assert result is False
 
-    def test_write_iso_cancelled_by_user(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_cancelled_by_user(iso_file, logger):
+        """Test that ISO write is cancelled when user does not confirm."""
         with patch('builtins.input', return_value='NO'):
             result = USBWriter.write_iso(iso_file, "/dev/sdb", logger)
             assert result is False
@@ -115,7 +129,8 @@ class TestUSBWriterFullCoverage:
                     result = USBWriter.write_iso(iso_file, "/dev/sdb", logger)
                     assert result is False
 
-    def test_write_iso_device_busy(self, iso_file, logger):
+    @staticmethod
+    def test_write_iso_device_busy(iso_file, logger):
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Linux'):
                 with patch('subprocess.run') as mock_run:
@@ -130,14 +145,16 @@ class TestUSBWriterFullCoverage:
     # Tests list_devices
     # ========================================================================
 
-    def test_list_devices_linux_empty(self):
+    @staticmethod
+    def test_list_devices_linux_empty():
         with patch('platform.system', return_value='Linux'):
             with patch('subprocess.run') as mock_run:
                 mock_run.return_value = MagicMock(stdout="")
                 devices = USBWriter.list_devices()
                 assert devices == []
 
-    def test_list_devices_linux_with_devices(self):
+    @staticmethod
+    def test_list_devices_linux_with_devices():
         mock_output = """NAME SIZE MODEL TYPE MOUNTPOINT
 sda  120G SSD   disk
 sdb  32G  USB Drive disk
@@ -150,14 +167,16 @@ sdb  32G  USB Drive disk
                 assert devices[0]['name'] == '/dev/sda'
                 assert devices[1]['name'] == '/dev/sdb'
 
-    def test_list_devices_darwin_empty(self):
+    @staticmethod
+    def test_list_devices_darwin_empty():
         with patch('platform.system', return_value='Darwin'):
             with patch('subprocess.run') as mock_run:
                 mock_run.return_value = MagicMock(stdout="")
                 devices = USBWriter.list_devices()
                 assert devices == []
 
-    def test_list_devices_darwin_with_devices(self):
+    @staticmethod
+    def test_list_devices_darwin_with_devices():
         mock_output = """
 /dev/disk0 (internal):
    #:                       TYPE NAME                    SIZE       IDENTIFIER
@@ -173,7 +192,8 @@ sdb  32G  USB Drive disk
                 assert len(devices) == 1
                 assert '/dev/disk2' in devices[0]['name']
 
-    def test_list_devices_unknown_platform(self):
+    @staticmethod
+    def test_list_devices_unknown_platform():
         with patch('platform.system', return_value='FreeBSD'):
             devices = USBWriter.list_devices()
             assert devices == []
@@ -183,6 +203,7 @@ sdb  32G  USB Drive disk
     # ========================================================================
 
     def test_write_iso_device_path_already_has_dev(self, iso_file, logger):
+        """Test ISO write when device path already starts with /dev/."""
         with patch('builtins.input', return_value='YES'):
             with patch('platform.system', return_value='Linux'):
                 with patch('subprocess.run') as mock_run:

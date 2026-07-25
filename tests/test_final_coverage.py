@@ -50,7 +50,8 @@ class TestRemainingCoverageLines:
         stage_names = [name for name, _ in stages]
         assert 'security' in stage_names
 
-    def test_get_build_stages_with_privacy_tools(self, tmp_path):
+    @staticmethod
+    def test_get_build_stages_with_privacy_tools(tmp_path):
         """Test get_build_stages includes privacy when enabled (line 1064-1065)"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
@@ -107,7 +108,8 @@ class TestRemainingCoverageLines:
         assert 'desktop' in stage_names
         assert 'applications' in stage_names
 
-    def test_build_stages_with_java_dev(self, tmp_path):
+    @staticmethod
+    def test_build_stages_with_java_dev(tmp_path):
         """Test get_build_stages includes java-dev stage (line 1051-1052)"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
