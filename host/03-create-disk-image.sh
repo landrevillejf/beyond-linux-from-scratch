@@ -35,6 +35,8 @@ BOOT_SIZE_MB=${BOOT_SIZE_MB:-512}
 SWAP_SIZE_MB=${SWAP_SIZE_MB:-2048}
 ROOT_SIZE_MB=$((IMAGE_SIZE_MB - BOOT_SIZE_MB - SWAP_SIZE_MB))
 
+log_info "Root partition size: ${ROOT_SIZE_MB}MB"
+
 # Set LFS directory
 if [ "$IN_DOCKER" = true ]; then
     LFS=${LFS:-/output}

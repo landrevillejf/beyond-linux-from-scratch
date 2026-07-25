@@ -88,12 +88,14 @@ if [ "$EUID" -ne 0 ] && [ "$IN_DOCKER" = false ] && [ "$IN_LIMA" = false ]; then
     if sudo -n true 2>/dev/null; then
         log_warning "Not running as root, but sudo is available"
         log_info "Will use sudo for privileged operations"
+        # shellcheck disable=SC2034
         USE_SUDO=true
     else
         log_error "Please run as root or with sudo"
         exit 1
     fi
 else
+    # shellcheck disable=SC2034
     USE_SUDO=false
 fi
 
@@ -125,7 +127,7 @@ if [ "$IN_DOCKER" = true ]; then
     missing_commands=()
     for cmd in "${required_commands[@]}"; do
         if ! command -v $cmd &> /dev/null; then
-            missing_commands+=($cmd)
+            missing_commands+=("$cmd")
         fi
     done
 
@@ -149,7 +151,7 @@ required_commands=(
 missing_commands=()
 for cmd in "${required_commands[@]}"; do
     if ! command -v $cmd &> /dev/null; then
-        missing_commands+=($cmd)
+        missing_commands+=("$cmd")
     fi
 done
 

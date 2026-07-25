@@ -10,12 +10,12 @@ log_error()   { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
 # Create required directories
-mkdir -pv "$LFS/usr/local/bin"
+mkdir -pv "$LFS/usr/bin"
 mkdir -pv "$LFS/var/lib/lpm-updater"
 mkdir -pv "$LFS/var/log"
 
 # Write the actual package updater script
-cat > "$LFS/usr/local/bin/lpm-update" << 'SCRIPT'
+cat > "$LFS/usr/bin/lpm-update" << 'SCRIPT'
 #!/bin/bash
 set -e
 
@@ -32,7 +32,7 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $*"; }
 
 # Paths
 LPM_DB="/var/lib/lpm"
-LPM_PACKAGES_DIR="/usr/local/share/lpm/packages"
+LPM_PACKAGES_DIR="/usr/share/lpm/packages"
 UPDATER_DB="/var/lib/lpm-updater"
 mkdir -p "$LPM_DB" "$LPM_PACKAGES_DIR" "$UPDATER_DB"
 
@@ -146,7 +146,7 @@ case "$1" in
 esac
 SCRIPT
 
-chmod +x "$LFS/usr/local/bin/lpm-update"
+chmod +x "$LFS/usr/bin/lpm-update"
 
 # Create initial log file
 touch "$LFS/var/lib/lpm-updater/update.log"

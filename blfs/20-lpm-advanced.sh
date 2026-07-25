@@ -7,7 +7,9 @@ set -euo pipefail
 # ----------------------------------------------------------------------
 # Colors (can be disabled in config)
 # ----------------------------------------------------------------------
+# shellcheck disable=SC2034
 C_RED='\033[0;31m' C_GREEN='\033[0;32m' C_YELLOW='\033[1;33m' C_BLUE='\033[0;34m' C_NC='\033[0m'
+# shellcheck disable=SC2034
 USE_COLOR=true
 
 # ----------------------------------------------------------------------
@@ -18,7 +20,7 @@ LPM_CONF="/etc/lpm/lpm.conf"
 LPM_ETC="/etc/lpm"
 LPM_DB="/var/lib/lpm"
 LPM_LOGS="/var/log/lpm"
-LPM_PACKAGES_DIR="/usr/local/share/lpm/packages"
+LPM_PACKAGES_DIR="/usr/share/lpm/packages"          # Changed from /usr/local
 LPM_REPOS=( "local" )
 REPO_LOCAL_PATH="$LPM_PACKAGES_DIR"
 LOCK_FILE="/var/lock/lpm.lock"
@@ -132,7 +134,6 @@ resolve_deps() {
 install_order() {
     local pkgs="$*"
     local order=()
-    local visited=()
     local pkg
     for pkg in $pkgs; do
         if ! is_installed "$pkg"; then
@@ -376,7 +377,7 @@ search_package() {
     local pattern="$1"
     [ -z "$pattern" ] && die "Usage: lpm search <pattern>"
     echo -e "${C_BLUE}Search results for '$pattern':${C_NC}"
-    grep -i "$pattern" "$db_file" 2>/dev/null | while IFS=: read -r name ver desc deps chk; do
+    grep -i "$pattern" "$db_file" 2>/dev/null | while IFS=: read -r name ver desc deps _chk; do
         printf "  %-20s %-10s %s\n" "$name" "$ver" "${desc:-}"
     done || echo "  No matches found"
 }

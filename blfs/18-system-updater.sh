@@ -10,12 +10,12 @@ log_error()   { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
 # Create required directories
-mkdir -pv "$LFS/usr/local/bin"
+mkdir -pv "$LFS/usr/bin"
 mkdir -pv "$LFS/var/lib/lfs-updater"
 mkdir -pv "$LFS/var/log"
 
 # Write the actual system updater script
-cat > "$LFS/usr/local/bin/lfs-update" << 'SCRIPT'
+cat > "$LFS/usr/bin/lfs-update" << 'SCRIPT'
 #!/bin/bash
 set -e
 
@@ -135,7 +135,7 @@ case "$1" in
 esac
 SCRIPT
 
-chmod +x "$LFS/usr/local/bin/lfs-update"
+chmod +x "$LFS/usr/bin/lfs-update"
 
 # Create default repo manifest if missing
 if [ ! -f "$LFS/var/lib/lfs-updater/repo.list" ]; then

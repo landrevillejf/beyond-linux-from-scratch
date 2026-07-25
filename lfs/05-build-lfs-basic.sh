@@ -105,6 +105,7 @@ fi
 log_info "Building temporary toolchain (this may take a while)..."
 run_privileged su - lfs -c "
 set -e
+# shellcheck disable=SC2027
 cd \"$LFS/sources\"
 
 # ----- Binutils (pass 1) -----
@@ -143,6 +144,7 @@ cd build
 make -j\$(nproc)
 make install
 cd $LFS/sources
+# shellcheck disable=SC2027
 rm -rf "$GCC_DIR"
 
 # ----- Linux API headers -----
@@ -197,6 +199,7 @@ cd build-libstdc++
 make -j\$(nproc)
 make install
 cd $LFS/sources
+# shellcheck disable=SC2027
 rm -rf "$GCC_DIR2"
 
 # ----- Essential utilities -----

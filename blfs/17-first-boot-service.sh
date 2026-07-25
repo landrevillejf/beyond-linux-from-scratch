@@ -45,13 +45,13 @@ log_info "========================================="
 
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – creating first-boot script inside $LFS"
-    run_privileged mkdir -pv "$LFS/usr/local/sbin"
-    run_privileged tee "$LFS/usr/local/sbin/first-boot.sh" << 'EOF' > /dev/null
+    run_privileged mkdir -pv "$LFS/usr/sbin"
+    run_privileged tee "$LFS/usr/sbin/first-boot.sh" << 'EOF' > /dev/null
 #!/bin/bash
 echo "First-boot script running (Docker mode)"
 touch /var/log/first-boot-done
 EOF
-    run_privileged chmod +x "$LFS/usr/local/sbin/first-boot.sh"
+    run_privileged chmod +x "$LFS/usr/sbin/first-boot.sh"
     log_success "First-boot script created (Docker mode)"
     exit 0
 fi
@@ -59,25 +59,25 @@ fi
 # Native mode
 log_info "Native mode – installing first-boot service"
 
-# Monter les FS
+# Mount virtual filesystems
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
-# Créer le répertoire et le script dans le chroot
-run_privileged mkdir -pv "$LFS/usr/local/sbin"
+# Create directory and script inside chroot
+run_privileged mkdir -pv "$LFS/usr/sbin"
 
-# Utiliser run_privileged tee pour écrire le fichier
-run_privileged tee "$LFS/usr/local/sbin/first-boot.sh" << 'EOF' > /dev/null
+# Write the script
+run_privileged tee "$LFS/usr/sbin/first-boot.sh" << 'EOF' > /dev/null
 #!/bin/bash
 echo "Running first-boot configuration..."
-# Ajouter ici les tâches du premier démarrage
+# Add first-boot tasks here
 touch /var/log/first-boot-done
 echo "First-boot done."
 EOF
-run_privileged chmod +x "$LFS/usr/local/sbin/first-boot.sh"
+run_privileged chmod +x "$LFS/usr/sbin/first-boot.sh"
 
-# Créer un service systemd si systemd est l'init, ou un script rc pour sysvinit
+# Create systemd service if systemd is the init, or an rc script for sysvinit
 if [ -d "$LFS/usr/lib/systemd/system" ]; then
     run_privileged tee "$LFS/usr/lib/systemd/system/first-boot.service" << 'SERVICE' > /dev/null
 [Unit]
@@ -86,7 +86,7 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/sbin/first-boot.sh
+ExecStart=/usr/sbin/first-boot.sh
 RemainAfterExit=yes
 
 [Install]
@@ -98,7 +98,7 @@ elif [ -d "$LFS/etc/init.d" ]; then
 #!/bin/sh
 case "$1" in
     start)
-        /usr/local/sbin/first-boot.sh
+        /usr/sbin/first-boot.sh
         ;;
     *)
         exit 1

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Configure LFS system – copie des binaires et configuration minimale
+# Configure LFS system – copy binaries and minimal configuration
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -46,7 +46,7 @@ copy_binaries() {
         src=$(which "$tool" 2>/dev/null || echo "/bin/$tool")
         if [ -f "$src" ]; then
             run_privileged cp -L -v "$src" "$dest/bin/"
-            # Copier les bibliothèques
+            # Copy libraries
             ldd "$src" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read lib; do
                 lib_dir="$dest/lib"
                 [[ "$lib" == *"/lib64/"* ]] && lib_dir="$dest/lib64"
@@ -66,7 +66,7 @@ log_info "========================================="
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – minimal config inside $LFS"
     run_privileged mkdir -pv "$LFS"/etc/X11/xorg.conf.d
-    run_privileged mkdir -pv "$LFS"/usr/local/bin
+    run_privileged mkdir -pv "$LFS"/usr/bin
 
     cat > "$LFS/configure-system.sh" << 'INNEREOF'
 #!/bin/bash
@@ -85,11 +85,11 @@ Section "InputClass"
     Option "XkbLayout" "us"
 EndSection
 XORG
-cat > ./usr/local/bin/start-desktop << "START"
+cat > ./usr/bin/start-desktop << "START"
 #!/bin/bash
 exec startx
 START
-chmod +x ./usr/local/bin/start-desktop
+chmod +x ./usr/bin/start-desktop
 echo "lfs-desktop" > ./etc/hostname
 cat > ./etc/hosts << "HOSTS"
 127.0.0.1   localhost.localdomain localhost
@@ -107,18 +107,18 @@ fi
 # Native mode
 log_info "Native mode – full configuration"
 
-# Monter les systèmes de fichiers virtuels
+# Mount virtual filesystems
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
-# Copier les binaires essentiels dans le chroot
+# Copy essential binaries to chroot
 log_info "Copying essential binaries to chroot"
 run_privileged mkdir -p "$LFS/bin" "$LFS/usr/bin" "$LFS/sbin"
 copy_binaries "$LFS" mkdir chmod chown ln cat echo cp mv rm sed grep which
-# Copier aussi les outils de gestion d'utilisateurs si présents (optionnel)
+# Copy user management tools if present (optional)
 for tool in groupadd useradd chpasswd; do
     src=$(which "$tool" 2>/dev/null || echo "/usr/sbin/$tool")
     if [ -f "$src" ]; then
@@ -132,7 +132,7 @@ for tool in groupadd useradd chpasswd; do
     fi
 done
 
-# Créer un script de configuration simplifié (sans dépendre de grub, systemd, etc.)
+# Create a simplified configuration script (without depending on grub, systemd, etc.)
 cat > "$LFS/configure-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
@@ -140,12 +140,12 @@ echo "========================================="
 echo "Configuring LFS System (minimal)"
 echo "========================================="
 
-# Fichiers de base
+# Base files
 mkdir -pv /etc
-mkdir -pv /usr/local/bin
+mkdir -pv /usr/bin
 mkdir -pv /etc/X11/xorg.conf.d
 
-# Créer les utilisateurs si absents
+# Create users if absent
 if ! grep -q lfsuser /etc/passwd; then
     echo "lfsuser:x:1000:1000::/home/lfsuser:/bin/bash" >> /etc/passwd
     echo "lfsuser:x:1000:" >> /etc/group
@@ -157,7 +157,7 @@ fi
 # Sudoers
 echo "lfsuser ALL=(ALL) ALL" >> /etc/sudoers 2>/dev/null || echo "Warning: sudoers not updated"
 
-# Clavier
+# Keyboard
 cat > /etc/X11/xorg.conf.d/00-keyboard.conf << "XORG"
 Section "InputClass"
     Identifier "system-keyboard"
@@ -166,12 +166,12 @@ Section "InputClass"
 EndSection
 XORG
 
-# Lanceur de bureau
-cat > /usr/local/bin/start-desktop << "START"
+# Desktop launcher
+cat > /usr/bin/start-desktop << "START"
 #!/bin/bash
 exec startx
 START
-chmod +x /usr/local/bin/start-desktop
+chmod +x /usr/bin/start-desktop
 
 # Hostname
 echo "lfs-desktop" > /etc/hostname
@@ -181,7 +181,7 @@ cat > /etc/hosts << "HOSTS"
 127.0.1.1   lfs-desktop
 HOSTS
 
-# Fuseau horaire
+# Timezone
 ln -sfv /usr/share/zoneinfo/UTC /etc/localtime
 
 # Locale
@@ -202,11 +202,11 @@ INNEREOF
 
 run_privileged chmod +x "$LFS/configure-system.sh"
 
-# Exécuter la configuration dans le chroot
+# Run configuration inside chroot
 log_info "Running configuration in chroot..."
 run_privileged chroot "$LFS" /bin/bash /configure-system.sh
 
-# Démontage
+# Unmount
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
 run_privileged umount "$LFS"/dev 2>/dev/null || true
 run_privileged umount "$LFS"/proc 2>/dev/null || true

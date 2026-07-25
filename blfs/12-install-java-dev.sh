@@ -1,5 +1,6 @@
 #!/bin/bash
-# blfs/12-install-java-dev.sh – with dynamic source path
+# blfs/12-install-java-dev.sh
+# Java Development Environment installation
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -65,7 +66,7 @@ run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
-# --- DYNAMIC SOURCE PATH ---
+# Dynamic source path
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
@@ -90,61 +91,68 @@ install_package() {
     echo "=== $name installed to $target_dir ==="
 }
 
+# Java JDK
 if ls OpenJDK21U-jdk_*.tar.gz 1> /dev/null 2>&1; then
-    mkdir -p /opt
-    install_package $(ls OpenJDK21U-jdk_*.tar.gz | head -n1) /opt/jdk
+    mkdir -p /usr/lib/java
+    install_package $(ls OpenJDK21U-jdk_*.tar.gz | head -n1) /usr/lib/java/jdk
     cat > /etc/profile.d/java.sh << 'EOF'
-export JAVA_HOME=/opt/jdk
+export JAVA_HOME=/usr/lib/java/jdk
 export PATH=$JAVA_HOME/bin:$PATH
 EOF
     chmod +x /etc/profile.d/java.sh
-    /opt/jdk/bin/java -version
+    /usr/lib/java/jdk/bin/java -version
 fi
 
+# Maven
 if ls apache-maven-*.tar.gz 1> /dev/null 2>&1; then
-    install_package $(ls apache-maven-*.tar.gz | head -n1) /opt/maven
+    install_package $(ls apache-maven-*.tar.gz | head -n1) /usr/lib/maven
     cat > /etc/profile.d/maven.sh << 'EOF'
-export MAVEN_HOME=/opt/maven
+export MAVEN_HOME=/usr/lib/maven
 export PATH=$MAVEN_HOME/bin:$PATH
 EOF
     chmod +x /etc/profile.d/maven.sh
 fi
 
+# Gradle
 if ls gradle-*.zip 1> /dev/null 2>&1; then
-    unzip -q $(ls gradle-*.zip | head -n1) -d /opt
-    mv /opt/gradle-* /opt/gradle
+    unzip -q $(ls gradle-*.zip | head -n1) -d /usr/lib
+    mv /usr/lib/gradle-* /usr/lib/gradle
     cat > /etc/profile.d/gradle.sh << 'EOF'
-export GRADLE_HOME=/opt/gradle
+export GRADLE_HOME=/usr/lib/gradle
 export PATH=$GRADLE_HOME/bin:$PATH
 EOF
     chmod +x /etc/profile.d/gradle.sh
 fi
 
+# Tomcat
 if ls apache-tomcat-*.tar.gz 1> /dev/null 2>&1; then
-    install_package $(ls apache-tomcat-*.tar.gz | head -n1) /opt/tomcat
+    install_package $(ls apache-tomcat-*.tar.gz | head -n1) /usr/lib/tomcat
     groupadd -r tomcat 2>/dev/null || true
-    useradd -r -g tomcat -d /opt/tomcat tomcat 2>/dev/null || true
-    chown -R tomcat:tomcat /opt/tomcat
+    useradd -r -g tomcat -d /usr/lib/tomcat tomcat 2>/dev/null || true
+    chown -R tomcat:tomcat /usr/lib/tomcat
 fi
 
+# Jenkins
 if [ -f jenkins.war ]; then
-    mkdir -p /opt/jenkins
-    cp jenkins.war /opt/jenkins/
+    mkdir -p /usr/lib/jenkins
+    cp jenkins.war /usr/lib/jenkins/
     groupadd -r jenkins 2>/dev/null || true
-    useradd -r -g jenkins -d /opt/jenkins jenkins 2>/dev/null || true
-    chown -R jenkins:jenkins /opt/jenkins
+    useradd -r -g jenkins -d /usr/lib/jenkins jenkins 2>/dev/null || true
+    chown -R jenkins:jenkins /usr/lib/jenkins
 fi
 
+# Docker
 if ls docker-*.tgz 1> /dev/null 2>&1; then
-    tar -xf $(ls docker-*.tgz | head -n1) -C /opt
-    mv /opt/docker /opt/docker-bin
-    ln -sf /opt/docker-bin/docker /usr/local/bin/docker
-    ln -sf /opt/docker-bin/dockerd /usr/local/bin/dockerd
+    tar -xf $(ls docker-*.tgz | head -n1) -C /usr/lib
+    mv /usr/lib/docker /usr/lib/docker-bin
+    ln -sf /usr/lib/docker-bin/docker /usr/bin/docker
+    ln -sf /usr/lib/docker-bin/dockerd /usr/bin/dockerd
     groupadd -r docker 2>/dev/null || true
 fi
 
+# kubectl
 if [ -f kubectl ]; then
-    install -m 755 kubectl /usr/local/bin/kubectl
+    install -m 755 kubectl /usr/bin/kubectl
 fi
 
 echo "Java tools installed."

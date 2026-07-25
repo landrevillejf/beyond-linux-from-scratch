@@ -10,8 +10,8 @@ mkdir -pv "$LFS"/etc/security/limits.d
 mkdir -pv "$LFS"/etc/profile.d
 mkdir -pv "$LFS"/etc/cron.daily
 mkdir -pv "$LFS"/etc/audit
-mkdir -pv "$LFS"/usr/local/bin
-mkdir -pv "$LFS"/usr/local/sbin
+mkdir -pv "$LFS"/usr/bin
+mkdir -pv "$LFS"/usr/sbin
 mkdir -pv "$LFS"/var/log
 cat > "$LFS"/etc/sysctl.d/99-security.conf << 'SYSCONF'
 # Security sysctl settings
