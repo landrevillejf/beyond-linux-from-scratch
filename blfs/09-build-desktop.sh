@@ -150,6 +150,7 @@ compile_package() {
 }
 
 for pattern in xfce4-*.tar.bz2 xfce4-*.tar.xz gtk-*.tar.xz libxfce4util-*.tar.xz xfconf-*.tar.xz libxfce4ui-*.tar.xz; do
+    # shellcheck disable=SC2086
     for archive in $pattern; do
         if [ -f "$archive" ]; then
             compile_package "$archive" || true
