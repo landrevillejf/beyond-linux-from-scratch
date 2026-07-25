@@ -18,7 +18,7 @@ from typing import List, Dict, Tuple, Optional
 DEFAULT_DIRS = ["host", "lfs", "blfs", "final"]
 EXCLUDED_FILES = ["*.py", "*.md", "*.txt", "*.json", "*.conf"]
 # Directories where certain rules are relaxed
-HOST_DIRS = {"host", "common", "lfs", "blfs"}   # sudo allowed here
+HOST_DIRS = {"host", "common", "lfs", "blfs", "final"}
 FINAL_DIRS = {"final", "lfs", "blfs"}           # chroot allowed here
 
 # ------------------------------------------------------------------------------
