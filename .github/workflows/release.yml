@@ -30,6 +30,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Check LFS compatibility of shell scripts
+        run: |
+          python3 lfs_check.py --shellcheck
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -98,34 +102,24 @@ jobs:
             /tmp/lfs-build/build-release/build_info.json
           if-no-files-found: error
 
-      # --------------------------------------------------------------
-      # Boot test with QEMU (after ISO is uploaded)
-      # --------------------------------------------------------------
       - name: Boot ISO in QEMU (smoke test)
         if: success()
         run: |
-           sudo apt-get update
-           sudo apt-get install -y qemu-system-x86
-           ISO_PATH="${{ inputs.output_dir || './lfs-build' }}/lfs-installer.iso"
-           echo "Booting $ISO_PATH in QEMU..."
-           timeout 90s qemu-system-x86_64 \
-             -cdrom "$ISO_PATH" \
-             -nographic -no-reboot -m 2G -smp 2 \
-             -append "console=ttyS0" | tee qemu.log || true
-           if grep -qi "LFS\|init:\|login:" qemu.log; then
-             echo "ISO booted successfully!"
-           else
-             echo "ISO boot failed – no expected output found"
-             cat qemu.log
-             exit 1
-           fi
-
-      - name: Upload build info
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-info
-          path: ${{ inputs.output_dir || './lfs-build' }}/build_info.json
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86
+          ISO_PATH="/tmp/lfs-build/build-release/lfs-installer.iso"
+          echo "Booting $ISO_PATH in QEMU..."
+          timeout 90s qemu-system-x86_64 \
+            -cdrom "$ISO_PATH" \
+            -nographic -no-reboot -m 2G -smp 2 \
+            -append "console=ttyS0" | tee qemu.log || true
+          if grep -qi "LFS\|init:\|login:" qemu.log; then
+            echo "ISO booted successfully!"
+          else
+            echo "ISO boot failed – no expected output found"
+            cat qemu.log
+            exit 1
+          fi
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
