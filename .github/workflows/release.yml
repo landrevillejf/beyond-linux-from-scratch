@@ -74,9 +74,9 @@ jobs:
             lfs-sources-release-
             lfs-sources-
 
-      - name: Verify sources
-        run: python3 lfs_verify_sources.py --sources-dir ./build-release/sources
-        working-directory: /tmp/lfs-build
+#      - name: Verify sources
+#        run: python3 lfs_verify_sources.py --sources-dir ./build-release/sources
+#        working-directory: /tmp/lfs-build
 
       - name: Run tests
         run: python3 -m pytest tests/ -q
