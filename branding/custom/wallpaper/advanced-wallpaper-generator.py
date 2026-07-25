@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 LFS Wallpaper Generator – Advanced Edition
-Fully featured: themes, random generation, JSON config, effects, theme folders.
+Supports logo overlay (SVG/PNG), position, size, opacity, rotation.
 """
 
 import os
@@ -11,11 +11,19 @@ import random
 import math
 import argparse
 import logging
+import io
 from typing import List, Tuple, Optional, Dict, Any
 from pathlib import Path
 from datetime import datetime
 
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageColor, ImageOps
+
+# Optional SVG support
+try:
+    import cairosvg
+    HAS_CAIRO = True
+except ImportError:
+    HAS_CAIRO = False
 
 # ============================================================================
 # THEMES & COLOR UTILITIES
@@ -72,7 +80,6 @@ def blend_colors(c1, c2, t):
     return tuple(int(a + (b - a) * t) for a, b in zip(c1, c2))
 
 def parse_color(color, theme_colors=None):
-    """Convert a color specification to an RGBA tuple."""
     if color is None:
         return None
     if isinstance(color, (list, tuple)):
@@ -94,9 +101,111 @@ def parse_color(color, theme_colors=None):
     return (0,0,0,255)
 
 # ============================================================================
-# DRAWING HELPERS
+# LOGO LOADING & OVERLAY
 # ============================================================================
+def load_logo_image(path, target_size=None, rotate=0, scale=1.0):
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Logo file not found: {path}")
 
+    ext = os.path.splitext(path)[1].lower()
+    if ext == '.svg':
+        if not HAS_CAIRO:
+            raise RuntimeError("cairosvg not installed. Please install it to use SVG logos: pip install cairosvg")
+        png_data = cairosvg.svg2png(url=path)
+        img = Image.open(io.BytesIO(png_data))
+    else:
+        img = Image.open(path)
+
+    if img.mode != 'RGBA':
+        img = img.convert('RGBA')
+
+    if target_size is not None:
+        img.thumbnail(target_size, Image.Resampling.LANCZOS)
+
+    if rotate != 0:
+        img = img.rotate(rotate, expand=True, resample=Image.Resampling.BICUBIC)
+
+    if scale != 1.0:
+        w, h = img.size
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+    return img
+
+def apply_logo_to_image(base_img, logo_params, width, height):
+    if not logo_params:
+        return base_img
+
+    path = logo_params.get('path')
+    if not path:
+        return base_img
+
+    position = logo_params.get('position', 'center')
+    size_rel = logo_params.get('size', 0.1)
+    opacity = logo_params.get('opacity', 1.0)
+    rotate = logo_params.get('rotate', 0)
+    scale = logo_params.get('scale', 1.0)
+    margin = logo_params.get('margin', 0.02)
+
+    target_w = int(width * size_rel)
+    target_h = int(target_w)
+
+    logo = load_logo_image(path, target_size=(target_w, target_w), rotate=rotate, scale=scale)
+    logo_w, logo_h = logo.size
+    if logo_w > width or logo_h > height:
+        ratio = min(width / logo_w, height / logo_h)
+        new_w = int(logo_w * ratio)
+        new_h = int(logo_h * ratio)
+        logo = logo.resize((new_w, new_h), Image.Resampling.LANCZOS)
+        logo_w, logo_h = logo.size
+
+    x, y = 0, 0
+    if isinstance(position, (list, tuple)) and len(position) == 2:
+        x = int(position[0] * width - logo_w / 2)
+        y = int(position[1] * height - logo_h / 2)
+    elif isinstance(position, str):
+        pos = position.lower()
+        margin_px = int(min(width, height) * margin)
+        if pos == 'center':
+            x = (width - logo_w) // 2
+            y = (height - logo_h) // 2
+        elif pos == 'top-left':
+            x = margin_px
+            y = margin_px
+        elif pos == 'top-right':
+            x = width - logo_w - margin_px
+            y = margin_px
+        elif pos == 'bottom-left':
+            x = margin_px
+            y = height - logo_h - margin_px
+        elif pos == 'bottom-right':
+            x = width - logo_w - margin_px
+            y = height - logo_h - margin_px
+        else:
+            try:
+                parts = pos.split(',')
+                if len(parts) == 2:
+                    fx = float(parts[0].strip())
+                    fy = float(parts[1].strip())
+                    x = int(fx * width - logo_w / 2)
+                    y = int(fy * height - logo_h / 2)
+            except:
+                pass
+
+    if opacity < 1.0:
+        alpha = logo.getchannel('A')
+        alpha = alpha.point(lambda p: int(p * opacity))
+        logo.putalpha(alpha)
+
+    if base_img.mode != 'RGBA':
+        base_img = base_img.convert('RGBA')
+    base_img.paste(logo, (x, y), logo)
+    return base_img
+
+# ============================================================================
+# DRAWING HELPERS (ALL ORIGINAL FUNCTIONS)
+# ============================================================================
 def generate_decorative_dots(draw, count, width, height, color):
     for _ in range(count):
         x = random.randint(0, width)
@@ -281,12 +390,10 @@ def generate_random_config(width, height, theme_colors):
              primary if random.random()>0.5 else accent, None, 1)
         ]
     if random.random() > 0.7:
-        # Generate ordered rectangle coordinates
         x1 = random.uniform(0.1, 0.8)
         y1 = random.uniform(0.1, 0.8)
         x2 = x1 + random.uniform(0.05, 0.3)
         y2 = y1 + random.uniform(0.05, 0.3)
-        # Clamp to [0,1]
         x1 = max(0, min(1, x1))
         y1 = max(0, min(1, y1))
         x2 = max(0, min(1, x2))
@@ -401,7 +508,6 @@ class AdvancedWallpaperGenerator:
                     continue
                 xy, radius, fill, outline, width_line = rect[0], rect[1], rect[2], rect[3], rect[4]
                 x1, y1, x2, y2 = xy
-                # Normalize coordinates (ensure x1<x2 and y1<y2)
                 if x1 > x2:
                     x1, x2 = x2, x1
                 if y1 > y2:
@@ -427,7 +533,7 @@ class AdvancedWallpaperGenerator:
         if config.get("text"):
             text, pos, color = config["text"]
             if not text:
-                text = "LFS"
+                text = ""
             color = parse_color(color, self.theme_colors)
             font_size = int(0.08 * self.width)
             font = self.get_font(font_size)
@@ -464,6 +570,10 @@ class AdvancedWallpaperGenerator:
         if config.get("metadata"):
             meta_font = self.get_font(int(0.02 * self.width))
             draw_metadata(draw, config["metadata"], self.width, self.height, meta_font)
+
+        # ---- Logo overlay ----
+        if config.get("logo"):
+            img = apply_logo_to_image(img, config["logo"], self.width, self.height)
 
         # ---- Global effects ----
         if config.get("noise", 0) > 0:
@@ -514,7 +624,8 @@ def parse_arguments():
         description="LFS Wallpaper Generator Pro – Create stunning wallpapers",
         epilog="Examples:\n"
                "  python advanced-wallpaper-generator.py --theme neon --random --count 10\n"
-               "  python advanced-wallpaper-generator.py --width 2560 --height 1440 --theme nature"
+               "  python advanced-wallpaper-generator.py --width 2560 --height 1440 --theme nature\n"
+               "  python advanced-wallpaper-generator.py --logo logo.svg --logo-position bottom-right --logo-size 0.12"
     )
     parser.add_argument("-o", "--output-dir", default="./wallpapers",
                         help="Parent output directory (a subfolder named after the theme will be created)")
@@ -535,6 +646,22 @@ def parse_arguments():
     parser.add_argument("--blur", type=float, default=0.0, help="Apply Gaussian blur radius (global)")
     parser.add_argument("--noise", type=float, default=0.0, help="Apply noise intensity (0-1, global)")
     parser.add_argument("--glow", action="store_true", help="Apply glow effect (global)")
+
+    # Logo options
+    parser.add_argument("--logo", type=str, help="Path to logo image (SVG/PNG)")
+    parser.add_argument("--logo-position", type=str, default="center",
+                        help="Logo position: center, top-left, top-right, bottom-left, bottom-right, or X,Y (relative 0..1)")
+    parser.add_argument("--logo-size", type=float, default=0.1,
+                        help="Logo size relative to wallpaper width (0..1)")
+    parser.add_argument("--logo-opacity", type=float, default=1.0,
+                        help="Logo opacity (0..1)")
+    parser.add_argument("--logo-rotate", type=float, default=0,
+                        help="Logo rotation in degrees")
+    parser.add_argument("--logo-scale", type=float, default=1.0,
+                        help="Additional scale factor for the logo")
+    parser.add_argument("--logo-margin", type=float, default=0.02,
+                        help="Relative margin from edges for corner positions (0..1)")
+
     parser.add_argument("--log-level", default="INFO", choices=["DEBUG","INFO","WARNING","ERROR"])
     parser.add_argument("--version", action="version", version="LFS Wallpaper Generator v3.0")
     return parser.parse_args()
@@ -569,20 +696,33 @@ def main():
     end = min(total, start + args.count)
     selected = designs[start:end]
 
+    # Build logo parameters from CLI (if provided)
+    logo_params = None
+    if args.logo:
+        logo_params = {
+            "path": args.logo,
+            "position": args.logo_position,
+            "size": args.logo_size,
+            "opacity": args.logo_opacity,
+            "rotate": args.logo_rotate,
+            "scale": args.logo_scale,
+            "margin": args.logo_margin
+        }
+
     for cfg in selected:
+        # Override with CLI logo if provided
+        if logo_params:
+            cfg["logo"] = logo_params
         if args.watermark:
             cfg["watermark"] = args.watermark
         if args.metadata:
             cfg["metadata"] = args.metadata
         if args.text:
-            # Override the main text field
             if "text" in cfg and isinstance(cfg["text"], (list, tuple)) and len(cfg["text"]) >= 3:
-                # Keep position and color, replace text string
                 text_parts = list(cfg["text"])
                 text_parts[0] = args.text
                 cfg["text"] = tuple(text_parts)
             else:
-                # If no text field, create one with default position and theme color
                 cfg["text"] = (args.text, (0.5, 0.5), THEMES.get(args.theme, THEMES["default"])["text"])
         if args.blur > 0:
             cfg["blur"] = args.blur

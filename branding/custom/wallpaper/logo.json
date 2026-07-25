@@ -1,0 +1,15 @@
+[
+  {
+    "gradient": ["vertical", ["#2E8B57", "#1a1a2e"]],
+    "text": ["LFS", [0.5, 0.5], "#f0f0f0"],
+    "logo": {
+      "path": "logo.svg",
+      "position": "bottom-right",
+      "size": 0.12,
+      "opacity": 0.8,
+      "rotate": -5,
+      "scale": 1.2,
+      "margin": 0.03
+    }
+  }
+]
