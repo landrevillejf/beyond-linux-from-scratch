@@ -7,6 +7,7 @@
       <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <sourceFolder url="file://$MODULE_DIR$/tests/venv/lib/python3.13/site-packages" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/venv/lib/python3.13/site-packages" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tests/venv/lib/python3.13/site-packages/pip/_vendor" isTestSource="false" />
     </content>
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
