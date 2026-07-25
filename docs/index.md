@@ -1,21 +1,52 @@
-# LFS/BLFS Builder – Documentation
+# Way Beyond Linux From Scratch
 
-**Version 0.4.3** – *Works on Linux, macOS, and Windows (WSL2)*  
+[![Version](https://img.shields.io/github/v/release/landrevillejf/beyond-linux-from-scratch?color=blue)](https://github.com/landrevillejf/beyond-linux-from-scratch/releases)
+[![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)]()
+![Tests](https://github.com/landrevillejf/beyond-linux-from-scratch/actions/workflows/python-app.yml/badge.svg)
+[![Coverage](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch/branch/main/graph/badge.svg)](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch)
+
+Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`). Works on Linux, macOS, and Windows (WSL2).
+
+**Version:** 0.4.3  
 **Author:** Jean-Francois Landreville
+
+This repository is designed for reproducible, profile‑driven builds and CI/CD publication workflows that separate:
+
+- Cache generation pipelines
+- Full ISO release pipelines
+- ISO‑from‑cache reconstruction pipelines
 
 ---
 
-## Overview
+## Table of Contents
 
-The **LFS/BLFS Builder** is a Python‑based orchestrator that automates the creation of a custom Linux system from scratch, following the Linux From Scratch (LFS) and Beyond Linux From Scratch (BLFS) books. It downloads source tarballs, runs a series of shell scripts to compile the toolchain, the base system, desktop environments, and additional packages, and finally produces a bootable ISO image.
-
-The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC, etc.), desktop environments (XFCE, GNOME, KDE, LXQt), cross‑compilation for ARM64, and a cache mechanism to speed up repeated builds.
+- [Features](#features)
+- [Documentation pages](#documentation-pages)
+- [Project goals and philosophy](#project-goals-and-philosophy)
+- [Architecture](#architecture)
+- [Build pipeline flow](#build-pipeline-flow)
+- [Repository structure](#repository-structure)
+- [System requirements](#system-requirements)
+- [Quick start](#quick-start)
+- [Command line reference](#command-line-reference)
+- [Build profiles](#build-profiles)
+- [Configuration model](#configuration-model)
+- [Artifacts and outputs](#artifacts-and-outputs)
+- [USB writing](#usb-writing)
+- [Custom sources](#custom-sources)
+- [GitHub Actions workflow model](#github-actions-workflow-model)
+- [Testing and quality gates](#testing-and-quality-gates)
+- [Troubleshooting](#troubleshooting)
+- [Security and support](#security-and-support)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
 ## Features
 
-- **Profile‑based builds** – choose from 15 predefined profiles (minimal, full desktop, security‑hardened, etc.).
+- **Profile‑based builds** – choose from 17 predefined profiles (minimal, full desktop, security‑hardened, ARM64, etc.).
 - **Flexible init systems** – sysvinit, systemd, OpenRC, runit, s6.
 - **Desktop environments** – XFCE, GNOME, KDE Plasma, LXQt, or no GUI.
 - **Cross‑compilation** – build for ARM64 (aarch64) on an x86_64 host using QEMU and cross‑toolchains.
@@ -25,215 +56,357 @@ The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC,
 - **Parallel downloads** – fetch source tarballs concurrently.
 - **Resume capability** – restart from a failed stage without redoing previous work.
 - **Comprehensive logging** – detailed logs per stage, with last 50 lines displayed on failure.
+- **Professional branding** – custom themes, wallpapers, and GRUB backgrounds for the installer and live system (see [Branding](docs/BRANDING.md)).
 
 ---
 
-## System Requirements
+## Documentation pages
 
-- **OS:** Linux (native), macOS (with Docker), Windows 10/11 (WSL2)
-- **Python:** 3.10 or higher (3.13 recommended)
-- **Disk space:** at least 50 GB for a full desktop build (more if using cache)
-- **Host tools (Linux):** `bash`, `gcc`, `make`, `bison`, `gawk`, `m4`, `wget`, `tar`, `gzip`, `xorriso`, `parted`
-- **For macOS:** Docker Desktop is required (the builder runs inside a container)
-- **For cross‑compilation (ARM64):** `gcc-aarch64-linux-gnu`, `binutils-aarch64-linux-gnu`, `qemu-user-static`
+- [Overview](docs/content.md)
+- [Stage Timings](docs/stage-timings.md)
+- [Professional Branding System](docs/BRANDING.md)
+- [Installer Branding](docs/INSTALLER_BRANDING.md)
+- [Branding Visual Reference](docs/branding-visual-mockup.html)
+- [LPM Package Manager](docs/lpm.md)
+- [Troubleshooting](docs/troubleshoot.md)
+- [Docker How-To](docs/docker-howto.md)
+- [Release How-To](docs/make-release-how-to.md)
+- [Testing How-To](docs/testing-howto.md)
+- [Wallpaper Generator How-To](docs/wallpaper-generator-howto.md)
 
 ---
 
-## Installation
+## Project goals and philosophy
+
+This project follows three core principles:
+
+1. **LFS first**: builds are aligned with Linux From Scratch and Beyond Linux From Scratch stage sequencing.
+2. **Single orchestrator**: `builder.py` is the source of truth for profile selection, parameter propagation, and stage execution.
+3. **Reproducible automation**: CI workflows produce deterministic outputs (cache archives, kernels, ISO installers) with explicit verification steps.
+
+---
+
+## Architecture
+
+### High-level component architecture
+
+```mermaid
+graph LR
+    CLI["CLI (builder.py)"] --> CFG["LFSConfig (config/build.conf)"]
+    CLI --> PM["ProfileManager"]
+    CLI --> DL["SourceDownloader"]
+    CLI --> EX["ScriptExecutor"]
+
+    CFG --> ENV["Flattened environment (LFS_CONFIG_*, LFS_PROFILE_*)"]
+    PM --> ENV
+    ENV --> SH["Stage shell scripts"]
+
+    SH --> HOST["host/*"]
+    SH --> LFS["lfs/*"]
+    SH --> BLFS["blfs/*"]
+    SH --> FINAL["final/*"]
+
+    FINAL --> OUT["Output directory"]
+    OUT --> ISO["lfs-installer.iso"]
+    OUT --> IMG["image/boot/vmlinuz*"]
+    OUT --> LOGS["logs/*.log"]
+    OUT --> META["build_info.json"]
+```
+
+### Runtime responsibility split
+
+| Layer | Responsibility |
+|---|---|
+| `builder.py` | CLI parsing, profile application, environment propagation, stage orchestration |
+| `host/*.sh` | Host checks, host preparation, disk image and toolchain setup |
+| `lfs/*.sh` | Core LFS base and system construction |
+| `blfs/*.sh` | Desktop, applications, package management, hardening, updater layers |
+| `final/*.sh` | Initramfs, bootloader, installer, live ISO generation |
+| `.github/workflows/*.yml` | CI/CD automation: cache pipelines, nightly builds, release publication |
+
+---
+
+## Build pipeline flow
+
+```mermaid
+flowchart TD
+    A["Start builder.py"] --> B["Parse CLI arguments"]
+    B --> C["Load config + profile"]
+    C --> D["Apply overrides (--init, --no-live, --kernel-type, --bootloader, --host-distro)"]
+    D --> E["Refresh script execution environment"]
+    E --> F["Check prerequisites"]
+    F --> G["Prepare output layout"]
+    G --> H["Update and download sources"]
+    H --> I["Execute ordered stage scripts"]
+    I --> J{"Build success?"}
+    J -- No --> K["Stop and inspect logs"]
+    J -- Yes --> L["Generate artifacts (kernel, installer, ISO or cache rootfs)"]
+    L --> M["Optional USB write"]
+```
+
+### Default stage order (xfce profile, live enabled)
+
+1. `host-check`
+2. `host-prepare`
+3. `disk-image`
+4. `toolchain`
+5. `lfs-basic`
+6. `lfs-system`
+7. `init-system`
+8. `service-abstraction`
+9. `configure-lfs`
+10. `blfs-base`
+11. `build-kernel`
+12. `desktop`
+13. `applications`
+14. `configure-desktop`
+15. `package-manager`
+16. `base-packages`
+17. `security`
+18. `branding`
+19. `first-boot`
+20. `system-updater`
+21. `package-updater`
+22. `lpm-advanced`
+23. `initramfs`
+24. `bootloader`
+25. `installer`
+26. `live-system` (when enabled)
+
+---
+
+## Repository structure
+
+```text
+.
+|-- builder.py
+|-- config/
+|   |-- build.conf
+|   |-- build-cross.conf
+|   `-- ...
+|-- host/
+|-- lfs/
+|-- blfs/
+|-- final/
+|-- packages/
+|-- profiles/
+|-- tests/
+|   |-- features/
+|   `-- ...
+`-- .github/workflows/
+```
+
+---
+
+## System requirements
+
+### Native Linux build host
+
+| Resource | Minimum | Recommended |
+|---|---:|---:|
+| CPU cores | 4 | 8+ |
+| RAM | 8 GB | 16+ GB |
+| Disk | 50 GB free | 100+ GB free |
+| Architecture | x86_64 | x86_64 |
+
+### Supported host distributions
+
+- Debian/Ubuntu
+- Fedora/RHEL-like
+- Arch
+
+Use `--host-distro` if auto detection must be overridden:
+
+```bash
+python3 builder.py --host-distro fedora
+```
+
+### macOS and Windows
+
+- macOS is supported through `mac-lfs-builder.sh` (Docker-based workflow).
+- Windows is supported through WSL2 and Linux tooling.
+
+---
+
+## Quick start
 
 ```bash
 git clone https://github.com/landrevillejf/beyond-linux-from-scratch.git
 cd beyond-linux-from-scratch
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt   # if exists, otherwise only pytest etc. are used
-```
 
-No separate installation is needed – the builder is a single Python script `builder.py`. All dependencies are pulled via `pip install` as needed.
+# Install Python test/build dependencies
+python3 -m pip install -r tests/requirements-test.txt
 
----
+# List available profiles
+python3 builder.py --list-profiles
 
-## Usage
-
-Basic command:
-
-```bash
-python3 builder.py [OPTIONS]
-```
-
-### Common examples
-
-```bash
-# Build default XFCE + sysvinit with live ISO
+# Build default profile (xfce)
 python3 builder.py
+```
 
-# Build a minimal CLI system (no GUI)
+Common variants:
+
+```bash
+# Minimal CLI system
 python3 builder.py --profile minimal
 
-# Build for ARM64 (Raspberry Pi)
+# SysV init build
+python3 builder.py --profile xfce --init sysvinit
+
+# Server rootfs (no live ISO)
+python3 builder.py --profile server --no-live
+
+# ARM64 cross profile
 python3 builder.py --profile arm64 --config config/build-cross.conf
 
-# Build KDE Plasma with systemd
-python3 builder.py --profile kde --init systemd
-
-# Use a pre‑built cache and skip compilation
+# Use cache to skip compilation
 python3 builder.py --profile xfce --use-cache
 
 # Resume a failed build from the "desktop" stage
 python3 builder.py --resume-from desktop
 
-# List all available profiles
-python3 builder.py --list-profiles
-
-# Show detailed info about a profile
-python3 builder.py --profile-info full
-
-# Clean the build directory
-python3 builder.py --clean --output ./lfs-build
-
 # Write the ISO to a USB drive
 python3 builder.py --write-usb /dev/sdb
+
+# Generate sources.list and exit
+python3 builder.py --generate-sources-list
 ```
 
 ---
 
-## Command‑line Options
+## Command line reference
 
 | Option | Description |
 |--------|-------------|
-| `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`. |
-| `--output` | Output directory (default: `./lfs-build`). |
-| `--config` | Configuration file path (default: `config/build.conf`). |
-| `--resume-from` | Resume build from a specific stage (e.g., `desktop`). |
-| `--write-usb` | Write the generated ISO to a USB device (e.g., `/dev/sdb`). |
-| `--list-profiles` | List all available profiles. |
-| `--profile-info` | Show detailed information about a specific profile. |
-| `--clean` | Delete the build directory (interactive confirmation). |
-| `--verbose` / `-v` | Enable DEBUG logging. |
-| `--init` | Override the init system (`systemd`, `sysvinit`, `openrc`, `runit`, `s6`). |
-| `--no-live` | Disable live system creation (only produce the root filesystem). |
-| `--version` | Show version information. |
-| `--use-cache` | Use a pre‑built cache (skip compilation) if available. |
-| `--cache-only` | Only use the cache; fail if not found. |
-| `--cache-url` | Custom URL for cache metadata (default: a predefined JSON). |
-| `--kernel-type` | Kernel type: `linux`, `linux-libre`, `gnu-hurd`, `freebsd`. |
+| `--profile` | Build profile (`xfce` by default) |
+| `--output` | Output directory (`./lfs-build` by default) |
+| `--config` | Configuration file path (`config/build.conf`) |
+| `--resume-from` | Resume from a specific stage |
+| `--write-usb <device>` | Write generated ISO to a USB device |
+| `--list-profiles` | Print available profiles |
+| `--profile-info <profile>` | Print profile details |
+| `--clean` | Interactive cleanup of output directory |
+| `--verbose`, `-v` | Enable debug logs |
+| `--init` | Init override (`systemd`, `sysvinit`, `openrc`, `runit`, `s6`) |
+| `--no-live` | Disable live-system stage |
+| `--version` | Print builder version |
+| `--use-cache` | Use cache metadata to restore prebuilt image |
+| `--cache-only` | Require cache hit; fail otherwise |
+| `--cache-url` | Override cache metadata URL |
+| `--kernel-type` | Kernel type (`linux`, `linux-libre`, `gnu-hurd`, `freebsd`) |
+| `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
+| `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
+| `--generate-sources-list` | Generate `packages/sources.list` and exit |
 
 ---
 
-## Build Profiles
+## Build profiles
 
-The builder comes with a set of predefined profiles that configure the target system. Each profile defines:
+Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 
-- Description
-- Approximate size on disk (GB)
-- Estimated build time (hours)
-- List of packages (or categories)
-- Desktop environment (or `None`)
-- Init system
-- Whether to include Java development tools
-- Package manager (LPM)
-- Security hardening
-- Privacy tools
-- Live system support
-- System updater
-- Cross‑compilation settings (for ARM profiles)
-
-### Available Profiles
-
-| Profile | Description |
-|---------|-------------|
-| `minimal` | CLI‑only, no GUI, small footprint |
-| `gnu-free` | 100% FSF‑compliant free software system |
-| `gnu-free-full` | Full GNU system with all GNU packages |
-| `xfce` | XFCE desktop environment (default) |
-| `gnome` | GNOME desktop environment |
-| `java-dev` | Java development environment with XFCE |
-| `secure` | Security‑hardened system with privacy tools |
-| `full` | Complete system with everything |
-| `arm64` | ARM64 server (Raspberry Pi, Orange Pi) |
-| `audio-cli` | CLI‑only audio production system |
-| `pinebook` | Pinebook / Pinebook Pro ARM64 laptop |
-| `audio-studio` | Full audio production studio with XFCE |
-| `kde` | KDE Plasma full‑featured desktop |
-| `lxqt` | LXQt extremely lightweight Qt desktop |
-| `server` | Production‑optimised server configuration |
-| `brax3` | Brax3 Linux smartphone (Qualcomm Snapdragon) |
-| `custom` | User‑defined custom profile template |
+| Profile | Description | Desktop | Default init | Arch | Live | Size (GB) | Build time (h) |
+|---|---|---|---|---|---:|---:|---:|
+| `minimal` | Minimal command-line only system | none | sysvinit | x86_64 | No | 1 | 2 |
+| `gnu-free` | 100% free software system | none | sysvinit | x86_64 | No | 3 | 4 |
+| `gnu-free-full` | Full GNU stack | xfce | sysvinit | x86_64 | Yes | 10 | 8 |
+| `xfce` | XFCE desktop environment | xfce | systemd | x86_64 | Yes | 4 | 4 |
+| `gnome` | GNOME desktop environment | gnome | systemd | x86_64 | Yes | 8 | 8 |
+| `kde` | KDE Plasma desktop environment | kde | systemd | x86_64 | Yes | 10 | 12 |
+| `lxqt` | Lightweight LXQt desktop | lxqt | systemd | x86_64 | Yes | 2 | 3 |
+| `java-dev` | Java development stack on XFCE | xfce | systemd | x86_64 | Yes | 10 | 6 |
+| `server` | Server-oriented profile | none | sysvinit | x86_64 | No | 2 | 3 |
+| `secure` | Hardened profile with privacy tools | xfce | sysvinit | x86_64 | Yes | 6 | 5 |
+| `full` | Full feature profile | gnome | systemd | x86_64 | Yes | 20 | 12 |
+| `audio-cli` | Headless audio production | none | sysvinit | x86_64 | No | 2 | 3 |
+| `audio-studio` | Desktop audio production | xfce | systemd | x86_64 | Yes | 8 | 6 |
+| `arm64` | ARM64 server profile | none | sysvinit | aarch64 | No | 2 | 3 |
+| `pinebook` | Pinebook profile | xfce | sysvinit | aarch64 | No | 4 | 4 |
+| `brax3` | Brax3 smartphone profile | phosh | systemd | aarch64 | No | 4 | 5 |
+| `custom` | User-defined profile template | none | sysvinit | x86_64 | No | 5 | 5 |
 
 ---
 
-## Configuration File
+## Configuration model
 
-The builder uses a JSON configuration file (default: `config/build.conf`). It contains all settings for the build:
+Primary configuration file: `config/build.conf` (JSON).
 
-- LFS/BLFS versions
-- Build threads
-- Cross‑compilation flags
-- Init system options
-- Package manager settings
-- Live system parameters
-- Desktop settings
-- Security options
-- Kernel version and modules
-- Network, locale, timezone, users
-- Repository URLs
-- Build options (parallel, stripping, checksum verification)
+Key sections:
 
-You can override any setting by editing the file. The builder will create a default configuration if the file does not exist.
+- `init_system`: selected init, service style, restart policy
+- `kernel`: kernel version/type/config and module list
+- `live_system`: live ISO behavior (compression, persistence, default boot)
+- `package_manager`: LPM behavior
+- `system_updater`: update policy
+- `security`: hardening, firewall, auditing, privacy flags
+- `bootloader`: grub/uboot metadata
+- `repositories`: source list endpoints
 
----
+At runtime, builder exports all configuration and profile values to shell stages:
 
-## Build Stages
+- Fixed env vars: `LFS`, `PROFILE`, `INIT_SYSTEM`, `KERNEL_TYPE`, etc.
+- Flattened vars: `LFS_CONFIG_*` and `LFS_PROFILE_*`
 
-The build process is divided into several stages, executed in order:
+These values are preserved inside built systems in:
 
-1. **host-check** – verify host system prerequisites.
-2. **host-prepare** – prepare the host environment (create user, directories).
-3. **disk-image** – create a disk image file.
-4. **toolchain** – build the cross‑toolchain (binutils, gcc).
-5. **qemu-setup** – set up QEMU user emulation for cross‑compilation.
-6. **uboot** – build U‑Boot for ARM boards.
-7. **lfs-basic** – build the basic LFS system (bash, coreutils, etc.).
-8. **lfs-system** – build the full LFS system (glibc, binutils, gcc).
-9. **init-system** – install the chosen init system.
-10. **service-abstraction** – set up service management.
-11. **configure-lfs** – configure the LFS system.
-12. **blfs-base** – build BLFS base packages (curl, openssl, etc.).
-13. **build-kernel** – compile the Linux kernel.
-14. **desktop** – build the desktop environment (if enabled).
-15. **applications** – install desktop applications.
-16. **configure-desktop** – configure the desktop.
-17. **package-manager** – install the LPM package manager.
-18. **base-packages** – install base packages via LPM.
-19. **security** – apply security hardening.
-20. **privacy** – install privacy tools.
-21. **branding** – apply custom branding (themes, wallpapers).
-22. **first-boot** – set up first‑boot services.
-23. **system-updater** – install the system updater.
-24. **package-updater** – install the package updater.
-25. **lpm-advanced** – advanced LPM features.
-26. **initramfs** – create the initramfs.
-27. **bootloader** – install the bootloader (GRUB).
-28. **installer** – create the bootable ISO.
-29. **live-system** – generate the live squashfs and final ISO.
+```text
+/etc/lfs-builder-params.env
+```
 
-If a stage fails, you can resume from that stage using `--resume-from`.
+### Branding configuration
 
----
+Branding is fully configurable from `config/build.conf`:
 
-## Cache Mechanism
+```json
+"branding": {
+  "preset": "default",
+  "dir": "",
+  "theme_variant": "dark",
+  "gtk_theme": "",
+  "icon_theme": "",
+  "wallpaper": "lfs-wallpaper.png",
+  "apply_desktops": "auto",
+  "strict": false
+}
+```
 
-The builder can use a pre‑built root filesystem cache to avoid lengthy compilation steps. This is useful for CI/CD pipelines or for quickly testing final stages.
+Behavior:
 
-- Enable with `--use-cache`.
-- The cache is downloaded from a URL specified in `--cache-url` (default points to a metadata JSON).
-- The metadata contains entries for each profile, init system, and architecture.
-- If the cache is found and successfully extracted, all build stages are skipped.
-- With `--cache-only`, the builder will fail if the cache is not available.
+1. `preset` selects `branding/<preset>/`.
+2. `dir` can override with an absolute or repository-relative path.
+3. `theme_variant`, `gtk_theme`, and `icon_theme` control theme identity.
+4. `apply_desktops` accepts `auto`, `all`, or a comma list (`xfce,gnome,kde,lxqt,phosh`).
+5. `strict` turns missing assets into hard errors.
+
+Branding stage outputs:
+
+- `/etc/lfs-builder-params.env`
+- `/etc/lfs-branding-manifest.txt` (installed assets + checksums)
 
 ---
 
-## USB Writing
+## Artifacts and outputs
+
+Default output tree (`--output`):
+
+```text
+<output>/
+|-- build_info.json
+|-- logs/
+|-- sources/
+|-- image/
+|   `-- boot/vmlinuz*
+`-- lfs-installer.iso   (if live enabled)
+```
+
+Typical outputs:
+
+- Live builds: ISO + kernel + logs + metadata
+- Non-live builds (`--no-live`): root filesystem image tree + kernel + logs
+- Cache workflows: compressed rootfs cache archive (`.tar.zst`)
+
+---
+
+## USB writing
 
 The `--write-usb` option writes the generated ISO to a USB drive.
 
@@ -244,59 +417,145 @@ The `--write-usb` option writes the generated ISO to a USB drive.
 
 ---
 
-## Cross‑Compilation (ARM64)
-
-To build for ARM64 (e.g., Raspberry Pi), use the `arm64` or `pinebook` profile. The builder:
-
-- Sets `cross_compile = True` in the configuration.
-- Uses the cross‑toolchain (`gcc-aarch64-linux-gnu` etc.).
-- Sets up QEMU user emulation for running ARM binaries on the host.
-- Builds U‑Boot as the bootloader.
-- Produces a raw disk image (`.img`) instead of an ISO.
-
-Cross‑compilation requires that the cross‑toolchain be installed on the host (provided by the Docker image on macOS/Windows).
-
----
-
-## Custom Sources
+## Custom sources
 
 You can add custom source URLs (e.g., for private mirrors or additional packages) by creating a file `packages/custom-sources.list`. Each line should contain a URL to a tarball. The builder will append these to the main `sources.list` during the download stage.
 
 ---
 
+## GitHub Actions workflow model
+
+### Workflow architecture
+
+```mermaid
+graph TD
+    A["Cache workflows"] --> A1["xfce-sysvinit-x86_64-build-cache.yml"]
+    A --> A2["xfce-systemd-x86_64-build-cache.yml"]
+
+    B["ISO release workflows"] --> B1["xfce-live-boot-iso.yml"]
+    B --> B2["release.yml"]
+    B --> B3["nightly.yml"]
+
+    C["ISO from cache workflow"] --> C1["build-iso-from-cache.yml"]
+
+    D["CI and governance workflows"] --> D1["python-app.yml"]
+    D --> D2["codeql.yml"]
+    D --> D3["codacy-security-scan.yml"]
+    D --> D4["docs.yml"]
+    D --> D5["benchmark.yml"]
+    D --> D6["pr-labeler.yml"]
+    D --> D7["squash-pr.yml"]
+    D --> D8["cross-compile.yml"]
+    D --> D9["build.yml"]
+```
+
+### Build and release workflow behavior
+
+| Workflow | Purpose | Produces release | Produces ISO | Produces kernel artifact | Cache-only |
+|---|---|---:|---:|---:|---:|
+| `xfce-sysvinit-x86_64-build-cache.yml` | Build reusable cache rootfs | No | No | Verified in cache | Yes |
+| `xfce-systemd-x86_64-build-cache.yml` | Build reusable cache rootfs | No | No | Verified in cache | Yes |
+| `build-iso-from-cache.yml` | Reconstruct ISO from cache archive | Optional | Yes | Yes | No |
+| `xfce-live-boot-iso.yml` | Full live ISO release pipeline | Yes | Yes | Yes | No |
+| `release.yml` | Tagged release build pipeline | Yes | Yes | Yes | No |
+| `nightly.yml` | Scheduled profile matrix builds | Artifact upload | Yes | Yes | No |
+
+All release-capable workflows explicitly verify:
+
+1. ISO presence and non-empty file
+2. Kernel artifact presence (`image/boot/vmlinuz*`)
+3. SHA256 checksum generation for published assets
+
+---
+
+## Testing and quality gates
+
+Test suite location:
+
+```text
+tests/
+```
+
+Includes:
+
+- Unit tests
+- Integration tests
+- BDD feature tests (`tests/features/*.feature`)
+- Coverage measurement
+
+Current baseline in this repository:
+
+- `builder.py` coverage target: 100%
+- BDD scenarios are executable through pytest + `pytest-bdd`
+
+Run locally:
+
+```bash
+python3 -m pip install -r tests/requirements-test.txt
+python3 -m pytest tests/ --cov=builder --cov-report=term-missing
+```
+
+---
+
 ## Troubleshooting
 
-- **Build fails at a stage** – check the log file at `./lfs-build/logs/<stage>.log`. The builder prints the last 50 lines on failure.
-- **Missing host tools** – install required packages (see System Requirements).
-- **Disk space** – a full desktop build may require 20–30 GB. Use `--clean` to free space.
-- **Download errors** – some source URLs may be outdated. Update `packages/sources.list` manually or via `_update_sources_list()`.
-- **Cache not found** – ensure `--cache-url` points to a valid metadata JSON.
-- **USB write permission denied** – use `sudo` or run as root.
+### Build stops at prerequisites
+
+- Confirm host dependencies are installed.
+- Use `--host-distro` when distro detection is ambiguous.
+
+### Live ISO missing
+
+- Check whether `--no-live` was used.
+- Verify final stages logs in `<output>/logs/`.
+
+### Kernel missing in output
+
+- Inspect `lfs/09-build-kernel.sh` stage log.
+- Confirm `kernel.type` in config and source availability.
+
+### Download errors
+
+- Some source URLs may be outdated. Update `packages/sources.list` manually or via `python3 builder.py --generate-sources-list`.
+- Add a `packages/custom-sources.list` with mirror URLs.
+
+### Cache not found
+
+- Ensure `--cache-url` points to a valid metadata JSON.
+- With `--cache-only`, the build will fail if cache is unavailable.
+
+### USB write permission denied
+
+- Use `sudo` or run as root.
+
+### Resume after failure
+
+```bash
+python3 builder.py --resume-from <stage-name> --profile <profile> --output <output-dir>
+```
+
+### Regenerate source list
+
+```bash
+python3 builder.py --generate-sources-list
+```
+
+---
+
+## Security and support
+
+- Security policy: [SECURITY.md](SECURITY.md)
+- Changelog: [CHANGELOG.md](CHANGELOG.md)
+- Advanced notes: [ADVANCED.md](ADVANCED.md)
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please follow these guidelines:
-
-- Fork the repository and create a feature branch.
-- Write tests for new functionality (pytest).
-- Ensure 100% code coverage.
-- Update documentation accordingly.
-- Submit a pull request.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
 
 ---
 
 ## License
 
-This project is licensed under the GNU General Public License v3.0 – see the [LICENSE file](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/LICENSE) for details.
-
----
-
-## Support
-
-For issues, questions, or suggestions, please open an issue on GitHub.
-
----
-
-*Happy building!*
+This project is licensed under GPLv3. See [LICENSE](LICENSE).
