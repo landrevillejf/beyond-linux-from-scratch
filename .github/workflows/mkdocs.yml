@@ -1,0 +1,40 @@
+site_name: Way Beyond Linux From Scratch
+site_description: Automated LFS/BLFS distribution builder
+site_url: https://landrevillejf.github.io/beyond-linux-from-scratch/
+repo_url: https://github.com/landrevillejf/beyond-linux-from-scratch
+repo_name: landrevillejf/beyond-linux-from-scratch
+
+theme:
+  name: material
+  palette:
+    scheme: dark
+    primary: green
+    accent: light-green
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+  - mkdocs-same-dir:
+      enabled: true
+      include: "**/*.md"
+      plugins:
+        - mkdocs-same-dir:
+            enabled: true
+            include: "**/*.md"
+            exclude:
+              - "**/venv/**"
+              - "**/build-release/**"
+              - "**/lfs-build/**"
+              - "**/__pycache__/**"
+              - "**/.git/**"
+              - "**/.*/**"
+
+# Pas besoin de navigation manuelle – mkdocs-same-dir va tout trouver
