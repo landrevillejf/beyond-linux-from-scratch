@@ -616,6 +616,49 @@ def apply_glow(img, color=(255,255,255,50), radius=5):
     glow = glow.filter(ImageFilter.GaussianBlur(radius))
     return Image.alpha_composite(img, glow)
 
+def apply_cartoon_effect(img, intensity=0.5, bits=4):
+    # Convert to RGB if needed
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    # Smooth
+    smoothed = img.filter(ImageFilter.SMOOTH_MORE)
+    # Posterize
+    posterized = ImageOps.posterize(smoothed, bits)
+    # Edge detection
+    edges = img.filter(ImageFilter.FIND_EDGES)
+    edges = edges.convert('L')  # grayscale
+    # Invert edges to get black lines on white
+    edges = ImageOps.invert(edges)
+    # Blend edges with posterized image using intensity
+    # We can convert edges to RGB and blend with alpha
+    if intensity > 0:
+        edges_rgb = Image.merge('RGB', (edges, edges, edges))
+        # Composite: overlay edges as black lines? Actually we want to darken edges.
+        # Use blend: posterized * (1 - intensity) + edges * intensity? But edges is white where no edge.
+        # Better: multiply blend: posterized * (edges / 255)
+        # For simplicity, use Image.blend with a dark edge mask.
+        # Let's do: darken the posterized image where edges are strong.
+        # Create a mask: edges with intensity applied.
+        # Use `Image.composite` with a dark color for edges.
+        # Simpler: create a black image, and use edges as alpha to overlay black over posterized.
+        edge_mask = edges.point(lambda p: 255 - int(p * intensity))  # intensity controls darkness
+        # Actually we want edges to be black lines. So we set edge pixels to black.
+        # We can create a black image and use edges as mask to overlay black.
+        black = Image.new('RGB', img.size, (0,0,0))
+        # edges is white on black; we want black lines on transparent, so invert again?
+        # edges are white lines on black background (after invert), so we can use that as mask for black.
+        # Actually after invert, edges are white lines on black, so we can use that as mask to overlay black.
+        edge_mask = edges  # white lines
+        # Composite: posterized, then overlay black where edge_mask is white.
+        result = Image.composite(black, posterized, edge_mask)
+        # Then blend with posterized based on intensity? We can use blend.
+        # Actually we want to keep some of the original posterized colors, and only darken edges.
+        # We can blend between posterized and result with intensity.
+        result = Image.blend(posterized, result, intensity)
+        return result
+    else:
+        return posterized
+
 # ============================================================================
 # COMMAND LINE INTERFACE
 # ============================================================================
