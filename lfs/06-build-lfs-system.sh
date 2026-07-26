@@ -193,10 +193,8 @@ extract() {
 # ----- Helper: find archive (supports .tar.xz, .tar.gz, .tgz, etc.) -----
 find_archive() {
     local base=$1
-    local archive=$(ls "$base"*.tar.* 2>/dev/null | head -1)
-    if [ -z "$archive" ]; then
-        archive=$(ls "$base"*.tgz 2>/dev/null | head -1)
-    fi
+    # Use find to list files matching the base name, ignoring case and handling any extension
+    local archive=$(find . -maxdepth 1 -type f -name "${base}*.tar.*" -o -name "${base}*.tgz" 2>/dev/null | head -1 | sed 's|^\./||')
     echo "$archive"
 }
 
