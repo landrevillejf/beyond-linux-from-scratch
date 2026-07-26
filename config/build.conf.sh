@@ -17,10 +17,10 @@ ARCH="x86_64"
 
 # Target triplet (auto-detected from ARCH)
 case "$ARCH" in
-    x86_64)   TARGET="x86_64-lfs-linux-gnu" ;;
-    i686)     TARGET="i686-lfs-linux-gnu" ;;
-    aarch64)  TARGET="aarch64-lfs-linux-gnu" ;;
-    armv7hl)  TARGET="armv7hl-lfs-linux-gnueabihf" ;;
+    x86_64)   TARGET="x86_64-lfs-linux" ;;
+    i686)     TARGET="i686-lfs-linux" ;;
+    aarch64)  TARGET="aarch64-lfs-linux" ;;
+    armv7hl)  TARGET="armv7hl-lfs-linux" ;;
 esac
 
 # ============================================================================
