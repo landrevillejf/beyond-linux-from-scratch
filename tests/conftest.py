@@ -90,7 +90,7 @@ def mock_config_file(temp_dir):
             "boot_mb": 512
         },
         "kernel": {
-            "version": "6.12.20",
+            "version": "6.16.1",
             "config": "config/kernel-config",
             "modules": ["ext4", "xfs", "nvme"]
         },
@@ -146,7 +146,7 @@ def sample_sources_list(temp_dir):
     """Create sample sources.list file"""
     sources_file = temp_dir / "sources.list"
     content = """# LFS Core Packages
-https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.12.20.tar.xz
+https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
 https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
 
 # Audio Packages
@@ -161,7 +161,7 @@ https://github.com/FluidSynth/fluidsynth/releases/download/v2.5.0/fluidsynth-2.5
 def sample_md5sums(temp_dir):
     """Create sample md5sums file"""
     md5_file = temp_dir / "md5sums"
-    content = """1234567890abcdef1234567890abcdef linux-6.12.20.tar.xz
+    content = """1234567890abcdef1234567890abcdef linux-6.16.1.tar.xz
 abcdef1234567890abcdef1234567890 gcc-15.2.0.tar.xz
 """
     md5_file.write_text(content)

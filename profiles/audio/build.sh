@@ -107,10 +107,10 @@ configure_studio_full() {
     log_info "Configuring full studio environment..."
 
     # Real-time kernel
-    if [ -f /sources/linux-6.12.20-rt.tar.xz ]; then
+    if [ -f /sources/linux-6.16.1-rt.tar.xz ]; then
         cd /sources
-        tar -xf linux-6.12.20-rt.tar.xz
-        cd linux-6.12.20-rt
+        tar -xf linux-6.16.1-rt.tar.xz
+        cd linux-6.16.1-rt
         scripts/config --enable PREEMPT_RT
         make -j$(nproc)
         make modules_install

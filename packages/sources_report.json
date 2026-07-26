@@ -16,7 +16,7 @@
       "message": "OK (HEAD 200)"
     },
     {
-      "url": "https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.12.20.tar.xz",
+      "url": "https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz",
       "valid": true,
       "message": "OK (HEAD 200)"
     },

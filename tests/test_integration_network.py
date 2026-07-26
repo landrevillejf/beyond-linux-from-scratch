@@ -188,7 +188,7 @@ class TestRealSourceLists:
     def test_download_critical_packages(self, downloader, real_sources_list):
         """Download some critical LFS packages (slow, may fail)"""
         critical_files = [
-            "linux-6.12.20.tar.xz",
+            "linux-6.16.1.tar.xz",
             "gcc-15.2.0.tar.xz",
             "glibc-2.43.tar.xz",
             "make-4.4.1.tar.gz",

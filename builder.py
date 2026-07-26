@@ -216,7 +216,7 @@ class LFSConfig:
             },
 
             "kernel": {
-                "version": "6.12.20",
+                "version": "6.16.1",
                 "type": "linux",
                 "config": "config/kernel-config",
                 "modules": ["ext4", "xfs", "nvme", "virtio", "usb_storage", "overlay", "vfat", "ntfs"],

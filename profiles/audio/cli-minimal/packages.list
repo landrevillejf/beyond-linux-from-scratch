@@ -7,8 +7,8 @@
 # ============================================================================
 # BASE SYSTEM (LFS 13.0 core)
 # ============================================================================
-linux-6.12.20
-linux-headers-6.12.20
+linux-6.16.1
+linux-headers-6.16.1
 glibc-2.43
 gcc-15.2.0
 binutils-2.46.0
@@ -47,7 +47,7 @@ sysvinit-3.14
 # REAL-TIME KERNEL (Optional - for low latency)
 # ============================================================================
 # Note: RT kernel requires manual patching or use linux-rt package
-# linux-rt-6.12.20
+# linux-rt-6.16.1
 
 # ============================================================================
 # AUDIO SYSTEM CORE

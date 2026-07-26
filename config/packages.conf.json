@@ -8,7 +8,7 @@
       "required": true,
       "description": "LFS 13.0 core packages",
       "packages": [
-        {"name": "linux", "version": "6.12.20", "url": "https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.12.20.tar.xz", "type": "kernel"},
+        {"name": "linux", "version": "6.16.1", "url": "https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz", "type": "kernel"},
         {"name": "gcc", "version": "15.2.0", "url": "https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz", "type": "compiler"},
         {"name": "binutils", "version": "2.46.0", "url": "https://ftp.gnu.org/gnu/binutils/binutils-2.46.0.tar.xz", "type": "toolchain"},
         {"name": "glibc", "version": "2.43", "url": "https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz", "type": "libc"},

@@ -532,11 +532,11 @@ https://custom.url/source2.tar.xz
         packages_dir.mkdir()
         sources_file = packages_dir / "sources.list"
         custom_file = packages_dir / "custom-sources.list"
-        custom_file.write_text("https://mirror.local/linux-6.12.20.tar.xz\n")
+        custom_file.write_text("https://mirror.local/linux-6.16.1.tar.xz\n")
 
         mock_response = MagicMock()
         mock_response.read.return_value = (
-            b"https://old.lfs.org/linux-6.12.20.tar.xz\n"
+            b"https://old.lfs.org/linux-6.16.1.tar.xz\n"
             b"https://official.url/bash-5.3.tar.gz\n"
         )
         mock_response.__enter__.return_value = mock_response
@@ -546,8 +546,8 @@ https://custom.url/source2.tar.xz
             assert result is True
 
         content = sources_file.read_text()
-        assert "https://mirror.local/linux-6.12.20.tar.xz" in content
-        assert "https://old.lfs.org/linux-6.12.20.tar.xz" not in content
+        assert "https://mirror.local/linux-6.16.1.tar.xz" in content
+        assert "https://old.lfs.org/linux-6.16.1.tar.xz" not in content
         assert "https://official.url/bash-5.3.tar.gz" in content
 
     def test_update_sources_list_custom_overrides_different_version(self, tmp_path, monkeypatch):

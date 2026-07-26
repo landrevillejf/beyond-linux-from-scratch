@@ -13,8 +13,8 @@ include:../minimal/packages.list
 # ============================================================================
 
 # Linux kernel with Qualcomm Snapdragon support
-# Version 6.12.20 with Qcom patches
-https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.20.tar.xz
+# Version 6.16.1 with Qcom patches
+https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
 
 # Qualcomm-specific kernel patches
 # https://github.com/msm8953-mainline/linux

@@ -416,7 +416,7 @@ glibc:2.43:GNU C Library:linux-headers:sha256-dummy
 binutils:2.46.0:GNU Binary Utilities:glibc:sha256-dummy
 openssl:3.6.1:OpenSSL library:glibc:sha256-dummy
 curl:8.5.0:Command line URL fetcher:openssl,glibc:sha256-dummy
-linux:6.12.20:Linux kernel::sha256-dummy
+linux:6.16.1:Linux kernel::sha256-dummy
 EOF
     log_success "Database updated"
 }
