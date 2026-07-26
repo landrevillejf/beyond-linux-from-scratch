@@ -1149,6 +1149,7 @@ class LFSBuilder:
             'PRIVACY_TOOLS': str(self.profile_config.get('privacy_tools', False)).lower(),
             'LIVE_SYSTEM': str(self.profile_config.get('live_system', True)).lower(),
             'KERNEL_TYPE': str(self.config.get('kernel.type', 'linux')).lower(),
+            'KERNEL_VERSION': str(self.config.get('kernel.version', '6.16.1')),
             'SYSTEM_UPDATER': str(self.profile_config.get('system_updater', True)).lower(),
             'LFS_VERSION': __version__,
             'LC_ALL': 'POSIX'
@@ -1516,90 +1517,95 @@ class LFSBuilder:
 
     def _update_sources_list(self) -> bool:
         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""
-        sources_file = Path('packages/sources.list')
-        custom_file = Path('packages/custom-sources.list')
-        repo_urls = self.config.get('repositories', [])
+    sources_file = Path('packages/sources.list')
+    custom_file = Path('packages/custom-sources.list')
+    repo_urls = self.config.get('repositories', [])
 
-        if not repo_urls:
-            self.logger.warning("No repository URLs configured, skipping sources update")
-            return False
+    if not repo_urls:
+        self.logger.warning("No repository URLs configured, skipping sources update")
+        return False
 
-        urls_by_key: Dict[str, str] = {}
-        override_count = 0
-        success_official = False
+    urls_by_key: Dict[str, str] = {}
+    override_count = 0
+    success_official = False
 
-        def source_key(url: str) -> str:
-            filename = Path(urlparse(url).path).name
-            if filename:
-                # Strip the version number (and the trailing file extension that comes
-                # after it) from the archive filename so that different versions of the
-                # same package share the same key.  This lets custom-sources.list
-                # override the official version even when the version numbers differ.
-                #
-                # The regex matches the first occurrence of an optional separator
-                # (hyphen or underscore), an optional 'v' prefix, a leading digit,
-                # then any remaining digits/dots/plus signs, and finally `.*$` which
-                # strips the rest of the string — including any sub-version suffixes
-                # and the file extension (e.g. '.tar.xz').
-                #
-                # Examples (filename → key base):
-                #   gawk-5.3.2.tar.xz        → gawk
-                #   gawk-5.4.0.tar.xz        → gawk  (same key, custom version wins)
-                #   node-v22.18.0.tar.xz     → node
-                #   ImageMagick-7.1.2-27.tar.gz → ImageMagick
-                #   sqlite-autoconf-3500400.tar.gz → sqlite-autoconf
-                base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
-                if not base:
-                    self.logger.warning(
-                        f"source_key: regex stripped entire filename '{filename}'; "
-                        "using full filename as key"
-                    )
-                    return f"pkg:{filename}"
-                return f"pkg:{base}"
-            return f"url:{url}"
+    def source_key(url: str) -> str:
+        filename = Path(urlparse(url).path).name
+        if filename:
+            # Strip version number and trailing extension for consistent key
+            base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
+            if not base:
+                self.logger.warning(
+                    f"source_key: regex stripped entire filename '{filename}'; "
+                    "using full filename as key"
+                )
+                return f"pkg:{filename}"
+            return f"pkg:{base}"
+        return f"url:{url}"
 
-        for repo_url in repo_urls:
-            try:
-                self.logger.info(f"Fetching sources list from {repo_url}")
-                with urllib.request.urlopen(repo_url, timeout=30) as resp:
-                    content = resp.read().decode('utf-8')
-                    for line in content.splitlines():
-                        line = line.strip()
-                        if line and not line.startswith('#'):
-                            key = source_key(line)
-                            urls_by_key.setdefault(key, line)
-                    success_official = True
-            except Exception as e:
-                self.logger.warning(f"Failed to fetch {repo_url}: {e}")
-
-        # Ajouter les sources personnalisées
-        if custom_file.exists():
-            self.logger.info(f"Appending custom sources from {custom_file}")
-            with open(custom_file, 'r') as cf:
-                for line in cf:
+    # Fetch official sources
+    for repo_url in repo_urls:
+        try:
+            self.logger.info(f"Fetching sources list from {repo_url}")
+            with urllib.request.urlopen(repo_url, timeout=30) as resp:
+                content = resp.read().decode('utf-8')
+                for line in content.splitlines():
                     line = line.strip()
                     if line and not line.startswith('#'):
                         key = source_key(line)
-                        previous = urls_by_key.get(key)
-                        if previous and previous != line:
-                            override_count += 1
-                        urls_by_key[key] = line
+                        urls_by_key.setdefault(key, line)
+                success_official = True
+        except Exception as e:
+            self.logger.warning(f"Failed to fetch {repo_url}: {e}")
 
-        # Si aucune URL n'a été trouvée, on retourne False
-        if not urls_by_key:
-            self.logger.error("No URLs found from official or custom sources")
-            return False
+    # --- Kernel substitution based on type and version ---
+    kernel_type = self.config.get('kernel.type', 'linux')
+    kernel_version = self.config.get('kernel.version', '6.16.1')
 
-        # Écrire le fichier sources.list avec toutes les URLs
-        with open(sources_file, 'w') as f:
-            f.write("# LFS Sources - Automatically generated from official wget-lists\n")
-            f.write(f"# Generated: {datetime.now().isoformat()}\n")
-            f.write("# DO NOT EDIT MANUALLY – changes will be overwritten\n\n")
-            for url in sorted(urls_by_key.values()):
-                f.write(f"{url}\n")
+    kernel_url = None
+    if kernel_type == 'linux':
+        kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
+    elif kernel_type == 'linux-libre':
+        kernel_url = f"https://www.linux-libre.fsfla.org/pub/linux-libre/releases/{kernel_version}-gnu/linux-libre-{kernel_version}-gnu.tar.xz"
+    # Add other kernel types if needed (gnu-hurd, freebsd, etc.)
 
-        if override_count:
-            self.logger.info(f"Applied {override_count} custom source override(s)")
+    if kernel_url:
+        # Remove any existing kernel-like entry
+        keys_to_remove = [k for k in urls_by_key if 'linux-' in k or k.startswith('pkg:linux')]
+        for k in keys_to_remove:
+            del urls_by_key[k]
+        # Add the new kernel URL
+        new_key = f"pkg:{kernel_type}-{kernel_version}"
+        urls_by_key[new_key] = kernel_url
+        self.logger.info(f"Using {kernel_type} kernel version {kernel_version}: {kernel_url}")
+
+    # --- Custom sources override ---
+    if custom_file.exists():
+        self.logger.info(f"Appending custom sources from {custom_file}")
+        with open(custom_file, 'r') as cf:
+            for line in cf:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    key = source_key(line)
+                    previous = urls_by_key.get(key)
+                    if previous and previous != line:
+                        override_count += 1
+                    urls_by_key[key] = line
+
+    if not urls_by_key:
+        self.logger.error("No URLs found from official or custom sources")
+        return False
+
+    # Write sources.list
+    with open(sources_file, 'w') as f:
+        f.write("# LFS Sources - Automatically generated from official wget-lists\n")
+        f.write(f"# Generated: {datetime.now().isoformat()}\n")
+        f.write("# DO NOT EDIT MANUALLY – changes will be overwritten\n\n")
+        for url in sorted(urls_by_key.values()):
+            f.write(f"{url}\n")
+
+    if override_count:
+        self.logger.info(f"Applied {override_count} custom source override(s)")
         self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom)")
         return True
 
@@ -1813,6 +1819,9 @@ Examples:
     parser.add_argument('--generate-sources-list', action='store_true',
                         help='Generate packages/sources.list from configured repositories and exit')
 
+    parser.add_argument('--kernel-version',
+                        help='Version du noyau (ex: 6.16.1, 6.12.20, etc.)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -1900,6 +1909,11 @@ def main():
     if args.kernel_type:
         builder.config.set('kernel.type', args.kernel_type)
         builder.logger.info(f"Kernel type overridden to: {args.kernel_type}")
+        refresh_executor = True
+
+    if args.kernel_version:
+        builder.config.set('kernel.version', args.kernel_version)
+        builder.logger.info(f"Kernel version overridden to: {args.kernel_version}")
         refresh_executor = True
 
     if args.bootloader:
