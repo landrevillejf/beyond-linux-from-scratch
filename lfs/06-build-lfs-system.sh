@@ -193,9 +193,17 @@ extract() {
 # ----- Helper: find archive (supports .tar.xz, .tar.gz, .tgz, etc.) -----
 find_archive() {
     local base=$1
-    # Use find to list files matching the base name, ignoring case and handling any extension
-    local archive=$(find . -maxdepth 1 -type f -name "${base}*.tar.*" -o -name "${base}*.tgz" 2>/dev/null | head -1 | sed 's|^\./||')
-    echo "$archive"
+    # Use bash globbing: match any file starting with $base and ending with .tar.* or .tgz
+    local files=( "${base}"*.tar.* )
+    if [ ${#files[@]} -eq 0 ]; then
+        files=( "${base}"*.tgz )
+    fi
+    if [ ${#files[@]} -gt 0 ]; then
+        # Return the first match (base name only)
+        echo "${files[0]}"
+    else
+        echo ""
+    fi
 }
 
 # ---- Install Linux API headers into /usr/include ----
