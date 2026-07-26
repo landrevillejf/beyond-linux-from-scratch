@@ -84,8 +84,6 @@ https://git.kernel.org/pub/scm/linux/kernel/git/dhowells/keyutils.git/snapshot/k
 # mesa
 https://archive.mesa3d.org/mesa-25.1.8.tar.xz
 
-https://www.linux-libre.fsfla.org/pub/linux-libre/releases/6.12.20-gnu/linux-libre-6.12.20-gnu.tar.xz
-
 # Stunnel - version 5.75
 http://rsync.belnet.be/mirror/ftp.frugalware.org/ftp/pub/frugalware/frugalware-stable/source/network-extra/stunnel/stunnel-5.75.tar.gz
 
