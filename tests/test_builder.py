@@ -7,6 +7,7 @@ import pytest
 import json
 import sys
 import os
+import logging
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from builder import LFSBuilder, ScriptExecutor, SourceDownloader, main
@@ -608,3 +609,28 @@ class TestLFSBuilder:
             main()  # Ne lève pas SystemExit, retourne normalement
         mock_update.assert_called_once()
         mock_print.assert_any_call("sources.list generated successfully.")
+
+    def test_main_kernel_version_override(self, monkeypatch, caplog):
+        """Vérifie que l'option --kernel-version modifie la config et log le message."""
+        from builder import main, LFSBuilder
+        import sys
+
+        # Sauvegarder l'argv original
+        original_argv = sys.argv.copy()
+        test_args = ['builder.py', '--kernel-version', '6.12.20', '--profile', 'minimal']
+        monkeypatch.setattr(sys, 'argv', test_args)
+
+        # Mocker les méthodes lourdes via patch pour une isolation propre
+        import builder
+        from unittest.mock import patch
+
+        with patch.object(builder.LFSBuilder, 'check_prerequisites', return_value=True), \
+                patch.object(builder.LFSBuilder, 'prepare_environment', return_value=True), \
+                patch.object(builder.LFSBuilder, 'download_sources', return_value=True), \
+                patch.object(builder.LFSBuilder, 'build', return_value=True):
+
+            caplog.set_level(logging.INFO)
+            main()
+
+        # Vérifier le log
+        assert "Kernel version overridden to: 6.12.20" in caplog.text
