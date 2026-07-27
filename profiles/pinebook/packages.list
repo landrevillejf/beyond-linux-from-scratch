@@ -14,8 +14,8 @@ include:../minimal/packages.list
 # ============================================================================
 
 # Linux kernel with Pinebook patches
-# Version 6.12.20 with RK3399 optimizations
-https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.12.20.tar.xz
+# Version 6.16.1 with RK3399 optimizations
+https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
 
 # Pinebook-specific kernel patches
 # From https://github.com/torvalds/linux/ (mainline includes RK3399 support)

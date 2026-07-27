@@ -10,7 +10,7 @@
 
 # Linux-libre kernel (version sans blobs propriétaires)
 # https://www.fsfla.org/ikiwiki/selibre/linux-libre/
-https://www.fsfla.org/svn/fsfla/software/linux-libre/releases/6.12.20-gnu/linux-libre-6.12.20-gnu.tar.xz
+https://www.fsfla.org/svn/fsfla/software/linux-libre/releases/6.16.1-gnu/linux-libre-6.16.1-gnu.tar.xz
 
 # GNU C Library
 https://ftp.gnu.org/gnu/glibc/glibc-2.43.tar.xz

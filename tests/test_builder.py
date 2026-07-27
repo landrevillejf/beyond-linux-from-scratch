@@ -617,7 +617,7 @@ class TestLFSBuilder:
 
         # Sauvegarder l'argv original
         original_argv = sys.argv.copy()
-        test_args = ['builder.py', '--kernel-version', '6.12.20', '--profile', 'minimal']
+        test_args = ['builder.py', '--kernel-version', '6.16.1', '--profile', 'minimal']
         monkeypatch.setattr(sys, 'argv', test_args)
 
         # Mocker les méthodes lourdes via patch pour une isolation propre
@@ -633,4 +633,4 @@ class TestLFSBuilder:
             main()
 
         # Vérifier le log
-        assert "Kernel version overridden to: 6.12.20" in caplog.text
+        assert "Kernel version overridden to: 6.16.1" in caplog.text
