@@ -1,5 +1,8 @@
 name: Build and deploy docs
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [ main ]
