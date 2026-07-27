@@ -146,7 +146,8 @@
       "vfat",
       "ntfs"
     ],
-    "custom_patches": []
+    "custom_patches": [],
+    "type": "linux"
   },
   "locale": "en_US.UTF-8",
   "timezone": "UTC",
@@ -202,5 +203,8 @@
     "max_size_mb": 100,
     "max_files": 10,
     "log_build_output": true
+  },
+  "host": {
+    "distro_override": "auto"
   }
 }
