@@ -56,8 +56,7 @@ BUILD_STAGES = [
     ('toolchain', 'host/04-build-toolchain.sh'),
     ('qemu-setup', 'host/00-setup-qemu.sh'),
     ('uboot', 'host/05-build-uboot.sh'),
-    ('lfs-basic', 'lfs/05-build-lfs-basic.sh'),
-    ('lfs-system', 'lfs/06-build-lfs-system.sh'),
+    ('lfs-system', 'lfs/05-build-lfs-system.sh'),
     ('init-system', 'lfs/06a-init-system.sh'),
     ('service-mgmt', 'lfs/06b-service-management.sh'),
     ('configure-lfs', 'lfs/07-configure-lfs.sh'),
@@ -1457,8 +1456,7 @@ class LFSBuilder:
             stages.append(('uboot', 'host/05-build-uboot.sh'))
 
         # LFS core
-        stages.append(('lfs-basic', 'lfs/05-build-lfs-basic.sh'))
-        stages.append(('lfs-system', 'lfs/06-build-lfs-system.sh'))
+        stages.append(('lfs-system', 'lfs/05-build-lfs-system.sh'))
 
         # Init system (sysvinit or systemd)
         stages.append(('init-system', 'lfs/06a-init-system.sh'))

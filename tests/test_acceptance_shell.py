@@ -127,8 +127,7 @@ exit 1
     def test_lfs_init_script_validation(self, temp_dir, test_env):
         """Validation de la syntaxe des scripts LFS"""
         lfs_scripts = [
-            'lfs/05-build-lfs-basic.sh',
-            'lfs/06-build-lfs-system.sh',
+            'lfs/05-build-lfs-system.sh',
             'lfs/06a-init-system.sh',
             'lfs/06b-service-management.sh',
         ]
@@ -173,28 +172,6 @@ exit 1
         assert "export LFS LC_ALL LFS_TGT PATH" in content
         assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in content
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in content
-
-    def test_lfs_basic_script_uses_build_root_local_tools_path(self):
-        """lfs-basic must install the temporary toolchain into $LFS/tools."""
-        basic_script = Path('lfs/05-build-lfs-basic.sh')
-        assert basic_script.exists()
-        content = basic_script.read_text()
-        normalized = content.replace('\\"', '"').replace('\\$', '$')
-        assert 'KERNEL_TYPE=${KERNEL_TYPE:-linux}' in content
-        assert 'TOOLS_DIR="$LFS/tools"' in content
-        assert '--prefix="$TOOLS_DIR"' in normalized
-        assert '--with-headers="$TOOLS_DIR/include"' in normalized
-        assert 'cp -rv usr/include/. "$TOOLS_DIR/include/"' in normalized
-        assert 'PATH=$LFS/tools/bin:/bin:/usr/bin' in normalized
-        assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in normalized
-        assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in normalized
-        assert 'rm -rf "$GCC_DIR"' in normalized
-        assert 'rm -rf "$GCC_DIR2"' in normalized
-        assert 'if [ "$pkg" = "bzip2" ]; then' in normalized
-        assert 'make PREFIX="$TOOLS_DIR" install' in normalized
-        assert 'rm -rf gcc-*' not in normalized
-        assert '--prefix=/tools' not in content
-        assert '--with-headers=/tools/include' not in content
 
     def test_shellcheck_on_scripts(self):
         """Exécuter shellcheck sur tous les scripts (si installé)"""
@@ -317,7 +294,7 @@ class TestIntegrationWorkflow:
         print(f"✅ {len(stages)} stages de build")
 
         # Vérifier les noms des stages critiques
-        critical_stages = ['lfs-basic', 'lfs-system', 'init-system']
+        critical_stages = ['lfs-system', 'init-system']
         for stage in critical_stages:
             stage_names = [s[0] for s in stages]
             assert stage in stage_names, f"{stage} not found"

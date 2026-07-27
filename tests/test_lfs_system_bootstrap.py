@@ -7,7 +7,7 @@ from pathlib import Path
 
 def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "lfs" / "06-build-lfs-system.sh"
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
     lfs_dir = temp_dir / "lfs-root"
     fake_bin = temp_dir / "fake-bin"
     lfs_tgt = f"{os.uname().machine}-lfs-linux-gnu"
@@ -79,7 +79,7 @@ exit 0
 
 def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
     repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "lfs" / "06-build-lfs-system.sh"
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
     output_dir = temp_dir / "build-output"
     lfs_dir = output_dir / "image"
     fake_bin = temp_dir / "fake-bin"
