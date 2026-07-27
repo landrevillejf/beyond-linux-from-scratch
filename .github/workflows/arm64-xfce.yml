@@ -1,4 +1,4 @@
-name: Cross-Compile ARM64
+name: ARM64
 
 on:
   schedule:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  cross:
+  arm64:
     runs-on: ubuntu-latest
     timeout-minutes: 480
     steps:
