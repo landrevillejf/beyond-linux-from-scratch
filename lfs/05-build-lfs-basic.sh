@@ -128,23 +128,38 @@ rm -rf \$BINUTILS_DIR
 
 # ----- GCC (pass 1) -----
 echo 'Building gcc (pass 1)'
-GCC_DIR=\$(tar -tf gcc-*.tar.xz | head -1 | cut -d/ -f1)
+GCC_DIR=$(tar -tf gcc-*.tar.xz | head -1 | cut -d/ -f1)
 tar -xf gcc-*.tar.xz
-cd \"\$GCC_DIR\"
+cd "$GCC_DIR"
+
+# Extract GMP, MPFR, MPC into GCC source tree (required by GCC configure)
+for lib in gmp mpfr mpc; do
+    # Find the archive (supports .tar.xz, .tar.gz, etc.)
+    archive=$(find "$LFS/sources" -maxdepth 1 -type f -name "${lib}-*.tar.*" | head -1)
+    if [ -z "$archive" ]; then
+        echo "ERROR: $lib source not found in $LFS/sources" >&2
+        exit 1
+    fi
+    echo "Extracting $archive into GCC tree"
+    tar -xf "$archive" -C .
+    # Rename extracted directory to just the library name (e.g., gmp-6.3.0 -> gmp)
+    dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+    mv "$dir" "$lib"
+done
+
 mkdir -v build
 cd build
-../configure --prefix=\"$TOOLS_DIR\"    \
+../configure --prefix="$TOOLS_DIR"    \
              --with-sysroot=$LFS        \
-             --target=\$(uname -m)-lfs-linux-gnu          \
+             --target=$(uname -m)-lfs-linux-gnu          \
              --disable-nls              \
              --enable-languages=c,c++   \
              --disable-multilib         \
              --disable-bootstrap        \
              --with-system-zlib
-make -j\$(nproc)
+make -j$(nproc)
 make install
 cd $LFS/sources
-# shellcheck disable=SC2027
 rm -rf "$GCC_DIR"
 
 # ----- Linux API headers -----
