@@ -66,12 +66,10 @@ jobs:
           cd /tmp/lfs-build
           sudo -u lfs python3 builder.py --generate-sources-list
 
-      # ❌ Cache des sources supprimé
-
       - name: Run tests
         run: |
           cd /tmp/lfs-build
-          sudo -u lfs python3 -m pytest tests/ -q
+          sudo -u python3 -m pytest tests/ -q
 
       - name: Build cache rootfs (no live ISO)
         run: |
@@ -84,8 +82,8 @@ jobs:
 
       - name: Verify kernel in cache
         run: |
-          sudo -u lfs ls -l /tmp/lfs-build/build-release/image/boot
-          sudo -u lfs ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
+          ls -l /tmp/lfs-build/build-release/image/boot
+          ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
 
       - name: Create cache archive
         run: |
