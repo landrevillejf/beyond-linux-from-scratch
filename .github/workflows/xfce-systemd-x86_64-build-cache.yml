@@ -19,6 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Free disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -37,40 +47,49 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r tests/requirements-test.txt
 
-      - name: Create lfs user and output directory
+      - name: Create lfs user
         run: |
           sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
           echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
           sudo chmod 440 /etc/sudoers.d/lfs
           sudo -u lfs touch /home/lfs/.bashrc
+
+      - name: Prepare build directory and copy source
+        run: |
+          sudo rm -rf /tmp/lfs-build
           sudo mkdir -p /tmp/lfs-build
+          sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Make source accessible to lfs user
-        run: sudo chmod -R a+rX ${{ github.workspace }}
-
       - name: Generate sources list
-        run: sudo -u lfs python3 builder.py --generate-sources-list
+        run: |
+          cd /tmp/lfs-build
+          sudo -u lfs python3 builder.py --generate-sources-list
+
+      # ❌ Cache des sources supprimé
 
       - name: Run tests
-        run: sudo -u lfs python3 -m pytest tests/ -q
+        run: |
+          cd /tmp/lfs-build
+          sudo -u lfs python3 -m pytest tests/ -q
 
       - name: Build cache rootfs (no live ISO)
         run: |
+          cd /tmp/lfs-build
           sudo -u lfs python3 builder.py \
             --profile xfce \
             --init systemd \
             --no-live \
-            --output /tmp/lfs-build
+            --output ./build-release
 
       - name: Verify kernel in cache
         run: |
-          sudo -u lfs ls -l /tmp/lfs-build/image/boot
-          sudo -u lfs ls /tmp/lfs-build/image/boot/vmlinuz*
+          sudo -u lfs ls -l /tmp/lfs-build/build-release/image/boot
+          sudo -u lfs ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
 
       - name: Create cache archive
         run: |
-          cd /tmp/lfs-build/image
+          cd /tmp/lfs-build/build-release/image
           sudo tar --zstd -cf /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst \
             --exclude='proc' --exclude='sys' --exclude='dev' --exclude='run' --exclude='sources' .
           sudo chown "$USER:$USER" /tmp/rootfs-cache-xfce-systemd-x86_64.tar.zst
@@ -88,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-xfce-systemd-x86_64
-          path: /tmp/lfs-build/logs/
+          path: /tmp/lfs-build/build-release/logs/
           if-no-files-found: ignore
 
   release:
