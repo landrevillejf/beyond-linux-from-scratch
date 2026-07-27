@@ -46,13 +46,11 @@ jobs:
           sudo mkdir -p /tmp/lfs-build
           sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Make source owned by lfs user
-        run: sudo chown -R lfs:lfs ${{ github.workspace }}
+      - name: Make source accessible to lfs user
+        run: sudo chmod -R a+rX ${{ github.workspace }}
 
       - name: Generate sources list
         run: sudo -u lfs python3 builder.py --generate-sources-list
-
-      # ❌ Cache des sources supprimé (évite les problèmes de noyau manquant)
 
       - name: Run tests
         run: sudo -u lfs python3 -m pytest tests/ -q
