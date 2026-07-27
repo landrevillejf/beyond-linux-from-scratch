@@ -19,6 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Make source readable by lfs
+        run: sudo chmod -R a+rX ${{ github.workspace }}
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -95,6 +98,7 @@ jobs:
         with:
           name: logs-xfce-systemd-x86_64
           path: /tmp/lfs-build/logs/
+          if-no-files-found: ignore
 
   release:
     needs: build-cache
