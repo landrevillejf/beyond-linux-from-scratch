@@ -2,14 +2,37 @@ name: Nightly Builds
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-  workflow_dispatch:   # <-- permet de lancer manuellement
+    - cron: '0 3 * * *'   # tous les jours à 3h UTC
+  workflow_dispatch:      # déclenchement manuel (toujours permis)
 
 permissions:
   contents: read
 
 jobs:
+  check_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # récupère tout l'historique pour pouvoir faire un git log
+      - name: Vérifier les commits des dernières 24 heures
+        id: check
+        run: |
+          # S'il y a au moins un commit dans les 24 dernières heures
+          if [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
   build-profiles:
+    needs: check_changes
+    # Ne tourne que si :
+    #  - workflow déclenché manuellement, OU
+    #  - des commits ont été détectés dans les 24h
+    if: github.event_name == 'workflow_dispatch' || needs.check_changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 480
     strategy:
