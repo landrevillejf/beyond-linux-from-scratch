@@ -65,14 +65,8 @@ jobs:
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Cache sources
-        uses: actions/cache@v4
-        with:
-          path: /tmp/lfs-build/build-release/sources
-          key: lfs-sources-release-${{ hashFiles('packages/sources.list') }}
-          restore-keys: |
-            lfs-sources-release-
-            lfs-sources-
+      - name: Ensure sources directory is clean
+        run: sudo rm -rf /tmp/lfs-build/build-release/sources
 
       - name: Run tests
         run: python3 -m pytest tests/ -q
