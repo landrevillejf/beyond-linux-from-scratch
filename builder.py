@@ -27,7 +27,7 @@ import pwd
 import urllib.request
 import urllib.error
 from urllib.parse import urlparse
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================================
 # VERSION INFO
@@ -670,7 +670,8 @@ class SourceDownloader:
                 if attempt < retries - 1:
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
-                return False
+                return False  # at top
+
     def download_from_list(self, list_file: Path, parallel: int = 4) -> bool:
         """Download multiple sources in parallel"""
         if not list_file.exists():
@@ -682,26 +683,34 @@ class SourceDownloader:
             for line in f:
                 line = line.strip()
                 if line and not line.startswith('#'):
-                    # Ne skip que les URLs qui commencent par git:// ou qui finissent par .git
                     if line.startswith('git://') or line.endswith('.git'):
                         self.logger.info(f"Skipping Git repository (use git clone): {line}")
                         continue
-                    # Si c'est une archive (tar.gz, tar.xz, etc.) on la garde
                     urls.append(line)
 
         self.logger.info(f"Downloading {len(urls)} sources with {parallel} threads")
 
+        failed_urls = []
         with ThreadPoolExecutor(max_workers=parallel) as executor:
-            futures = [executor.submit(self.download, url) for url in urls]
-            results = [f.result() for f in futures]
+            future_to_url = {executor.submit(self.download, url): url for url in urls}
+            for future in as_completed(future_to_url):
+                url = future_to_url[future]
+                try:
+                    success = future.result()
+                    if not success:
+                        failed_urls.append(url)
+                except Exception as e:
+                    self.logger.error(f"Unexpected error downloading {url}: {e}")
+                    failed_urls.append(url)
 
-        success = all(results)
-        if success:
-            self.logger.info("All sources downloaded successfully")
+        if failed_urls:
+            self.logger.warning(f"Failed to download {len(failed_urls)} sources:")
+            for url in failed_urls:
+                self.logger.warning(f"  {url}")
+            return False
         else:
-            self.logger.warning("Some sources failed to download")
-
-        return success
+            self.logger.info("All sources downloaded successfully")
+            return True
 
     def verify_checksums(self, checksum_file: Path) -> bool:
         """Verify downloaded files against checksums"""

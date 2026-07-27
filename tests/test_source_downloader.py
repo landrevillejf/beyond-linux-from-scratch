@@ -10,7 +10,6 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 from builder import SourceDownloader
 
-
 class TestSourceDownloader:
     """Test SourceDownloader class"""
 
@@ -197,3 +196,22 @@ https://git.savannah.gnu.org/git/guix.git
 
         assert result is True
         mock_logger.warning.assert_called()
+
+    def test_download_from_list_handles_exception(self, tmp_path):
+        """Test that download_from_list catches exceptions from the download task."""
+        list_file = tmp_path / "sources.list"
+        list_file.write_text("https://example.com/package.tar.gz\n")
+
+        from unittest.mock import Mock  # ou utilise MagicMock
+        logger = Mock()
+        downloader = SourceDownloader(sources_dir=tmp_path, logger=logger, timeout=10, retries=1)
+
+        with patch.object(downloader, 'download', side_effect=Exception("Simulated network error")):
+            result = downloader.download_from_list(list_file, parallel=1)
+
+        assert result is False
+        logger.error.assert_called_once_with(
+            "Unexpected error downloading https://example.com/package.tar.gz: Simulated network error"
+        )
+        logger.warning.assert_any_call("Failed to download 1 sources:")
+        logger.warning.assert_any_call("  https://example.com/package.tar.gz")
