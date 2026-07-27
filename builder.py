@@ -1527,28 +1527,10 @@ class LFSBuilder:
 
         urls_by_key: Dict[str, str] = {}
         override_count = 0
-        success_official = False
 
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                # Strip the version number (and the trailing file extension that comes
-                # after it) from the archive filename so that different versions of the
-                # same package share the same key.  This lets custom-sources.list
-                # override the official version even when the version numbers differ.
-                #
-                # The regex matches the first occurrence of an optional separator
-                # (hyphen or underscore), an optional 'v' prefix, a leading digit,
-                # then any remaining digits/dots/plus signs, and finally `.*$` which
-                # strips the rest of the string — including any sub-version suffixes
-                # and the file extension (e.g. '.tar.xz').
-                #
-                # Examples (filename → key base):
-                #   gawk-5.3.2.tar.xz        → gawk
-                #   gawk-5.4.0.tar.xz        → gawk  (same key, custom version wins)
-                #   node-v22.18.0.tar.xz     → node
-                #   ImageMagick-7.1.2-27.tar.gz → ImageMagick
-                #   sqlite-autoconf-3500400.tar.gz → sqlite-autoconf
                 base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
                 if not base:
                     self.logger.warning(
@@ -1559,6 +1541,7 @@ class LFSBuilder:
                 return f"pkg:{base}"
             return f"url:{url}"
 
+        # 1. Récupérer les listes officielles
         for repo_url in repo_urls:
             try:
                 self.logger.info(f"Fetching sources list from {repo_url}")
@@ -1569,11 +1552,33 @@ class LFSBuilder:
                         if line and not line.startswith('#'):
                             key = source_key(line)
                             urls_by_key.setdefault(key, line)
-                    success_official = True
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {repo_url}: {e}")
 
-        # Ajouter les sources personnalisées
+        # 2. Substitution du noyau (seulement si on a des URLs officielles)
+        if urls_by_key:
+            kernel_type = self.config.get('kernel.type', 'linux')
+            kernel_version = self.config.get('kernel.version', '6.16.1')
+
+            kernel_url = None
+            if kernel_type == 'linux':
+                kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
+            elif kernel_type == 'linux-libre':
+                kernel_url = f"https://www.linux-libre.fsfla.org/pub/linux-libre/releases/{kernel_version}-gnu/linux-libre-{kernel_version}-gnu.tar.xz"
+            elif kernel_type == 'gnu-hurd':
+                kernel_url = f"https://ftpmirror.gnu.org/hurd/hurd-{kernel_version}.tar.gz"
+            elif kernel_type == 'freebsd':
+                kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
+
+            if kernel_url:
+                keys_to_remove = [k for k in urls_by_key if 'linux-' in k or k.startswith('pkg:linux')]
+                for k in keys_to_remove:
+                    del urls_by_key[k]
+                new_key = f"pkg:{kernel_type}-{kernel_version}"
+                urls_by_key[new_key] = kernel_url
+                self.logger.info(f"Using {kernel_type} kernel {kernel_version}: {kernel_url}")
+
+        # 3. Ajouter les sources personnalisées (prioritaires)
         if custom_file.exists():
             self.logger.info(f"Appending custom sources from {custom_file}")
             with open(custom_file, 'r') as cf:
@@ -1586,12 +1591,13 @@ class LFSBuilder:
                             override_count += 1
                         urls_by_key[key] = line
 
-        # Si aucune URL n'a été trouvée, on retourne False
+        # 4. Si aucune URL, on retourne False
         if not urls_by_key:
             self.logger.error("No URLs found from official or custom sources")
             return False
 
-        # Écrire le fichier sources.list avec toutes les URLs
+        # 5. Créer le répertoire parent et écrire le fichier
+        sources_file.parent.mkdir(parents=True, exist_ok=True)
         with open(sources_file, 'w') as f:
             f.write("# LFS Sources - Automatically generated from official wget-lists\n")
             f.write(f"# Generated: {datetime.now().isoformat()}\n")
@@ -1601,7 +1607,7 @@ class LFSBuilder:
 
         if override_count:
             self.logger.info(f"Applied {override_count} custom source override(s)")
-        self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom)")
+        self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom) -> {sources_file}")
         return True
 
     def build(self, resume_from: Optional[str] = None, use_cache: bool = False, cache_only: bool = False) -> bool:

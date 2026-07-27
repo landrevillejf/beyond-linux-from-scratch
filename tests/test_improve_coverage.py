@@ -642,67 +642,220 @@ https://custom.url/source2.tar.xz
         assert "https://repo.example.com" in content
         assert "https://official.url/file1.tar.gz" in content
 
-    def test_update_sources_list_no_repositories(self, tmp_path, monkeypatch):
-        """Test quand aucune URL de dépôt n'est configurée."""
+    def test_update_sources_list_kernel_type_gnu_hurd(self, tmp_path, monkeypatch):
+        """Vérifie que le type de noyau 'gnu-hurd' génère la bonne URL."""
+        from builder import LFSBuilder, LFSConfig
+        from unittest.mock import patch, MagicMock
+
         monkeypatch.chdir(tmp_path)
-        output_dir = tmp_path / "lfs-build"
+
+        output_dir = tmp_path / 'lfs-build'
         output_dir.mkdir()
-        config_file = tmp_path / "config.json"
+        config_file = tmp_path / 'config.json'
         config = LFSConfig(config_file)
-        config.set('repositories', [])  # liste vide
+        config.set('kernel.type', 'gnu-hurd')
+        config.set('kernel.version', '0.9')
+        config.set('repositories', ['https://example.com/wget-list'])
 
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
 
-        packages_dir = tmp_path / "packages"
-        packages_dir.mkdir()
-        sources_file = packages_dir / "sources.list"
-        sources_file.write_text("https://existing.source/file1.tar.gz")  # on garde un fichier existant
-
-        result = builder._update_sources_list()
-        assert result is False   # Aucune repository configurée, on ne fait rien
-
-        # Le fichier existant n'est pas modifié
-        content = sources_file.read_text()
-        assert "https://existing.source/file1.tar.gz" in content
-    def test_update_sources_list_filename_completely_stripped_by_regex(self, tmp_path, monkeypatch):
+        fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
+        https://example.com/other-package.tar.gz
         """
-        Test when filename is completely stripped by regex (triggers warning).
-        This covers lines 1553-1557 in builder.py.
-        Filenames like '-5.3.2.tar.xz' match the pattern and become empty strings.
-        """
-        monkeypatch.chdir(tmp_path)
-        output_dir = tmp_path / "lfs-build"
-        output_dir.mkdir()
-        config_file = tmp_path / "config.json"
-        config = LFSConfig(config_file)
-        # URL with a filename that starts with a hyphen and digit
-        config.set('repositories', ['https://example.com/sources'])
-
-        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
-        builder.config = config
-
-        packages_dir = tmp_path / "packages"
-        packages_dir.mkdir()
-        sources_file = packages_dir / "sources.list"
 
         mock_response = MagicMock()
-        # Include URLs with filenames that will be completely stripped by regex:
-        # -5.3.2.tar.xz matches [-_][v]?\d[\d.+]*.*$ and becomes empty string
-        mock_response.read.return_value = (
-            b"https://repo.example.com/-5.3.2.tar.xz\n"
-            b"https://repo2.example.com/_v7.1.0.tar.gz\n"
-            b"https://normal.example.com/package-1.0.tar.gz\n"
-        )
+        mock_response.read.return_value = fake_content
         mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
 
         with patch('urllib.request.urlopen', return_value=mock_response):
             result = builder._update_sources_list()
-            assert result is True
 
-        # Verify sources.list was created and contains all URLs
-        # The completely-stripped filenames should fall back to pkg:{full_filename} keys
+        assert result is True
+
+        sources_file = Path('packages/sources.list')
+        assert sources_file.exists()
         content = sources_file.read_text()
-        assert "https://repo.example.com/-5.3.2.tar.xz" in content
-        assert "https://repo2.example.com/_v7.1.0.tar.gz" in content
-        assert "https://normal.example.com/package-1.0.tar.gz" in content
+        expected_url = "https://ftpmirror.gnu.org/hurd/hurd-0.9.tar.gz"
+        assert expected_url in content
+        assert "linux-6.16.1.tar.xz" not in content
+
+    def test_update_sources_list_kernel_type_freebsd(self, tmp_path, monkeypatch):
+        """Vérifie que le type de noyau 'freebsd' génère la bonne URL."""
+        from builder import LFSBuilder, LFSConfig
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('kernel.type', 'freebsd')
+        config.set('kernel.version', '13.0')
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
+        https://example.com/other-package.tar.gz
+        """
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = fake_content
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+
+        assert result is True
+
+        sources_file = Path('packages/sources.list')
+        assert sources_file.exists()
+        content = sources_file.read_text()
+        expected_url = "https://download.freebsd.org/ftp/releases/amd64/13.0/src.txz"
+        assert expected_url in content
+        assert "linux-6.16.1.tar.xz" not in content
+
+    def test_update_sources_list_filename_completely_stripped_by_regex(self, tmp_path, monkeypatch):
+        """Vérifie que le regex de source_key gère correctement les noms de fichiers avec des versions."""
+        from builder import LFSBuilder, LFSConfig
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/sources'])
+        config.set('kernel.type', 'linux')
+        config.set('kernel.version', '6.16.1')
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        fake_content = b"""https://example.com/pkg-5.3.2.tar.xz
+        https://example.com/pkg_v7.1.0.tar.gz
+        https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
+        """
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = fake_content
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+
+        assert result is True
+
+        sources_file = Path('packages/sources.list')
+        assert sources_file.exists()
+        content = sources_file.read_text()
+
+        # La substitution du noyau doit être présente
+        assert 'linux-6.16.1.tar.xz' in content
+        # Une seule des deux URLs de paquet doit être présente (celle qui survit)
+        # car les clés sont identiques, seule la première est conservée.
+        assert 'https://example.com/pkg-5.3.2.tar.xz' in content
+        # L'autre ne doit pas être présente
+        assert 'https://example.com/pkg_v7.1.0.tar.gz' not in content
+        # Il doit y avoir 2 URLs au total (1 paquet + 1 noyau)
+        lines = [line for line in content.splitlines() if line.startswith(('http://', 'https://'))]
+        assert len(lines) == 2
+
+    def test_update_sources_list_kernel_type_linux_libre(self, tmp_path, monkeypatch):
+        """Vérifie que le type de noyau 'linux-libre' génère la bonne URL."""
+        from builder import LFSBuilder, LFSConfig
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('kernel.type', 'linux-libre')
+        config.set('kernel.version', '6.12.20')
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
+        https://example.com/other-package.tar.gz
+        """
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = fake_content
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+
+        assert result is True
+
+        sources_file = Path('packages/sources.list')
+        assert sources_file.exists()
+        content = sources_file.read_text()
+
+        expected_url = "https://www.linux-libre.fsfla.org/pub/linux-libre/releases/6.12.20-gnu/linux-libre-6.12.20-gnu.tar.xz"
+        assert expected_url in content
+        assert "linux-6.16.1.tar.xz" not in content
+        assert "https://example.com/other-package.tar.gz" in content
+
+        # Vérifier qu'il y a 2 URLs (le noyau substitué + l'autre paquet)
+        lines = [line for line in content.splitlines() if line.startswith(('http://', 'https://'))]
+        assert len(lines) == 2
+
+    def test_source_key_regex_strips_entire_filename(self, tmp_path, monkeypatch):
+        """Vérifie que source_key gère le cas où le regex supprime tout le nom de fichier."""
+        from builder import LFSBuilder, LFSConfig
+        from unittest.mock import patch, MagicMock
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/sources'])
+        config.set('kernel.type', 'linux')
+        config.set('kernel.version', '6.16.1')
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        # Une URL dont le nom de fichier est entièrement supprimé par le regex (ex: commence par '-')
+        fake_content = b"""https://example.com/-5.3.2.tar.xz
+        https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
+        """
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = fake_content
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            with patch.object(builder.logger, 'warning') as mock_warning:
+                result = builder._update_sources_list()
+
+        assert result is True
+
+        sources_file = Path('packages/sources.list')
+        assert sources_file.exists()
+        content = sources_file.read_text()
+
+        # L'URL est présente avec son nom complet (car la clé est pkg:-5.3.2.tar.xz)
+        assert 'https://example.com/-5.3.2.tar.xz' in content
+        # Le noyau substitué est présent
+        assert 'linux-6.16.1.tar.xz' in content
+        # Vérifier que le warning a été émis
+        mock_warning.assert_called_once()
+        args, _ = mock_warning.call_args
+        assert "source_key: regex stripped entire filename '-5.3.2.tar.xz'" in args[0]
