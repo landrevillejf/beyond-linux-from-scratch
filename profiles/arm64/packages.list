@@ -1,193 +1,66 @@
 # ============================================================================
-# LFS ARM64 (aarch64) Package List
-# Core packages for ARM64/Linux from Scratch
-# Target: Raspberry Pi, Orange Pi, Pine64, and other ARM64 SBCs
+# LFS ARM64 (aarch64) Package List for BLFS
 # ============================================================================
 
-# ============================================================================
-# BASE SYSTEM (Required)
-# ============================================================================
-linux-headers
-glibc
-gcc
-binutils
-make
-bash
-coreutils
-util-linux
-systemd
-grub-efi
-
-# ============================================================================
-# ARM64 SPECIFIC TOOLCHAIN
-# ============================================================================
-gcc-aarch64-linux-gnu
-binutils-aarch64-linux-gnu
-cross-toolchain
-qemu-user-static
-arm64-tools
+# Base tools (already built in LFS)
+# linux-headers, glibc, gcc, binutils, make, bash, coreutils, util-linux,
+# systemd or sysvinit, etc. are already installed by LFS stages.
 
 # ============================================================================
 # BOOTLOADER (U-Boot)
 # ============================================================================
 u-boot
-u-boot-rpi
-u-boot-orangepi
-u-boot-pine64
 u-boot-tools
-mkimage
 
 # ============================================================================
-# KERNEL AND MODULES
+# NETWORKING
 # ============================================================================
-linux-arm64
-linux-firmware
-raspberrypi-firmware
-orangepi-firmware
-arm64-modules
-dkms
-
-# ============================================================================
-# FILESYSTEM SUPPORT
-# ============================================================================
-ext4
-btrfs-progs
-xfsprogs
-f2fs-tools
-e2fsprogs
-dosfstools
-ntfs-3g
-
-# ============================================================================
-# NETWORKING (ARM64 Optimized)
-# ============================================================================
-network-manager
 dhcpcd
 wireless-tools
 wpa_supplicant
-bluez
 openssh-server
 curl
 wget
 
 # ============================================================================
-# DEVELOPMENT TOOLS
-# ============================================================================
-gdb
-strace
-ltrace
-make
-cmake
-git
-vim
-nano
-gcc
-g++
-clang
-
-# ============================================================================
 # SYSTEM UTILITIES
 # ============================================================================
-systemd
 dbus
 polkit
-udev
+eudev
 cronie
 logrotate
 rsync
-tar
-gzip
-xz-utils
 unzip
 
 # ============================================================================
-# SECURITY (ARM64)
+# FILESYSTEM SUPPORT
 # ============================================================================
-fail2ban
-lynis
-aide
+dosfstools
+e2fsprogs
+ntfs-3g
+
+# ============================================================================
+# SECURITY
+# ============================================================================
 openssl
-libsodium
-firewalld
 iptables
-nftables
-
-# ============================================================================
-# DATABASES
-# ============================================================================
-sqlite
-mariadb
-postgresql
-
-# ============================================================================
-# WEB SERVERS
-# ============================================================================
-nginx
-apache2
-php
-php-fpm
-
-# ============================================================================
-# CONTAINER SUPPORT
-# ============================================================================
-docker
-docker-compose
-containerd
-runc
-podman
-cri-o
-
-# ============================================================================
-# ARM64 OPTIMIZED APPLICATIONS
-# ============================================================================
-rust
-go
-nodejs
-python3
-perl
-ruby
 
 # ============================================================================
 # MONITORING
 # ============================================================================
 htop
-iotop
-iftop
 nmon
-glances
-prometheus-node-exporter
 
 # ============================================================================
-# FIRMWARE AND DRIVERS
+# OPTIONAL: DESKTOP
 # ============================================================================
-raspberrypi-bootloader
-raspberrypi-kernel
-vpu-firmware
-wifi-firmware
-bluetooth-firmware
+xorg-server
+xfce4
+lightdm
 
 # ============================================================================
-# OPTIONAL DESKTOP (for GUI on ARM64)
+# OPTIONAL: CONTAINER SUPPORT
 # ============================================================================
-# xorg-server
-# xfce4
-# lightdm
-# firefox-arm64
-# chromium
-# vlc
-
-# ============================================================================
-# EMULATION AND CROSS-PLATFORM
-# ============================================================================
-qemu-system-arm
-qemu-user-static
-box64           # Run x86_64 apps on ARM64
-box86           # Run x86 on ARM32 (if running 32-bit compat)
-
-# ============================================================================
-# BENCHMARKING TOOLS
-# ============================================================================
-sysbench
-iperf3
-stress-ng
-lmbench
+docker
+# containerd

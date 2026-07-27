@@ -1,0 +1,78 @@
+name: Cross-Compile ARM64
+
+on:
+  schedule:
+    - cron: '0 3 * * *'   # 3am daily
+  workflow_dispatch:   # <-- permet de lancer manuellement
+
+permissions:
+  contents: read
+
+jobs:
+  cross:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential bison flex gawk texinfo \
+            wget curl git python3 python3-pip xorriso isolinux \
+            mtools dosfstools parted rsync bc cpio kmod \
+            libssl-dev libelf-dev \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user-static
+
+      - name: Create lfs user
+        run: |
+          if ! id lfs &>/dev/null; then
+            sudo useradd -m -s /bin/bash lfs
+          fi
+          sudo -u lfs touch /home/lfs/.bashrc
+
+      - name: Grant lfs user passwordless sudo
+        run: |
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs
+
+      - name: Prepare lfs build directory
+        run: |
+          sudo mkdir -p /tmp/lfs-build
+          sudo cp -a $GITHUB_WORKSPACE/. /tmp/lfs-build/
+          sudo chown -R lfs:lfs /tmp/lfs-build
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Build ARM64
+        run: |
+          cd /tmp/lfs-build
+          sudo -u lfs python3 builder.py --profile arm64 --no-live --output ./build-arm64
+
+      - name: Verify output image
+        run: |
+          if [ -f /tmp/lfs-build/build-arm64/lfs-installer.img ]; then
+            echo "Found lfs-installer.img"
+          elif [ -f /tmp/lfs-build/build-arm64/lfs-arm64.img ]; then
+            echo "Found lfs-arm64.img"
+          elif [ -f /tmp/lfs-build/build-arm64/lfs-installer.iso ]; then
+            echo "Found lfs-installer.iso (fallback)"
+          else
+            echo "No image file found"
+            exit 1
+          fi
+          ls /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+
+      - name: Upload ARM64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: arm64-cross-build
+          path: |
+            /tmp/lfs-build/build-arm64/lfs-installer.img
+            /tmp/lfs-build/build-arm64/lfs-arm64.img
+            /tmp/lfs-build/build-arm64/lfs-installer.iso
+            /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+            /tmp/lfs-build/build-arm64/build_info.json
+          if-no-files-found: warn
