@@ -67,9 +67,7 @@ jobs:
           sudo -u lfs python3 builder.py --generate-sources-list
 
       - name: Run tests
-        run: |
-          cd /tmp/lfs-build
-          sudo -u python3 -m pytest tests/ -q
+        run: python3 -m pytest tests/ -q
 
       - name: Build cache rootfs (no live ISO)
         run: |
