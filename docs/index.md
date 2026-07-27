@@ -235,7 +235,7 @@ git clone https://github.com/landrevillejf/beyond-linux-from-scratch.git
 cd beyond-linux-from-scratch
 
 # Install Python test/build dependencies
-python3 -m pip install -r tests/requirements-test.txt
+python3 -m pip install -r tests/requirements.txt
 
 # List available profiles
 python3 builder.py --list-profiles
@@ -491,7 +491,7 @@ Current baseline in this repository:
 Run locally:
 
 ```bash
-python3 -m pip install -r tests/requirements-test.txt
+python3 -m pip install -r tests/requirements.txt
 python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 ```
 

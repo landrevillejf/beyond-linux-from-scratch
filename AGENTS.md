@@ -96,7 +96,7 @@ Available profiles: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `kd
 ```bash
 git clone https://github.com/landrevillejf/beyond-linux-from-scratch.git
 cd beyond-linux-from-scratch
-python3 -m pip install -r tests/requirements-test.txt
+python3 -m pip install -r tests/requirements.txt
 ```
 
 ### Running the test suite
