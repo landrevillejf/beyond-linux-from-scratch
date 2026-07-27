@@ -52,14 +52,7 @@ jobs:
       - name: Generate sources list
         run: sudo -u lfs python3 builder.py --generate-sources-list
 
-      - name: Cache LFS sources
-        uses: actions/cache@v4
-        with:
-          path: /tmp/lfs-build/sources
-          key: lfs-sources-xfce-systemd-x86_64-${{ hashFiles('packages/sources.list') }}
-          restore-keys: |
-            lfs-sources-xfce-systemd-x86_64-
-            lfs-sources-
+      # ❌ Cache des sources supprimé (évite les problèmes de noyau manquant)
 
       - name: Run tests
         run: sudo -u lfs python3 -m pytest tests/ -q
