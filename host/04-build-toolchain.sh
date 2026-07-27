@@ -188,13 +188,23 @@ build_toolchain() {
     GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
-    # Embed GMP, MPFR, and MPC inside the GCC source tree (required by GCC configure)
+    # Embed GMP, MPFR, MPC into GCC source tree
     for lib in gmp mpfr mpc; do
-        LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print -quit)
+        # Find the tarball, whether it's .tar.gz, .tar.xz, etc.
+        LIB_TAR=$(ls ${lib}-*.tar.* 2>/dev/null | head -1)
         if [ -n "$LIB_TAR" ]; then
             tar -xf "$LIB_TAR"
-            LIB_DIR=$(find . -maxdepth 1 -type d -name "${lib}-*" -print -quit | sed 's|^\./||')
-            mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+            # The extracted directory name is typically "${lib}-<version>"
+            LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
+            if [ -d "$LIB_DIR" ]; then
+                mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+            else
+                echo "ERROR: Could not find extracted directory for $lib"
+                exit 1
+            fi
+        else
+            echo "ERROR: Tarball for $lib not found"
+            exit 1
         fi
     done
     cd "$GCC_DIR"
