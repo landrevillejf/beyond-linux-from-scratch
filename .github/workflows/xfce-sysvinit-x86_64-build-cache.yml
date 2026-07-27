@@ -19,8 +19,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Make source readable by lfs
-        run: sudo chmod -R a+rX ${{ github.workspace }}
+      - name: Make source owned by lfs user
+        run: sudo chown -R lfs:lfs ${{ github.workspace }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -50,7 +50,7 @@ jobs:
           sudo chown -R lfs:lfs /tmp/lfs-build
 
       - name: Generate sources list
-        run: python3 builder.py --generate-sources-list
+        run: sudo -u lfs python3 builder.py --generate-sources-list
 
       - name: Cache LFS sources
         uses: actions/cache@v4
@@ -62,7 +62,7 @@ jobs:
             lfs-sources-
 
       - name: Run tests
-        run: python3 -m pytest tests/ -q
+        run: sudo -u lfs python3 -m pytest tests/ -q
 
       - name: Build cache rootfs (no live ISO)
         run: |
@@ -74,8 +74,8 @@ jobs:
 
       - name: Verify kernel in cache
         run: |
-          ls -l /tmp/lfs-build/image/boot
-          ls /tmp/lfs-build/image/boot/vmlinuz*
+          sudo -u lfs ls -l /tmp/lfs-build/image/boot
+          sudo -u lfs ls /tmp/lfs-build/image/boot/vmlinuz*
 
       - name: Create cache archive
         run: |
