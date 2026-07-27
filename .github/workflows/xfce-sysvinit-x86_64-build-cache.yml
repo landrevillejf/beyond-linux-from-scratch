@@ -1,16 +1,16 @@
-name: XFCE SYSVINIT x86_64 Build Cache
+name: XFCE SYSVINIT x86_64 Build Cache & Release
 
 on:
   schedule:
-    - cron: '0 0 * * 0'
-  workflow_dispatch:
+    - cron: '0 0 * * 0'   # Tous les dimanches à minuit
+  workflow_dispatch:      # Déclenchement manuel
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write   # Nécessaire pour créer une release
 
 jobs:
   build-cache:
@@ -24,7 +24,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install dependencies
+      - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
@@ -95,3 +95,37 @@ jobs:
         with:
           name: logs-xfce-sysvinit-x86_64
           path: /tmp/lfs-build/logs/
+
+  release:
+    needs: build-cache
+    runs-on: ubuntu-latest
+    if: always() && needs.build-cache.result == 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: Download cache artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: rootfs-cache-xfce-sysvinit-x86_64
+          path: ./artifact
+
+      - name: Generate release tag and name
+        id: vars
+        run: |
+          # Utiliser la date et le numéro du workflow pour un tag unique
+          VERSION="v$(date +'%Y.%m.%d')-run${{ github.run_number }}"
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+          echo "name=XFCE SYSVINIT x86_64 Cache $VERSION" >> $GITHUB_OUTPUT
+          echo "asset_path=./artifact/rootfs-cache-xfce-sysvinit-x86_64.tar.zst" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: ${{ steps.vars.outputs.name }}
+          draft: false
+          prerelease: false
+          files: |
+            ${{ steps.vars.outputs.asset_path }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
