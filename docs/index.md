@@ -1,11 +1,5 @@
 # Way Beyond Linux From Scratch
 
-[![Version](https://img.shields.io/github/v/release/landrevillejf/beyond-linux-from-scratch?color=blue)](https://github.com/landrevillejf/beyond-linux-from-scratch/releases)
-[![License](https://img.shields.io/badge/license-GPLv3-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Linux-lightgrey.svg)]()
-![Tests](https://github.com/landrevillejf/beyond-linux-from-scratch/actions/workflows/python-app.yml/badge.svg)
-[![Coverage](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch/branch/main/graph/badge.svg)](https://codecov.io/gh/landrevillejf/beyond-linux-from-scratch)
-
 Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`). Works on Linux, macOS, and Windows (WSL2).
 
 **Version:** 0.25.14  
@@ -294,6 +288,7 @@ python3 builder.py --generate-sources-list
 | `--cache-only` | Require cache hit; fail otherwise |
 | `--cache-url` | Override cache metadata URL |
 | `--kernel-type` | Kernel type (`linux`, `linux-libre`, `gnu-hurd`, `freebsd`) |
+| `--kernel-version` | Version du noyau (ex: `6.16.1`, `6.12.20`) |
 | `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
 | `--generate-sources-list` | Generate `packages/sources.list` and exit |
