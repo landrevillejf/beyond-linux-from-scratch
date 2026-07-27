@@ -1,6 +1,6 @@
 #!/bin/bash
-# first-boot.sh - Exécuté une seule fois au premier démarrage
-# Utilise les ressources de packages/custom-scripts/
+# first-boot.sh - Run once at first boot.
+# Uses resources from packages/custom-scripts/
 
 set -e
 
@@ -10,28 +10,66 @@ if [ -f "$FIRST_BOOT_FLAG" ]; then
     exit 0
 fi
 
-log_info() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
+log_info()    { echo -e "\033[0;32m[INFO]\033[0m $1"; }
 log_success() { echo -e "\033[0;34m[SUCCESS]\033[0m $1"; }
 log_warning() { echo -e "\033[1;33m[WARNING]\033[0m $1"; }
+log_error()   { echo -e "\033[0;31m[ERROR]\033[0m $1" >&2; exit 1; }
 
 # ============================================================================
-# CHARGER LA CONFIGURATION PERSONNALISÉE
+# LOAD CUSTOM CONFIGURATION
 # ============================================================================
 CUSTOM_CONF="/packages/custom-scripts/custom-settings.conf"
 if [ -f "$CUSTOM_CONF" ]; then
     source "$CUSTOM_CONF"
 fi
 
-# Variables par défaut
+# Default values (can be overridden by custom.conf or environment)
 DEFAULT_USER="${DEFAULT_USER:-lfsuser}"
 DEFAULT_PASSWORD="${DEFAULT_PASSWORD:-lfsuser123}"
 HOSTNAME="${HOSTNAME:-lfs-desktop}"
 
+# Try to read builder configuration from JSON (if present)
+CONFIG_FILE="/etc/lfs-build.json"
+if [ -f "$CONFIG_FILE" ] && command -v jq >/dev/null 2>&1; then
+    # Override with values from the builder config
+    HOSTNAME=$(jq -r '.hostname // "'"$HOSTNAME"'"' "$CONFIG_FILE")
+    # Users: get first user from list, fallback to DEFAULT_USER
+    USER_FROM_JSON=$(jq -r '.users[0].name // ""' "$CONFIG_FILE")
+    if [ -n "$USER_FROM_JSON" ]; then
+        DEFAULT_USER="$USER_FROM_JSON"
+    fi
+    # Init system detection: we can get it from config
+    INIT_SYSTEM=$(jq -r '.init_system // "sysvinit"' "$CONFIG_FILE")
+    DESKTOP=$(jq -r '.desktop.type // "xfce"' "$CONFIG_FILE")
+else
+    # Fallback: detect init system from running processes
+    if pidof systemd >/dev/null 2>&1; then
+        INIT_SYSTEM="systemd"
+    else
+        INIT_SYSTEM="sysvinit"
+    fi
+    # Desktop: try to detect from installed packages (simple heuristic)
+    if command -v startxfce4 >/dev/null 2>&1; then
+        DESKTOP="xfce"
+    elif command -v gnome-session >/dev/null 2>&1; then
+        DESKTOP="gnome"
+    elif command -v startplasma-x11 >/dev/null 2>&1; then
+        DESKTOP="kde"
+    elif command -v lxqt-session >/dev/null 2>&1; then
+        DESKTOP="lxqt"
+    else
+        DESKTOP="none"
+    fi
+fi
+
+# Export for welcome script
+export DESKTOP INIT_SYSTEM
+
 # ============================================================================
-# DÉTECTION DU MATÉRIEL
+# HARDWARE DETECTION
 # ============================================================================
 detect_hardware() {
-    log_info "Détection du matériel..."
+    log_info "Detecting hardware..."
 
     CPU_VENDOR=$(lscpu | grep "Vendor ID" | cut -d: -f2 | xargs 2>/dev/null || echo "unknown")
     CPU_CORES=$(nproc 2>/dev/null || echo 1)
@@ -55,54 +93,54 @@ GPU="$GPU"
 HOSTNAME="$HOSTNAME"
 EOF
 
-    log_success "Matériel détecté: $GPU, $CPU_CORES cœurs, ${RAM_GB}GB RAM"
+    log_success "Hardware detected: $GPU, $CPU_CORES cores, ${RAM_GB}GB RAM"
 }
 
 # ============================================================================
-# CONFIGURATION RÉSEAU
+# NETWORK CONFIGURATION
 # ============================================================================
 configure_network() {
-    log_info "Configuration réseau..."
+    log_info "Configuring network..."
 
-    # Définir le hostname
+    # Set hostname
     echo "$HOSTNAME" > /etc/hostname
     hostname "$HOSTNAME"
 
-    # DHCP sur toutes les interfaces
+    # Try DHCP on all Ethernet interfaces
     for iface in $(ip link show | grep -E '^[0-9]+: e' | cut -d: -f2 | xargs); do
-        log_info "Configuration de $iface en DHCP..."
+        log_info "Configuring $iface with DHCP..."
         dhcpcd "$iface" 2>/dev/null || dhclient "$iface" 2>/dev/null || true
     done
 
-    # Tester la connexion
+    # Test connectivity
     if ping -c 1 8.8.8.8 >/dev/null 2>&1; then
-        log_success "Réseau connecté !"
+        log_success "Network connected!"
     else
-        log_warning "Connexion réseau échouée. Configuration manuelle nécessaire."
+        log_warning "Network connection failed. Manual configuration may be needed."
     fi
 }
 
 # ============================================================================
-# CRÉATION DE L'UTILISATEUR
+# USER CREATION
 # ============================================================================
 create_user() {
-    log_info "Création de l'utilisateur $DEFAULT_USER..."
+    log_info "Creating user $DEFAULT_USER..."
 
     if ! id "$DEFAULT_USER" &>/dev/null; then
         useradd -m -G wheel,audio,video,storage,docker,plugdev -s /bin/bash "$DEFAULT_USER"
         echo "$DEFAULT_USER:$DEFAULT_PASSWORD" | chpasswd
         echo "$DEFAULT_USER ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/"$DEFAULT_USER"
-        log_success "Utilisateur créé"
+        log_success "User created"
     else
-        log_info "Utilisateur existe déjà"
+        log_info "User already exists"
     fi
 }
 
 # ============================================================================
-# CONFIGURATION BASH
+# BASH CONFIGURATION
 # ============================================================================
 configure_bash() {
-    log_info "Configuration Bash..."
+    log_info "Configuring Bash..."
 
     cat >> /etc/bash.bashrc << 'BASH'
 # Custom prompt
@@ -127,7 +165,7 @@ HISTTIMEFORMAT="%F %T "
 export PATH="$HOME/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 BASH
 
-    # Pour le user
+    # Copy to user home
     if [ -d "/home/$DEFAULT_USER" ]; then
         cp /etc/bash.bashrc "/home/$DEFAULT_USER/.bashrc"
         chown "$DEFAULT_USER:$DEFAULT_USER" "/home/$DEFAULT_USER/.bashrc"
@@ -135,82 +173,87 @@ BASH
 }
 
 # ============================================================================
-# ACTIVATION DES SERVICES
+# SERVICE ACTIVATION (systemd or sysvinit)
 # ============================================================================
 enable_services() {
-    log_info "Activation des services..."
+    log_info "Activating services for $INIT_SYSTEM..."
 
-    # Services système
-    for svc in systemd-networkd systemd-resolved dbus; do
-        systemctl enable "$svc" 2>/dev/null || true
-    done
+    if [ "$INIT_SYSTEM" = "systemd" ]; then
+        # System services
+        for svc in systemd-networkd systemd-resolved dbus; do
+            systemctl enable "$svc" 2>/dev/null || true
+        done
 
-    # Bluetooth si présent
-    if command -v bluetoothd >/dev/null 2>&1; then
-        systemctl enable bluetooth 2>/dev/null || true
+        # Bluetooth if present
+        if command -v bluetoothd >/dev/null 2>&1; then
+            systemctl enable bluetooth 2>/dev/null || true
+        fi
+
+        # CUPS if present
+        if command -v cupsd >/dev/null 2>&1; then
+            systemctl enable cups 2>/dev/null || true
+        fi
+
+        # Display manager (DM)
+        if systemctl list-unit-files | grep -q lightdm; then
+            systemctl enable lightdm 2>/dev/null || true
+            systemctl set-default graphical.target 2>/dev/null || true
+        elif systemctl list-unit-files | grep -q gdm; then
+            systemctl enable gdm 2>/dev/null || true
+            systemctl set-default graphical.target 2>/dev/null || true
+        elif systemctl list-unit-files | grep -q sddm; then
+            systemctl enable sddm 2>/dev/null || true
+            systemctl set-default graphical.target 2>/dev/null || true
+        fi
+    else
+        # sysvinit: enable common services via /etc/rc.d/rc.conf
+        if [ -f /etc/rc.d/rc.conf ]; then
+            sed -i 's/^#SERVICES=.*/SERVICES="network dhcpcd sshd"/' /etc/rc.d/rc.conf 2>/dev/null || true
+        fi
+        # (Additional sysvinit service links can be added here)
     fi
 
-    # Cups si présent
-    if command -v cupsd >/dev/null 2>&1; then
-        systemctl enable cups 2>/dev/null || true
-    fi
-
-    # Gestionnaire de connexion
-    if systemctl list-unit-files | grep -q lightdm; then
-        systemctl enable lightdm 2>/dev/null || true
-        systemctl set-default graphical.target 2>/dev/null || true
-    elif systemctl list-unit-files | grep -q gdm; then
-        systemctl enable gdm 2>/dev/null || true
-        systemctl set-default graphical.target 2>/dev/null || true
-    elif systemctl list-unit-files | grep -q sddm; then
-        systemctl enable sddm 2>/dev/null || true
-        systemctl set-default graphical.target 2>/dev/null || true
-    fi
-
-    log_success "Services activés"
+    log_success "Services activated"
 }
 
 # ============================================================================
-# CONFIGURATION DE LA PERSISTANCE (mode live)
+# LIVE PERSISTENCE SETUP (if in live mode)
 # ============================================================================
 setup_persistence() {
-    log_info "Configuration de la persistance live..."
+    log_info "Setting up live persistence..."
 
-    # Vérifier si une partition de persistance existe
     PERSIST_PART=$(blkid -L "LFS-PERSIST" 2>/dev/null)
-
     if [ -n "$PERSIST_PART" ]; then
         mkdir -p /mnt/persist
         mount "$PERSIST_PART" /mnt/persist 2>/dev/null || true
 
         if [ -d /mnt/persist ]; then
             mkdir -p /mnt/persist/{upper,work}
-            # Créer un fichier de marque pour que le script live sache utiliser la persistance
             touch /var/lib/live-persistence-enabled
-            log_success "Persistance live activée sur $PERSIST_PART"
+            log_success "Live persistence enabled on $PERSIST_PART"
         fi
     else
-        log_info "Aucune partition de persistance trouvée"
+        log_info "No persistence partition found"
     fi
 }
 
 # ============================================================================
-# MESSAGE DE BIENVENUE
+# WELCOME MESSAGE
 # ============================================================================
 create_welcome() {
-    log_info "Création du message de bienvenue..."
+    log_info "Creating welcome message..."
 
     cat > /etc/profile.d/welcome.sh << 'WELCOME'
 #!/bin/bash
-
 if [ "$PS1" ]; then
     echo "=================================================="
-    echo "  Bienvenue sur LFS Linux $(cat /etc/lfs-release 2>/dev/null)"
+    echo "  Welcome to LFS Linux $(cat /etc/lfs-release 2>/dev/null)"
     echo "=================================================="
     echo "  Kernel : $(uname -r)"
-    echo "  CPU    : $(nproc) cœurs"
+    echo "  CPU    : $(nproc) cores"
     echo "  RAM    : $(free -h | awk '/^Mem:/{print $2}')"
-    echo "  Bureau : $(cat /etc/desktop-environment 2>/dev/null || echo 'inconnu')"
+    echo "  Desktop: ${DESKTOP:-unknown}"
+    echo "  Init   : ${INIT_SYSTEM:-unknown}"
     echo "=================================================="
     echo ""
 fi
@@ -218,38 +261,33 @@ WELCOME
 
     chmod +x /etc/profile.d/welcome.sh
 
-    # Ajouter le logo du système
+    # Add system logo if available
     if [ -f /usr/share/icons/hicolor/256x256/apps/lfs-logo.png ]; then
         echo "  Logo : LFS Linux" >> /etc/issue
     fi
 }
 
 # ============================================================================
-# NETTOYAGE
+# CLEANUP
 # ============================================================================
 cleanup() {
-    log_info "Nettoyage..."
+    log_info "Cleaning up..."
 
-    # Supprimer les fichiers temporaires
     rm -rf /tmp/* 2>/dev/null || true
     rm -rf /var/tmp/* 2>/dev/null || true
-
-    # Vider les logs (les plus anciens)
     find /var/log -name "*.log" -mtime +30 -delete 2>/dev/null || true
 
-    log_success "Nettoyage terminé"
+    log_success "Cleanup completed"
 }
 
 # ============================================================================
 # MAIN
 # ============================================================================
 main() {
-    log_info "=== CONFIGURATION DU PREMIER DÉMARRAGE ==="
+    log_info "=== FIRST BOOT CONFIGURATION ==="
 
-    # Vérifier les droits
     if [ "$EUID" -ne 0 ]; then
-        log_warning "Le script doit être exécuté en root"
-        exit 1
+        log_error "This script must be run as root."
     fi
 
     detect_hardware
@@ -261,18 +299,17 @@ main() {
     create_welcome
     cleanup
 
-    # Marquer comme terminé
     touch "$FIRST_BOOT_FLAG"
 
-    log_success "=== SYSTÈME PRÊT ! ==="
+    log_success "=== SYSTEM READY ==="
     echo ""
     echo "=================================================="
-    echo "  LFS LINUX EST MAINTENANT PRÊT À L'EMPLOI"
+    echo "  LFS LINUX IS NOW READY TO USE"
     echo "=================================================="
-    echo "  Utilisateur : $DEFAULT_USER"
-    echo "  Mot de passe : $DEFAULT_PASSWORD"
+    echo "  User     : $DEFAULT_USER"
+    echo "  Password : $DEFAULT_PASSWORD"
     echo ""
-    echo "  N'oubliez pas de changer votre mot de passe !"
+    echo "  Please change your password!"
     echo "=================================================="
 }
 
