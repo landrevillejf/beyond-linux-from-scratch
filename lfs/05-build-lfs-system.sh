@@ -213,15 +213,19 @@ if [ -z "$LINUX_ARCHIVE" ]; then
     ls -la
     exit 1
 fi
-extract "$LINUX_ARCHIVE"
-# Le nom du répertoire extrait est le nom sans extension
+echo "Extracting $LINUX_ARCHIVE"
+tar -xf "$LINUX_ARCHIVE"
 LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+if [ ! -d "$LINUX_DIR" ]; then
+    echo "ERROR: extracted directory $LINUX_DIR not found"
+    exit 1
+fi
 cd "$LINUX_DIR"
 make mrproper
 make headers
 find usr/include -name '.*' -delete
 rm -f usr/include/Makefile
-cp -rv usr/include /usr/include
+cp -rv usr/include/. /usr/include
 cd /sources
 rm -rf "$LINUX_DIR"
 echo "Linux headers installed"
