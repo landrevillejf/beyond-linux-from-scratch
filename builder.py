@@ -2,9 +2,7 @@
 """
 LFS/BLFS Builder - Main orchestrator
 Works on Linux, macOS, and Windows (WSL2)
-Version: 0.4.3
-Author: Jean-Francois Landreville (Dr Land Evil), landrevillejf@protonmail.com, 2026
-Contributors: Realmit kirills1
+Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026
 """
 
 import os
