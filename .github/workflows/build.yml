@@ -72,6 +72,11 @@ jobs:
           restore-keys: |
             sources-
 
+      - name: Fix permissions for lfs
+        run: |
+          sudo chmod o+x /home/runner
+          sudo chmod -R o+r /home/runner/work
+
       - name: Build LFS
         id: build
         run: |
