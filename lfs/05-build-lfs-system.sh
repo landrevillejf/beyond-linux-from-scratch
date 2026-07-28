@@ -92,7 +92,7 @@ ensure_bootstrap_chroot_shell() {
         run_privileged ln -sfn bash "$LFS/bin/sh"
     fi
 
-    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname; do
+    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make; do
         if [ ! -x "$LFS/usr/bin/$tool" ]; then
             log_info "Bootstrapping /usr/bin/$tool into chroot"
             local host_tool
