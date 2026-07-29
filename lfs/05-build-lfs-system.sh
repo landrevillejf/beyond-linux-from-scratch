@@ -405,7 +405,7 @@ INNEREOF
 run_privileged chmod +x "$LFS/build-lfs-system.sh"
 
 log_info "Entering chroot and compiling..."
-run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
+run_privileged chroot "$LFS" /bin/bash -c "export LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/lib:/usr/lib; export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
 if [ -x "$LFS/usr/bin/bash" ]; then
     run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
