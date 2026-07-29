@@ -105,7 +105,7 @@ ensure_bootstrap_chroot_shell() {
         fi
     done
 
-   # After the for loop, ensure /bin/awk exists and is executable
+   # Ensure /bin/awk exists
    if [ ! -x "$LFS/bin/awk" ]; then
        if [ -x "$LFS/usr/bin/awk" ]; then
            run_privileged cp -v "$LFS/usr/bin/awk" "$LFS/bin/awk"
@@ -113,6 +113,11 @@ ensure_bootstrap_chroot_shell() {
        else
            log_warning "/usr/bin/awk not found in chroot, awk may be missing"
        fi
+   fi
+
+   # CHANGED 1: Create symlink for libtinfo.so.6 in /lib
+   if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
+       run_privileged ln -sf x86_64-linux-gnu/libtinfo.so.6 "$LFS/lib/libtinfo.so.6"
    fi
 }
 
@@ -186,6 +191,7 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
+# CHANGED 2: Put /tools/bin first in PATH
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export SHELL=/bin/bash
 export CONFIG_SHELL=/bin/bash
@@ -205,7 +211,6 @@ extract() {
 find_archive() {
     local base=$1
     local archive=""
-    # Use a for loop with glob patterns; if no match, the pattern is literal, but -f will fail.
     for f in "${base}"*.tar.* "${base}"*.tgz; do
         if [ -f "$f" ]; then
             archive="$f"
@@ -271,7 +276,8 @@ cd build
              --enable-cet \
              --enable-multi-arch
 make -j$(nproc)
-make install
+# CHANGED 3: Force use of /tools/bin/rm during install
+make RM=/tools/bin/rm install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
@@ -405,7 +411,7 @@ INNEREOF
 run_privileged chmod +x "$LFS/build-lfs-system.sh"
 
 log_info "Entering chroot and compiling..."
-run_privileged chroot "$LFS" /bin/bash -c "export LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/lib:/usr/lib; export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
+run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
 if [ -x "$LFS/usr/bin/bash" ]; then
     run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
