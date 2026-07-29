@@ -105,10 +105,15 @@ ensure_bootstrap_chroot_shell() {
         fi
     done
 
-    # After the for loop, ensure /bin/awk exists
-    if [ ! -e "$LFS/bin/awk" ]; then
-        run_privileged ln -sf /usr/bin/awk "$LFS/bin/awk"
-    fi
+   # After the for loop, ensure /bin/awk exists and is executable
+   if [ ! -x "$LFS/bin/awk" ]; then
+       if [ -x "$LFS/usr/bin/awk" ]; then
+           run_privileged cp -v "$LFS/usr/bin/awk" "$LFS/bin/awk"
+           run_privileged chmod +x "$LFS/bin/awk"
+       else
+           log_warning "/usr/bin/awk not found in chroot, awk may be missing"
+       fi
+   fi
 }
 
 log_info "========================================="
