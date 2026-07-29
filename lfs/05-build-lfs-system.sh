@@ -186,7 +186,7 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-export PATH=/bin:/usr/bin:/sbin:/tools/bin
+export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export SHELL=/bin/bash
 export CONFIG_SHELL=/bin/bash
 
