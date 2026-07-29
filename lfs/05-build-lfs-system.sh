@@ -104,6 +104,11 @@ ensure_bootstrap_chroot_shell() {
             fi
         fi
     done
+
+    # After the for loop, ensure /bin/awk exists
+    if [ ! -e "$LFS/bin/awk" ]; then
+        run_privileged ln -sf /usr/bin/awk "$LFS/bin/awk"
+    fi
 }
 
 log_info "========================================="
