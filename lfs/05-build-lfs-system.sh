@@ -192,8 +192,8 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 set -e
 
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
-export SHELL=/bin/bash
-export CONFIG_SHELL=/bin/bash
+export SHELL=/tools/bin/bash
+export CONFIG_SHELL=/tools/bin/bash
 
 cd /sources
 
@@ -275,7 +275,8 @@ cd build
              --enable-cet \
              --enable-multi-arch
 make -j$(nproc)
-make RM=/tools/bin/rm install
+# Use LD_LIBRARY_PATH and SHELL to ensure /bin/sh can find libtinfo
+LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make RM=/tools/bin/rm SHELL=/tools/bin/bash install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
