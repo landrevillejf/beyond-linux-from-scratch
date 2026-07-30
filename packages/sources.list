@@ -1,5 +1,5 @@
 # LFS Sources - Automatically generated from official wget-lists
-# Generated: 2026-07-30T10:35:23.590480
+# Generated: 2026-07-30T12:16:39.337327
 # DO NOT EDIT MANUALLY – changes will be overwritten
 
 http://archive.xfce.org/src/xfce/xfce4-dev-tools/4.20/xfce4-dev-tools-4.20.0.tar.bz2
@@ -347,6 +347,8 @@ https://download.qemu.org/qemu-10.0.3.tar.xz
 https://download.qt.io/archive/qt/6.9/6.9.2/single/qt-everywhere-src-6.9.2.tar.xz
 https://download.qt.io/official_releases/qt/6.9/6.9.2/submodules/qtwebengine-everywhere-src-6.9.2.tar.xz
 https://download.samba.org/pub/samba/stable/samba-4.22.4.tar.gz
+https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
+https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
 https://download.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz
 https://download.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz
 https://download.videolan.org/contrib/libmpeg2/libmpeg2-0.5.1.tar.gz

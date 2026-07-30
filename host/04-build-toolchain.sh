@@ -284,8 +284,38 @@ build_toolchain() {
     rm -rf "$GLIBC_DIR"
     log_success "glibc done"
 
+    # ----- Build essential host tools for the temporary system -----
+    log_info "Building essential tools for /tools"
+    for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
+        archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+        if [ -z "$archive" ]; then
+            log_warning "Source for $pkg not found, skipping"
+            continue
+        fi
+        dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+        log_info "Building $dir"
+        tar -xf "$archive"
+        cd "$dir"
+        # Use the cross-compiler
+        CC="$LFS_TGT-gcc" \
+        CXX="$LFS_TGT-g++" \
+        AR="$LFS_TGT-ar" \
+        RANLIB="$LFS_TGT-ranlib" \
+        ./configure --prefix=/tools --host="$LFS_TGT" \
+                    --build=$(uname -m)-linux-gnu 2>/dev/null || true
+        make -j"$NUM_JOBS"
+        if [ "$pkg" = "bzip2" ]; then
+            make PREFIX=/tools install
+        else
+            make install
+        fi
+        cd "$LFS/sources"
+        rm -rf "$dir"
+    done
+
     log_info "Building libstdc++"
     tar -xf "$GCC_TAR"   # re-extract GCC
+
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
     mkdir -v build-libstdc++
