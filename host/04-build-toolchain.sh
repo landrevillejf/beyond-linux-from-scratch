@@ -296,13 +296,10 @@ build_toolchain() {
         log_info "Building $dir"
         tar -xf "$archive"
         cd "$dir"
-        # Fix for coreutils MB_LEN_MAX error
+        CFLAGS=""
         if [ "$pkg" = "coreutils" ]; then
-            export CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE"
-        else
-            export CFLAGS=""
+            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
         fi
-        # Use the cross-compiler and install into $LFS/tools
         CC="$LFS_TGT-gcc" \
         CXX="$LFS_TGT-g++" \
         AR="$LFS_TGT-ar" \
@@ -311,6 +308,10 @@ build_toolchain() {
         ./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
                     --build=$(uname -m)-linux-gnu \
                     --disable-nls 2>/dev/null || true
+        # For coreutils, remove gnulib-tests from SUBDIRS to avoid PATH_MAX error
+        if [ "$pkg" = "coreutils" ]; then
+            sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile
+        fi
         make -j"$NUM_JOBS"
         if [ "$pkg" = "bzip2" ]; then
             make PREFIX="$LFS/tools" install
