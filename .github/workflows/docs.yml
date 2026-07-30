@@ -19,7 +19,7 @@ jobs:
           python-version: '3.11'
       - name: Install MkDocs and plugins
         run: |
-          pip install 'mkdocs<2.0' mkdocs-material mkdocs-awesome-pages
+          pip install 'mkdocs<2.0' mkdocs-material mkdocs-awesome-pages-plugin
       - name: Build site
         run: mkdocs build --site-dir public
       - name: Upload artifact
