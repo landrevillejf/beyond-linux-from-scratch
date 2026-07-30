@@ -282,7 +282,7 @@ build_toolchain() {
     sed '/RTLDLIST=/s@/usr@@g' -i "$LFS/usr/bin/ldd"
     cd "$LFS/sources"
     rm -rf "$GLIBC_DIR"
-        log_success "glibc done"
+    log_success "glibc done"
 
     # ----- Build essential host tools for the temporary system -----
     log_info "Building essential tools for /tools"
@@ -296,19 +296,22 @@ build_toolchain() {
         log_info "Building $dir"
         tar -xf "$archive"
         cd "$dir"
-        # Fix for coreutils MB_LEN_MAX error
+        # Set CFLAGS for coreutils to fix MB_LEN_MAX and add _GNU_SOURCE for PATH_MAX
+        CFLAGS=""
+        CONFIGURE_OPTS=""
         if [ "$pkg" = "coreutils" ]; then
-            export CFLAGS="-DMB_LEN_MAX=16"
-        else
-            export CFLAGS=""
+            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE"
+            CONFIGURE_OPTS="--disable-gnulib-tests"
         fi
         # Cross‑compile with the temporary toolchain
         CC="$LFS_TGT-gcc" \
         CXX="$LFS_TGT-g++" \
         AR="$LFS_TGT-ar" \
         RANLIB="$LFS_TGT-ranlib" \
+        CFLAGS="$CFLAGS" \
         ./configure --prefix=/tools --host="$LFS_TGT" \
-                    --build=$(uname -m)-linux-gnu 2>/dev/null || true
+                    --build=$(uname -m)-linux-gnu \
+                    --disable-nls $CONFIGURE_OPTS 2>/dev/null || true
         make -j"$NUM_JOBS"
         if [ "$pkg" = "bzip2" ]; then
             make PREFIX=/tools install
