@@ -296,12 +296,10 @@ build_toolchain() {
         log_info "Building $dir"
         tar -xf "$archive"
         cd "$dir"
-        # Set CFLAGS for coreutils to fix MB_LEN_MAX and add _GNU_SOURCE for PATH_MAX
+        # Set CFLAGS for coreutils to define PATH_MAX and MB_LEN_MAX
         CFLAGS=""
-        CONFIGURE_OPTS=""
         if [ "$pkg" = "coreutils" ]; then
-            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE"
-            CONFIGURE_OPTS="--disable-gnulib-tests"
+            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
         fi
         # Cross‑compile with the temporary toolchain
         CC="$LFS_TGT-gcc" \
@@ -311,7 +309,11 @@ build_toolchain() {
         CFLAGS="$CFLAGS" \
         ./configure --prefix=/tools --host="$LFS_TGT" \
                     --build=$(uname -m)-linux-gnu \
-                    --disable-nls $CONFIGURE_OPTS 2>/dev/null || true
+                    --disable-nls 2>/dev/null || true
+        # For coreutils, remove gnulib-tests from SUBDIRS to avoid compilation errors
+        if [ "$pkg" = "coreutils" ]; then
+            sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile
+        fi
         make -j"$NUM_JOBS"
         if [ "$pkg" = "bzip2" ]; then
             make PREFIX=/tools install
