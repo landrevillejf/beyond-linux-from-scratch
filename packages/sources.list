@@ -1,5 +1,5 @@
 # LFS Sources - Automatically generated from official wget-lists
-# Generated: 2026-07-30T13:29:02.729678
+# Generated: 2026-07-30T14:30:45.967787
 # DO NOT EDIT MANUALLY – changes will be overwritten
 
 http://archive.xfce.org/src/xfce/xfce4-dev-tools/4.20/xfce4-dev-tools-4.20.0.tar.bz2
@@ -944,8 +944,6 @@ https://www.cpan.org/authors/id/W/WB/WBRASWELL/Parse-Yapp-1.21.tar.gz
 https://www.cpan.org/authors/id/W/WY/WYANT/DateTime-Calendar-Julian-0.107.tar.gz
 https://www.cpan.org/src/5.0/perl-5.42.0.tar.xz
 https://www.docbook.org/sgml/3.1/docbk31.zip
-https://www.docbook.org/sgml/4.5/docbook-4.5.zip
-https://www.docbook.org/xml/4.5/docbook-xml-4.5.zip
 https://www.dovecot.org/releases/2.4/dovecot-2.4.0.tar.gz
 https://www.eecis.udel.edu/~ntp/ntp_spool/ntp4/ntp-4.2/ntp-4.2.8p18.tar.gz
 https://www.fftw.org/fftw-3.3.10.tar.gz
