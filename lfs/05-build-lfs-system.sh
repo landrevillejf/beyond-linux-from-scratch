@@ -115,9 +115,9 @@ ensure_bootstrap_chroot_shell() {
        fi
    fi
 
-   # CHANGED 1: Create symlink for libtinfo.so.6 in /lib
+   # Copy libtinfo.so.6 to /lib (instead of symlink) to ensure it's found
    if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
-       run_privileged ln -sf x86_64-linux-gnu/libtinfo.so.6 "$LFS/lib/libtinfo.so.6"
+       run_privileged cp -v "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" "$LFS/lib/libtinfo.so.6"
    fi
 }
 
@@ -191,7 +191,6 @@ cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
 #!/bin/bash
 set -e
 
-# CHANGED 2: Put /tools/bin first in PATH
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export SHELL=/bin/bash
 export CONFIG_SHELL=/bin/bash
@@ -276,7 +275,6 @@ cd build
              --enable-cet \
              --enable-multi-arch
 make -j$(nproc)
-# CHANGED 3: Force use of /tools/bin/rm during install
 make RM=/tools/bin/rm install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
