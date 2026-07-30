@@ -96,8 +96,11 @@ https://distfiles.adelielinux.org/source/a52dec/a52dec-0.8.0.tar.gz
 # exim
 https://ftp.exim.org/pub/pub/exim/exim4/exim-4.99.5.tar.gz
 
-# acl – version 2.3.2
-https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
-
 # cdrdao – version 1.2.3
 https://downloads.sourceforge.net/cdrdao/cdrdao-1.2.3.tar.bz2
+
+# acl – version 2.3.2
+https://sourceforge.net/projects/immortalwrt/files/sources/acl-2.3.2.tar.xz/download
+
+# attr – version 2.5.2
+https://download-mirror.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
