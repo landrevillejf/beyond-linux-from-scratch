@@ -25,16 +25,12 @@ plugins:
   - mkdocs-same-dir:
       enabled: true
       include: "**/*.md"
-      plugins:
-        - mkdocs-same-dir:
-            enabled: true
-            include: "**/*.md"
-            exclude:
-              - "**/venv/**"
-              - "**/build-release/**"
-              - "**/lfs-build/**"
-              - "**/__pycache__/**"
-              - "**/.git/**"
-              - "**/.*/**"
+      exclude:
+        - "**/venv/**"
+        - "**/build-release/**"
+        - "**/lfs-build/**"
+        - "**/__pycache__/**"
+        - "**/.git/**"
+        - "**/.*/**"
 
-# Pas besoin de navigation manuelle – mkdocs-same-dir va tout trouver
+# No manual navigation – mkdocs-same-dir will discover all markdown files.
