@@ -22,15 +22,6 @@ theme:
 
 plugins:
   - search
-  - mkdocs-same-dir:
-      enabled: true
-      include: "**/*.md"
-      exclude:
-        - "**/venv/**"
-        - "**/build-release/**"
-        - "**/lfs-build/**"
-        - "**/__pycache__/**"
-        - "**/.git/**"
-        - "**/.*/**"
+  - awesome-pages  # Remplace mkdocs-same-dir
 
-# No manual navigation – mkdocs-same-dir will discover all markdown files.
+# Pas besoin de navigation manuelle – awesome-pages va tout trouver

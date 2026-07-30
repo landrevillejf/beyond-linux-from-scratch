@@ -17,9 +17,9 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install MkDocs with Material theme and plugins
+      - name: Install MkDocs and plugins
         run: |
-          pip install mkdocs mkdocs-material mkdocs-same-dir
+          pip install 'mkdocs<2.0' mkdocs-material mkdocs-awesome-pages
       - name: Build site
         run: mkdocs build --site-dir public
       - name: Upload artifact
