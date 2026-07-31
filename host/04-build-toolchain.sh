@@ -294,6 +294,29 @@ build_toolchain() {
         log_info "Building $dir"
         tar -xf "$archive"
         cd "$dir"
+
+        # Correctif pour findutils : _POSIX_ARG_MAX manquant avec glibc récente
+        if [ "$pkg" = "findutils" ]; then
+            cat > /tmp/fix-posix-arg-max.patch << 'PATCH'
+    --- a/lib/buildcmd.c
+    +++ b/lib/buildcmd.c
+    @@ -491,7 +491,11 @@ bc_init_controlinfo(struct bc_controlinfo *ctl)
+       ctl->arg_max = MIN (ARG_MAX, bc_arg_max_limit ());
+
+       /* Set posix_arg_size_min to _POSIX_ARG_MAX if defined, otherwise 4096.  */
+    +#ifdef _POSIX_ARG_MAX
+       ctl->posix_arg_size_min = _POSIX_ARG_MAX;
+    +#else
+    +  ctl->posix_arg_size_min = 4096;
+    +#endif
+
+       ctl->exit_if_size_exceeded = true;
+       ctl->exec_callback = NULL;
+    PATCH
+            patch -p1 < /tmp/fix-posix-arg-max.patch
+            rm -f /tmp/fix-posix-arg-max.patch
+        fi
+
         CFLAGS=""
         if [ "$pkg" = "coreutils" ]; then
             CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
