@@ -275,6 +275,8 @@ python3 builder.py --generate-sources-list
 | `--profile` | Build profile (`xfce` by default) |
 | `--output` | Output directory (`./lfs-build` by default) |
 | `--config` | Configuration file path (`config/build.conf`) |
+| `--download-timeout` | Timeout in seconds for each download (default: from config or 300) |
+| `--download-retries` | Number of retries for failed downloads (default: from config or 3) |
 | `--resume-from` | Resume from a specific stage |
 | `--write-usb <device>` | Write generated ISO to a USB device |
 | `--list-profiles` | Print available profiles |
