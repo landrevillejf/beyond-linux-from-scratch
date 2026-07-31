@@ -297,7 +297,7 @@ build_toolchain() {
         CFLAGS=""
         if [ "$pkg" = "coreutils" ]; then
             CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
-        elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
+        elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
             CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
         fi
 
@@ -314,13 +314,8 @@ build_toolchain() {
             exit 1
         fi
 
-        # Pour coreutils, retirer gnulib-tests des SUBDIRS
-        if [ "$pkg" = "coreutils" ]; then
-            sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile
-        fi
-        # Pour grep et sed, même chose si nécessaire (mais ils ont déjà le flag PATH_MAX)
-        if [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
-            # Certaines versions peuvent avoir gnulib-tests, on le retire aussi
+        # Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
+        if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
             sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
         fi
 
