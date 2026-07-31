@@ -100,7 +100,12 @@ https://ftp.exim.org/pub/pub/exim/exim4/exim-4.99.5.tar.gz
 https://downloads.sourceforge.net/cdrdao/cdrdao-1.2.3.tar.bz2
 
 # acl – version 2.3.2
-https://sourceforge.net/projects/immortalwrt/files/sources/acl-2.3.2.tar.xz/download
+https://sourceforge.net/projects/immortalwrt/files/sources/acl-2.3.2.tar.xz
 
 # attr – version 2.5.2
 https://download-mirror.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
+
+# intltool – version 0.51.0
+http://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
+
+https://sourceforge.net/projects/mylfs/files/sources/docbook-xml-4.5.zip
