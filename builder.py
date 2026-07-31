@@ -69,7 +69,7 @@ BUILD_STAGES = [
     ('branding', 'blfs/20-branding.sh'),
     ('first-boot', 'blfs/17-first-boot-service.sh'),
     ('system-updater', 'blfs/18-system-updater.sh'),
-    ('lpm-advanced', 'blfs/19-lpm.sh'),
+    ('lpm', 'blfs/19-lpm.sh'),
     ('initramfs', 'final/12-create-initramfs.sh'),
     ('bootloader', 'final/13-create-bootloader.sh'),
     ('installer', 'final/14-create-installer.sh'),
@@ -1506,9 +1506,9 @@ class LFSBuilder:
         # System updater
         if self.profile_config.get('system_updater', True):
             stages.append(('system-updater', 'blfs/18-system-updater.sh'))
-            stages.append(('lpm-advanced', 'blfs/19-lpm.sh'))
+            stages.append(('lpm', 'blfs/19-lpm.sh'))
 
-        # ✅ FINAL STAGES (un seul initramfs ici)
+        # FINAL STAGES (un seul initramfs ici)
         stages.append(('initramfs', 'final/12-create-initramfs.sh'))
         stages.append(('bootloader', 'final/13-create-bootloader.sh'))
         stages.append(('installer', 'final/14-create-installer.sh'))
