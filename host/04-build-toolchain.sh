@@ -302,10 +302,11 @@ build_toolchain() {
         tar -xf "$archive"
         cd "$dir"
         CFLAGS=""
-        if [ "$pkg" = "coreutils" ]; then
-            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
-        elif [ "$pkg" = "grep" ]; then
+        if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
             CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
+            if [ "$pkg" = "coreutils" ]; then
+                CFLAGS="-DMB_LEN_MAX=16 $CFLAGS"
+            fi
         fi
         CC="$LFS_TGT-gcc" \
         CXX="$LFS_TGT-g++" \
@@ -315,8 +316,8 @@ build_toolchain() {
         ./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
                     --build=$(uname -m)-linux-gnu \
                     --disable-nls 2>/dev/null || true
-        # For coreutils, remove gnulib-tests from SUBDIRS to avoid PATH_MAX error
-        if [ "$pkg" = "coreutils" ]; then
+        # Remove gnulib-tests from SUBDIRS to avoid PATH_MAX errors in coreutils, grep, sed
+        if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
             sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile
         fi
         make -j"$NUM_JOBS"
