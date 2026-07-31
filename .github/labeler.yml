@@ -40,5 +40,5 @@ lpm:
           - lpm.py
           - docs/lpm.md
           - LPM_DOCUMENTATION.md
-          - blfs/20-lpm-advanced.sh
+          - blfs/19-lpm.sh
           - blfs/14-create-base-packages.sh
