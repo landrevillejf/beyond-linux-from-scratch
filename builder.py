@@ -63,14 +63,12 @@ BUILD_STAGES = [
     ('applications', 'blfs/10-build-applications.sh'),
     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
     ('java-dev', 'blfs/12-install-java-dev.sh'),
-    ('package-manager', 'blfs/13-create-package-manager.sh'),
     ('base-packages', 'blfs/14-create-base-packages.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
     ('branding', 'blfs/21-branding.sh'),
     ('first-boot', 'blfs/17-first-boot-service.sh'),
     ('system-updater', 'blfs/18-system-updater.sh'),
-    ('package-updater', 'blfs/19-package-updater.sh'),
     ('lpm-advanced', 'blfs/20-lpm-advanced.sh'),
     ('initramfs', 'final/12-create-initramfs.sh'),
     ('bootloader', 'final/13-create-bootloader.sh'),
@@ -1488,7 +1486,7 @@ class LFSBuilder:
 
         # Package manager
         if self.profile_config.get('package_manager', True):
-            stages.append(('package-manager', 'blfs/13-create-package-manager.sh'))
+            stages.append(('package-manager', 'blfs/20-lpm-advanced.sh'))
             stages.append(('base-packages', 'blfs/14-create-base-packages.sh'))
 
         # Security hardening
@@ -1508,7 +1506,6 @@ class LFSBuilder:
         # System updater
         if self.profile_config.get('system_updater', True):
             stages.append(('system-updater', 'blfs/18-system-updater.sh'))
-            stages.append(('package-updater', 'blfs/19-package-updater.sh'))
             stages.append(('lpm-advanced', 'blfs/20-lpm-advanced.sh'))
 
         # ✅ FINAL STAGES (un seul initramfs ici)

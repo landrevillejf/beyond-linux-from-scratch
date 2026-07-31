@@ -130,7 +130,6 @@ class TestRemainingCoverageLines:
 
         stage_names = [name for name, _ in stages]
         assert 'system-updater' in stage_names
-        assert 'package-updater' in stage_names
 
     @staticmethod
     def test_build_stages_without_live_system(tmp_path):

@@ -41,5 +41,4 @@ lpm:
           - docs/lpm.md
           - LPM_DOCUMENTATION.md
           - blfs/20-lpm-advanced.sh
-          - blfs/13-create-package-manager.sh
           - blfs/14-create-base-packages.sh
