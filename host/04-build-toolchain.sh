@@ -304,6 +304,8 @@ build_toolchain() {
         CFLAGS=""
         if [ "$pkg" = "coreutils" ]; then
             CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
+        elif [ "$pkg" = "grep" ]; then
+            CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
         fi
         CC="$LFS_TGT-gcc" \
         CXX="$LFS_TGT-g++" \
