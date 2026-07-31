@@ -190,11 +190,9 @@ build_toolchain() {
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     # Embed GMP, MPFR, MPC into GCC source tree
     for lib in gmp mpfr mpc; do
-        # Find the tarball, whether it's .tar.gz, .tar.xz, etc.
         LIB_TAR=$(ls ${lib}-*.tar.* 2>/dev/null | head -1)
         if [ -n "$LIB_TAR" ]; then
             tar -xf "$LIB_TAR"
-            # The extracted directory name is typically "${lib}-<version>"
             LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
             if [ -d "$LIB_DIR" ]; then
                 mv -v "$LIB_DIR" "$GCC_DIR/$lib"
@@ -264,10 +262,6 @@ build_toolchain() {
     cd "$GLIBC_DIR"
     mkdir -v build
     cd build
-    # Use --prefix=/usr with DESTDIR=$LFS so glibc is installed into the sysroot
-    # (the cross-compiler has --with-sysroot=$LFS, so it looks for libc at $LFS/usr/lib).
-    # libc_cv_slibdir and libc_cv_forced_unwind are provided as cache variables to
-    # bypass link tests that fail under GCC_NO_EXECUTABLES in a cross-compile environment.
     ../configure --prefix=/usr \
                  --host="$LFS_TGT" \
                  --build="$(../scripts/config.guess)" \
@@ -278,7 +272,6 @@ build_toolchain() {
                  libc_cv_forced_unwind=yes
     make -j"$NUM_JOBS"
     make DESTDIR="$LFS" install
-    # Fix hard-coded path in ldd script
     sed '/RTLDLIST=/s@/usr@@g' -i "$LFS/usr/bin/ldd"
     cd "$LFS/sources"
     rm -rf "$GLIBC_DIR"
@@ -287,7 +280,6 @@ build_toolchain() {
     # ----- Build essential host tools for the temporary system -----
     log_info "Building essential tools for /tools"
     for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
-        # Avoid matching make-ca when looking for make
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
         else
@@ -301,6 +293,15 @@ build_toolchain() {
         log_info "Building $dir"
         tar -xf "$archive"
         cd "$dir"
+
+        # ---------- CORRECTIF POUR FINDUTILS ----------
+        if [ "$pkg" = "findutils" ]; then
+            log_info "Patching findutils for _POSIX_ARG_MAX"
+            # Remplacer la ligne incriminée par une condition
+            sed -i '/ctl->posix_arg_size_min = _POSIX_ARG_MAX;/c\
+#ifdef _POSIX_ARG_MAX\n  ctl->posix_arg_size_min = _POSIX_ARG_MAX;\n#else\n  ctl->posix_arg_size_min = 4096;\n#endif' lib/buildcmd.c
+        fi
+
         CFLAGS=""
         if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
             CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
@@ -308,6 +309,7 @@ build_toolchain() {
                 CFLAGS="-DMB_LEN_MAX=16 $CFLAGS"
             fi
         fi
+
         CC="$LFS_TGT-gcc" \
         CXX="$LFS_TGT-g++" \
         AR="$LFS_TGT-ar" \
@@ -316,10 +318,11 @@ build_toolchain() {
         ./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
                     --build=$(uname -m)-linux-gnu \
                     --disable-nls 2>/dev/null || true
-        # Remove gnulib-tests from SUBDIRS to avoid PATH_MAX errors in coreutils, grep, sed
+
         if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ]; then
             sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile
         fi
+
         make -j"$NUM_JOBS"
         if [ "$pkg" = "bzip2" ]; then
             make PREFIX="$LFS/tools" install
