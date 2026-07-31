@@ -74,7 +74,13 @@ jobs:
       - name: Build release profile (xfce + sysvinit live)
         run: |
           cd /tmp/lfs-build
-          sudo -u lfs python3 builder.py --profile xfce --init sysvinit --output ./build-release --verbose
+          sudo -u lfs python3 builder.py \
+            --profile xfce \
+            --init sysvinit \
+            --output ./build-release \
+            --verbose \
+            --download-timeout 600 \
+            --download-retries 5
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
