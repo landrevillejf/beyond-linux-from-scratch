@@ -287,7 +287,12 @@ build_toolchain() {
     # ----- Build essential host tools for the temporary system -----
     log_info "Building essential tools for /tools"
     for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
-        archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+        # Avoid matching make-ca when looking for make
+        if [ "$pkg" = "make" ]; then
+            archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
+        else
+            archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+        fi
         if [ -z "$archive" ]; then
             log_warning "Source for $pkg not found, skipping"
             continue
