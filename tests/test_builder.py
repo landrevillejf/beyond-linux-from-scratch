@@ -572,34 +572,39 @@ class TestLFSBuilder:
 
     def test_main_bootloader_override(self, tmp_path):
         """Test that --bootloader argument updates config and executor."""
-        # Préparer un fichier de configuration minimal
         config_file = tmp_path / "build.conf"
         config_file.write_text('{}')
 
-        # Simuler sys.argv pour appeler main() avec --bootloader
         test_args = [
             'builder.py',
             '--profile', 'minimal',
             '--output', str(tmp_path / 'build'),
             '--config', str(config_file),
             '--bootloader', 'uboot',
-            '--no-live',          # éviter la création du live system
+            '--no-live',
         ]
-        with patch('sys.argv', test_args):
-            # Empêcher les téléchargements et le build réel
-            with patch.object(LFSBuilder, 'download_sources', return_value=True), \
-                    patch.object(LFSBuilder, 'prepare_environment', return_value=True), \
-                    patch.object(LFSBuilder, 'check_prerequisites', return_value=True), \
-                    patch.object(LFSBuilder, 'build', return_value=True):
+
+        # Patcher la classe LFSBuilder pour capturer l'appel du constructeur
+        with patch('builder.LFSBuilder') as MockBuilder:
+            # Créer une instance mockée qui retournera un mock pour les méthodes
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
                 main()
 
-        # Vérifier que le builder a bien reçu la config
-        # On ne peut pas accéder directement au builder, mais on peut vérifier
-        # que la variable d'environnement est exportée via les fichiers de log.
-        # Pour plus de précision, on peut intercepter la création du builder.
-        # Une autre approche : tester directement l'appel de la logique comme avant.
-        # Ici, on se contente de garantir que main() s'exécute sans erreur.
-        # La couverture indiquera que les lignes ont été exécutées.
+            # Vérifier que le constructeur a été appelé avec les bons arguments
+            MockBuilder.assert_called_once_with(
+                profile='minimal',
+                output_dir=str(tmp_path / 'build'),
+                config_file=str(config_file),
+                cache_url='https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json',
+                download_timeout=None,
+                download_retries=None
+            )
 
     @patch('builder.LFSBuilder._update_sources_list')
     @patch('builtins.print')

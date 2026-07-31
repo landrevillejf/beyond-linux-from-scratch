@@ -593,7 +593,9 @@ class TestLFSBuilderMissingISO:
                 # Verify that the builder was created with the cache_url
                 MockBuilder.assert_called_once_with(
                     profile='minimal',
-                    output_dir='./lfs-build',           # string, not Path
-                    config_file='config/build.conf',    # string, not Path
-                    cache_url=url
+                    output_dir='./lfs-build',
+                    config_file='config/build.conf',
+                    cache_url='https://my-custom/metadata.json',
+                    download_timeout=None,
+                    download_retries=None
                 )

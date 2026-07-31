@@ -1016,27 +1016,31 @@ class BuildCache:
 class LFSBuilder:
     """Main orchestrator for LFS/BLFS build process"""
 
-    def __init__(self, profile: str, output_dir: Path, config_file: Path, cache_url: Optional[str] = None):
+    def __init__(self, profile: str, output_dir: Path, config_file: Path,
+                 cache_url: Optional[str] = None,
+                 download_timeout: Optional[int] = None,
+                 download_retries: Optional[int] = None):
         self.profile = profile
         self.output_dir = Path(output_dir).resolve()
         if isinstance(config_file, str):
             config_file = Path(config_file)
-        self.config = LFSConfig(config_file)
+        self.config = LFSConfig(config_file)   # <- UN SEUL ARGUMENT
         self.system = platform.system()
         self._detected_system = self.system
         self.logger = self.setup_logging()
         self.profile_config = ProfileManager.get_profile(profile)
         self._cache_url = cache_url or "https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json"
-        # Apply profile settings to config
         self._apply_profile_settings()
 
-        # Initialize components
+        timeout = download_timeout if download_timeout is not None else self.config.get('build_options.download_timeout', 300)
+        retries = download_retries if download_retries is not None else self.config.get('build_options.retry_downloads', 3)
+
         self.downloader = SourceDownloader(
             self.output_dir / 'sources',
             self.logger,
-            timeout=self.config.get('build_options.download_timeout', 30),
-            retries=self.config.get('build_options.retry_downloads', 2),
-        )
+            timeout=timeout,
+            retries=retries,
+            )
         self.refresh_executor()
 
     def refresh_executor(self):
@@ -1828,6 +1832,12 @@ Examples:
     parser.add_argument('--kernel-version',
                         help='Version du noyau (ex: 6.16.1, 6.12.20, etc.)')
 
+    parser.add_argument('--download-timeout', type=int,
+                        help='Timeout in seconds for each download (default: from config or 300)')
+
+    parser.add_argument('--download-retries', type=int,
+                        help='Number of retries for failed downloads (default: from config or 3)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -1894,7 +1904,9 @@ def main():
         profile=args.profile,
         output_dir=args.output,
         config_file=args.config,
-        cache_url=args.cache_url
+        cache_url=args.cache_url,
+        download_timeout=args.download_timeout,
+        download_retries=args.download_retries
     )
 
     if args.host_distro:
