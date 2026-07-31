@@ -298,21 +298,21 @@ build_toolchain() {
         # Correctif pour findutils : _POSIX_ARG_MAX manquant avec glibc récente
         if [ "$pkg" = "findutils" ]; then
             cat > /tmp/fix-posix-arg-max.patch << 'PATCH'
-    --- a/lib/buildcmd.c
-    +++ b/lib/buildcmd.c
-    @@ -491,7 +491,11 @@ bc_init_controlinfo(struct bc_controlinfo *ctl)
-       ctl->arg_max = MIN (ARG_MAX, bc_arg_max_limit ());
+--- a/lib/buildcmd.c
++++ b/lib/buildcmd.c
+@@ -491,7 +491,11 @@ bc_init_controlinfo(struct bc_controlinfo *ctl)
+   ctl->arg_max = MIN (ARG_MAX, bc_arg_max_limit ());
 
-       /* Set posix_arg_size_min to _POSIX_ARG_MAX if defined, otherwise 4096.  */
-    +#ifdef _POSIX_ARG_MAX
-       ctl->posix_arg_size_min = _POSIX_ARG_MAX;
-    +#else
-    +  ctl->posix_arg_size_min = 4096;
-    +#endif
+   /* Set posix_arg_size_min to _POSIX_ARG_MAX if defined, otherwise 4096.  */
++#ifdef _POSIX_ARG_MAX
+   ctl->posix_arg_size_min = _POSIX_ARG_MAX;
++#else
++  ctl->posix_arg_size_min = 4096;
++#endif
 
-       ctl->exit_if_size_exceeded = true;
-       ctl->exec_callback = NULL;
-    PATCH
+   ctl->exit_if_size_exceeded = true;
+   ctl->exec_callback = NULL;
+PATCH
             patch -p1 < /tmp/fix-posix-arg-max.patch
             rm -f /tmp/fix-posix-arg-max.patch
         fi
