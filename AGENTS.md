@@ -8,7 +8,7 @@ This file provides context and guidelines for AI agents (e.g. GitHub Copilot, au
 
 **Way Beyond Linux From Scratch** is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`).
 
-- **Version**: 0.25.9  
+- **Version**: 0.52.4  
 - **License**: GPLv3  
 - **Primary language**: Python 3 (orchestrator) + Bash (stage scripts)  
 - **Author**: Jean-Francois Landreville, landrevillejf@protonmail.com
@@ -190,11 +190,6 @@ All workflows live in `.github/workflows/`. Key pipelines:
 2. Use `set -e` and `set -u` at the top of every stage script.
 3. Log meaningful progress messages — CI pipelines parse log output.
 4. Honour the `--resume-from` flag by ensuring stages can detect already-completed work.
-
-### Making changes to `lpm.py`
-
-- Cover new commands with tests in `tests/test_lpm*.py`.
-- See `LPM_DOCUMENTATION.md` for the package manager specification.
 
 ### Documentation
 
