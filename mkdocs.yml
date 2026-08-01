@@ -52,21 +52,19 @@ plugins:
       lang: en
       pipeline:
         - stemmer
-        - stop
-  - awesome-pages:
-      file: .pages
+        - stopWordFilter
+  - awesome-pages
   - minify:
       minify_html: true
       minify_css: true
       minify_js: true
-      minify_json: true
       cache_safe: true
   - mermaid2
 
 markdown_extensions:
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.superfences:
       custom_fences:
         - name: mermaid
