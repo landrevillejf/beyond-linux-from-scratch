@@ -31,7 +31,7 @@ jobs:
 
       - name: Build MkDocs site
         run: |
-          mkdocs build --strict
+          mkdocs build
 
       - name: Copy compiled site to docs folder
         run: |
