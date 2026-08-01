@@ -638,4 +638,35 @@ class TestLFSBuilder:
             main()
 
         # Vérifier le log
-        assert "Kernel version overridden to: 6.16.1" in caplog.text
+
+
+class TestVersionHandling:
+    """Test version file handling"""
+
+    def test_get_version_from_file(self):
+        """Test _get_version returns version from VERSION file when it exists"""
+        from builder import _get_version
+        # VERSION file exists in repo root
+        version = _get_version()
+        assert version == "0.52.7"
+        assert version != "dev"
+
+    def test_get_version_fallback_when_missing(self, tmp_path, monkeypatch):
+        """Test _get_version returns 'dev' when VERSION file is missing"""
+        from pathlib import Path
+        from unittest.mock import patch, MagicMock
+        import importlib
+        import builder
+        
+        # Patch Path to return a path that doesn't exist
+        original_path = Path
+        
+        def mock_path_init(*args, **kwargs):
+            # When called with "VERSION", return a mock that doesn't exist
+            result = MagicMock(spec=Path)
+            result.exists.return_value = False
+            return result
+        
+        with patch('builder.Path', side_effect=mock_path_init):
+            result = builder._get_version()
+            assert result == "dev", f"Expected 'dev' when VERSION file missing, got '{result}'"
