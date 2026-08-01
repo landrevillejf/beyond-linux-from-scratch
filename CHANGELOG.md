@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Added
+
+- **LPM Profile Management System**
+  - New `lpm list-profiles` command to list all available build profiles
+  - New `lpm add-profile <profile>` command to install preset package collections
+  - 12 predefined profiles: minimal, java-dev, audio-studio, xfce, gnome, kde, lxqt, server, web-dev, gnu-free, secure, multimedia
+  - Profiles stored in `/etc/lpm/profiles.json` with full package specifications
+  - Full dependency resolution for profile packages (uses existing install_order function)
+  - Dry-run support for preview before installation
+  - Modular system composition workflow: start minimal, add profiles incrementally
+
 ### Fixed
 - **LPM Critical Fixes** - Achieved production-ready status
   - Fixed regex escape bug in `parse_dep_spec()` for dependency version constraints
