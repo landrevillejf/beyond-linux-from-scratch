@@ -1,94 +1,95 @@
-<!doctype html><html lang=en class=no-js> <head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Automated LFS/BLFS distribution builder"><link href=https://landrevillejf.github.io/beyond-linux-from-scratch/lpm/ rel=canonical><link href=../make-release-how-to/ rel=prev><link href=../LPM_IMPROVEMENTS_v2.1.0/ rel=next><link rel=icon href=../assets/favicon.svg><meta name=generator content="mkdocs-1.6.1, mkdocs-material-9.7.7"><title>LPM Documentation - Way Beyond Linux From Scratch</title><link rel=stylesheet href=../assets/stylesheets/main.ec1eaa64.min.css><link rel=stylesheet href=../assets/stylesheets/palette.ab4e12ef.min.css><link rel=preconnect href=https://fonts.gstatic.com crossorigin><link rel=stylesheet href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback"><style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style><link rel=stylesheet href=../stylesheets/extra.css><script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script></head> <body dir=ltr data-md-color-scheme=default data-md-color-primary=green data-md-color-accent=light-green> <input class=md-toggle data-md-toggle=drawer type=checkbox id=__drawer autocomplete=off> <input class=md-toggle data-md-toggle=search type=checkbox id=__search autocomplete=off> <label class=md-overlay for=__drawer></label> <div data-md-component=skip> <a href=#lpm-linux-package-manager-for-lfs class=md-skip> Skip to content </a> </div> <div data-md-component=announce> </div> <div data-md-color-scheme=default data-md-component=outdated hidden> </div> <header class="md-header md-header--shadow md-header--lifted" data-md-component=header> <nav class="md-header__inner md-grid" aria-label=Header> <a href=.. title="Way Beyond Linux From Scratch" class="md-header__button md-logo" aria-label="Way Beyond Linux From Scratch" data-md-component=logo> <img src=../assets/logo.svg alt=logo> </a> <label class="md-header__button md-icon" for=__drawer> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg> </label> <div class=md-header__title data-md-component=header-title> <div class=md-header__ellipsis> <div class=md-header__topic> <span class=md-ellipsis> Way Beyond Linux From Scratch </span> </div> <div class=md-header__topic data-md-component=header-topic> <span class=md-ellipsis> LPM Documentation </span> </div> </div> </div> <form class=md-header__option data-md-component=palette> <input class=md-option data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme=default data-md-color-primary=green data-md-color-accent=light-green aria-label="Switch to dark mode" type=radio name=__palette id=__palette_0> <label class="md-header__button md-icon" title="Switch to dark mode" for=__palette_1 hidden> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7M9 21v-1h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1m3-17a5 5 0 0 0-5 5c0 2.05 1.23 3.81 3 4.58V16h4v-2.42c1.77-.77 3-2.53 3-4.58a5 5 0 0 0-5-5"/></svg> </label> <input class=md-option data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme=slate data-md-color-primary=green data-md-color-accent=light-green aria-label="Switch to light mode" type=radio name=__palette id=__palette_1> <label class="md-header__button md-icon" title="Switch to light mode" for=__palette_0 hidden> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9z"/></svg> </label> </form> <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script> <label class="md-header__button md-icon" for=__search> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg> </label> <div class=md-search data-md-component=search role=dialog> <label class=md-search__overlay for=__search></label> <div class=md-search__inner role=search> <form class=md-search__form name=search> <input type=text class=md-search__input name=query aria-label=Search placeholder=Search autocapitalize=off autocorrect=off autocomplete=off spellcheck=false data-md-component=search-query required> <label class="md-search__icon md-icon" for=__search> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg> </label> <nav class=md-search__options aria-label=Search> <a href=javascript:void(0) class="md-search__icon md-icon" title=Share aria-label=Share data-clipboard data-clipboard-text data-md-component=search-share tabindex=-1> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"/></svg> </a> <button type=reset class="md-search__icon md-icon" title=Clear aria-label=Clear tabindex=-1> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg> </button> </nav> <div class=md-search__suggest data-md-component=search-suggest></div> </form> <div class=md-search__output> <div class=md-search__scrollwrap tabindex=0 data-md-scrollfix> <div class=md-search-result data-md-component=search-result> <div class=md-search-result__meta> Initializing search </div> <ol class=md-search-result__list role=presentation></ol> </div> </div> </div> </div> </div> <div class=md-header__source> <a href=https://github.com/landrevillejf/beyond-linux-from-scratch title="Go to repository" class=md-source data-md-component=source> <div class="md-source__icon md-icon"> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 448 512"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg> </div> <div class=md-source__repository> landrevillejf/beyond-linux-from-scratch </div> </a> </div> </nav> <nav class=md-tabs aria-label=Tabs data-md-component=tabs> <div class=md-grid> <ul class=md-tabs__list> <li class=md-tabs__item> <a href=.. class=md-tabs__link> Home </a> </li> <li class=md-tabs__item> <a href=../features/ class=md-tabs__link> Getting Started </a> </li> <li class=md-tabs__item> <a href=../testing-howto/ class=md-tabs__link> User Guide </a> </li> <li class="md-tabs__item md-tabs__item--active"> <a href=./ class=md-tabs__link> Package Manager </a> </li> <li class=md-tabs__item> <a href=../BRANDING/ class=md-tabs__link> Customization </a> </li> <li class=md-tabs__item> <a href=../stage-timings/ class=md-tabs__link> Advanced </a> </li> <li class=md-tabs__item> <a href=../../../AGENTS.md class=md-tabs__link> Development </a> </li> </ul> </div> </nav> </header> <div class=md-container data-md-component=container> <main class=md-main data-md-component=main> <div class="md-main__inner md-grid"> <div class="md-sidebar md-sidebar--primary" data-md-component=sidebar data-md-type=navigation> <div class=md-sidebar__scrollwrap> <div class=md-sidebar__inner> <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label=Navigation data-md-level=0> <label class=md-nav__title for=__drawer> <a href=.. title="Way Beyond Linux From Scratch" class="md-nav__button md-logo" aria-label="Way Beyond Linux From Scratch" data-md-component=logo> <img src=../assets/logo.svg alt=logo> </a> Way Beyond Linux From Scratch </label> <div class=md-nav__source> <a href=https://github.com/landrevillejf/beyond-linux-from-scratch title="Go to repository" class=md-source data-md-component=source> <div class="md-source__icon md-icon"> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 448 512"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg> </div> <div class=md-source__repository> landrevillejf/beyond-linux-from-scratch </div> </a> </div> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=.. class=md-nav__link> <span class=md-ellipsis> Home </span> </a> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_2> <label class=md-nav__link for=__nav_2 id=__nav_2_label tabindex=0> <span class=md-ellipsis> Getting Started </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_2_label aria-expanded=false> <label class=md-nav__title for=__nav_2> <span class="md-nav__icon md-icon"></span> Getting Started </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../features/ class=md-nav__link> <span class=md-ellipsis> Features </span> </a> </li> <li class=md-nav__item> <a href=../content/ class=md-nav__link> <span class=md-ellipsis> Content Overview </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_3> <label class=md-nav__link for=__nav_3 id=__nav_3_label tabindex=0> <span class=md-ellipsis> User Guide </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_3_label aria-expanded=false> <label class=md-nav__title for=__nav_3> <span class="md-nav__icon md-icon"></span> User Guide </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../testing-howto/ class=md-nav__link> <span class=md-ellipsis> Testing </span> </a> </li> <li class=md-nav__item> <a href=../troubleshoot/ class=md-nav__link> <span class=md-ellipsis> Troubleshooting </span> </a> </li> <li class=md-nav__item> <a href=../docker-howto/ class=md-nav__link> <span class=md-ellipsis> Docker Setup </span> </a> </li> <li class=md-nav__item> <a href=../make-release-how-to/ class=md-nav__link> <span class=md-ellipsis> Make Release </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested"> <input class="md-nav__toggle md-toggle " type=checkbox id=__nav_4 checked> <label class=md-nav__link for=__nav_4 id=__nav_4_label tabindex> <span class=md-ellipsis> Package Manager </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_4_label aria-expanded=true> <label class=md-nav__title for=__nav_4> <span class="md-nav__icon md-icon"></span> Package Manager </label> <ul class=md-nav__list data-md-scrollfix> <li class="md-nav__item md-nav__item--active"> <input class="md-nav__toggle md-toggle" type=checkbox id=__toc> <label class="md-nav__link md-nav__link--active" for=__toc> <span class=md-ellipsis> LPM Documentation </span> <span class="md-nav__icon md-icon"></span> </label> <a href=./ class="md-nav__link md-nav__link--active"> <span class=md-ellipsis> LPM Documentation </span> </a> <nav class="md-nav md-nav--secondary" aria-label="Table of contents"> <label class=md-nav__title for=__toc> <span class="md-nav__icon md-icon"></span> Table of contents </label> <ul class=md-nav__list data-md-component=toc data-md-scrollfix> <li class=md-nav__item> <a href=#features class=md-nav__link> <span class=md-ellipsis> Features </span> </a> </li> <li class=md-nav__item> <a href=#installation class=md-nav__link> <span class=md-ellipsis> Installation </span> </a> <nav class=md-nav aria-label=Installation> <ul class=md-nav__list> <li class=md-nav__item> <a href=#system-requirements class=md-nav__link> <span class=md-ellipsis> System Requirements </span> </a> </li> </ul> </nav> </li> <li class=md-nav__item> <a href=#configuration class=md-nav__link> <span class=md-ellipsis> Configuration </span> </a> </li> <li class=md-nav__item> <a href=#package-format class=md-nav__link> <span class=md-ellipsis> Package Format </span> </a> </li> <li class=md-nav__item> <a href=#database class=md-nav__link> <span class=md-ellipsis> Database </span> </a> <nav class=md-nav aria-label=Database> <ul class=md-nav__list> <li class=md-nav__item> <a href=#dependency-format class=md-nav__link> <span class=md-ellipsis> Dependency Format </span> </a> </li> </ul> </nav> </li> <li class=md-nav__item> <a href=#commands class=md-nav__link> <span class=md-ellipsis> Commands </span> </a> <nav class=md-nav aria-label=Commands> <ul class=md-nav__list> <li class=md-nav__item> <a href=#install-package-or-add class=md-nav__link> <span class=md-ellipsis> install &lt;package&gt; (or add) </span> </a> </li> <li class=md-nav__item> <a href=#remove-package-or-rm class=md-nav__link> <span class=md-ellipsis> remove &lt;package&gt; (or rm) </span> </a> </li> <li class=md-nav__item> <a href=#update-package-or-upgrade-single class=md-nav__link> <span class=md-ellipsis> update &lt;package&gt; (or upgrade-single) </span> </a> </li> <li class=md-nav__item> <a href=#upgrade class=md-nav__link> <span class=md-ellipsis> upgrade </span> </a> </li> <li class=md-nav__item> <a href=#list-or-ls class=md-nav__link> <span class=md-ellipsis> list (or ls) </span> </a> </li> <li class=md-nav__item> <a href=#search-pattern-or-find class=md-nav__link> <span class=md-ellipsis> search &lt;pattern&gt; (or find) </span> </a> </li> <li class=md-nav__item> <a href=#info-package class=md-nav__link> <span class=md-ellipsis> info &lt;package&gt; </span> </a> </li> <li class=md-nav__item> <a href=#update-db-or-sync class=md-nav__link> <span class=md-ellipsis> update-db (or sync) </span> </a> </li> <li class=md-nav__item> <a href=#clean class=md-nav__link> <span class=md-ellipsis> clean </span> </a> </li> <li class=md-nav__item> <a href=#help-or-help-h class=md-nav__link> <span class=md-ellipsis> help (or --help, -h) </span> </a> </li> <li class=md-nav__item> <a href=#version-or-version-v class=md-nav__link> <span class=md-ellipsis> version (or --version, -V) </span> </a> </li> </ul> </nav> </li> <li class=md-nav__item> <a href=#global-options class=md-nav__link> <span class=md-ellipsis> Global Options </span> </a> </li> <li class=md-nav__item> <a href=#hooks class=md-nav__link> <span class=md-ellipsis> Hooks </span> </a> <nav class=md-nav aria-label=Hooks> <ul class=md-nav__list> <li class=md-nav__item> <a href=#hook-timing class=md-nav__link> <span class=md-ellipsis> Hook timing </span> </a> </li> <li class=md-nav__item> <a href=#example-pre-installsh class=md-nav__link> <span class=md-ellipsis> Example pre-install.sh </span> </a> </li> <li class=md-nav__item> <a href=#example-post-installsh class=md-nav__link> <span class=md-ellipsis> Example post-install.sh </span> </a> </li> </ul> </nav> </li> <li class=md-nav__item> <a href=#locking class=md-nav__link> <span class=md-ellipsis> Locking </span> </a> </li> <li class=md-nav__item> <a href=#logging class=md-nav__link> <span class=md-ellipsis> Logging </span> </a> </li> <li class=md-nav__item> <a href=#example-workflow class=md-nav__link> <span class=md-ellipsis> Example Workflow </span> </a> </li> <li class=md-nav__item> <a href=#repository-structure class=md-nav__link> <span class=md-ellipsis> Repository Structure </span> </a> </li> <li class=md-nav__item> <a href=#integration-with-lfsblfs-builder class=md-nav__link> <span class=md-ellipsis> Integration with LFS/BLFS Builder </span> </a> </li> </ul> </nav> </li> <li class=md-nav__item> <a href=../LPM_IMPROVEMENTS_v2.1.0/ class=md-nav__link> <span class=md-ellipsis> Improvements v2.1.0 </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_5> <label class=md-nav__link for=__nav_5 id=__nav_5_label tabindex=0> <span class=md-ellipsis> Customization </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_5_label aria-expanded=false> <label class=md-nav__title for=__nav_5> <span class="md-nav__icon md-icon"></span> Customization </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../BRANDING/ class=md-nav__link> <span class=md-ellipsis> Branding </span> </a> </li> <li class=md-nav__item> <a href=../INSTALLER_BRANDING/ class=md-nav__link> <span class=md-ellipsis> Installer Branding </span> </a> </li> <li class=md-nav__item> <a href=../wallpaper-generator-howto/ class=md-nav__link> <span class=md-ellipsis> Wallpaper Generator </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_6> <label class=md-nav__link for=__nav_6 id=__nav_6_label tabindex=0> <span class=md-ellipsis> Advanced </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_6_label aria-expanded=false> <label class=md-nav__title for=__nav_6> <span class="md-nav__icon md-icon"></span> Advanced </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../stage-timings/ class=md-nav__link> <span class=md-ellipsis> Stage Timings </span> </a> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_6_2> <label class=md-nav__link for=__nav_6_2 id=__nav_6_2_label tabindex=0> <span class=md-ellipsis> Upgrade Planning </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=2 aria-labelledby=__nav_6_2_label aria-expanded=false> <label class=md-nav__title for=__nav_6_2> <span class="md-nav__icon md-icon"></span> Upgrade Planning </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../UPGRADE-PHASE1-RESEARCH/ class=md-nav__link> <span class=md-ellipsis> Phase 1 Research </span> </a> </li> <li class=md-nav__item> <a href=../UPGRADE-PLAN/ class=md-nav__link> <span class=md-ellipsis> Full Upgrade Plan </span> </a> </li> </ul> </nav> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type=checkbox id=__nav_7> <label class=md-nav__link for=__nav_7 id=__nav_7_label tabindex=0> <span class=md-ellipsis> Development </span> <span class="md-nav__icon md-icon"></span> </label> <nav class=md-nav data-md-level=1 aria-labelledby=__nav_7_label aria-expanded=false> <label class=md-nav__title for=__nav_7> <span class="md-nav__icon md-icon"></span> Development </label> <ul class=md-nav__list data-md-scrollfix> <li class=md-nav__item> <a href=../../../AGENTS.md class=md-nav__link> <span class=md-ellipsis> Project Structure </span> </a> </li> <li class=md-nav__item> <a href=../../../SECURITY.md class=md-nav__link> <span class=md-ellipsis> Security Policy </span> </a> </li> <li class=md-nav__item> <a href=../../../CHANGELOG.md class=md-nav__link> <span class=md-ellipsis> Changelog </span> </a> </li> <li class=md-nav__item> <a href=../../../CONTRIBUTING.md class=md-nav__link> <span class=md-ellipsis> Contributing </span> </a> </li> </ul> </nav> </li> </ul> </nav> </div> </div> </div> <div class=md-content data-md-component=content> <article class="md-content__inner md-typeset"> <h1 id=lpm-linux-package-manager-for-lfs>LPM – Linux Package Manager for LFS<a class=headerlink href=#lpm-linux-package-manager-for-lfs title="Permanent link">&para;</a></h1> <p>LPM is a lightweight, full‑featured package manager designed specifically for Linux From Scratch (LFS) and other custom distributions.<br> It handles package installation, removal, upgrades, dependency resolution, and database management without relying on any external package management infrastructure.</p> <p><strong>Status</strong>: ✅ Production-Ready (v2.2.0+) – Performance-competitive with YUM/DNF/APT</p> <h2 id=features>Features<a class=headerlink href=#features title="Permanent link">&para;</a></h2> <ul> <li><strong>Dependency resolution</strong> – automatically installs required dependencies in the correct order with version constraint support (<code>pkg&gt;=1.2</code>, <code>pkg=2.0</code>).</li> <li><strong>Circular dependency detection</strong> – O(1) fast detection prevents infinite loops in complex dependency graphs.</li> <li><strong>Version constraints</strong> – support <code>&gt;=</code> and <code>=</code> operators for precise dependency control.</li> <li><strong>File tracking</strong> – records every installed file; removes only files that are not shared with other packages.</li> <li><strong>Checksum verification</strong> – optional SHA256 integrity check before installation.</li> <li><strong>GPG signature verification</strong> – optional cryptographic signature validation for package authenticity.</li> <li><strong>Pre/post install/remove hooks</strong> – run custom scripts during package lifecycle.</li> <li><strong>Transactional installation</strong> – atomic file installation with automatic rollback on failure.</li> <li><strong>Concurrent execution lock</strong> – prevents multiple LPM instances from interfering.</li> <li><strong>Verbose and dry‑run modes</strong> – simulate operations or get detailed debug output.</li> <li><strong>Repository support</strong> – local and remote HTTP(S) repository support.</li> <li><strong>Portable</strong> – works on minimal LFS systems (no GNU-specific dependencies).</li> <li><strong>High performance</strong> – optimized dependency resolution and file operations (100x faster than naive implementations).</li> <li><strong>Command set</strong> – install, remove, update, upgrade, list, search, info, clean, and more.</li> </ul> <h2 id=installation>Installation<a class=headerlink href=#installation title="Permanent link">&para;</a></h2> <p>LPM is installed as part of the Beyond Linux from Scratch build process (stage 19-lpm).<br> If you need to install it manually, copy the <code>lpm</code> script to <code>/usr/local/bin/lpm</code> and make it executable:</p> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span></pre></div></td><td class=code><div><pre><span></span><code>install<span class=w> </span>-m<span class=w> </span><span class=m>755</span><span class=w> </span>blfs/19-lpm.sh<span class=w> </span>/usr/local/bin/lpm
-mkdir<span class=w> </span>-p<span class=w> </span>/var/lib/lpm<span class=w> </span>/var/log/lpm<span class=w> </span>/etc/lpm<span class=w> </span>/usr/share/lpm/packages
-touch<span class=w> </span>/var/lib/lpm/packages.list<span class=w> </span>/var/lib/lpm/installed.list<span class=w> </span>/var/lib/lpm/file_index
-</code></pre></div></td></tr></table></div> <p>Ensure the configuration file <code>/etc/lpm/lpm.conf</code> exists (optional – all values have sensible defaults).</p> <h3 id=system-requirements>System Requirements<a class=headerlink href=#system-requirements title="Permanent link">&para;</a></h3> <ul> <li><strong>Bash</strong> 4.0+ (arrays, command substitution, regex support)</li> <li><strong>awk</strong> (standard POSIX awk, used for efficient data processing)</li> <li><strong>curl</strong> (optional, for remote repository downloads)</li> <li><strong>gpg</strong> (optional, for signature verification)</li> <li>Minimal LFS environment with tar, gzip, xz utilities</li> </ul> <h2 id=configuration>Configuration<a class=headerlink href=#configuration title="Permanent link">&para;</a></h2> <p>The configuration file <code>/etc/lpm/lpm.conf</code> can override the following variables (defaults shown):</p> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal> 1</span>
-<span class=normal> 2</span>
-<span class=normal> 3</span>
-<span class=normal> 4</span>
-<span class=normal> 5</span>
-<span class=normal> 6</span>
-<span class=normal> 7</span>
-<span class=normal> 8</span>
-<span class=normal> 9</span>
-<span class=normal>10</span>
-<span class=normal>11</span>
-<span class=normal>12</span>
-<span class=normal>13</span>
-<span class=normal>14</span>
-<span class=normal>15</span>
-<span class=normal>16</span>
-<span class=normal>17</span>
-<span class=normal>18</span>
-<span class=normal>19</span>
-<span class=normal>20</span>
-<span class=normal>21</span>
-<span class=normal>22</span>
-<span class=normal>23</span>
-<span class=normal>24</span>
-<span class=normal>25</span>
-<span class=normal>26</span>
-<span class=normal>27</span>
-<span class=normal>28</span>
-<span class=normal>29</span>
-<span class=normal>30</span>
-<span class=normal>31</span>
-<span class=normal>32</span>
-<span class=normal>33</span>
-<span class=normal>34</span>
-<span class=normal>35</span>
-<span class=normal>36</span>
-<span class=normal>37</span>
-<span class=normal>38</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Database paths</span>
-<span class=nv>LPM_DB</span><span class=o>=</span><span class=s2>&quot;/var/lib/lpm&quot;</span><span class=w>                       </span><span class=c1># Database directory</span>
-<span class=nv>LPM_LOGS</span><span class=o>=</span><span class=s2>&quot;/var/log/lpm&quot;</span><span class=w>                     </span><span class=c1># Log files directory</span>
-<span class=nv>LPM_PACKAGES_DIR</span><span class=o>=</span><span class=s2>&quot;/usr/share/lpm/packages&quot;</span><span class=w>  </span><span class=c1># Default local repository</span>
-<span class=nv>LPM_ETC</span><span class=o>=</span><span class=s2>&quot;/etc/lpm&quot;</span><span class=w>                          </span><span class=c1># Configuration directory</span>
-<span class=nv>LPM_ROOT</span><span class=o>=</span><span class=s2>&quot;/&quot;</span><span class=w>                                </span><span class=c1># Install root (for chroots/testing)</span>
+<!DOCTYPE html>
+<html class="no-js" lang="en"> <head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><meta content="Automated LFS/BLFS distribution builder" name="description"/><link href="https://landrevillejf.github.io/beyond-linux-from-scratch/lpm/" rel="canonical"/><link href="../make-release-how-to/" rel="prev"/><link href="../LPM_IMPROVEMENTS_v2.1.0/" rel="next"/><link href="../assets/favicon.svg" rel="icon"/><meta content="mkdocs-1.6.1, mkdocs-material-9.7.7" name="generator"/><title>LPM Documentation - Way Beyond Linux From Scratch</title><link href="../assets/stylesheets/main.ec1eaa64.min.css" rel="stylesheet"/><link href="../assets/stylesheets/palette.ab4e12ef.min.css" rel="stylesheet"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback" rel="stylesheet"/><style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style><link href="../stylesheets/extra.css" rel="stylesheet"/><script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script></head> <body data-md-color-accent="light-green" data-md-color-primary="green" data-md-color-scheme="default" dir="ltr"> <input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox"/> <input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/> <label class="md-overlay" for="__drawer"></label> <div data-md-component="skip"> <a class="md-skip" href="#lpm-linux-package-manager-for-lfs"> Skip to content </a> </div> <div data-md-component="announce"> </div> <div data-md-color-scheme="default" data-md-component="outdated" hidden=""> </div> <header class="md-header md-header--shadow md-header--lifted" data-md-component="header"> <nav aria-label="Header" class="md-header__inner md-grid"> <a aria-label="Way Beyond Linux From Scratch" class="md-header__button md-logo" data-md-component="logo" href=".." title="Way Beyond Linux From Scratch"> <img alt="logo" src="../assets/logo.svg"/> </a> <label class="md-header__button md-icon" for="__drawer"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg> </label> <div class="md-header__title" data-md-component="header-title"> <div class="md-header__ellipsis"> <div class="md-header__topic"> <span class="md-ellipsis"> Way Beyond Linux From Scratch </span> </div> <div class="md-header__topic" data-md-component="header-topic"> <span class="md-ellipsis"> LPM Documentation </span> </div> </div> </div> <form class="md-header__option" data-md-component="palette"> <input aria-label="Switch to dark mode" class="md-option" data-md-color-accent="light-green" data-md-color-media="(prefers-color-scheme: light)" data-md-color-primary="green" data-md-color-scheme="default" id="__palette_0" name="__palette" type="radio"/> <label class="md-header__button md-icon" for="__palette_1" hidden="" title="Switch to dark mode"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7M9 21v-1h6v1a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1m3-17a5 5 0 0 0-5 5c0 2.05 1.23 3.81 3 4.58V16h4v-2.42c1.77-.77 3-2.53 3-4.58a5 5 0 0 0-5-5"></path></svg> </label> <input aria-label="Switch to light mode" class="md-option" data-md-color-accent="light-green" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-primary="green" data-md-color-scheme="slate" id="__palette_1" name="__palette" type="radio"/> <label class="md-header__button md-icon" for="__palette_0" hidden="" title="Switch to light mode"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7M9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9z"></path></svg> </label> </form> <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script> <label class="md-header__button md-icon" for="__search"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg> </label> <div class="md-search" data-md-component="search" role="dialog"> <label class="md-search__overlay" for="__search"></label> <div class="md-search__inner" role="search"> <form class="md-search__form" name="search"> <input aria-label="Search" autocapitalize="off" autocomplete="off" autocorrect="off" class="md-search__input" data-md-component="search-query" name="query" placeholder="Search" required="" spellcheck="false" type="text"/> <label class="md-search__icon md-icon" for="__search"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg> </label> <nav aria-label="Search" class="md-search__options"> <a aria-label="Share" class="md-search__icon md-icon" data-clipboard="" data-clipboard-text="" data-md-component="search-share" href="javascript:void(0)" tabindex="-1" title="Share"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9a3 3 0 0 0-3 3 3 3 0 0 0 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.15c-.05.21-.08.43-.08.66 0 1.61 1.31 2.91 2.92 2.91s2.92-1.3 2.92-2.91A2.92 2.92 0 0 0 18 16.08"></path></svg> </a> <button aria-label="Clear" class="md-search__icon md-icon" tabindex="-1" title="Clear" type="reset"> <svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg> </button> </nav> <div class="md-search__suggest" data-md-component="search-suggest"></div> </form> <div class="md-search__output"> <div class="md-search__scrollwrap" data-md-scrollfix="" tabindex="0"> <div class="md-search-result" data-md-component="search-result"> <div class="md-search-result__meta"> Initializing search </div> <ol class="md-search-result__list" role="presentation"></ol> </div> </div> </div> </div> </div> <div class="md-header__source"> <a class="md-source" data-md-component="source" href="https://github.com/landrevillejf/beyond-linux-from-scratch" title="Go to repository"> <div class="md-source__icon md-icon"> <svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg> </div> <div class="md-source__repository"> landrevillejf/beyond-linux-from-scratch </div> </a> </div> </nav> <nav aria-label="Tabs" class="md-tabs" data-md-component="tabs"> <div class="md-grid"> <ul class="md-tabs__list"> <li class="md-tabs__item"> <a class="md-tabs__link" href=".."> Home </a> </li> <li class="md-tabs__item"> <a class="md-tabs__link" href="../features/"> Getting Started </a> </li> <li class="md-tabs__item"> <a class="md-tabs__link" href="../testing-howto/"> User Guide </a> </li> <li class="md-tabs__item md-tabs__item--active"> <a class="md-tabs__link" href="./"> Package Manager </a> </li> <li class="md-tabs__item"> <a class="md-tabs__link" href="../BRANDING/"> Customization </a> </li> <li class="md-tabs__item"> <a class="md-tabs__link" href="../stage-timings/"> Advanced </a> </li> <li class="md-tabs__item"> <a class="md-tabs__link" href="../../../AGENTS.md"> Development </a> </li> </ul> </div> </nav> </header> <div class="md-container" data-md-component="container"> <main class="md-main" data-md-component="main"> <div class="md-main__inner md-grid"> <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation"> <div class="md-sidebar__scrollwrap"> <div class="md-sidebar__inner"> <nav aria-label="Navigation" class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" data-md-level="0"> <label class="md-nav__title" for="__drawer"> <a aria-label="Way Beyond Linux From Scratch" class="md-nav__button md-logo" data-md-component="logo" href=".." title="Way Beyond Linux From Scratch"> <img alt="logo" src="../assets/logo.svg"/> </a> Way Beyond Linux From Scratch </label> <div class="md-nav__source"> <a class="md-source" data-md-component="source" href="https://github.com/landrevillejf/beyond-linux-from-scratch" title="Go to repository"> <div class="md-source__icon md-icon"> <svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg> </div> <div class="md-source__repository"> landrevillejf/beyond-linux-from-scratch </div> </a> </div> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href=".."> <span class="md-ellipsis"> Home </span> </a> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_2" type="checkbox"/> <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0"> <span class="md-ellipsis"> Getting Started </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_2_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_2"> <span class="md-nav__icon md-icon"></span> Getting Started </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../features/"> <span class="md-ellipsis"> Features </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../content/"> <span class="md-ellipsis"> Content Overview </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_3" type="checkbox"/> <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0"> <span class="md-ellipsis"> User Guide </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_3_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_3"> <span class="md-nav__icon md-icon"></span> User Guide </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../testing-howto/"> <span class="md-ellipsis"> Testing </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../troubleshoot/"> <span class="md-ellipsis"> Troubleshooting </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../docker-howto/"> <span class="md-ellipsis"> Docker Setup </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../make-release-how-to/"> <span class="md-ellipsis"> Make Release </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested"> <input checked="" class="md-nav__toggle md-toggle" id="__nav_4" type="checkbox"/> <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex=""> <span class="md-ellipsis"> Package Manager </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="true" aria-labelledby="__nav_4_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_4"> <span class="md-nav__icon md-icon"></span> Package Manager </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item md-nav__item--active"> <input class="md-nav__toggle md-toggle" id="__toc" type="checkbox"/> <label class="md-nav__link md-nav__link--active" for="__toc"> <span class="md-ellipsis"> LPM Documentation </span> <span class="md-nav__icon md-icon"></span> </label> <a class="md-nav__link md-nav__link--active" href="./"> <span class="md-ellipsis"> LPM Documentation </span> </a> <nav aria-label="Table of contents" class="md-nav md-nav--secondary"> <label class="md-nav__title" for="__toc"> <span class="md-nav__icon md-icon"></span> Table of contents </label> <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="#features"> <span class="md-ellipsis"> Features </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#installation"> <span class="md-ellipsis"> Installation </span> </a> <nav aria-label="Installation" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#system-requirements"> <span class="md-ellipsis"> System Requirements </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#configuration"> <span class="md-ellipsis"> Configuration </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#package-format"> <span class="md-ellipsis"> Package Format </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#database"> <span class="md-ellipsis"> Database </span> </a> <nav aria-label="Database" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#dependency-format"> <span class="md-ellipsis"> Dependency Format </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#commands"> <span class="md-ellipsis"> Commands </span> </a> <nav aria-label="Commands" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#install-package-or-add"> <span class="md-ellipsis"> install &lt;package&gt; (or add) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#remove-package-or-rm"> <span class="md-ellipsis"> remove &lt;package&gt; (or rm) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#update-package-or-upgrade-single"> <span class="md-ellipsis"> update &lt;package&gt; (or upgrade-single) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#upgrade"> <span class="md-ellipsis"> upgrade </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#list-or-ls"> <span class="md-ellipsis"> list (or ls) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#search-pattern-or-find"> <span class="md-ellipsis"> search &lt;pattern&gt; (or find) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#info-package"> <span class="md-ellipsis"> info &lt;package&gt; </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#update-db-or-sync"> <span class="md-ellipsis"> update-db (or sync) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#clean"> <span class="md-ellipsis"> clean </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#help-or-help-h"> <span class="md-ellipsis"> help (or --help, -h) </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#version-or-version-v"> <span class="md-ellipsis"> version (or --version, -V) </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#global-options"> <span class="md-ellipsis"> Global Options </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#hooks"> <span class="md-ellipsis"> Hooks </span> </a> <nav aria-label="Hooks" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#hook-timing"> <span class="md-ellipsis"> Hook timing </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#example-pre-installsh"> <span class="md-ellipsis"> Example pre-install.sh </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#example-post-installsh"> <span class="md-ellipsis"> Example post-install.sh </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#locking"> <span class="md-ellipsis"> Locking </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#logging"> <span class="md-ellipsis"> Logging </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#architecture"> <span class="md-ellipsis"> Architecture </span> </a> <nav aria-label="Architecture" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#system-architecture"> <span class="md-ellipsis"> System Architecture </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#command-flow-diagram"> <span class="md-ellipsis"> Command Flow Diagram </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#dependency-resolution-flow"> <span class="md-ellipsis"> Dependency Resolution Flow </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#package-removal-flow"> <span class="md-ellipsis"> Package Removal Flow </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#file-installation-with-rollback"> <span class="md-ellipsis"> File Installation with Rollback </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#lock-mechanism"> <span class="md-ellipsis"> Lock Mechanism </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#example-workflow"> <span class="md-ellipsis"> Example Workflow </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#repository-structure"> <span class="md-ellipsis"> Repository Structure </span> </a> <nav aria-label="Repository Structure" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#repository-priority"> <span class="md-ellipsis"> Repository Priority </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#integration-with-lfsblfs-builder"> <span class="md-ellipsis"> Integration with LFS/BLFS Builder </span> </a> <nav aria-label="Integration with LFS/BLFS Builder" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#build-stage-integration"> <span class="md-ellipsis"> Build Stage Integration </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#performance-characteristics"> <span class="md-ellipsis"> Performance Characteristics </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#security-architecture"> <span class="md-ellipsis"> Security Architecture </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#troubleshooting"> <span class="md-ellipsis"> Troubleshooting </span> </a> <nav aria-label="Troubleshooting" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#another-lpm-instance-is-running"> <span class="md-ellipsis"> "Another lpm instance is running" </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#package-not-found-in-database"> <span class="md-ellipsis"> "Package not found in database" </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#circular-dependency-detected"> <span class="md-ellipsis"> "Circular dependency detected" </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#checksum-mismatch"> <span class="md-ellipsis"> "Checksum mismatch" </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#installation-failed-rolling-back"> <span class="md-ellipsis"> "Installation failed - rolling back" </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#gpg-signature-verification-failed"> <span class="md-ellipsis"> "GPG signature verification failed" </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#faq"> <span class="md-ellipsis"> FAQ </span> </a> <nav aria-label="FAQ" class="md-nav"> <ul class="md-nav__list"> <li class="md-nav__item"> <a class="md-nav__link" href="#q-how-do-i-create-a-package-for-lpm"> <span class="md-ellipsis"> Q: How do I create a package for LPM? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-can-lpm-handle-version-constraints"> <span class="md-ellipsis"> Q: Can LPM handle version constraints? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-how-do-i-upgrade-all-packages-safely"> <span class="md-ellipsis"> Q: How do I upgrade all packages safely? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-what-if-a-file-is-owned-by-multiple-packages"> <span class="md-ellipsis"> Q: What if a file is owned by multiple packages? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-how-do-i-rollback-a-failed-installation"> <span class="md-ellipsis"> Q: How do I rollback a failed installation? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-can-i-use-lpm-on-a-mounted-chroot"> <span class="md-ellipsis"> Q: Can I use LPM on a mounted chroot? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-how-do-i-debug-lpm-operations"> <span class="md-ellipsis"> Q: How do I debug LPM operations? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-whats-the-performance-impact-of-lpm"> <span class="md-ellipsis"> Q: What's the performance impact of LPM? </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#q-is-lpm-production-ready"> <span class="md-ellipsis"> Q: Is LPM production-ready? </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#version-history"> <span class="md-ellipsis"> Version History </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="#contributing"> <span class="md-ellipsis"> Contributing </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../LPM_IMPROVEMENTS_v2.1.0/"> <span class="md-ellipsis"> Improvements v2.1.0 </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_5" type="checkbox"/> <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0"> <span class="md-ellipsis"> Customization </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_5_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_5"> <span class="md-nav__icon md-icon"></span> Customization </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../BRANDING/"> <span class="md-ellipsis"> Branding </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../INSTALLER_BRANDING/"> <span class="md-ellipsis"> Installer Branding </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../wallpaper-generator-howto/"> <span class="md-ellipsis"> Wallpaper Generator </span> </a> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_6" type="checkbox"/> <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0"> <span class="md-ellipsis"> Advanced </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_6_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_6"> <span class="md-nav__icon md-icon"></span> Advanced </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../stage-timings/"> <span class="md-ellipsis"> Stage Timings </span> </a> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_6_2" type="checkbox"/> <label class="md-nav__link" for="__nav_6_2" id="__nav_6_2_label" tabindex="0"> <span class="md-ellipsis"> Upgrade Planning </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_6_2_label" class="md-nav" data-md-level="2"> <label class="md-nav__title" for="__nav_6_2"> <span class="md-nav__icon md-icon"></span> Upgrade Planning </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../UPGRADE-PHASE1-RESEARCH/"> <span class="md-ellipsis"> Phase 1 Research </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../UPGRADE-PLAN/"> <span class="md-ellipsis"> Full Upgrade Plan </span> </a> </li> </ul> </nav> </li> </ul> </nav> </li> <li class="md-nav__item md-nav__item--nested"> <input class="md-nav__toggle md-toggle md-toggle--indeterminate" id="__nav_7" type="checkbox"/> <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0"> <span class="md-ellipsis"> Development </span> <span class="md-nav__icon md-icon"></span> </label> <nav aria-expanded="false" aria-labelledby="__nav_7_label" class="md-nav" data-md-level="1"> <label class="md-nav__title" for="__nav_7"> <span class="md-nav__icon md-icon"></span> Development </label> <ul class="md-nav__list" data-md-scrollfix=""> <li class="md-nav__item"> <a class="md-nav__link" href="../../../AGENTS.md"> <span class="md-ellipsis"> Project Structure </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../../../SECURITY.md"> <span class="md-ellipsis"> Security Policy </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../../../CHANGELOG.md"> <span class="md-ellipsis"> Changelog </span> </a> </li> <li class="md-nav__item"> <a class="md-nav__link" href="../../../CONTRIBUTING.md"> <span class="md-ellipsis"> Contributing </span> </a> </li> </ul> </nav> </li> </ul> </nav> </div> </div> </div> <div class="md-content" data-md-component="content"> <article class="md-content__inner md-typeset"> <h1 id="lpm-linux-package-manager-for-lfs">LPM – Linux Package Manager for LFS<a class="headerlink" href="#lpm-linux-package-manager-for-lfs" title="Permanent link">¶</a></h1> <p>LPM is a lightweight, full‑featured package manager designed specifically for Linux From Scratch (LFS) and other custom distributions.<br/> It handles package installation, removal, upgrades, dependency resolution, and database management without relying on any external package management infrastructure.</p> <p><strong>Status</strong>: ✅ Production-Ready (v2.2.0+) – Performance-competitive with YUM/DNF/APT</p> <h2 id="features">Features<a class="headerlink" href="#features" title="Permanent link">¶</a></h2> <ul> <li><strong>Dependency resolution</strong> – automatically installs required dependencies in the correct order with version constraint support (<code>pkg&gt;=1.2</code>, <code>pkg=2.0</code>).</li> <li><strong>Circular dependency detection</strong> – O(1) fast detection prevents infinite loops in complex dependency graphs.</li> <li><strong>Version constraints</strong> – support <code>&gt;=</code> and <code>=</code> operators for precise dependency control.</li> <li><strong>File tracking</strong> – records every installed file; removes only files that are not shared with other packages.</li> <li><strong>Checksum verification</strong> – optional SHA256 integrity check before installation.</li> <li><strong>GPG signature verification</strong> – optional cryptographic signature validation for package authenticity.</li> <li><strong>Pre/post install/remove hooks</strong> – run custom scripts during package lifecycle.</li> <li><strong>Transactional installation</strong> – atomic file installation with automatic rollback on failure.</li> <li><strong>Concurrent execution lock</strong> – prevents multiple LPM instances from interfering.</li> <li><strong>Verbose and dry‑run modes</strong> – simulate operations or get detailed debug output.</li> <li><strong>Repository support</strong> – local and remote HTTP(S) repository support.</li> <li><strong>Portable</strong> – works on minimal LFS systems (no GNU-specific dependencies).</li> <li><strong>High performance</strong> – optimized dependency resolution and file operations (100x faster than naive implementations).</li> <li><strong>Command set</strong> – install, remove, update, upgrade, list, search, info, clean, and more.</li> </ul> <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">¶</a></h2> <p>LPM is installed as part of the Beyond Linux from Scratch build process (stage 19-lpm).<br/> If you need to install it manually, copy the <code>lpm</code> script to <code>/usr/local/bin/lpm</code> and make it executable:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span></pre></div></td><td class="code"><div><pre><span></span><code>install<span class="w"> </span>-m<span class="w"> </span><span class="m">755</span><span class="w"> </span>blfs/19-lpm.sh<span class="w"> </span>/usr/local/bin/lpm
+mkdir<span class="w"> </span>-p<span class="w"> </span>/var/lib/lpm<span class="w"> </span>/var/log/lpm<span class="w"> </span>/etc/lpm<span class="w"> </span>/usr/share/lpm/packages
+touch<span class="w"> </span>/var/lib/lpm/packages.list<span class="w"> </span>/var/lib/lpm/installed.list<span class="w"> </span>/var/lib/lpm/file_index
+</code></pre></div></td></tr></table></div> <p>Ensure the configuration file <code>/etc/lpm/lpm.conf</code> exists (optional – all values have sensible defaults).</p> <h3 id="system-requirements">System Requirements<a class="headerlink" href="#system-requirements" title="Permanent link">¶</a></h3> <ul> <li><strong>Bash</strong> 4.0+ (arrays, command substitution, regex support)</li> <li><strong>awk</strong> (standard POSIX awk, used for efficient data processing)</li> <li><strong>curl</strong> (optional, for remote repository downloads)</li> <li><strong>gpg</strong> (optional, for signature verification)</li> <li>Minimal LFS environment with tar, gzip, xz utilities</li> </ul> <h2 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">¶</a></h2> <p>The configuration file <code>/etc/lpm/lpm.conf</code> can override the following variables (defaults shown):</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span>
+<span class="normal">19</span>
+<span class="normal">20</span>
+<span class="normal">21</span>
+<span class="normal">22</span>
+<span class="normal">23</span>
+<span class="normal">24</span>
+<span class="normal">25</span>
+<span class="normal">26</span>
+<span class="normal">27</span>
+<span class="normal">28</span>
+<span class="normal">29</span>
+<span class="normal">30</span>
+<span class="normal">31</span>
+<span class="normal">32</span>
+<span class="normal">33</span>
+<span class="normal">34</span>
+<span class="normal">35</span>
+<span class="normal">36</span>
+<span class="normal">37</span>
+<span class="normal">38</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Database paths</span>
+<span class="nv">LPM_DB</span><span class="o">=</span><span class="s2">"/var/lib/lpm"</span><span class="w">                       </span><span class="c1"># Database directory</span>
+<span class="nv">LPM_LOGS</span><span class="o">=</span><span class="s2">"/var/log/lpm"</span><span class="w">                     </span><span class="c1"># Log files directory</span>
+<span class="nv">LPM_PACKAGES_DIR</span><span class="o">=</span><span class="s2">"/usr/share/lpm/packages"</span><span class="w">  </span><span class="c1"># Default local repository</span>
+<span class="nv">LPM_ETC</span><span class="o">=</span><span class="s2">"/etc/lpm"</span><span class="w">                          </span><span class="c1"># Configuration directory</span>
+<span class="nv">LPM_ROOT</span><span class="o">=</span><span class="s2">"/"</span><span class="w">                                </span><span class="c1"># Install root (for chroots/testing)</span>
 
-<span class=c1># Repository settings</span>
-<span class=nv>REPO_LOCAL_PATH</span><span class=o>=</span><span class=s2>&quot;</span><span class=nv>$LPM_PACKAGES_DIR</span><span class=s2>&quot;</span><span class=w>         </span><span class=c1># Path for the &#39;local&#39; repository</span>
-<span class=nv>REPO_REMOTE_URLS</span><span class=o>=()</span><span class=w>                         </span><span class=c1># Remote HTTP(S) repository URLs</span>
+<span class="c1"># Repository settings</span>
+<span class="nv">REPO_LOCAL_PATH</span><span class="o">=</span><span class="s2">"</span><span class="nv">$LPM_PACKAGES_DIR</span><span class="s2">"</span><span class="w">         </span><span class="c1"># Path for the 'local' repository</span>
+<span class="nv">REPO_REMOTE_URLS</span><span class="o">=()</span><span class="w">                         </span><span class="c1"># Remote HTTP(S) repository URLs</span>
 
-<span class=c1># Verification settings</span>
-<span class=nv>VERIFY_CHECKSUMS</span><span class=o>=</span><span class=nb>true</span><span class=w>                       </span><span class=c1># Enable SHA256 verification</span>
-<span class=nv>VERIFY_SIGNATURES</span><span class=o>=</span><span class=nb>false</span><span class=w>                     </span><span class=c1># Enable GPG signature verification</span>
-<span class=nv>GPG_KEYRING</span><span class=o>=</span><span class=s2>&quot;/etc/lpm/trusted.gpg&quot;</span><span class=w>          </span><span class=c1># GPG trusted keyring</span>
+<span class="c1"># Verification settings</span>
+<span class="nv">VERIFY_CHECKSUMS</span><span class="o">=</span><span class="nb">true</span><span class="w">                       </span><span class="c1"># Enable SHA256 verification</span>
+<span class="nv">VERIFY_SIGNATURES</span><span class="o">=</span><span class="nb">false</span><span class="w">                     </span><span class="c1"># Enable GPG signature verification</span>
+<span class="nv">GPG_KEYRING</span><span class="o">=</span><span class="s2">"/etc/lpm/trusted.gpg"</span><span class="w">          </span><span class="c1"># GPG trusted keyring</span>
 
-<span class=c1># Download settings</span>
-<span class=nv>DOWNLOAD_MAX_CONNECTIONS</span><span class=o>=</span><span class=s2>&quot;4&quot;</span><span class=w>                </span><span class=c1># Parallel download limit</span>
-<span class=nv>DOWNLOAD_TIMEOUT</span><span class=o>=</span><span class=s2>&quot;60&quot;</span><span class=w>                       </span><span class=c1># Download timeout (seconds)</span>
-<span class=nv>DOWNLOAD_RETRIES</span><span class=o>=</span><span class=s2>&quot;3&quot;</span><span class=w>                        </span><span class=c1># Retry count on failure</span>
+<span class="c1"># Download settings</span>
+<span class="nv">DOWNLOAD_MAX_CONNECTIONS</span><span class="o">=</span><span class="s2">"4"</span><span class="w">                </span><span class="c1"># Parallel download limit</span>
+<span class="nv">DOWNLOAD_TIMEOUT</span><span class="o">=</span><span class="s2">"60"</span><span class="w">                       </span><span class="c1"># Download timeout (seconds)</span>
+<span class="nv">DOWNLOAD_RETRIES</span><span class="o">=</span><span class="s2">"3"</span><span class="w">                        </span><span class="c1"># Retry count on failure</span>
 
-<span class=c1># Build settings</span>
-<span class=nv>BUILD_JOBS</span><span class=o>=</span><span class=s2>&quot;</span><span class=k>$(</span>nproc<span class=k>)</span><span class=s2>&quot;</span><span class=w>                       </span><span class=c1># Parallel build jobs</span>
-<span class=nv>RUN_TESTS</span><span class=o>=</span><span class=s2>&quot;basic&quot;</span><span class=w>                           </span><span class=c1># Test level before install</span>
+<span class="c1"># Build settings</span>
+<span class="nv">BUILD_JOBS</span><span class="o">=</span><span class="s2">"</span><span class="k">$(</span>nproc<span class="k">)</span><span class="s2">"</span><span class="w">                       </span><span class="c1"># Parallel build jobs</span>
+<span class="nv">RUN_TESTS</span><span class="o">=</span><span class="s2">"basic"</span><span class="w">                           </span><span class="c1"># Test level before install</span>
 
-<span class=c1># Dependency resolution</span>
-<span class=nv>AUTO_INSTALL_DEPS</span><span class=o>=</span><span class=s2>&quot;true&quot;</span><span class=w>                    </span><span class=c1># Automatically install dependencies</span>
-<span class=nv>CHECK_CIRCULAR_DEPS</span><span class=o>=</span><span class=s2>&quot;true&quot;</span><span class=w>                  </span><span class=c1># Check for circular dependencies</span>
-<span class=nv>MAX_DEPTH</span><span class=o>=</span><span class=s2>&quot;20&quot;</span><span class=w>                              </span><span class=c1># Maximum dependency depth</span>
+<span class="c1"># Dependency resolution</span>
+<span class="nv">AUTO_INSTALL_DEPS</span><span class="o">=</span><span class="s2">"true"</span><span class="w">                    </span><span class="c1"># Automatically install dependencies</span>
+<span class="nv">CHECK_CIRCULAR_DEPS</span><span class="o">=</span><span class="s2">"true"</span><span class="w">                  </span><span class="c1"># Check for circular dependencies</span>
+<span class="nv">MAX_DEPTH</span><span class="o">=</span><span class="s2">"20"</span><span class="w">                              </span><span class="c1"># Maximum dependency depth</span>
 
-<span class=c1># Security</span>
-<span class=nv>REQUIRE_ROOT</span><span class=o>=</span><span class=s2>&quot;true&quot;</span><span class=w>                         </span><span class=c1># Require root for installation</span>
-<span class=nv>USE_SANDBOX</span><span class=o>=</span><span class=s2>&quot;false&quot;</span><span class=w>                         </span><span class=c1># Sandbox builds (bubblewrap)</span>
+<span class="c1"># Security</span>
+<span class="nv">REQUIRE_ROOT</span><span class="o">=</span><span class="s2">"true"</span><span class="w">                         </span><span class="c1"># Require root for installation</span>
+<span class="nv">USE_SANDBOX</span><span class="o">=</span><span class="s2">"false"</span><span class="w">                         </span><span class="c1"># Sandbox builds (bubblewrap)</span>
 
-<span class=c1># Logging &amp; display</span>
-<span class=nv>LOG_LEVEL</span><span class=o>=</span><span class=s2>&quot;INFO&quot;</span><span class=w>                            </span><span class=c1># DEBUG, INFO, WARNING, ERROR</span>
-<span class=nv>LOG_TIMESTAMP_FORMAT</span><span class=o>=</span><span class=s2>&quot;%Y-%m-%d %H:%M:%S&quot;</span><span class=w>   </span><span class=c1># Timestamp format in logs</span>
-<span class=nv>USE_COLORS</span><span class=o>=</span><span class=s2>&quot;true&quot;</span><span class=w>                           </span><span class=c1># Enable colored output</span>
-</code></pre></div></td></tr></table></div> <p>You can also set <code>NO_COLOR=true</code> to disable colorised output (respects <code>NO_COLOR</code> environment variable).</p> <h2 id=package-format>Package Format<a class=headerlink href=#package-format title="Permanent link">&para;</a></h2> <p>A package is a <strong>tar.xz</strong> archive with the following structure:</p> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal> 1</span>
-<span class=normal> 2</span>
-<span class=normal> 3</span>
-<span class=normal> 4</span>
-<span class=normal> 5</span>
-<span class=normal> 6</span>
-<span class=normal> 7</span>
-<span class=normal> 8</span>
-<span class=normal> 9</span>
-<span class=normal>10</span>
-<span class=normal>11</span></pre></div></td><td class=code><div><pre><span></span><code>package-version.tar.xz
+<span class="c1"># Logging &amp; display</span>
+<span class="nv">LOG_LEVEL</span><span class="o">=</span><span class="s2">"INFO"</span><span class="w">                            </span><span class="c1"># DEBUG, INFO, WARNING, ERROR</span>
+<span class="nv">LOG_TIMESTAMP_FORMAT</span><span class="o">=</span><span class="s2">"%Y-%m-%d %H:%M:%S"</span><span class="w">   </span><span class="c1"># Timestamp format in logs</span>
+<span class="nv">USE_COLORS</span><span class="o">=</span><span class="s2">"true"</span><span class="w">                           </span><span class="c1"># Enable colored output</span>
+</code></pre></div></td></tr></table></div> <p>You can also set <code>NO_COLOR=true</code> to disable colorised output (respects <code>NO_COLOR</code> environment variable).</p> <h2 id="package-format">Package Format<a class="headerlink" href="#package-format" title="Permanent link">¶</a></h2> <p>A package is a <strong>tar.xz</strong> archive with the following structure:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span></pre></div></td><td class="code"><div><pre><span></span><code>package-version.tar.xz
 ├── files/               # Files to install, with full path relative to root
 │   ├── usr/
 │   │   └── bin/
@@ -99,144 +100,533 @@ touch<span class=w> </span>/var/lib/lpm/packages.list<span class=w> </span>/var/
 ├── post-install.sh      # (optional) run after file installation
 ├── pre-remove.sh        # (optional) run before file removal
 └── post-remove.sh       # (optional) run after file removal
-</code></pre></div></td></tr></table></div> <p>All scripts must be executable and return <code>0</code> on success (non‑zero aborts the operation).</p> <h2 id=database>Database<a class=headerlink href=#database title="Permanent link">&para;</a></h2> <p>LPM maintains three files under <code>$LPM_DB</code>:</p> <ul> <li> <p><strong><code>packages.list</code></strong> – available packages database.<br> Format: <code>name|version|description|dependencies|checksum</code><br> Example:<br> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span></pre></div></td><td class=code><div><pre><span></span><code>bash|5.3|Bourne Again Shell|readline&gt;=2.0,ncurses|sha256-dummy
+</code></pre></div></td></tr></table></div> <p>All scripts must be executable and return <code>0</code> on success (non‑zero aborts the operation).</p> <h2 id="database">Database<a class="headerlink" href="#database" title="Permanent link">¶</a></h2> <p>LPM maintains three files under <code>$LPM_DB</code>:</p> <ul> <li> <p><strong><code>packages.list</code></strong> – available packages database.<br/> Format: <code>name|version|description|dependencies|checksum</code><br/> Example:<br/> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span></pre></div></td><td class="code"><div><pre><span></span><code>bash|5.3|Bourne Again Shell|readline&gt;=2.0,ncurses|sha256-dummy
 libfoo|1.0|A library|ncurses|sha256-abc123...
 gcc|13.2|GNU Compiler Collection|glibc&gt;=2.37,binutils|sha256-def456...
-</code></pre></div></td></tr></table></div></p> </li> <li> <p><strong><code>installed.list</code></strong> – installed packages (one per line).<br> Format: <code>name version</code><br> Example:<br> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span></pre></div></td><td class=code><div><pre><span></span><code>bash 5.3
+</code></pre></div></td></tr></table></div></p> </li> <li> <p><strong><code>installed.list</code></strong> – installed packages (one per line).<br/> Format: <code>name version</code><br/> Example:<br/> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span></pre></div></td><td class="code"><div><pre><span></span><code>bash 5.3
 ncurses 6.4
 readline 8.2
-</code></pre></div></td></tr></table></div></p> </li> <li> <p><strong><code>file_index</code></strong> – maps installed files to packages.<br> Format: <code>/path/to/file package-version</code><br> Example:<br> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span></pre></div></td><td class=code><div><pre><span></span><code>/usr/bin/bash bash-5.3
+</code></pre></div></td></tr></table></div></p> </li> <li> <p><strong><code>file_index</code></strong> – maps installed files to packages.<br/> Format: <code>/path/to/file package-version</code><br/> Example:<br/> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span></pre></div></td><td class="code"><div><pre><span></span><code>/usr/bin/bash bash-5.3
 /usr/lib/libreadline.so.8 readline-8.2
 /etc/bash.bashrc bash-5.3
-</code></pre></div></td></tr></table></div></p> </li> </ul> <h3 id=dependency-format>Dependency Format<a class=headerlink href=#dependency-format title="Permanent link">&para;</a></h3> <p>The <code>dependencies</code> field in <code>packages.list</code> is a comma-separated list of package names with optional version constraints:</p> <ul> <li><code>bash</code> – any version of bash</li> <li><code>readline&gt;=2.0</code> – readline version 2.0 or higher</li> <li><code>ncurses=6.4</code> – exactly ncurses version 6.4</li> <li><code>glibc&gt;=2.37,binutils,zlib&gt;=1.2.12</code> – multiple dependencies with constraints</li> </ul> <h2 id=commands>Commands<a class=headerlink href=#commands title="Permanent link">&para;</a></h2> <h3 id=install-package-or-add><code>install &lt;package&gt;</code> (or <code>add</code>)<a class=headerlink href=#install-package-or-add title="Permanent link">&para;</a></h3> <p>Install a package and its dependencies.<br> <code>package</code> can be a bare name (<code>bash</code>) or name‑version (<code>bash-5.3</code>).<br> LPM will automatically resolve and install all dependencies with version constraints.</p> <p>Use <code>--force</code> to reinstall an already installed package.<br> Use <code>--dry-run</code> to preview the installation without making changes.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>install<span class=w> </span>bash<span class=w>                    </span><span class=c1># Install latest bash and dependencies</span>
-lpm<span class=w> </span>install<span class=w> </span>bash-5.3<span class=w>                </span><span class=c1># Install specific version</span>
-lpm<span class=w> </span>install<span class=w> </span>--dry-run<span class=w> </span>gcc<span class=w>           </span><span class=c1># Preview gcc installation</span>
-lpm<span class=w> </span>install<span class=w> </span>--force<span class=w> </span>nginx<span class=w>           </span><span class=c1># Reinstall already-installed nginx</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=remove-package-or-rm><code>remove &lt;package&gt;</code> (or <code>rm</code>)<a class=headerlink href=#remove-package-or-rm title="Permanent link">&para;</a></h3> <p>Remove an installed package.<br> Files that are still required by other packages are preserved.<br> Runs pre-remove hooks before removal; post-remove hooks after.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>remove<span class=w> </span>nginx
-lpm<span class=w> </span>remove<span class=w> </span>--keep-files<span class=w> </span>php<span class=w>         </span><span class=c1># Remove but preserve installed files</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=update-package-or-upgrade-single><code>update &lt;package&gt;</code> (or <code>upgrade-single</code>)<a class=headerlink href=#update-package-or-upgrade-single title="Permanent link">&para;</a></h3> <p>Remove then reinstall a package (upgrade it to the latest known version from the database).</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>update<span class=w> </span>bash<span class=w>                     </span><span class=c1># Upgrade bash to latest available version</span>
-lpm<span class=w> </span>update<span class=w> </span>--dry-run<span class=w> </span>bash<span class=w>           </span><span class=c1># Preview the upgrade</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=upgrade><code>upgrade</code><a class=headerlink href=#upgrade title="Permanent link">&para;</a></h3> <p>Check all installed packages and upgrade those that have a newer version in the database.<br> Respects version constraints from the installed package's dependency specification.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>upgrade<span class=w> </span>--dry-run<span class=w>               </span><span class=c1># Check upgradable packages</span>
-lpm<span class=w> </span>upgrade<span class=w>                         </span><span class=c1># Upgrade all available packages</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=list-or-ls><code>list</code> (or <code>ls</code>)<a class=headerlink href=#list-or-ls title="Permanent link">&para;</a></h3> <p>Show all installed packages with version and description.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span>
-<span class=normal>5</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>list
-<span class=c1># Output:</span>
-<span class=c1># bash 5.3 – Bourne Again Shell</span>
-<span class=c1># readline 8.2 – GNU readline library</span>
-<span class=c1># ncurses 6.4 – Terminal control library</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=search-pattern-or-find><code>search &lt;pattern&gt;</code> (or <code>find</code>)<a class=headerlink href=#search-pattern-or-find title="Permanent link">&para;</a></h3> <p>Search the package database for a pattern (case-insensitive substring match).</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>search<span class=w> </span>python<span class=w>                   </span><span class=c1># Find all python packages</span>
-lpm<span class=w> </span>search<span class=w> </span>lib<span class=w>                      </span><span class=c1># Find all library packages</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=info-package><code>info &lt;package&gt;</code><a class=headerlink href=#info-package title="Permanent link">&para;</a></h3> <p>Display detailed information about a package: version, description, dependencies, checksum, and installed status.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span>
-<span class=normal>5</span>
-<span class=normal>6</span>
-<span class=normal>7</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>info<span class=w> </span>bash
-<span class=c1># Name: bash</span>
-<span class=c1># Version: 5.3</span>
-<span class=c1># Description: Bourne Again Shell</span>
-<span class=c1># Dependencies: readline&gt;=2.0</span>
-<span class=c1># Checksum: sha256-abc123...</span>
-<span class=c1># Status: installed (5.3)</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=update-db-or-sync><code>update-db</code> (or <code>sync</code>)<a class=headerlink href=#update-db-or-sync title="Permanent link">&para;</a></h3> <p>Refresh the package database by downloading/syncing repository indices.<br> Currently supports local repositories; remote repository support is in development.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>update-db
-lpm<span class=w> </span>update-db<span class=w> </span>--verbose<span class=w>             </span><span class=c1># Show details</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=clean><code>clean</code><a class=headerlink href=#clean title="Permanent link">&para;</a></h3> <p>Remove all cached <code>.tar.xz</code> files from the local repository directory and build artifacts.</p> <p><strong>Example:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code>lpm<span class=w> </span>clean<span class=w>                           </span><span class=c1># Free up disk space</span>
-lpm<span class=w> </span>clean<span class=w> </span>--dry-run<span class=w>                 </span><span class=c1># See what would be removed</span>
-</code></pre></div></td></tr></table></div></p> <h3 id=help-or-help-h><code>help</code> (or <code>--help</code>, <code>-h</code>)<a class=headerlink href=#help-or-help-h title="Permanent link">&para;</a></h3> <p>Display a short help summary of available commands.</p> <h3 id=version-or-version-v><code>version</code> (or <code>--version</code>, <code>-V</code>)<a class=headerlink href=#version-or-version-v title="Permanent link">&para;</a></h3> <p>Show LPM version information.</p> <h2 id=global-options>Global Options<a class=headerlink href=#global-options title="Permanent link">&para;</a></h2> <p>These options can be placed before the command:</p> <table> <thead> <tr> <th>Option</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code>--dry-run</code></td> <td>Simulate the operation (do not install, remove, or modify anything).</td> </tr> <tr> <td><code>--force</code></td> <td>Force reinstallation even if a package is already installed.</td> </tr> <tr> <td><code>--quiet</code></td> <td>Suppress all non‑error output.</td> </tr> <tr> <td><code>--verbose</code></td> <td>Show detailed debug messages (DEBUG level logging).</td> </tr> <tr> <td><code>--no-color</code></td> <td>Disable colored output (respects <code>NO_COLOR</code> environment variable).</td> </tr> <tr> <td><code>--help</code></td> <td>Show help text for the given command.</td> </tr> <tr> <td><code>--version</code></td> <td>Show LPM version.</td> </tr> </tbody> </table> <p><strong>Examples:</strong> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span>
-<span class=normal>5</span>
-<span class=normal>6</span>
-<span class=normal>7</span>
-<span class=normal>8</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Simulate a complex installation</span>
-lpm<span class=w> </span>--dry-run<span class=w> </span>--verbose<span class=w> </span>install<span class=w> </span>firefox
+</code></pre></div></td></tr></table></div></p> </li> </ul> <h3 id="dependency-format">Dependency Format<a class="headerlink" href="#dependency-format" title="Permanent link">¶</a></h3> <p>The <code>dependencies</code> field in <code>packages.list</code> is a comma-separated list of package names with optional version constraints:</p> <ul> <li><code>bash</code> – any version of bash</li> <li><code>readline&gt;=2.0</code> – readline version 2.0 or higher</li> <li><code>ncurses=6.4</code> – exactly ncurses version 6.4</li> <li><code>glibc&gt;=2.37,binutils,zlib&gt;=1.2.12</code> – multiple dependencies with constraints</li> </ul> <h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">¶</a></h2> <h3 id="install-package-or-add"><code>install &lt;package&gt;</code> (or <code>add</code>)<a class="headerlink" href="#install-package-or-add" title="Permanent link">¶</a></h3> <p>Install a package and its dependencies.<br/> <code>package</code> can be a bare name (<code>bash</code>) or name‑version (<code>bash-5.3</code>).<br/> LPM will automatically resolve and install all dependencies with version constraints.</p> <p>Use <code>--force</code> to reinstall an already installed package.<br/> Use <code>--dry-run</code> to preview the installation without making changes.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>install<span class="w"> </span>bash<span class="w">                    </span><span class="c1"># Install latest bash and dependencies</span>
+lpm<span class="w"> </span>install<span class="w"> </span>bash-5.3<span class="w">                </span><span class="c1"># Install specific version</span>
+lpm<span class="w"> </span>install<span class="w"> </span>--dry-run<span class="w"> </span>gcc<span class="w">           </span><span class="c1"># Preview gcc installation</span>
+lpm<span class="w"> </span>install<span class="w"> </span>--force<span class="w"> </span>nginx<span class="w">           </span><span class="c1"># Reinstall already-installed nginx</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="remove-package-or-rm"><code>remove &lt;package&gt;</code> (or <code>rm</code>)<a class="headerlink" href="#remove-package-or-rm" title="Permanent link">¶</a></h3> <p>Remove an installed package.<br/> Files that are still required by other packages are preserved.<br/> Runs pre-remove hooks before removal; post-remove hooks after.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>remove<span class="w"> </span>nginx
+lpm<span class="w"> </span>remove<span class="w"> </span>--keep-files<span class="w"> </span>php<span class="w">         </span><span class="c1"># Remove but preserve installed files</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="update-package-or-upgrade-single"><code>update &lt;package&gt;</code> (or <code>upgrade-single</code>)<a class="headerlink" href="#update-package-or-upgrade-single" title="Permanent link">¶</a></h3> <p>Remove then reinstall a package (upgrade it to the latest known version from the database).</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>update<span class="w"> </span>bash<span class="w">                     </span><span class="c1"># Upgrade bash to latest available version</span>
+lpm<span class="w"> </span>update<span class="w"> </span>--dry-run<span class="w"> </span>bash<span class="w">           </span><span class="c1"># Preview the upgrade</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="upgrade"><code>upgrade</code><a class="headerlink" href="#upgrade" title="Permanent link">¶</a></h3> <p>Check all installed packages and upgrade those that have a newer version in the database.<br/> Respects version constraints from the installed package's dependency specification.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>upgrade<span class="w"> </span>--dry-run<span class="w">               </span><span class="c1"># Check upgradable packages</span>
+lpm<span class="w"> </span>upgrade<span class="w">                         </span><span class="c1"># Upgrade all available packages</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="list-or-ls"><code>list</code> (or <code>ls</code>)<a class="headerlink" href="#list-or-ls" title="Permanent link">¶</a></h3> <p>Show all installed packages with version and description.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>list
+<span class="c1"># Output:</span>
+<span class="c1"># bash 5.3 – Bourne Again Shell</span>
+<span class="c1"># readline 8.2 – GNU readline library</span>
+<span class="c1"># ncurses 6.4 – Terminal control library</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="search-pattern-or-find"><code>search &lt;pattern&gt;</code> (or <code>find</code>)<a class="headerlink" href="#search-pattern-or-find" title="Permanent link">¶</a></h3> <p>Search the package database for a pattern (case-insensitive substring match).</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>search<span class="w"> </span>python<span class="w">                   </span><span class="c1"># Find all python packages</span>
+lpm<span class="w"> </span>search<span class="w"> </span>lib<span class="w">                      </span><span class="c1"># Find all library packages</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="info-package"><code>info &lt;package&gt;</code><a class="headerlink" href="#info-package" title="Permanent link">¶</a></h3> <p>Display detailed information about a package: version, description, dependencies, checksum, and installed status.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>info<span class="w"> </span>bash
+<span class="c1"># Name: bash</span>
+<span class="c1"># Version: 5.3</span>
+<span class="c1"># Description: Bourne Again Shell</span>
+<span class="c1"># Dependencies: readline&gt;=2.0</span>
+<span class="c1"># Checksum: sha256-abc123...</span>
+<span class="c1"># Status: installed (5.3)</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="update-db-or-sync"><code>update-db</code> (or <code>sync</code>)<a class="headerlink" href="#update-db-or-sync" title="Permanent link">¶</a></h3> <p>Refresh the package database by downloading/syncing repository indices.<br/> Currently supports local repositories; remote repository support is in development.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>update-db
+lpm<span class="w"> </span>update-db<span class="w"> </span>--verbose<span class="w">             </span><span class="c1"># Show details</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="clean"><code>clean</code><a class="headerlink" href="#clean" title="Permanent link">¶</a></h3> <p>Remove all cached <code>.tar.xz</code> files from the local repository directory and build artifacts.</p> <p><strong>Example:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span></pre></div></td><td class="code"><div><pre><span></span><code>lpm<span class="w"> </span>clean<span class="w">                           </span><span class="c1"># Free up disk space</span>
+lpm<span class="w"> </span>clean<span class="w"> </span>--dry-run<span class="w">                 </span><span class="c1"># See what would be removed</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="help-or-help-h"><code>help</code> (or <code>--help</code>, <code>-h</code>)<a class="headerlink" href="#help-or-help-h" title="Permanent link">¶</a></h3> <p>Display a short help summary of available commands.</p> <h3 id="version-or-version-v"><code>version</code> (or <code>--version</code>, <code>-V</code>)<a class="headerlink" href="#version-or-version-v" title="Permanent link">¶</a></h3> <p>Show LPM version information.</p> <h2 id="global-options">Global Options<a class="headerlink" href="#global-options" title="Permanent link">¶</a></h2> <p>These options can be placed before the command:</p> <table> <thead> <tr> <th>Option</th> <th>Description</th> </tr> </thead> <tbody> <tr> <td><code>--dry-run</code></td> <td>Simulate the operation (do not install, remove, or modify anything).</td> </tr> <tr> <td><code>--force</code></td> <td>Force reinstallation even if a package is already installed.</td> </tr> <tr> <td><code>--quiet</code></td> <td>Suppress all non‑error output.</td> </tr> <tr> <td><code>--verbose</code></td> <td>Show detailed debug messages (DEBUG level logging).</td> </tr> <tr> <td><code>--no-color</code></td> <td>Disable colored output (respects <code>NO_COLOR</code> environment variable).</td> </tr> <tr> <td><code>--help</code></td> <td>Show help text for the given command.</td> </tr> <tr> <td><code>--version</code></td> <td>Show LPM version.</td> </tr> </tbody> </table> <p><strong>Examples:</strong> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Simulate a complex installation</span>
+lpm<span class="w"> </span>--dry-run<span class="w"> </span>--verbose<span class="w"> </span>install<span class="w"> </span>firefox
 
-<span class=c1># Upgrade everything quietly</span>
-lpm<span class=w> </span>--quiet<span class=w> </span>upgrade
+<span class="c1"># Upgrade everything quietly</span>
+lpm<span class="w"> </span>--quiet<span class="w"> </span>upgrade
 
-<span class=c1># Install with debug output</span>
-lpm<span class=w> </span>--verbose<span class=w> </span>install<span class=w> </span>bash
-</code></pre></div></td></tr></table></div></p> <h2 id=hooks>Hooks<a class=headerlink href=#hooks title="Permanent link">&para;</a></h2> <p>All hook scripts receive the package name as <code>$1</code> and the installed version as <code>$2</code>.<br> They run from the extracted package directory and can access the package files via the <code>files/</code> subdirectory.<br> Hooks must be executable and return <code>0</code> on success (non-zero aborts the operation).</p> <h3 id=hook-timing>Hook timing<a class=headerlink href=#hook-timing title="Permanent link">&para;</a></h3> <ul> <li><strong><code>pre-install.sh</code></strong> – runs before file installation; abort installation if non-zero</li> <li><strong><code>post-install.sh</code></strong> – runs after file installation; logs warning if non-zero (does not abort)</li> <li><strong><code>pre-remove.sh</code></strong> – runs before file removal; logs warning if non-zero</li> <li><strong><code>post-remove.sh</code></strong> – runs after file removal; logs warning if non-zero</li> </ul> <h3 id=example-pre-installsh>Example <code>pre-install.sh</code><a class=headerlink href=#example-pre-installsh title="Permanent link">&para;</a></h3> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span>
-<span class=normal>5</span>
-<span class=normal>6</span>
-<span class=normal>7</span></pre></div></td><td class=code><div><pre><span></span><code><span class=ch>#!/bin/bash</span>
-<span class=nb>echo</span><span class=w> </span><span class=s2>&quot;[</span><span class=k>$(</span>date<span class=k>)</span><span class=s2>] Preparing to install </span><span class=nv>$1</span><span class=s2> (</span><span class=nv>$2</span><span class=s2>)&quot;</span>
-<span class=c1># Perform pre-installation tasks</span>
-<span class=k>if</span><span class=w> </span><span class=o>[</span><span class=w> </span><span class=s2>&quot;</span><span class=nv>$1</span><span class=s2>&quot;</span><span class=w> </span><span class=o>=</span><span class=w> </span><span class=s2>&quot;glibc&quot;</span><span class=w> </span><span class=o>]</span><span class=p>;</span><span class=w> </span><span class=k>then</span>
-<span class=w>    </span><span class=nb>echo</span><span class=w> </span><span class=s2>&quot;Note: glibc upgrade may require system reboot&quot;</span>
-<span class=k>fi</span>
-<span class=nb>exit</span><span class=w> </span><span class=m>0</span>
-</code></pre></div></td></tr></table></div> <h3 id=example-post-installsh>Example <code>post-install.sh</code><a class=headerlink href=#example-post-installsh title="Permanent link">&para;</a></h3> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
-<span class=normal>2</span>
-<span class=normal>3</span>
-<span class=normal>4</span>
-<span class=normal>5</span>
-<span class=normal>6</span>
-<span class=normal>7</span>
-<span class=normal>8</span></pre></div></td><td class=code><div><pre><span></span><code><span class=ch>#!/bin/bash</span>
-<span class=nb>echo</span><span class=w> </span><span class=s2>&quot;[</span><span class=k>$(</span>date<span class=k>)</span><span class=s2>] Installed </span><span class=nv>$1</span><span class=s2> (</span><span class=nv>$2</span><span class=s2>)&quot;</span>
-<span class=c1># Perform post-installation tasks</span>
-<span class=k>if</span><span class=w> </span><span class=o>[</span><span class=w> </span><span class=s2>&quot;</span><span class=nv>$1</span><span class=s2>&quot;</span><span class=w> </span><span class=o>=</span><span class=w> </span><span class=s2>&quot;bash&quot;</span><span class=w> </span><span class=o>]</span><span class=p>;</span><span class=w> </span><span class=k>then</span>
-<span class=w>    </span><span class=c1># Update any bash-related configurations</span>
-<span class=w>    </span>/usr/bin/bash<span class=w> </span>--version
-<span class=k>fi</span>
-<span class=nb>exit</span><span class=w> </span><span class=m>0</span>
-</code></pre></div></td></tr></table></div> <h2 id=locking>Locking<a class=headerlink href=#locking title="Permanent link">&para;</a></h2> <p>LPM uses <code>flock</code> on <code>/var/lock/lpm.lock</code> to ensure only one instance modifies the database at a time.<br> If another LPM process is already running, the command exits with an error.</p> <h2 id=logging>Logging<a class=headerlink href=#logging title="Permanent link">&para;</a></h2> <p>All operations are logged in:</p> <ul> <li><code>/var/log/lpm/install.log</code> – all installations</li> <li><code>/var/log/lpm/remove.log</code> – all removals</li> </ul> <p>Each line contains a timestamp, action, and package name.</p> <h2 id=example-workflow>Example Workflow<a class=headerlink href=#example-workflow title="Permanent link">&para;</a></h2> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal> 1</span>
-<span class=normal> 2</span>
-<span class=normal> 3</span>
-<span class=normal> 4</span>
-<span class=normal> 5</span>
-<span class=normal> 6</span>
-<span class=normal> 7</span>
-<span class=normal> 8</span>
-<span class=normal> 9</span>
-<span class=normal>10</span>
-<span class=normal>11</span>
-<span class=normal>12</span>
-<span class=normal>13</span>
-<span class=normal>14</span>
-<span class=normal>15</span>
-<span class=normal>16</span>
-<span class=normal>17</span>
-<span class=normal>18</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Install a package with its dependencies</span>
-lpm<span class=w> </span>install<span class=w> </span>git
+<span class="c1"># Install with debug output</span>
+lpm<span class="w"> </span>--verbose<span class="w"> </span>install<span class="w"> </span>bash
+</code></pre></div></td></tr></table></div></p> <h2 id="hooks">Hooks<a class="headerlink" href="#hooks" title="Permanent link">¶</a></h2> <p>All hook scripts receive the package name as <code>$1</code> and the installed version as <code>$2</code>.<br/> They run from the extracted package directory and can access the package files via the <code>files/</code> subdirectory.<br/> Hooks must be executable and return <code>0</code> on success (non-zero aborts the operation).</p> <h3 id="hook-timing">Hook timing<a class="headerlink" href="#hook-timing" title="Permanent link">¶</a></h3> <ul> <li><strong><code>pre-install.sh</code></strong> – runs before file installation; abort installation if non-zero</li> <li><strong><code>post-install.sh</code></strong> – runs after file installation; logs warning if non-zero (does not abort)</li> <li><strong><code>pre-remove.sh</code></strong> – runs before file removal; logs warning if non-zero</li> <li><strong><code>post-remove.sh</code></strong> – runs after file removal; logs warning if non-zero</li> </ul> <h3 id="example-pre-installsh">Example <code>pre-install.sh</code><a class="headerlink" href="#example-pre-installsh" title="Permanent link">¶</a></h3> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"[</span><span class="k">$(</span>date<span class="k">)</span><span class="s2">] Preparing to install </span><span class="nv">$1</span><span class="s2"> (</span><span class="nv">$2</span><span class="s2">)"</span>
+<span class="c1"># Perform pre-installation tasks</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$1</span><span class="s2">"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"glibc"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="nb">echo</span><span class="w"> </span><span class="s2">"Note: glibc upgrade may require system reboot"</span>
+<span class="k">fi</span>
+<span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+</code></pre></div></td></tr></table></div> <h3 id="example-post-installsh">Example <code>post-install.sh</code><a class="headerlink" href="#example-post-installsh" title="Permanent link">¶</a></h3> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="ch">#!/bin/bash</span>
+<span class="nb">echo</span><span class="w"> </span><span class="s2">"[</span><span class="k">$(</span>date<span class="k">)</span><span class="s2">] Installed </span><span class="nv">$1</span><span class="s2"> (</span><span class="nv">$2</span><span class="s2">)"</span>
+<span class="c1"># Perform post-installation tasks</span>
+<span class="k">if</span><span class="w"> </span><span class="o">[</span><span class="w"> </span><span class="s2">"</span><span class="nv">$1</span><span class="s2">"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"bash"</span><span class="w"> </span><span class="o">]</span><span class="p">;</span><span class="w"> </span><span class="k">then</span>
+<span class="w">    </span><span class="c1"># Update any bash-related configurations</span>
+<span class="w">    </span>/usr/bin/bash<span class="w"> </span>--version
+<span class="k">fi</span>
+<span class="nb">exit</span><span class="w"> </span><span class="m">0</span>
+</code></pre></div></td></tr></table></div> <h2 id="locking">Locking<a class="headerlink" href="#locking" title="Permanent link">¶</a></h2> <p>LPM uses <code>flock</code> on <code>/var/lock/lpm.lock</code> to ensure only one instance modifies the database at a time.<br/> If another LPM process is already running, the command exits with an error. On systems without <code>flock</code>, LPM falls back to atomic mkdir for lockfile creation.</p> <h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">¶</a></h2> <p>All operations are logged in:</p> <ul> <li><code>/var/log/lpm/install.log</code> – all installations</li> <li><code>/var/log/lpm/remove.log</code> – all removals</li> <li><code>/var/log/lpm/lpm.log</code> – general operations (if LOG_LEVEL=DEBUG)</li> </ul> <p>Each line contains a timestamp, action, and package name.</p> <hr/> <h2 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">¶</a></h2> <h3 id="system-architecture">System Architecture<a class="headerlink" href="#system-architecture" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph TB
+    subgraph "LPM Package Manager"
+        CLI["Command-Line Interface"]
+        Core["Core Functions"]
+        DB["Database Layer"]
+        Lock["Lock Manager"]
+    end
 
-<span class=c1># List installed packages</span>
-lpm<span class=w> </span>list
+    subgraph "Repositories"
+        Local["Local Repository"]
+        Remote["Remote Repository"]
+        Cache["Package Cache"]
+    end
 
-<span class=c1># Check for upgradable packages and upgrade all</span>
-lpm<span class=w> </span>upgrade<span class=w> </span>--dry-run
-lpm<span class=w> </span>upgrade
+    subgraph "System Integration"
+        Hooks["Pre/Post Hooks"]
+        FileTrack["File Tracker"]
+        Logs["Logging System"]
+    end
 
-<span class=c1># Search for a package</span>
-lpm<span class=w> </span>search<span class=w> </span>python
+    CLI --&gt;|install/remove/upgrade| Core
+    Core --&gt;|read/write| DB
+    Core --&gt;|acquire/release| Lock
+    Core --&gt;|fetch packages| Local
+    Core --&gt;|fetch packages| Remote
+    Local --&gt; Cache
+    Remote --&gt; Cache
+    Core --&gt;|track files| FileTrack
+    Core --&gt;|execute| Hooks
+    Core --&gt;|log operations| Logs
 
-<span class=c1># Show package info</span>
-lpm<span class=w> </span>info<span class=w> </span>bash
+    DB --&gt;|packages.list| Packages["📦 Package Database"]
+    DB --&gt;|installed.list| Installed["✅ Installed Packages"]
+    DB --&gt;|file_index| FileIndex["🗂️ File Index"]</code></pre> <h3 id="command-flow-diagram">Command Flow Diagram<a class="headerlink" href="#command-flow-diagram" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph LR
+    Start(["lpm install bash"]) --&gt;|Parse args| Parse["Parse: package name&lt;br/&gt;&amp; version constraints"]
+    Parse --&gt;|Check lock| Lock{Lock acquired?}
+    Lock --&gt;|No| Error["❌ Another instance&lt;br/&gt;running"]
+    Lock --&gt;|Yes| Load["📖 Load config &amp;&lt;br/&gt;set up paths"]
+    Load --&gt;|Resolve deps| Resolve["Dependency resolver&lt;br/&gt;with constraints"]
+    Resolve --&gt;|Check cycles| Cycle{Circular&lt;br/&gt;detected?}
+    Cycle --&gt;|Yes| Fail["❌ Abort&lt;br/&gt;(circular dep)"]
+    Cycle --&gt;|No| Order["📋 Topological&lt;br/&gt;sort for install"]
+    Order --&gt;|For each dep| Fetch["Fetch package&lt;br/&gt;from local/remote"]
+    Fetch --&gt;|Verify| Verify{Checksum &amp;&lt;br/&gt;signature OK?}
+    Verify --&gt;|No| Fail
+    Verify --&gt;|Yes| PreInstall["🔨 Run pre-install.sh"]
+    PreInstall --&gt;|Extract| Extract["Extract files&lt;br/&gt;to staging dir"]
+    Extract --&gt;|Backup| Backup["💾 Backup existing&lt;br/&gt;files"]
+    Backup --&gt;|Install| Install["📦 Install files&lt;br/&gt;to system"]
+    Install --&gt;|Track| Track["🗂️ Update file_index&lt;br/&gt;&amp; installed.list"]
+    Track --&gt;|Post-install| PostInstall["✨ Run post-install.sh"]
+    PostInstall --&gt;|Log| Log["📝 Log success"]
+    Log --&gt;|Next pkg| Order
+    Order --&gt;|Done| Release["🔓 Release lock"]
+    Release --&gt;|Success| End(["✅ Installation complete"])
+    Error --&gt; Release
+    Fail --&gt; Release</code></pre> <h3 id="dependency-resolution-flow">Dependency Resolution Flow<a class="headerlink" href="#dependency-resolution-flow" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph TD
+    Start(["Resolve bash&gt;=5.0"])
+    Start --&gt;|Check installed| Installed{Already&lt;br/&gt;installed &amp; satisfied?}
 
-<span class=c1># Remove a package (shared files are kept)</span>
-lpm<span class=w> </span>remove<span class=w> </span>gcc
-</code></pre></div></td></tr></table></div> <h2 id=repository-structure>Repository Structure<a class=headerlink href=#repository-structure title="Permanent link">&para;</a></h2> <p>Currently, LPM ships with a local repository. To add a remote repository, implement a custom handler in the <code>install_package</code> function that downloads the <code>.tar.xz</code> from a URL. The <code>update-db</code> command would then fetch the remote index and merge it into the local database.</p> <h2 id=integration-with-lfsblfs-builder>Integration with LFS/BLFS Builder<a class=headerlink href=#integration-with-lfsblfs-builder title="Permanent link">&para;</a></h2> <p>LPM is automatically installed as part of the <code>20-lpm-advanced.sh</code> stage in the LFS/BLFS builder.<br> The builder creates the necessary directories and populates the package database with pre‑built packages.</p> <hr> <p>For any questions or contributions, refer to the project repository.<br> LPM is maintained by Jean‑François Landreville (Dr. Land Evil).</p> </article> </div> <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script> <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script> </div> </main> <footer class=md-footer> <div class="md-footer-meta md-typeset"> <div class="md-footer-meta__inner md-grid"> <div class=md-copyright> <div class=md-copyright__highlight> Copyright © 2024 Jean-Francois Landreville. Licensed under GPLv3. </div> Made with <a href=https://squidfunk.github.io/mkdocs-material/ target=_blank rel=noopener> Material for MkDocs </a> </div> <div class=md-social> <a href=https://github.com/landrevillejf target=_blank rel=noopener title=GitHub class=md-social__link> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 512 512"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg> </a> <a href=mailto:landrevillejf@protonmail.com target=_blank rel=noopener title=Email class=md-social__link> <svg xmlns=http://www.w3.org/2000/svg viewbox="0 0 512 512"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4l208 156a48 48 0 0 0 57.6 0l208-156c12.1-9.1 19.2-23.3 19.2-38.4 0-26.5-21.5-48-48-48zM0 196v188c0 35.3 28.7 64 64 64h384c35.3 0 64-28.7 64-64V196L313.6 344.8c-34.1 25.6-81.1 25.6-115.2 0z"/></svg> </a> </div> </div> </div> </footer> </div> <div class=md-dialog data-md-component=dialog> <div class="md-dialog__inner md-typeset"></div> </div> <div class=md-progress data-md-component=progress role=progressbar></div> <script id=__config type=application/json>{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "toc.integrate", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link", "content.tooltips", "header.autohide"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "main", "provider": "mike"}}</script> <script src=../assets/javascripts/bundle.d7400e89.min.js></script> <script src=../javascripts/mathjax.js></script> <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script> <script src=https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js></script> </body> </html>
+    Installed --&gt;|Yes| Return["✅ Return (already have&lt;br/&gt;satisfying version)"]
+    Installed --&gt;|No| CheckCycle{Package in&lt;br/&gt;VISITED_DEPS?}
+
+    CheckCycle --&gt;|Yes| Circular["❌ Circular dependency&lt;br/&gt;detected"]
+    CheckCycle --&gt;|No| Mark["📍 Mark package&lt;br/&gt;as visited"]
+
+    Mark --&gt;|Query| Query["Query packages.list&lt;br/&gt;for 'bash' entry"]
+    Query --&gt;|Parse| Parse["Parse version&lt;br/&gt;from database"]
+    Parse --&gt;|Version check| VerCheck{bash version&lt;br/&gt;satisfies &gt;= 5.0?}
+
+    VerCheck --&gt;|No| VersionFail["❌ No version satisfies&lt;br/&gt;constraint"]
+    VerCheck --&gt;|Yes| GetDeps["📦 Get dependencies&lt;br/&gt;field from database"]
+
+    GetDeps --&gt;|Split| Split["Split on commas&lt;br/&gt;readline, ncurses"]
+    Split --&gt;|For each dep| RecurseStart["Recursively resolve&lt;br/&gt;each dependency"]
+
+    RecurseStart --&gt;|resolve readline| Readline["Resolve readline&lt;br/&gt;dependencies..."]
+    RecurseStart --&gt;|resolve ncurses| Ncurses["Resolve ncurses&lt;br/&gt;dependencies..."]
+
+    Readline --&gt;|No deps| AddReadline["✅ Add readline&lt;br/&gt;to install list"]
+    Ncurses --&gt;|No deps| AddNcurses["✅ Add ncurses&lt;br/&gt;to install list"]
+
+    AddReadline --&gt;|Continue| AddBash["✅ Add bash&lt;br/&gt;to install list"]
+    AddNcurses --&gt;|Continue| AddBash
+
+    AddBash --&gt;|Return| End(["Installation order:&lt;br/&gt;1. ncurses&lt;br/&gt;2. readline&lt;br/&gt;3. bash"])
+
+    Circular --&gt; End
+    VersionFail --&gt; End
+    Return --&gt; End</code></pre> <h3 id="package-removal-flow">Package Removal Flow<a class="headerlink" href="#package-removal-flow" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph TD
+    Start(["lpm remove bash"])
+    Start --&gt;|Acquire lock| Lock["🔒 Acquire lock"]
+    Lock --&gt;|Load config| Load["📖 Load paths &amp; config"]
+    Load --&gt;|Check installed| Check{bash&lt;br/&gt;installed?}
+
+    Check --&gt;|No| NotInstalled["⚠️ Warn: package&lt;br/&gt;not installed"]
+    Check --&gt;|Yes| PreRemove["🔨 Run pre-remove.sh"]
+
+    PreRemove --&gt;|Get version| GetVer["Get installed version&lt;br/&gt;from installed.list"]
+    GetVer --&gt;|Find files| FindFiles["Find all files owned&lt;br/&gt;by bash-5.3 in&lt;br/&gt;file_index"]
+
+    FindFiles --&gt;|For each file| CheckOwner{File owned by&lt;br/&gt;other packages?}
+
+    CheckOwner --&gt;|Yes| Keep["⏭️ Keep file&lt;br/&gt;(shared)"]
+    CheckOwner --&gt;|No| Backup["💾 Backup original&lt;br/&gt;file"]
+
+    Backup --&gt;|Remove| Remove["🗑️ Remove file&lt;br/&gt;from system"]
+    Remove --&gt;|Update index| UpdateIndex["Update file_index&lt;br/&gt;&amp; installed.list"]
+
+    Keep --&gt;|Continue| UpdateIndex
+    UpdateIndex --&gt;|Loop| FindFiles
+
+    FindFiles --&gt;|No more files| PostRemove["✨ Run post-remove.sh"]
+    PostRemove --&gt;|Cleanup| CleanBuild["Clean build artifacts"]
+    CleanBuild --&gt;|Log| Log["📝 Log removal"]
+    Log --&gt;|Release| Release["🔓 Release lock"]
+
+    NotInstalled --&gt; Release
+
+    Release --&gt;|Done| End(["✅ Removal complete"])</code></pre> <h3 id="file-installation-with-rollback">File Installation with Rollback<a class="headerlink" href="#file-installation-with-rollback" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph TD
+    Start(["Install package"])
+    Start --&gt;|Create| CreateBkp["Create backup dir&lt;br/&gt;$LPM_DB/.txn-pkg-ver"]
+
+    CreateBkp --&gt;|Initialize| Init["installed_files = ()"]
+    Init --&gt;|List files| List["Find all files in&lt;br/&gt;package/files/"]
+
+    List --&gt;|For each file| Loop["Process file"]
+    Loop --&gt;|Check exists| Exists{File exists&lt;br/&gt;on system?}
+
+    Exists --&gt;|Yes| BackupFile["💾 Backup to&lt;br/&gt;$backup_dir/$file"]
+    Exists --&gt;|No| MkParent["Create parent&lt;br/&gt;directories"]
+
+    BackupFile --&gt; MkParent
+    MkParent --&gt;|Copy file| Copy["📦 Copy file&lt;br/&gt;to system&lt;br/&gt;(cp -a)"]
+
+    Copy --&gt;|Success| AddList["Add file to&lt;br/&gt;installed_files[]"]
+    Copy --&gt;|Failure| Rollback["🔄 ROLLBACK:&lt;br/&gt;Restore all backups"]
+
+    AddList --&gt;|Continue| Loop
+    List --&gt;|All done| LogInstall["📝 Log installation&lt;br/&gt;Record in&lt;br/&gt;installed.list"]
+    LogInstall --&gt;|Cleanup| CleanBkp["Delete backup dir"]
+    CleanBkp --&gt;|Done| Success(["✅ Installation&lt;br/&gt;complete"])
+
+    Rollback --&gt;|For each file| RestoreLoop["Restore backed-up&lt;br/&gt;file or remove&lt;br/&gt;installed file"]
+    RestoreLoop --&gt;|Remove index| RemoveIndex["Remove entries from&lt;br/&gt;file_index"]
+    RemoveIndex --&gt;|Cleanup| Cleanup["Delete backup dir&lt;br/&gt;&amp; package dir"]
+    Cleanup --&gt;|Exit| Fail(["❌ Installation FAILED&lt;br/&gt;(rolled back)"])</code></pre> <h3 id="lock-mechanism">Lock Mechanism<a class="headerlink" href="#lock-mechanism" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph LR
+    Start(["LPM Command"])
+    Start --&gt;|acquire_lock| AcquireLock["Check for flock"]
+
+    AcquireLock --&gt;|flock available| Flock["exec {LOCK_FD} &gt; /var/lock/lpm.lock&lt;br/&gt;flock -n $LOCK_FD"]
+    AcquireLock --&gt;|no flock| Mkdir["Fallback: mkdir&lt;br/&gt;/var/lock/lpm.lock.d"]
+
+    Flock --&gt;|Success| Work["🔒 Work with lock held"]
+    Flock --&gt;|EWOULDBLOCK| Busy["❌ Another instance&lt;br/&gt;running (fail)"]
+
+    Mkdir --&gt;|Success| Work
+    Mkdir --&gt;|EEXIST| Busy
+
+    Work --&gt;|release_lock| Release["flock -u $LOCK_FD&lt;br/&gt;OR&lt;br/&gt;rmdir /var/lock/lpm.lock.d"]
+    Release --&gt;|Cleanup| Done(["✅ Lock released"])
+
+    Busy --&gt; Exit(["❌ Exit (locked)"])</code></pre> <hr/> <h2 id="example-workflow">Example Workflow<a class="headerlink" href="#example-workflow" title="Permanent link">¶</a></h2> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Install a package with its dependencies</span>
+lpm<span class="w"> </span>install<span class="w"> </span>git
+
+<span class="c1"># List installed packages</span>
+lpm<span class="w"> </span>list
+
+<span class="c1"># Check for upgradable packages and upgrade all</span>
+lpm<span class="w"> </span>upgrade<span class="w"> </span>--dry-run
+lpm<span class="w"> </span>upgrade
+
+<span class="c1"># Search for a package</span>
+lpm<span class="w"> </span>search<span class="w"> </span>python
+
+<span class="c1"># Show package info</span>
+lpm<span class="w"> </span>info<span class="w"> </span>bash
+
+<span class="c1"># Remove a package (shared files are kept)</span>
+lpm<span class="w"> </span>remove<span class="w"> </span>gcc
+</code></pre></div></td></tr></table></div> <h2 id="repository-structure">Repository Structure<a class="headerlink" href="#repository-structure" title="Permanent link">¶</a></h2> <p>Currently, LPM ships with a local repository. To add a remote repository, implement a custom handler in the <code>install_package</code> function that downloads the <code>.tar.xz</code> from a URL. The <code>update-db</code> command would then fetch the remote index and merge it into the local database.</p> <h3 id="repository-priority">Repository Priority<a class="headerlink" href="#repository-priority" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph LR
+    Start(["Fetch package"]) --&gt;|Look in| Local["1️⃣ Local repo&lt;br/&gt;$REPO_LOCAL_PATH"]
+    Local --&gt;|Found?| LocalYes{Yes}
+    LocalYes --&gt;|Yes| Return["✅ Use local copy"]
+    LocalYes --&gt;|No| Remote["2️⃣ Remote repos&lt;br/&gt;for url in REPO_REMOTE_URLS"]
+    Remote --&gt;|Try URL| Curl["curl -fsSL&lt;br/&gt;$url/$pkg.tar.xz"]
+    Curl --&gt;|Success| Cache["💾 Cache in&lt;br/&gt;REPO_LOCAL_PATH"]
+    Cache --&gt;|Return| Return
+    Curl --&gt;|Failure| NextURL{More URLs?}
+    NextURL --&gt;|Yes| Remote
+    NextURL --&gt;|No| Fail["❌ Not found&lt;br/&gt;in any repo"]</code></pre> <h2 id="integration-with-lfsblfs-builder">Integration with LFS/BLFS Builder<a class="headerlink" href="#integration-with-lfsblfs-builder" title="Permanent link">¶</a></h2> <p>LPM is automatically installed as part of the <code>19-lpm</code> stage in the LFS/BLFS builder.<br/> The builder creates the necessary directories and populates the package database with pre‑built packages.</p> <h3 id="build-stage-integration">Build Stage Integration<a class="headerlink" href="#build-stage-integration" title="Permanent link">¶</a></h3> <pre class="mermaid"><code>graph TD
+    subgraph "Beyond Linux from Scratch Build"
+        Stage["Stage 19: LPM Install"]
+        CreateDirs["Create LPM directories&lt;br/&gt;/var/lib/lpm&lt;br/&gt;/var/log/lpm&lt;br/&gt;/etc/lpm"]
+        SourceLPM["Source 19-lpm.sh&lt;br/&gt;with exports"]
+        LoadConfig["Load LPM config&lt;br/&gt;from build.conf"]
+        PopDB["Populate packages.list&lt;br/&gt;from available packages"]
+        InitDB["Initialize&lt;br/&gt;installed.list&lt;br/&gt;&amp; file_index"]
+        TestLPM["Run basic LPM&lt;br/&gt;functionality tests"]
+    end
+
+    Stage --&gt;|Execute| CreateDirs
+    CreateDirs --&gt;|Setup| SourceLPM
+    SourceLPM --&gt;|Configure| LoadConfig
+    LoadConfig --&gt;|Populate| PopDB
+    PopDB --&gt;|Initialize| InitDB
+    InitDB --&gt;|Verify| TestLPM
+    TestLPM --&gt;|Success| Done(["✅ LPM ready"])</code></pre> <hr/> <h2 id="performance-characteristics">Performance Characteristics<a class="headerlink" href="#performance-characteristics" title="Permanent link">¶</a></h2> <pre class="mermaid"><code>graph TD
+    subgraph "LPM v2.2.0+ Performance"
+        InstallSingle["Single package install&lt;br/&gt;(no deps): 50-200ms"]
+        DepsSmall["Small dep tree&lt;br/&gt;(5-10 packages): 500ms-2s"]
+        DepsMedium["Medium dep tree&lt;br/&gt;(50+ packages): 5-30s"]
+        DepsLarge["Large dep tree&lt;br/&gt;(100+ packages): 30-120s"]
+    end
+
+    subgraph "Operations"
+        DepRes["Dependency resolution"]
+        FileOps["File operations"]
+        Verify["Verification"]
+    end
+
+    DepRes --&gt;|O(n) optimized| InstallSingle
+    DepRes --&gt;|Circular detection O(1)| DepsSmall
+    FileOps --&gt;|Backup/restore| DepsSmall
+    Verify --&gt;|SHA256/GPG| DepsSmall
+
+    DepRes --&gt;|Large graphs| DepsMedium
+    FileOps --&gt;|File tracking| DepsMedium
+
+    DepRes --&gt;|Complex constraints| DepsLarge
+    Verify --&gt;|Many signatures| DepsLarge
+
+    style InstallSingle fill:#90EE90
+    style DepsSmall fill:#87CEEB
+    style DepsMedium fill:#FFD700
+    style DepsLarge fill:#FFA07A</code></pre> <hr/> <h2 id="security-architecture">Security Architecture<a class="headerlink" href="#security-architecture" title="Permanent link">¶</a></h2> <pre class="mermaid"><code>graph TB
+    subgraph "Security Layers"
+        Lock["🔒 Mutual Exclusion&lt;br/&gt;flock / mkdir atomicity"]
+        Verify["🔐 Integrity Verification&lt;br/&gt;SHA256 checksums"]
+        Sig["✍️ Authenticity Verification&lt;br/&gt;GPG signatures"]
+        Rollback["🔄 Atomic Rollback&lt;br/&gt;Transaction support"]
+        Perms["👤 Permission Check&lt;br/&gt;REQUIRE_ROOT"]
+    end
+
+    Lock --&gt;|Prevents race&lt;br/&gt;conditions| Safety["Safe concurrent access"]
+    Verify --&gt;|Detects corruption&lt;br/&gt;or tampering| Safety
+    Sig --&gt;|Verifies package&lt;br/&gt;origin| Trust["Trusted package&lt;br/&gt;installation"]
+    Rollback --&gt;|Restores on&lt;br/&gt;failure| Integrity["System integrity&lt;br/&gt;preserved"]
+    Perms --&gt;|Limits who can&lt;br/&gt;modify| Trust
+
+    Safety --&gt;|Combined| Result(["✅ Production-Ready&lt;br/&gt;Security"])
+    Trust --&gt;|Combined| Result
+    Integrity --&gt;|Combined| Result</code></pre> <hr/> <h2 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">¶</a></h2> <h3 id="another-lpm-instance-is-running">"Another lpm instance is running"<a class="headerlink" href="#another-lpm-instance-is-running" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: Another lpm instance is running. Exiting.</code></p> <p><strong>Cause</strong>: Lock file is held by another LPM process (or stale lock from crashed process)</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Check for running LPM processes</span>
+ps<span class="w"> </span>aux<span class="w"> </span><span class="p">|</span><span class="w"> </span>grep<span class="w"> </span>lpm
+
+<span class="c1"># If stale, remove lock file</span>
+rm<span class="w"> </span>-f<span class="w"> </span>/var/lock/lpm.lock<span class="w"> </span>/var/lock/lpm.lock.d
+
+<span class="c1"># Or wait for the other process to complete</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="package-not-found-in-database">"Package not found in database"<a class="headerlink" href="#package-not-found-in-database" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: Package 'gcc' not found in database (run: lpm update-db)</code></p> <p><strong>Cause</strong>: Package database is empty or hasn't been synced</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Sync package database from repository</span>
+lpm<span class="w"> </span>update-db
+
+<span class="c1"># Verify packages are in database</span>
+lpm<span class="w"> </span>list
+
+<span class="c1"># If still empty, check packages.list</span>
+cat<span class="w"> </span>/var/lib/lpm/packages.list
+</code></pre></div></td></tr></table></div></p> <h3 id="circular-dependency-detected">"Circular dependency detected"<a class="headerlink" href="#circular-dependency-detected" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: Circular dependency detected: glibc</code></p> <p><strong>Cause</strong>: Package A depends on B, which depends on A (or a longer cycle)</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Check dependencies in database</span>
+lpm<span class="w"> </span>info<span class="w"> </span>glibc
+lpm<span class="w"> </span>info<span class="w"> </span>gcc
+
+<span class="c1"># Fix the packages.list to break the cycle</span>
+<span class="c1"># Edit /var/lib/lpm/packages.list and verify dependency chains</span>
+</code></pre></div></td></tr></table></div></p> <h3 id="checksum-mismatch">"Checksum mismatch"<a class="headerlink" href="#checksum-mismatch" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: Checksum mismatch for bash-5.3</code></p> <p><strong>Cause</strong>: Package file is corrupted or tampered with</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Remove the corrupted file</span>
+rm<span class="w"> </span>/usr/share/lpm/packages/bash-5.3.tar.xz
+
+<span class="c1"># Re-download the package</span>
+lpm<span class="w"> </span>install<span class="w"> </span>bash
+
+<span class="c1"># Or disable checksum verification (NOT recommended for production)</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">'s/VERIFY_CHECKSUMS=true/VERIFY_CHECKSUMS=false/'</span><span class="w"> </span>/etc/lpm/lpm.conf
+</code></pre></div></td></tr></table></div></p> <h3 id="installation-failed-rolling-back">"Installation failed - rolling back"<a class="headerlink" href="#installation-failed-rolling-back" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: Installation failed - rolling back bash-5.3</code></p> <p><strong>Cause</strong>: File installation error (permissions, disk full, etc.)</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Check disk space</span>
+df<span class="w"> </span>-h<span class="w"> </span>/
+
+<span class="c1"># Check directory permissions</span>
+ls<span class="w"> </span>-la<span class="w"> </span>/var/lib/lpm<span class="w"> </span>/usr
+
+<span class="c1"># Retry installation</span>
+lpm<span class="w"> </span>--verbose<span class="w"> </span>install<span class="w"> </span>bash
+</code></pre></div></td></tr></table></div></p> <h3 id="gpg-signature-verification-failed">"GPG signature verification failed"<a class="headerlink" href="#gpg-signature-verification-failed" title="Permanent link">¶</a></h3> <p><strong>Problem</strong>: <code>Error: GPG signature verification FAILED for bash-5.3.tar.xz</code></p> <p><strong>Cause</strong>: Package signature is invalid or keyring is not properly configured</p> <p><strong>Solution</strong>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Disable signature verification if you trust the source</span>
+sed<span class="w"> </span>-i<span class="w"> </span><span class="s1">'s/VERIFY_SIGNATURES=true/VERIFY_SIGNATURES=false/'</span><span class="w"> </span>/etc/lpm/lpm.conf
+
+<span class="c1"># Or properly configure the GPG keyring</span>
+lpm<span class="w"> </span>install<span class="w"> </span>bash<span class="w">  </span><span class="c1"># Will now skip signature verification</span>
+</code></pre></div></td></tr></table></div></p> <hr/> <h2 id="faq">FAQ<a class="headerlink" href="#faq" title="Permanent link">¶</a></h2> <h3 id="q-how-do-i-create-a-package-for-lpm">Q: How do I create a package for LPM?<a class="headerlink" href="#q-how-do-i-create-a-package-for-lpm" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Create a <code>.tar.xz</code> archive with the following structure:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 1</span>
+<span class="normal"> 2</span>
+<span class="normal"> 3</span>
+<span class="normal"> 4</span>
+<span class="normal"> 5</span>
+<span class="normal"> 6</span>
+<span class="normal"> 7</span>
+<span class="normal"> 8</span>
+<span class="normal"> 9</span>
+<span class="normal">10</span>
+<span class="normal">11</span>
+<span class="normal">12</span>
+<span class="normal">13</span>
+<span class="normal">14</span>
+<span class="normal">15</span>
+<span class="normal">16</span>
+<span class="normal">17</span>
+<span class="normal">18</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Create package directory</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>bash-5.3/files/usr/bin
+
+<span class="c1"># Add files relative to root</span>
+cp<span class="w"> </span>/path/to/bash<span class="w"> </span>bash-5.3/files/usr/bin/
+
+<span class="c1"># Optional: add hooks</span>
+cat<span class="w"> </span>&gt;<span class="w"> </span>bash-5.3/post-install.sh<span class="w"> </span><span class="s">&lt;&lt; 'HOOK'</span>
+<span class="s">#!/bin/bash</span>
+<span class="s">echo "bash $2 installed successfully"</span>
+<span class="s">HOOK</span>
+chmod<span class="w"> </span>+x<span class="w"> </span>bash-5.3/post-install.sh
+
+<span class="c1"># Create archive</span>
+tar<span class="w"> </span>-Jcf<span class="w"> </span>bash-5.3.tar.xz<span class="w"> </span>bash-5.3/
+
+<span class="c1"># Copy to local repository</span>
+cp<span class="w"> </span>bash-5.3.tar.xz<span class="w"> </span>/usr/share/lpm/packages/
+</code></pre></div></td></tr></table></div> <p>Then add to <code>packages.list</code>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span></pre></div></td><td class="code"><div><pre><span></span><code>bash|5.3|Bourne Again Shell|readline&gt;=2.0|sha256-&lt;checksum&gt;
+</code></pre></div></td></tr></table></div></p> <h3 id="q-can-lpm-handle-version-constraints">Q: Can LPM handle version constraints?<a class="headerlink" href="#q-can-lpm-handle-version-constraints" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Yes! LPM supports: - <code>pkg</code> – any version - <code>pkg&gt;=1.2</code> – version 1.2 or higher - <code>pkg=2.0</code> – exactly version 2.0</p> <p>Example dependency in <code>packages.list</code>: <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span></pre></div></td><td class="code"><div><pre><span></span><code>gcc|13.2|GNU Compiler Collection|glibc&gt;=2.37,binutils&gt;=2.40|sha256-...
+</code></pre></div></td></tr></table></div></p> <h3 id="q-how-do-i-upgrade-all-packages-safely">Q: How do I upgrade all packages safely?<a class="headerlink" href="#q-how-do-i-upgrade-all-packages-safely" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Use <code>--dry-run</code> first to preview changes:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Preview upgrades</span>
+lpm<span class="w"> </span>upgrade<span class="w"> </span>--dry-run<span class="w"> </span>--verbose
+
+<span class="c1"># Execute upgrades</span>
+lpm<span class="w"> </span>upgrade
+</code></pre></div></td></tr></table></div> <h3 id="q-what-if-a-file-is-owned-by-multiple-packages">Q: What if a file is owned by multiple packages?<a class="headerlink" href="#q-what-if-a-file-is-owned-by-multiple-packages" title="Permanent link">¶</a></h3> <p><strong>A</strong>: LPM tracks file ownership in <code>file_index</code>. When removing a package: - Files owned by that package alone are removed - Files shared with other packages are preserved - The <code>file_index</code> entry is updated</p> <p>This prevents accidentally breaking other packages.</p> <h3 id="q-how-do-i-rollback-a-failed-installation">Q: How do I rollback a failed installation?<a class="headerlink" href="#q-how-do-i-rollback-a-failed-installation" title="Permanent link">¶</a></h3> <p><strong>A</strong>: LPM automatically rolls back on installation failure, but you can also:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Remove the package to get back to previous state</span>
+lpm<span class="w"> </span>remove<span class="w"> </span>bash
+
+<span class="c1"># Or reinstall from database</span>
+lpm<span class="w"> </span>install<span class="w"> </span>bash<span class="w"> </span>--force
+</code></pre></div></td></tr></table></div> <h3 id="q-can-i-use-lpm-on-a-mounted-chroot">Q: Can I use LPM on a mounted chroot?<a class="headerlink" href="#q-can-i-use-lpm-on-a-mounted-chroot" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Yes! Set <code>LPM_ROOT</code> to the chroot path:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Create package manager for chroot</span>
+mkdir<span class="w"> </span>-p<span class="w"> </span>/mnt/lfs/var/lib/lpm
+<span class="nv">LPM_ROOT</span><span class="o">=</span>/mnt/lfs<span class="w"> </span>lpm<span class="w"> </span>install<span class="w"> </span>bash
+</code></pre></div></td></tr></table></div> <h3 id="q-how-do-i-debug-lpm-operations">Q: How do I debug LPM operations?<a class="headerlink" href="#q-how-do-i-debug-lpm-operations" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Use <code>--verbose</code> and check logs:</p> <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1</span>
+<span class="normal">2</span>
+<span class="normal">3</span>
+<span class="normal">4</span>
+<span class="normal">5</span>
+<span class="normal">6</span>
+<span class="normal">7</span>
+<span class="normal">8</span>
+<span class="normal">9</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="c1"># Verbose output</span>
+lpm<span class="w"> </span>--verbose<span class="w"> </span>install<span class="w"> </span>bash
+
+<span class="c1"># Check logs</span>
+tail<span class="w"> </span>-f<span class="w"> </span>/var/log/lpm/install.log
+tail<span class="w"> </span>-f<span class="w"> </span>/var/log/lpm/lpm.log<span class="w">  </span><span class="c1"># if LOG_LEVEL=DEBUG</span>
+
+<span class="c1"># Dry-run to see what would happen</span>
+lpm<span class="w"> </span>--dry-run<span class="w"> </span>--verbose<span class="w"> </span>install<span class="w"> </span>gcc
+</code></pre></div></td></tr></table></div> <h3 id="q-whats-the-performance-impact-of-lpm">Q: What's the performance impact of LPM?<a class="headerlink" href="#q-whats-the-performance-impact-of-lpm" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Minimal! LPM is optimized for LFS: - Single package install: ~50-200ms - Small dependency tree (5-10 packages): ~500ms-2s - Dependency resolution: O(n) complexity - Circular detection: O(1) fast path - No external dependencies beyond bash/awk</p> <h3 id="q-is-lpm-production-ready">Q: Is LPM production-ready?<a class="headerlink" href="#q-is-lpm-production-ready" title="Permanent link">¶</a></h3> <p><strong>A</strong>: Yes! As of v2.2.0+: - ✅ All critical bugs fixed - ✅ Performance-competitive with YUM/DNF/APT - ✅ Full portability to minimal LFS - ✅ Comprehensive testing and documentation - ✅ Transactional installation with rollback - ✅ Security features (checksums, GPG, locks)</p> <hr/> <h2 id="version-history">Version History<a class="headerlink" href="#version-history" title="Permanent link">¶</a></h2> <ul> <li><strong>v2.2.0</strong> (2026-08-01) – Production-ready release</li> <li>Fixed regex escape bug in dependency parsing</li> <li>Portable version comparison (no sort -V)</li> <li>O(1) circular dependency detection</li> <li>O(n) topological sort for installs</li> <li> <p>5-100x performance improvements</p> </li> <li> <p><strong>v2.1.0</strong> (2026-07-XX) – Initial LPM implementation</p> </li> <li>Basic install/remove/list/search</li> <li>Dependency resolution</li> <li>File tracking and removal</li> <li>Pre/post-install hooks</li> <li>Transactional installation with rollback</li> </ul> <hr/> <h2 id="contributing">Contributing<a class="headerlink" href="#contributing" title="Permanent link">¶</a></h2> <p>Contributions are welcome! Please:</p> <ol> <li>Test your changes with the test suite</li> <li>Follow existing code style (bash conventions)</li> <li>Document new features in this file</li> <li>Update CHANGELOG.md</li> </ol> <p>For bug reports or feature requests, open an issue on GitHub.</p> <hr/> <p>For questions, refer to the project repository.<br/> LPM is maintained by Jean‑François Landreville. </p> <p><strong>Status</strong>: ✅ Production-Ready (v2.2.0+) – Performance-competitive with enterprise package managers (YUM/DNF/APT)</p> </article> </div> <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script> <script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script> </div> </main> <footer class="md-footer"> <div class="md-footer-meta md-typeset"> <div class="md-footer-meta__inner md-grid"> <div class="md-copyright"> <div class="md-copyright__highlight"> Copyright © 2024 Jean-Francois Landreville. Licensed under GPLv3. </div> Made with <a href="https://squidfunk.github.io/mkdocs-material/" rel="noopener" target="_blank"> Material for MkDocs </a> </div> <div class="md-social"> <a class="md-social__link" href="https://github.com/landrevillejf" rel="noopener" target="_blank" title="GitHub"> <svg viewbox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"></path></svg> </a> <a class="md-social__link" href="mailto:landrevillejf@protonmail.com" rel="noopener" target="_blank" title="Email"> <svg viewbox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><!-- Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M48 64C21.5 64 0 85.5 0 112c0 15.1 7.1 29.3 19.2 38.4l208 156a48 48 0 0 0 57.6 0l208-156c12.1-9.1 19.2-23.3 19.2-38.4 0-26.5-21.5-48-48-48zM0 196v188c0 35.3 28.7 64 64 64h384c35.3 0 64-28.7 64-64V196L313.6 344.8c-34.1 25.6-81.1 25.6-115.2 0z"></path></svg> </a> </div> </div> </div> </footer> </div> <div class="md-dialog" data-md-component="dialog"> <div class="md-dialog__inner md-typeset"></div> </div> <div class="md-progress" data-md-component="progress" role="progressbar"></div> <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.instant.prefetch", "navigation.instant.progress", "navigation.tracking", "navigation.tabs", "navigation.tabs.sticky", "navigation.sections", "navigation.expand", "toc.integrate", "toc.follow", "search.suggest", "search.highlight", "search.share", "content.code.copy", "content.code.select", "content.code.annotate", "content.tabs.link", "content.tooltips", "header.autohide"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "main", "provider": "mike"}}</script> <script src="../assets/javascripts/bundle.d7400e89.min.js"></script> <script src="../javascripts/mathjax.js"></script> <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script> <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script> </body> </html>
