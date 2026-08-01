@@ -366,10 +366,19 @@ CROSS_CACHE_EOF
 			fi
 		fi
 
+		# Correctif pour m4 : PATH_MAX non déclaré dans stackvma.c avec glibc récente
+		# Use sed instead of a patch file to avoid brittle line-number/context matching
+		if [ "$pkg" = "m4" ]; then
+			if grep -q "PATH_MAX" lib/stackvma.c 2>/dev/null &&
+				! grep -q "#include <limits.h>" lib/stackvma.c 2>/dev/null; then
+				sed -i '1s/^/#include <limits.h>\n/' lib/stackvma.c
+			fi
+		fi
+
 		CFLAGS=""
 		if [ "$pkg" = "coreutils" ]; then
 			CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
-		elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+		elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ] || [ "$pkg" = "m4" ]; then
 			CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
 		fi
 
@@ -401,7 +410,7 @@ CROSS_CACHE_EOF
 			rm -f "$PKG_CACHE"
 
 			# Remove gnulib-tests from SUBDIRS to avoid PATH_MAX and related errors
-			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ] || [ "$pkg" = "m4" ]; then
 				sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
 			fi
 
