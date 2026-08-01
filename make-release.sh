@@ -28,22 +28,22 @@ Options:
   --no-tar       Do not create the tarball (only the tag)
   --skip-tests   Skip running tests before release
   --skip-clean   Skip cleaning build artifacts before release
-  --bump VERSION   Update the version in builder.py to VERSION (e.g. --bump 0.4.4)
+  --bump VERSION   Update the version in VERSION file to VERSION (e.g. --bump 0.52.8)
                    before creating the release.
   --help         Show this help
 
 Description:
   This script prepares a project release:
-    - Optionally bumps the version in builder.py
+    - Optionally bumps the version in VERSION file
     - Checks that the Git repository is clean (or offers to commit changes)
-    - Extracts the version from builder.py
+    - Extracts the version from VERSION file
     - Optionally runs tests (if tools/run-tests.sh exists)
     - Optionally cleans build artifacts (if tools/clean-build.sh exists)
     - Creates a tarball of the source code
     - Creates a Git tag (optional)
     - Displays instructions for pushing and publishing
 
-The version is read from builder.py (__version__ = "X.Y.Z").
+The version is read from VERSION file (single line with X.Y.Z format).
 EOF
     exit 0
 }
@@ -51,11 +51,12 @@ EOF
 bump_version() {
     local new_version="$1"
     if [ -z "$new_version" ]; then
-        echo -e "${RED}Error: specify new version (e.g., 0.4.4)${NC}" >&2
+        echo -e "${RED}Error: specify new version (e.g., 0.52.8)${NC}" >&2
         exit 1
     fi
-    $SED_INLINE "s/^__version__ = \"[0-9.]*\"/__version__ = \"$new_version\"/" builder.py
-    echo -e "${GREEN}Version set to $new_version in builder.py${NC}"
+    # Update VERSION file
+    echo "$new_version" > VERSION
+    echo -e "${GREEN}Version set to $new_version in VERSION file${NC}"
 }
 
 # ---------- Parse arguments ----------
@@ -91,9 +92,9 @@ fi
 if [ -n "$BUMP_VERSION" ]; then
     echo -e "${BLUE}Bumping version to ${BUMP_VERSION}...${NC}"
     bump_version "$BUMP_VERSION"
-    if ! git diff --quiet builder.py; then
-        echo -e "${YELLOW}builder.py has been modified. Committing the version bump...${NC}"
-        git add builder.py
+    if ! git diff --quiet VERSION; then
+        echo -e "${YELLOW}VERSION file has been modified. Committing the version bump...${NC}"
+        git add VERSION
         git commit -m "Bump version to ${BUMP_VERSION}"
         echo -e "${GREEN}Version bump committed.${NC}"
     fi
@@ -135,17 +136,16 @@ elif [ "$RUN_CLEAN" = true ]; then
     echo -e "${YELLOW}No clean script found (tools/clean-build.sh). Skipping.${NC}"
 fi
 
-# ---------- Extract version from builder.py ----------
-VERSION_FILE="builder.py"
+# ---------- Extract version from VERSION file ----------
+VERSION_FILE="VERSION"
 if [ ! -f "$VERSION_FILE" ]; then
     echo -e "${RED}Error: $VERSION_FILE not found.${NC}"
     exit 1
 fi
 
-VERSION=$(grep -E '^__version__\s*=\s*"[0-9]+\.[0-9]+\.[0-9]+"' "$VERSION_FILE" | sed -E 's/.*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/')
+VERSION=$(cat "$VERSION_FILE")
 if [ -z "$VERSION" ]; then
-    echo -e "${RED}Error: unable to extract version from $VERSION_FILE.${NC}"
-    echo "Look for a line like: __version__ = \"X.Y.Z\""
+    echo -e "${RED}Error: VERSION file is empty.${NC}"
     exit 1
 fi
 
