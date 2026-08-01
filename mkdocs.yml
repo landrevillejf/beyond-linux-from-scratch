@@ -53,6 +53,13 @@ plugins:
       pipeline:
         - stemmer
         - stopWordFilter
+  - awesome-pages
+  - minify:
+      minify_html: true
+      minify_css: true
+      minify_js: true
+      cache_safe: true
+  - mermaid2
 
 markdown_extensions:
   - pymdownx.emoji:
