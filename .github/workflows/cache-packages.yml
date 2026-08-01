@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: '0 2 1 * *'  # First day of month at 2 AM UTC
 
+permissions:
+  contents: write
+
 jobs:
   download-packages:
     name: Download and Cache Packages
