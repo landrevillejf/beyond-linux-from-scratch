@@ -701,6 +701,8 @@ Commands:
   remove <pkg>          Remove a package
   update <pkg>          Update (reinstall) a specific package
   upgrade               Upgrade all installed packages to latest versions
+  add-profile <prof>    Install all packages from a build profile
+  list-profiles         List available profiles
   list                  List installed packages
   search <pattern>      Search for packages in database
   info <pkg>            Show detailed package information
@@ -722,21 +724,104 @@ Configuration (/etc/lpm/lpm.conf):
   GPG_KEYRING=/etc/lpm/trusted.gpg                        # Trusted keys
   VERIFY_CHECKSUMS=true                                   # SHA256 integrity
 
+Profiles (/etc/lpm/profiles.json):
+  Predefined package collections for different workflows:
+    minimal          Minimal base system
+    java-dev         Java development environment
+    audio-studio     Full audio production studio
+    gnome            GNOME desktop environment
+    kde              KDE Plasma desktop
+
 Dependency version constraints (in package database):
   name|1.0|desc|glibc>=2.40,openssl=3.6.1|checksum
 
 Examples:
   lpm install bash
   lpm remove coreutils
+  lpm add-profile audio-studio
   lpm upgrade --dry-run
   lpm search gcc
   lpm install --no-color bash
+  lpm list-profiles
 HELP
 }
 
 # ======================================================================
-# Main command dispatcher
-# ======================================================================
+list_available_profiles() {
+    local profiles_file="$LPM_ETC/profiles.json"
+    
+    if [ ! -f "$profiles_file" ]; then
+        log_warn "No profiles database found at $profiles_file"
+        return 1
+    fi
+    
+    echo -e "$(_apply_color "${C_BLUE}")Available profiles:$(_apply_color "${C_NC}")"
+    
+    # Use grep to extract profile names  from JSON
+    grep -o '"[^"]*": {' "$profiles_file" | sed 's/": {$//' | sed 's/^"//' | while read -r name; do
+        # Extract description for this profile
+        desc=$(sed -n "/\"$name\": {/,/^  },*$/p" "$profiles_file" | grep '"description"' | sed 's/.*"description": "//' | sed 's/".*//')
+        printf "  %-20s %s\n" "$name" "${desc:- No description}"
+    done
+}
+
+get_profile_packages() {
+    local profile="$1"
+    local profiles_file="$LPM_ETC/profiles.json"
+    
+    if [ ! -f "$profiles_file" ]; then
+        die "Profiles database not found at $profiles_file"
+    fi
+    
+    # Extract packages array for profile from JSON
+    sed -n "/\"$profile\": {/,/^  },*$/p" "$profiles_file" | \
+        sed -n '/"packages": \[/,/\]/p' | \
+        grep -o '"[^"]*"' | \
+        sed 's/"//g' | \
+        grep -v '^packages$'
+}
+
+add_profile() {
+    local profile="$1"
+    [ -z "$profile" ] && die "Missing profile name"
+    
+    log_info "Adding profile: $profile"
+    
+    local packages
+    packages=$(get_profile_packages "$profile") || die "Profile '$profile' not found or has no packages"
+    
+    if [ -z "$packages" ]; then
+        die "Profile '$profile' has no packages defined"
+    fi
+    
+    log_info "Installing packages for profile '$profile'..."
+    
+    local pkg_list
+    pkg_list=$(echo "$packages" | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+    log_verbose "Package list: $pkg_list"
+    
+    # Install all packages in dependency order
+    local pkgs_to_install
+    pkgs_to_install=$(install_order $pkg_list) || die "Failed to resolve profile dependencies"
+    
+    if $DRY_RUN; then
+        echo "The following packages would be installed for profile '$profile' (in order):"
+        printf '%s\n' "$pkgs_to_install"
+    else
+        local count=0
+        while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            count=$((count + 1))
+            log_info "[$count] Installing: $p"
+            install_package "$p" || log_warn "Failed to install $p (may have partial data)"
+        done <<< "$pkgs_to_install"
+        log_success "Profile '$profile' installation complete"
+    fi
+}
+
+
+
+
 main() {
     # Parse global options
     while [[ $# -gt 0 ]]; do
@@ -803,6 +888,13 @@ main() {
             ;;
         clean)
             clean_cache
+            ;;
+        add-profile)
+            [ "$#" -eq 0 ] && die "Missing profile name"
+            add_profile "$1"
+            ;;
+        list-profiles)
+            list_available_profiles
             ;;
         help|--help|-h)
             show_help

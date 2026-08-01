@@ -1,0 +1,98 @@
+{
+  "minimal": {
+    "description": "Minimal base system with only essential packages",
+    "packages": [
+      "bash", "coreutils", "grep", "sed", "awk", "util-linux",
+      "openssl", "curl", "git"
+    ]
+  },
+  "java-dev": {
+    "description": "Java development environment with build tools",
+    "packages": [
+      "openjdk", "maven", "gradle", "git", "curl",
+      "gcc", "make", "binutils", "glibc-dev"
+    ]
+  },
+  "audio-studio": {
+    "description": "Full audio production studio with DAWs and plugins",
+    "packages": [
+      "jack2", "pulseaudio", "alsa-utils", "sox",
+      "ardour", "lmms", "qtractor", "calf-studio-gear",
+      "x42-plugins", "lsp-plugins", "dragonfly-reverb",
+      "neural-amp-dsp", "soundfont-gm", "fluid-soundfont"
+    ]
+  },
+  "xfce": {
+    "description": "XFCE lightweight desktop environment",
+    "packages": [
+      "xorg-server", "xfce4", "xfce4-terminal", "mousepad",
+      "thunar", "xfdesktop", "libxfce4ui", "libxfce4util",
+      "xfce4-appfinder", "xfce4-mixer", "thunar-volman"
+    ]
+  },
+  "gnome": {
+    "description": "GNOME full-featured desktop environment",
+    "packages": [
+      "glib", "gtk+", "gnome-shell", "gnome-calendar",
+      "nautilus", "gnome-terminal", "gedit", "evolution",
+      "gnome-control-center", "gnome-settings-daemon"
+    ]
+  },
+  "kde": {
+    "description": "KDE Plasma full-featured desktop environment",
+    "packages": [
+      "qt5", "kf5-tier1", "kf5-tier2", "kf5-tier3",
+      "plasma-framework", "kdelibs", "kdeplasma-addons",
+      "kdeclarative", "kfilemetadata", "knewstuff",
+      "dolphin", "konsole", "kate"
+    ]
+  },
+  "lxqt": {
+    "description": "LXQt extremely lightweight Qt desktop",
+    "packages": [
+      "qt5", "lxqt-common", "lxqt-config", "lxqt-panel",
+      "lxqt-runner", "lxqt-session", "pcmanfm-qt",
+      "lxqt-about", "lximage-qt"
+    ]
+  },
+  "server": {
+    "description": "Production-optimized server configuration",
+    "packages": [
+      "openssh", "openssl", "curl", "git", "vim",
+      "systemd", "chrony", "rsyslog", "sudo",
+      "wget", "tar", "gzip", "bzip2"
+    ]
+  },
+  "web-dev": {
+    "description": "Web development stack with frameworks and tools",
+    "packages": [
+      "nodejs", "npm", "python3", "pip3", "ruby",
+      "git", "curl", "postgresql", "mysql",
+      "redis", "docker", "docker-compose"
+    ]
+  },
+  "gnu-free": {
+    "description": "GNU/Linux system with exclusively free software",
+    "packages": [
+      "linux-libre", "gcc", "glibc", "binutils",
+      "coreutils", "bash", "openssl", "libreoffice",
+      "gimp", "blender"
+    ]
+  },
+  "secure": {
+    "description": "Security-hardened system with encryption and firewalls",
+    "packages": [
+      "openssh", "openssl", "gnupg", "fail2ban",
+      "nftables", "aide", "rkhunter", "apparmor",
+      "auditd", "cryptsetup", "truecrypt"
+    ]
+  },
+  "multimedia": {
+    "description": "Media creation and playback suite",
+    "packages": [
+      "ffmpeg", "vlc", "obs-studio", "imagemagick",
+      "inkscape", "krita", "blender", "handbrake",
+      "shotcut", "audacity"
+    ]
+  }
+}

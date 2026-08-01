@@ -183,9 +183,22 @@ USE_COLOR=1
 CONF
 fi
 
+# ---------------------------------------------------------------------------
+# LPM profiles database
+# ---------------------------------------------------------------------------
+if [ ! -f "$LFS/etc/lpm/profiles.json" ]; then
+    log_info "Installing LPM profiles database to /etc/lpm/profiles.json"
+    if [ -f "$SCRIPT_DIR/../config/lpm-profiles.json" ]; then
+        run_privileged install -m 0644 "$SCRIPT_DIR/../config/lpm-profiles.json" "$LFS/etc/lpm/profiles.json"
+    else
+        log_warning "LPM profiles template not found at $SCRIPT_DIR/../config/lpm-profiles.json"
+    fi
+fi
+
 PKG_COUNT=$(grep -cE '^[^#|]+\|' "$DB_FILE" || echo 0)
 log_success "Registered $PKG_COUNT base packages in LPM database"
 log_success "Base package list: $BASE_LIST"
 log_success "LPM database:      $DB_FILE"
 log_success "LPM config:        $LFS/etc/lpm/lpm.conf"
+log_success "LPM profiles:      $LFS/etc/lpm/profiles.json"
 exit 0
