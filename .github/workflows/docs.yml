@@ -1,34 +1,128 @@
-name: Build and deploy docs
+name: Build and Deploy Docs
 
 permissions:
   contents: read
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: '3.11'
+  MKDOCS_VERSION: '1.5.3'
+
 jobs:
-  build:
+  validate:
+    name: Validate Documentation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
       - name: Install MkDocs and plugins
         run: |
-          pip install 'mkdocs<2.0' mkdocs-material mkdocs-awesome-pages-plugin
-      - name: Build site
-        run: mkdocs build --site-dir public
-      - name: Upload artifact
+          pip install --no-cache-dir \
+            'mkdocs>=${{ env.MKDOCS_VERSION }},<2.0' \
+            mkdocs-material \
+            mkdocs-awesome-pages-plugin \
+            mkdocs-mermaid2-plugin \
+            mkdocs-minify-plugin
+
+      - name: Validate MkDocs configuration
+        run: |
+          mkdocs get-deps > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "::error::MkDocs configuration validation failed"
+            exit 1
+          fi
+
+      - name: Check for broken links (basic)
+        run: |
+          echo "Checking for common issues in docs..."
+          if grep -r '\[.*\]()' docs/ --include='*.md'; then
+            echo "::error::Found broken links (empty URLs)"
+            exit 1
+          fi
+          if grep -r '](#[^)]*)' docs/ --include='*.md' | grep -v '](#'; then
+            echo "::warning::Found potential broken anchor links"
+          fi
+
+  build:
+    name: Build Documentation Site
+    needs: validate
+    runs-on: ubuntu-latest
+    outputs:
+      site_ready: ${{ steps.build.outcome }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git-based plugins
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install MkDocs and plugins
+        run: |
+          pip install --no-cache-dir \
+            'mkdocs>=${{ env.MKDOCS_VERSION }},<2.0' \
+            mkdocs-material \
+            mkdocs-awesome-pages-plugin \
+            mkdocs-mermaid2-plugin \
+            mkdocs-minify-plugin
+
+      - name: Build documentation site
+        id: build
+        run: |
+          echo "Building MkDocs site..."
+          mkdocs build --site-dir public --strict
+          echo "Build completed successfully"
+          echo "size=$(du -sh public | cut -f1)" >> $GITHUB_OUTPUT
+
+      - name: Generate sitemap summary
+        run: |
+          echo "# Generated Site Structure" > public/SITEMAP.txt
+          find public -name "*.html" -type f | sort >> public/SITEMAP.txt
+
+      - name: Upload artifact for deployment
         uses: actions/upload-pages-artifact@v3
         with:
+          name: github-pages
           path: public
+          retention-days: 1
+
+      - name: Output build information
+        run: |
+          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Success" >> $GITHUB_STEP_SUMMARY
+          echo "- **Site Size**: ${{ steps.build.outputs.size }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
 
   deploy:
+    name: Deploy to GitHub Pages
     needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       pages: write
       id-token: write
@@ -37,6 +131,37 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages
+
+      - name: Create deployment summary
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+
+  report:
+    name: Generate Documentation Report
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [validate, build]
+    steps:
+      - name: Create workflow report
+        run: |
+          echo "# Documentation Build Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Validate Job**: ${{ needs.validate.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Job**: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ needs.validate.result }}" = "success" ] && [ "${{ needs.build.result }}" = "success" ]; then
+            echo "✅ All documentation tasks completed successfully!" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Some documentation tasks failed. Check logs above." >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,30 @@
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Features: features.md
+    - Content Overview: content.md
+  - User Guide:
+    - Testing: testing-howto.md
+    - Troubleshooting: troubleshoot.md
+    - Docker Setup: docker-howto.md
+    - Make Release: make-release-how-to.md
+  - Package Manager:
+    - LPM Documentation: lpm.md
+    - Improvements v2.1.0: LPM_IMPROVEMENTS_v2.1.0.md
+  - Customization:
+    - Branding: BRANDING.md
+    - Installer Branding: INSTALLER_BRANDING.md
+    - Wallpaper Generator: wallpaper-generator-howto.md
+  - Advanced:
+    - Stage Timings: stage-timings.md
+    - Upgrade Planning:
+      - Phase 1 Research: UPGRADE-PHASE1-RESEARCH.md
+      - Full Upgrade Plan: UPGRADE-PLAN.md
+  - Development:
+    - Project Structure: "../../AGENTS.md"
+    - Security Policy: "../../SECURITY.md"
+    - Changelog: "../../CHANGELOG.md"
+    - Contributing: "../../CONTRIBUTING.md"
+
+not_in_nav: |
+  *.html

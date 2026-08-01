@@ -3,25 +3,117 @@ site_description: Automated LFS/BLFS distribution builder
 site_url: https://landrevillejf.github.io/beyond-linux-from-scratch/
 repo_url: https://github.com/landrevillejf/beyond-linux-from-scratch
 repo_name: landrevillejf/beyond-linux-from-scratch
+copyright: 'Copyright © 2024 Jean-Francois Landreville. Licensed under GPLv3.'
 
 theme:
   name: material
   palette:
-    scheme: dark
-    primary: green
-    accent: light-green
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: green
+      accent: light-green
+      toggle:
+        icon: material/lightbulb-outline
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: green
+      accent: light-green
+      toggle:
+        icon: material/lightbulb
+        name: Switch to light mode
+
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  
   features:
     - navigation.instant
+    - navigation.instant.prefetch
+    - navigation.instant.progress
     - navigation.tracking
     - navigation.tabs
+    - navigation.tabs.sticky
     - navigation.sections
+    - navigation.expand
     - toc.integrate
+    - toc.follow
     - search.suggest
     - search.highlight
+    - search.share
     - content.code.copy
+    - content.code.select
+    - content.code.annotate
+    - content.tabs.link
+    - content.tooltips
+    - header.autohide
 
 plugins:
-  - search
-  - awesome-pages  # Remplace mkdocs-same-dir
+  - search:
+      lang: en
+      pipeline:
+        - stemmer
+        - stop
+  - awesome-pages:
+      file: .pages
+  - minify:
+      minify_html: true
+      minify_css: true
+      minify_js: true
+      minify_json: true
+      cache_safe: true
+  - mermaid2
 
-# Pas besoin de navigation manuelle – awesome-pages va tout trouver
+markdown_extensions:
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      use_pygments: true
+      linenums: true
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.caret
+  - pymdownx.mark
+  - pymdownx.tilde
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.smartsymbols
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - attr_list
+  - md_in_html
+  - tables
+  - footnotes
+  - toc:
+      permalink: true
+      toc_depth: 3
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/landrevillejf
+      name: GitHub
+    - icon: fontawesome/solid/envelope
+      link: mailto:landrevillejf@protonmail.com
+      name: Email
+  
+  version:
+    provider: mike
+    default: main
+
+extra_css:
+  - stylesheets/extra.css
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
