@@ -648,7 +648,7 @@ class TestVersionHandling:
         from builder import _get_version
         # VERSION file exists in repo root
         version = _get_version()
-        assert version == "0.52.8"
+        assert version == "0.52.9"
         assert version != "dev"
 
     def test_get_version_fallback_when_missing(self, tmp_path):
