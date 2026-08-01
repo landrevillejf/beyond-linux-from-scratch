@@ -137,8 +137,8 @@ jobs:
       - name: Link cached packages to build directory
         run: |
           if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
-            mkdir -p /tmp/lfs-build/build-release/sources
-            cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            sudo mkdir -p /tmp/lfs-build/build-release/sources
+            sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
