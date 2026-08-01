@@ -314,7 +314,7 @@ build_toolchain() {
 	# patch-2.8) that bundle updated gnulib with stricter runtime checks.
 	# Each package gets its own copy of the cache to avoid cross-contamination.
 	CROSS_CACHE_TMPL="$LFS/sources/.cross-compile-cache"
-	cat > "$CROSS_CACHE_TMPL" << 'CROSS_CACHE_EOF'
+	cat >"$CROSS_CACHE_TMPL" <<'CROSS_CACHE_EOF'
 # Autoconf/gnulib cache values for cross-compilation
 # String functions
 ac_cv_func_strcasecmp=yes
