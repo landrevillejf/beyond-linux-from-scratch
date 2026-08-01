@@ -646,9 +646,13 @@ class TestVersionHandling:
     def test_get_version_from_file(self):
         """Test _get_version returns version from VERSION file when it exists"""
         from builder import _get_version
+        from pathlib import Path
+        # Read expected version from VERSION file
+        version_file = Path(__file__).parent.parent / "VERSION"
+        expected_version = version_file.read_text().strip()
         # VERSION file exists in repo root
         version = _get_version()
-        assert version == "0.52.9"
+        assert version == expected_version
         assert version != "dev"
 
     def test_get_version_fallback_when_missing(self, tmp_path):
