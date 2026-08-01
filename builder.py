@@ -28,9 +28,15 @@ from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ============================================================================
-# VERSION INFO
+# VERSION INFO - Read from VERSION file
 # ============================================================================
-__version__ = "0.52.7"
+def _get_version():
+    version_file = Path(__file__).parent / "VERSION"
+    if version_file.exists():
+        return version_file.read_text().strip()
+    return "dev"
+
+__version__ = _get_version()
 __build_date__ = datetime.now().strftime("%Y-%m-%d")
 
 # ============================================================================

@@ -44,7 +44,13 @@ load_branding_config() {
         echo "[INFO] Loaded branding configuration"
     else
         echo "[WARN] Branding configuration not found, using defaults"
-        ISO_LABEL="BLFS-0.4.5-LIVE"
+        # Get version from VERSION file or environment
+        if [ -f "$REPO_ROOT/VERSION" ]; then
+            BUILD_VERSION=$(cat "$REPO_ROOT/VERSION")
+        else
+            BUILD_VERSION="${BUILD_VERSION:-0.52.7}"
+        fi
+        ISO_LABEL="BLFS-${BUILD_VERSION}-LIVE"
         GRUB_COLOR_NORMAL="lightgray/black"
         GRUB_COLOR_HIGHLIGHT="black/lightgreen"
     fi
@@ -93,7 +99,7 @@ install_branding_assets() {
     cat > "$ISO_ROOT/branding/manifest.txt" << EOF
 [Installer Branding Manifest]
 preset=$(basename "$BRANDING_DIR")
-version=0.4.5
+version=${BUILD_VERSION:-0.52.7}
 iso_label=$ISO_LABEL
 
 [Colors]
@@ -234,10 +240,10 @@ EOF
 
 # --- CONSTRUIRE L'ISO AVEC XORRISO (ISO LEVEL 4) ---
 echo "[INFO] Building ISO with xorriso (BIOS+UEFI, ISO level 4)..."
-echo "[INFO] ISO Label: ${ISO_LABEL:-LFS-0.4.5-LIVE}"
+echo "[INFO] ISO Label: $ISO_LABEL"
 xorriso -as mkisofs \
     -iso-level 4 \
-    -V "${ISO_LABEL:-LFS-0.4.5-LIVE}" \
+    -V "$ISO_LABEL" \
     -p "${ISO_PUBLISHER:-Beyond Linux From Scratch}" \
     -publisher "${ISO_PUBLISHER:-Beyond Linux From Scratch}" \
     -R -J -joliet-long \

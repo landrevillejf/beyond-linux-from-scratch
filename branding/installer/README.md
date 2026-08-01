@@ -89,7 +89,7 @@ During boot, the installer will display:
 The installer splash screen shows:
 - Title: "Beyond Linux From Scratch"
 - Subtitle: "Professional Linux Distribution"
-- Version: v0.4.5
+- Version: Read from VERSION file
 - Accent stripe on left side
 - Gradient background (green to dark)
 

@@ -37,7 +37,7 @@ branding/
 **Branded Elements**:
 - ✅ GRUB boot menu background (800x600 gradient)
 - ✅ GRUB color scheme (Forest Green primary, Light Green highlight)
-- ✅ ISO volume label: `BLFS-0.4.5-LIVE`
+- ✅ ISO volume label: `BLFS-${BUILD_VERSION}-LIVE`
 - ✅ ISO publisher: `Beyond Linux From Scratch`
 - ✅ Boot options with LFS branding
 - ✅ Branding manifest embedded in ISO
@@ -49,7 +49,7 @@ PRIMARY_DARK="#236B43"                     # Dark Green
 PRIMARY_LIGHT="#3CB371"                    # Light Green
 GRUB_COLOR_NORMAL="lightgray/black"
 GRUB_COLOR_HIGHLIGHT="black/lightgreen"
-ISO_LABEL="BLFS-0.4.5-LIVE"
+ISO_LABEL="BLFS-${BUILD_VERSION}-LIVE"    # Version read from VERSION file
 GRUB_TIMEOUT=10
 ```
 

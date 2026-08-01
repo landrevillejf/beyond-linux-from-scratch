@@ -1,8 +1,8 @@
 # Beyond Linux From Scratch - Professional Branding System
 
-**Version**: 0.4.5  
 **Status**: Complete and Professional  
 **Last Updated**: 2026-07-20
+**Version**: Read from VERSION file at build time
 
 ## 📋 Overview
 
@@ -97,7 +97,7 @@ Shown during system boot before login.
 - Title: "Beyond Linux From Scratch"
 - Subtitle: "Building your custom Linux distribution"
 - Animated progress bar
-- Version number (v0.4.5)
+- Version number (read from VERSION file)
 - Duration: 3 seconds with fade in/out
 
 **Design:**
@@ -260,7 +260,7 @@ branding/
 [brand]
 name = "Beyond Linux From Scratch"
 short_name = "BLFS"
-version = "0.4.5"
+# version is read from VERSION file at build time
 
 [colors.primary]
 hex = "#2E8B57"

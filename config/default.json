@@ -1,0 +1,206 @@
+{
+  "lfs_version": "13.0",
+  "blfs_version": "13.0",
+  "architecture": "x86_64",
+  "target_triplet": "x86_64-lfs-linux",
+  "build_threads": 12,
+  "cross_compile": false,
+  "cross_prefix": "",
+  "sysroot": "",
+  "qemu_user": "",
+  "init_system": {
+    "choice": "sysvinit",
+    "service_style": "lfs-classic",
+    "parallel_startup": false,
+    "auto_restart": true,
+    "default_runlevel": 3,
+    "service_timeout": 5,
+    "max_parallel": 1
+  },
+  "package_manager": {
+    "enabled": true,
+    "name": "lpm",
+    "version": "1.0.0",
+    "repositories": [
+      "official",
+      "community"
+    ],
+    "auto_clean": true,
+    "dependency_resolution": true,
+    "upgrade_check_daily": true
+  },
+  "system_updater": {
+    "enabled": false,
+    "auto_check": true,
+    "backup_before_upgrade": true,
+    "keep_backups": 5,
+    "rollback_support": true
+  },
+  "live_system": {
+    "enabled": false,
+    "squashfs_compression": "xz",
+    "persistence_support": true,
+    "default_boot": "live"
+  },
+  "java_dev": {
+    "enabled": false,
+    "version": "21.0.10",
+    "distribution": "temurin",
+    "tools": [
+      "maven",
+      "gradle",
+      "tomcat",
+      "jenkins",
+      "docker",
+      "kubectl"
+    ],
+    "optimizations": true,
+    "demo_projects": true
+  },
+  "desktop": {
+    "type": "none",
+    "display_manager": "lightdm",
+    "theme": "adwaita",
+    "icon_theme": "Papirus",
+    "font": "Noto Sans 10",
+    "wallpaper": "/usr/share/backgrounds/default.jpg",
+    "extras": [
+      "firefox",
+      "libreoffice",
+      "gimp",
+      "vlc",
+      "thunar",
+      "xfce4-terminal"
+    ]
+  },
+  "security": {
+    "kernel_hardening": true,
+    "firewall": {
+      "enabled": true,
+      "backend": "nftables",
+      "allow_ssh": true,
+      "allow_http": false
+    },
+    "privacy": {
+      "disable_telemetry": true,
+      "clear_tmp_on_boot": true,
+      "disable_core_dumps": true
+    },
+    "fail2ban": {
+      "enabled": true,
+      "ban_time": 3600,
+      "max_retry": 5
+    },
+    "audit": {
+      "enabled": true,
+      "monitor_files": [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/sudoers"
+      ]
+    },
+    "user_hardening": {
+      "password_min_length": 12,
+      "disable_root_login": true,
+      "max_login_attempts": 5
+    },
+    "encryption": {
+      "encrypted_swap": true,
+      "swap_size_mb": 2048
+    },
+    "hids": {
+      "enabled": true,
+      "daily_check": true,
+      "tool": "aide"
+    },
+    "daily_scans": {
+      "enabled": true,
+      "rootkit_check": true,
+      "port_scan": true
+    }
+  },
+  "bootloader": {
+    "type": "grub",
+    "config": "config/grub.cfg",
+    "uboot_config": "config/u-boot.config",
+    "uboot_board": "rpi_4"
+  },
+  "filesystem": {
+    "type": "ext4",
+    "size_mb": 10240,
+    "swap_mb": 2048,
+    "boot_mb": 512,
+    "compress": false,
+    "noatime": true
+  },
+  "kernel": {
+    "version": "6.16.1",
+    "config": "config/kernel-config",
+    "modules": [
+      "ext4",
+      "xfs",
+      "nvme",
+      "virtio",
+      "usb_storage",
+      "overlay",
+      "vfat",
+      "ntfs"
+    ],
+    "custom_patches": []
+  },
+  "locale": "en_US.UTF-8",
+  "timezone": "UTC",
+  "hostname": "lfs-desktop",
+  "keyboard_layout": "us",
+  "users": [
+    {
+      "name": "lfsuser",
+      "groups": [
+        "wheel",
+        "audio",
+        "video",
+        "storage",
+        "docker"
+      ],
+      "sudo": true,
+      "autologin": true
+    }
+  ],
+  "network": {
+    "dhcp": true,
+    "dns_servers": [
+      "8.8.8.8",
+      "8.8.4.4",
+      "1.1.1.1"
+    ],
+    "enable_ipv6": true,
+    "wireless": true,
+    "bluetooth": true
+  },
+  "custom_scripts": {
+    "post_install": [
+      "packages/custom-scripts/post-install.sh"
+    ],
+    "theme_setup": "packages/custom-scripts/theme-setup.sh",
+    "first_boot": "packages/custom-scripts/first-boot.sh"
+  },
+  "repositories": [
+    "https://www.linuxfromscratch.org/lfs/view/stable/wget-list",
+    "https://www.linuxfromscratch.org/blfs/view/stable/wget-list"
+  ],
+  "build_options": {
+    "parallel_build": true,
+    "keep_build_dirs": false,
+    "strip_binaries": true,
+    "checksum_verification": true,
+    "verbose_logging": false,
+    "download_timeout": 30,
+    "retry_downloads": 2
+  },
+  "logging": {
+    "level": "INFO",
+    "max_size_mb": 100,
+    "max_files": 10,
+    "log_build_output": true
+  }
+}

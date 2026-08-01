@@ -6,7 +6,7 @@ name = "Beyond Linux From Scratch"
 short_name = "BLFS"
 organization = "Linux From Scratch Project"
 description = "A professional Linux distribution built from source"
-version = "0.4.5"
+# version is managed by VERSION file, not hardcoded
 website = "https://www.linuxfromscratch.org"
 contact_email = "info@linuxfromscratch.org"
 license = "GPL v2"
