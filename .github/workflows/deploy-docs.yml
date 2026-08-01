@@ -27,7 +27,7 @@ jobs:
 
       - name: Install MkDocs and theme
         run: |
-          pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-mermaid2-plugin
+          pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-mermaid2-plugin mkdocs-minify-plugin
 
       - name: Build MkDocs site
         run: |
