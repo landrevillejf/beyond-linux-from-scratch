@@ -6,6 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+	# shellcheck source=/dev/null
 	source "$SCRIPT_DIR/../common/utils.sh"
 else
 	log_info() { echo "[INFO] $*"; }
@@ -18,6 +19,7 @@ KERNEL_TYPE=${KERNEL_TYPE:-linux}
 
 detect_distro() {
 	if [ -f /etc/os-release ]; then
+		# shellcheck source=/dev/null
 		. /etc/os-release
 		echo "$ID"
 	elif [ -f /etc/debian_version ]; then
@@ -128,7 +130,9 @@ mkdir -p "$LFS_HOME"
 	echo "umask 022"
 	printf 'LFS=%q\n' "$LFS"
 	echo "LC_ALL=POSIX"
+	# shellcheck disable=SC2016
 	echo 'LFS_TGT=$(uname -m)-lfs-linux-gnu'
+	# shellcheck disable=SC2016
 	echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
 	echo "export LFS LC_ALL LFS_TGT PATH"
 } >"$LFS_HOME/.bashrc"
@@ -196,7 +200,7 @@ build_toolchain() {
 	GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
 	# Embed GMP, MPFR, MPC into GCC source tree
 	for lib in gmp mpfr mpc; do
-		LIB_TAR=$(ls ${lib}-*.tar.* 2>/dev/null | head -1)
+		LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
 		if [ -n "$LIB_TAR" ]; then
 			tar -xf "$LIB_TAR"
 			LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
@@ -317,28 +321,32 @@ build_toolchain() {
 			CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
 		fi
 
-		# Configure avec vérification d'erreur
-		if ! CC="$LFS_TGT-gcc" \
-			CXX="$LFS_TGT-g++" \
-			AR="$LFS_TGT-ar" \
-			RANLIB="$LFS_TGT-ranlib" \
-			CFLAGS="$CFLAGS" \
-			./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
-			--build=$(uname -m)-linux-gnu \
-			--disable-nls; then
-			log_error "Configure failed for $pkg"
-			exit 1
-		fi
-
-		# Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
-		if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
-			sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
-		fi
-
-		make -j"$NUM_JOBS"
+		# bzip2 has no autoconf configure script; build it directly with make
 		if [ "$pkg" = "bzip2" ]; then
-			make PREFIX="$LFS/tools" install
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				-j"$NUM_JOBS"
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				PREFIX="$LFS/tools" install
 		else
+			# Configure avec vérification d'erreur
+			if ! CC="$LFS_TGT-gcc" \
+				CXX="$LFS_TGT-g++" \
+				AR="$LFS_TGT-ar" \
+				RANLIB="$LFS_TGT-ranlib" \
+				CFLAGS="$CFLAGS" \
+				./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
+				--build="$(uname -m)-linux-gnu" \
+				--disable-nls; then
+				log_error "Configure failed for $pkg"
+				exit 1
+			fi
+
+			# Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
+			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+				sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
+			fi
+
+			make -j"$NUM_JOBS"
 			make install
 		fi
 		cd "$LFS/sources"
