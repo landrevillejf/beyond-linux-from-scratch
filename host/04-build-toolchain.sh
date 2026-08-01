@@ -287,72 +287,6 @@ build_toolchain() {
 	rm -rf "$GLIBC_DIR"
 	log_success "glibc done"
 
-	# ----- Build essential host tools for the temporary system -----
-	log_info "Building essential tools for /tools"
-	for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
-		# Éviter de prendre make-ca pour make
-		if [ "$pkg" = "make" ]; then
-			archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
-		else
-			archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
-		fi
-		if [ -z "$archive" ]; then
-			log_warning "Source for $pkg not found, skipping"
-			continue
-		fi
-		dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-		log_info "Building $dir"
-		tar -xf "$archive"
-		cd "$dir"
-
-		# Correctif pour findutils : _POSIX_ARG_MAX manquant avec glibc récente
-		# Use sed instead of a patch file to avoid brittle line-number/context matching
-		if [ "$pkg" = "findutils" ]; then
-			if grep -q "ctl->posix_arg_size_min = _POSIX_ARG_MAX;" lib/buildcmd.c &&
-				! grep -q "#ifdef _POSIX_ARG_MAX" lib/buildcmd.c; then
-				sed -i 's/  ctl->posix_arg_size_min = _POSIX_ARG_MAX;/#ifdef _POSIX_ARG_MAX\n  ctl->posix_arg_size_min = _POSIX_ARG_MAX;\n#else\n  ctl->posix_arg_size_min = 4096;\n#endif/' lib/buildcmd.c
-			fi
-		fi
-
-		CFLAGS=""
-		if [ "$pkg" = "coreutils" ]; then
-			CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
-		elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
-			CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
-		fi
-
-		# bzip2 has no autoconf configure script; build it directly with make
-		if [ "$pkg" = "bzip2" ]; then
-			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
-				-j"$NUM_JOBS"
-			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
-				PREFIX="$LFS/tools" install
-		else
-			# Configure avec vérification d'erreur
-			if ! CC="$LFS_TGT-gcc" \
-				CXX="$LFS_TGT-g++" \
-				AR="$LFS_TGT-ar" \
-				RANLIB="$LFS_TGT-ranlib" \
-				CFLAGS="$CFLAGS" \
-				./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
-				--build="$(uname -m)-linux-gnu" \
-				--disable-nls; then
-				log_error "Configure failed for $pkg"
-				exit 1
-			fi
-
-			# Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
-			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
-				sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
-			fi
-
-			make -j"$NUM_JOBS"
-			make install
-		fi
-		cd "$LFS/sources"
-		rm -rf "$dir"
-	done
-
 	log_info "Building libstdc++"
 	tar -xf "$GCC_TAR" # re-extract GCC
 
@@ -372,6 +306,112 @@ build_toolchain() {
 	cd "$LFS/sources"
 	rm -rf "$GCC_DIR"
 	log_success "libstdc++ done"
+
+	# ----- Cross-compile configure cache -----
+	# Pre-answers gnulib/autoconf runtime tests that cannot execute when
+	# cross-compiling. Prevents "cannot run test program while cross compiling"
+	# failures introduced by newer package versions (e.g. diffutils-3.12,
+	# patch-2.8) that bundle updated gnulib with stricter runtime checks.
+	# Each package gets its own copy of the cache to avoid cross-contamination.
+	CROSS_CACHE_TMPL="$LFS/sources/.cross-compile-cache"
+	cat > "$CROSS_CACHE_TMPL" << 'CROSS_CACHE_EOF'
+# Autoconf/gnulib cache values for cross-compilation
+# String functions
+ac_cv_func_strcasecmp=yes
+ac_cv_func_strncasecmp=yes
+gl_cv_func_strcasecmp_works=yes
+gl_cv_func_strncasecmp_works=yes
+ac_cv_func_strnlen_works=yes
+gl_cv_func_strnlen_works=yes
+# Memory / file operations
+gl_cv_func_mknod_works=yes
+gl_cv_func_lstat_dereferences_slashed_symlink=yes
+gl_cv_func_stat_dir_slash=yes
+gl_cv_func_stat_file_slash=yes
+# Time
+gl_cv_func_working_mktime=yes
+gl_cv_func_utimes_works=yes
+# I/O
+gl_cv_func_fflush_stdin=yes
+gl_cv_func_printf_directive_n=yes
+# Misc
+gl_cv_func_getgroups_works=yes
+gl_cv_func_memmem_works=yes
+CROSS_CACHE_EOF
+
+	# ----- Build essential host tools for the temporary system -----
+	log_info "Building essential tools for /tools"
+	for pkg in m4 xz coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
+		# Avoid picking up make-ca instead of make
+		if [ "$pkg" = "make" ]; then
+			archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
+		else
+			archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+		fi
+		if [ -z "$archive" ]; then
+			log_warning "Source for $pkg not found, skipping"
+			continue
+		fi
+		dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+		log_info "Building $dir"
+		tar -xf "$archive"
+		cd "$dir"
+
+		# Correctif pour findutils : _POSIX_ARG_MAX manquant avec glibc récente
+		# Use sed instead of a patch file to avoid brittle line-number/context matching
+		if [ "$pkg" = "findutils" ]; then
+			if grep -q "ctl->posix_arg_size_min = _POSIX_ARG_MAX;" lib/buildcmd.c 2>/dev/null &&
+				! grep -q "#ifdef _POSIX_ARG_MAX" lib/buildcmd.c 2>/dev/null; then
+				sed -i 's/  ctl->posix_arg_size_min = _POSIX_ARG_MAX;/#ifdef _POSIX_ARG_MAX\n  ctl->posix_arg_size_min = _POSIX_ARG_MAX;\n#else\n  ctl->posix_arg_size_min = 4096;\n#endif/' lib/buildcmd.c
+			fi
+		fi
+
+		CFLAGS=""
+		if [ "$pkg" = "coreutils" ]; then
+			CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
+		elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+			CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
+		fi
+
+		# bzip2 has no autoconf configure script; build it directly with make
+		if [ "$pkg" = "bzip2" ]; then
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				-j"$NUM_JOBS"
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				PREFIX="$LFS/tools" install
+		else
+			# Per-package configure cache (copy from template to prevent cross-contamination)
+			PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+			cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+
+			# Configure with error checking; use the cross-compile cache so that
+			# runtime tests which cannot execute when cross-compiling are pre-answered.
+			if ! CC="$LFS_TGT-gcc" \
+				CXX="$LFS_TGT-g++" \
+				AR="$LFS_TGT-ar" \
+				RANLIB="$LFS_TGT-ranlib" \
+				CFLAGS="$CFLAGS" \
+				./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
+				--build="$(uname -m)-linux-gnu" \
+				--cache-file="$PKG_CACHE" \
+				--disable-nls; then
+				log_error "Configure failed for $pkg"
+				exit 1
+			fi
+			rm -f "$PKG_CACHE"
+
+			# Remove gnulib-tests from SUBDIRS to avoid PATH_MAX and related errors
+			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+				sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
+			fi
+
+			make -j"$NUM_JOBS"
+			make install
+		fi
+		cd "$LFS/sources"
+		rm -rf "$dir"
+	done
+	rm -f "$CROSS_CACHE_TMPL"
 
 	mkdir -p "$LFS/var/log"
 	touch "$LFS/var/log/toolchain-ready"

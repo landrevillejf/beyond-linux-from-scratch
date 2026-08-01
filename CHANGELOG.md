@@ -5,7 +5,42 @@ All notable changes to the LFS/BLFS Builder project will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-07-20
+## [Unreleased] - 2026-08-01
+
+### Fixed
+
+- **Toolchain cross-compile configure failures (diffutils-3.12, patch-2.8, and future gnulib-bundled packages)**
+  - Root cause: newer packages (e.g. `diffutils-3.12`) bundle updated gnulib containing
+    `AC_RUN_IFELSE` checks (e.g. `strcasecmp`, `strncasecmp`, `strnlen`, `mktime`) that
+    have no cross-compile default — autoconf aborts with
+    `cannot run test program while cross compiling` instead of guessing.
+  - Fix: a comprehensive per-package configure cache is written before the temporary-tools
+    build loop in `host/04-build-toolchain.sh`. Each package receives its own copy of the
+    cache template to prevent cross-contamination between configure runs. The cache
+    pre-answers all known gnulib/autoconf runtime tests for the x86_64-linux target:
+    `ac_cv_func_strcasecmp`, `gl_cv_func_strcasecmp_works`, `ac_cv_func_strncasecmp`,
+    `gl_cv_func_strncasecmp_works`, `gl_cv_func_working_mktime`, `gl_cv_func_mknod_works`,
+    `gl_cv_func_strnlen_works`, `gl_cv_func_fflush_stdin`, `gl_cv_func_getgroups_works`,
+    `gl_cv_func_memmem_works`, and related.
+
+- **libstdc++ now built before the essential-tools loop (correct LFS book ordering)**
+  - Previously libstdc++ was built after all temporary tools; it is now built immediately
+    after glibc, matching LFS Book Chapter 6 ordering.
+
+### Added
+
+- **m4 and xz added to the temporary-tools build list in `host/04-build-toolchain.sh`**
+  - `m4` is required by autoconf-based configure scripts inside the temporary system;
+    `xz` is needed to decompress `.tar.xz` archives in the chroot before the host-bootstrap
+    stage provides it. Both are skipped gracefully with a warning if their source archives
+    were not downloaded.
+
+- **Regression test: `test_toolchain_cross_compile_cache`**
+  - Verifies the cross-compile configure cache, the key gnulib cache entries, the
+    `--cache-file` flag, the correct libstdc++ build order, and presence of `diffutils`
+    and `patch` in the package loop.
+
+## [Previously Unreleased] - 2026-07-20
 
 ### Added
 
