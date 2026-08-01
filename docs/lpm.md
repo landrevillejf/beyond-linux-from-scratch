@@ -16,11 +16,12 @@ It handles package installation, removal, upgrades, dependency resolution, and d
 - **Pre/post install/remove hooks** – run custom scripts during package lifecycle.
 - **Transactional installation** – atomic file installation with automatic rollback on failure.
 - **Concurrent execution lock** – prevents multiple LPM instances from interfering.
+- **Profile management** – install predefined package collections for specific use cases (audio studio, Java dev, etc.) with automatic dependency resolution.
 - **Verbose and dry‑run modes** – simulate operations or get detailed debug output.
 - **Repository support** – local and remote HTTP(S) repository support.
 - **Portable** – works on minimal LFS systems (no GNU-specific dependencies).
 - **High performance** – optimized dependency resolution and file operations (100x faster than naive implementations).
-- **Command set** – install, remove, update, upgrade, list, search, info, clean, and more.
+- **Command set** – install, remove, update, upgrade, list, search, info, clean, list-profiles, add-profile, and more.
 
 ## Installation
 
@@ -259,6 +260,71 @@ Remove all cached `.tar.xz` files from the local repository directory and build 
 ```bash
 lpm clean                           # Free up disk space
 lpm clean --dry-run                 # See what would be removed
+```
+
+### `list-profiles`
+
+List all available build profiles and their descriptions.  
+Profiles are predefined package collections for specific use cases (audio workstation, Java development, etc.).
+
+**Example:**
+```bash
+lpm list-profiles
+# Output:
+# Available profiles:
+#   minimal              Minimal base system with essential packages
+#   java-dev             Java development environment
+#   audio-studio         Full audio production studio
+#   xfce                 XFCE lightweight desktop
+#   server               Production-optimized server
+```
+
+### `add-profile <profile>`
+
+Install all packages from a predefined profile.  
+This allows extending a minimal base system with packages for a specific use case without rebuilding.  
+Automatically resolves dependencies and installs in the correct order.
+
+**Profiles:**
+- `minimal` – Essential base packages (bash, coreutils, utilities)
+- `java-dev` – Java development (OpenJDK, Maven, Gradle, build tools)
+- `audio-studio` – Audio production workstation (Ardour, LMMS, plugins)
+- `xfce` – Lightweight XFCE desktop environment
+- `gnome` – Full GNOME desktop
+- `kde` – KDE Plasma desktop
+- `lxqt` – Extremely lightweight LXQt desktop
+- `server` – Production server packages (OpenSSH, NTP, logging)
+- `web-dev` – Web development stack (Node.js, Python, databases)
+- `gnu-free` – Exclusively free/libre software
+- `secure` – Security-hardened system (encryption, firewalls)
+- `multimedia` – Media creation and playback
+
+**Example:**
+```bash
+# View available profiles
+lpm list-profiles
+
+# Install audio production profile
+lpm add-profile audio-studio
+
+# Preview what would be installed
+lpm add-profile audio-studio --dry-run
+
+# Install Java development after minimal
+lpm add-profile minimal
+lpm add-profile java-dev
+
+# Install and see verbose output
+lpm add-profile xfce --verbose
+```
+
+**Workflow:**
+```bash
+# Modular system composition
+lpm add-profile minimal          # Start with minimal base
+lpm add-profile xfce             # Add lightweight desktop
+lpm add-profile audio-studio     # Add audio workstation
+# Result: Lightweight audio workstation
 ```
 
 ### `help` (or `--help`, `-h`)
