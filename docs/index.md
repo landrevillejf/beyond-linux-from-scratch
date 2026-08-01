@@ -50,23 +50,23 @@ This repository is designed for reproducible, profile‑driven builds and CI/CD 
 - **Parallel downloads** – fetch source tarballs concurrently.
 - **Resume capability** – restart from a failed stage without redoing previous work.
 - **Comprehensive logging** – detailed logs per stage, with last 50 lines displayed on failure.
-- **Professional branding** – custom themes, wallpapers, and GRUB backgrounds for the installer and live system (see [Branding](docs/BRANDING.md)).
+- **Professional branding** – custom themes, wallpapers, and GRUB backgrounds for the installer and live system (see [Branding](BRANDING.md)).
 
 ---
 
 ## Documentation pages
 
-- [Overview](docs/content.md)
-- [Stage Timings](docs/stage-timings.md)
-- [Professional Branding System](docs/BRANDING.md)
-- [Installer Branding](docs/INSTALLER_BRANDING.md)
-- [Branding Visual Reference](docs/branding-visual-mockup.html)
-- [LPM Package Manager](docs/lpm.md)
-- [Troubleshooting](docs/troubleshoot.md)
-- [Docker How-To](docs/docker-howto.md)
-- [Release How-To](docs/make-release-how-to.md)
-- [Testing How-To](docs/testing-howto.md)
-- [Wallpaper Generator How-To](docs/wallpaper-generator-howto.md)
+- [Overview](content.md)
+- [Stage Timings](stage-timings.md)
+- [Professional Branding System](BRANDING.md)
+- [Installer Branding](INSTALLER_BRANDING.md)
+- [Branding Visual Reference](branding-visual-mockup.html)
+- [LPM Package Manager](lpm.md)
+- [Troubleshooting](troubleshoot.md)
+- [Docker How-To](docker-howto.md)
+- [Release How-To](make-release-how-to.md)
+- [Testing How-To](testing-howto.md)
+- [Wallpaper Generator How-To](wallpaper-generator-howto.md)
 
 ---
 
@@ -541,18 +541,18 @@ python3 builder.py --generate-sources-list
 
 ## Security and support
 
-- Security policy: [SECURITY.md](SECURITY.md)
-- Changelog: [CHANGELOG.md](CHANGELOG.md)
-- Advanced notes: [ADVANCED.md](ADVANCED.md)
+- Security policy: [SECURITY.md](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/SECURITY.md)
+- Changelog: [CHANGELOG.md](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/CHANGELOG.md)
+- Advanced notes: [ADVANCED.md](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/ADVANCED.md)
 
 ---
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
+Please read [CONTRIBUTING.md](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/CONTRIBUTING.md) before submitting pull requests.
 
 ---
 
 ## License
 
-This project is licensed under GPLv3. See [LICENSE](LICENSE).
+This project is licensed under GPLv3. See [LICENSE](https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/LICENSE).
