@@ -651,34 +651,28 @@ class TestVersionHandling:
         assert version == "0.52.7"
         assert version != "dev"
 
-    def test_get_version_fallback_when_missing(self, tmp_path, monkeypatch):
-        """Test _get_version returns 'dev' when VERSION file is missing"""
+    def test_get_version_fallback_when_missing(self, tmp_path):
+        """Test _get_version returns 'dev' when VERSION file is missing (line 37)"""
         from pathlib import Path
+        from unittest.mock import patch, MagicMock
         
-        # Create a script file in tmp_path that calls _get_version
-        test_script = tmp_path / "test_version_fallback.py"
-        test_script.write_text('''
-from pathlib import Path
-import sys
-
-def _get_version():
-    version_file = Path(__file__).parent / "VERSION"
-    if version_file.exists():
-        return version_file.read_text().strip()
-    return "dev"
-
-# Call without VERSION file existing in this directory
-result = _get_version()
-print(result)
-''')
+        # Test the actual _get_version function by mocking Path.exists() to return False
+        def mock_get_version():
+            """Replicate the actual _get_version logic with mocking"""
+            version_file = MagicMock()
+            version_file.exists.return_value = False
+            
+            # This simulates the if condition failing, so we return "dev"
+            if version_file.exists():
+                return version_file.read_text().strip()
+            return "dev"
         
-        import subprocess
-        result = subprocess.run(
-            [sys.executable, str(test_script)],
-            cwd=str(tmp_path),
-            capture_output=True,
-            text=True
-        )
+        result = mock_get_version()
+        assert result == "dev", f"Expected 'dev' when VERSION file doesn't exist, got '{result}'"
         
-        assert result.returncode == 0
-        assert result.stdout.strip() == "dev"
+        # Also test by directly importing and calling with path mock
+        import builder
+        with patch.object(Path, 'exists', return_value=False):
+            # This should trigger the return "dev" path
+            result2 = builder._get_version()
+            assert result2 == "dev"
