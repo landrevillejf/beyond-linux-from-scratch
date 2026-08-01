@@ -18,10 +18,10 @@ jobs:
           mkdir -p /tmp/artifacts
           cd /tmp/artifacts
           
-          # Try to download latest packages cache release
+          # Try to download all split parts of the packages cache release
           gh release download packages-cache-latest \
             --repo ${{ github.repository }} \
-            --pattern "lfs-packages-part-1.tar.gz" \
+            --pattern "lfs-packages-part-*.tar.gz" \
             --pattern "SHA256SUMS" \
             2>/dev/null || echo "⚠️ No cache release found, will download packages during build"
         env:
@@ -32,9 +32,9 @@ jobs:
         run: |
           mkdir -p /tmp/lfs-sources
           
-          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
-            echo "Extracting cached packages..."
-            tar -xzf /tmp/artifacts/lfs-packages-part-1.tar.gz -C /tmp/
+          if ls /tmp/artifacts/lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
+            echo "Reassembling and extracting cached packages..."
+            cat $(ls -v /tmp/artifacts/lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
             echo "✅ Cache restored successfully"
           else
             echo "⚠️ No cached packages found, will download during build"
@@ -67,12 +67,12 @@ jobs:
           
           gh release download packages-cache-latest \
             --repo ${{ github.repository }} \
-            --pattern "lfs-packages-part-1.tar.gz" \
+            --pattern "lfs-packages-part-*.tar.gz" \
             2>/dev/null || echo "⚠️ Cache release not found"
           
           mkdir -p /tmp/lfs-sources
-          if [ -f lfs-packages-part-1.tar.gz ]; then
-            tar -xzf lfs-packages-part-1.tar.gz -C /tmp/ && echo "✅ Cache restored"
+          if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
+            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/ && echo "✅ Cache restored"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
