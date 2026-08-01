@@ -202,6 +202,12 @@ exit 1
             "Missing gl_cv_func_working_mktime cache entry"
         assert 'gl_cv_func_strnlen_works=yes' in content, \
             "Missing gl_cv_func_strnlen_works cache entry"
+        assert 'if [ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]; then' in content, \
+            "Missing PATH_MAX stackvma workaround for diffutils in the toolchain loop"
+        assert '[ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]' in content, \
+            "Missing diffutils stackvma fix guard"
+        assert '[ "$pkg" = "diffutils" ]; then' in content, \
+            "Missing diffutils-specific handling in toolchain script"
 
         # The per-package cache copy must be used in the configure invocation
         assert '--cache-file=' in content, \

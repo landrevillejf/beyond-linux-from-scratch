@@ -150,3 +150,17 @@ exit 0
     assert (lfs_dir / "bin" / "sh").is_symlink()
     assert os.readlink(lfs_dir / "bin" / "sh") == "bash"
     assert (lfs_dir / "usr" / "bin" / "env").exists()
+
+
+def test_lfs_system_diffutils_pathmax_workaround_present():
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert 'if [ "$pkg" = "diffutils" ]; then' in content
+    assert 'grep -q "PATH_MAX" lib/stackvma.c' in content
+    assert '! grep -q "#include <limits.h>" lib/stackvma.c' in content
+    assert "sed -i '1s/^/#include <limits.h>\\n/' lib/stackvma.c" in content
+    assert 'cflags="-D_GNU_SOURCE -DPATH_MAX=4096"' in content
+    assert 'CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc' in content
+    assert 'CFLAGS="$cflags" make -j$(nproc)' in content

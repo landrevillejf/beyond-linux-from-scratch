@@ -379,6 +379,7 @@ unset CC CXX LD AS
 
 build_simple() {
     local pkg=$1
+    local cflags=""
     local archive=$(find_archive "$pkg")
     if [ -z "$archive" ]; then
         echo "WARNING: $pkg source not found, skipping"
@@ -388,13 +389,20 @@ build_simple() {
     echo "=== Building $dir ==="
     tar -xf "$archive"
     cd "$dir"
+    if [ "$pkg" = "diffutils" ]; then
+        if grep -q "PATH_MAX" lib/stackvma.c 2>/dev/null &&
+           ! grep -q "#include <limits.h>" lib/stackvma.c 2>/dev/null; then
+            sed -i '1s/^/#include <limits.h>\n/' lib/stackvma.c
+        fi
+        cflags="-D_GNU_SOURCE -DPATH_MAX=4096"
+    fi
     if [ -f "configure" ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc
+        CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc
     elif [ -f "Makefile" ]; then
         true
     fi
-    make -j$(nproc)
-    make install
+    CFLAGS="$cflags" make -j$(nproc)
+    CFLAGS="$cflags" make install
     cd /sources
     rm -rf "$dir"
     echo "=== $dir done ==="
