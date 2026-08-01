@@ -173,6 +173,53 @@ exit 1
         assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in content
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in content
 
+    def test_toolchain_cross_compile_cache(self):
+        """Toolchain script must use a configure cache to pre-answer gnulib runtime
+        tests that cannot execute when cross-compiling (e.g. diffutils-3.12
+        strcasecmp check, patch-2.8 strncasecmp check).
+
+        Regression test for CI failure: 'cannot run test program while cross
+        compiling' on diffutils during the release pipeline toolchain stage.
+        """
+        toolchain_script = Path('host/04-build-toolchain.sh')
+        assert toolchain_script.exists()
+        content = toolchain_script.read_text()
+
+        # A template cache file must be created before the package loop
+        assert 'CROSS_CACHE_TMPL' in content, \
+            "Missing cross-compile configure cache template variable"
+        assert 'CROSS_CACHE_EOF' in content, \
+            "Missing CROSS_CACHE_EOF heredoc terminator"
+
+        # The cache must cover the key gnulib tests that fail when cross-compiling
+        assert 'ac_cv_func_strcasecmp=yes' in content, \
+            "Missing ac_cv_func_strcasecmp cache entry (fixes diffutils-3.12)"
+        assert 'gl_cv_func_strcasecmp_works=yes' in content, \
+            "Missing gl_cv_func_strcasecmp_works cache entry"
+        assert 'ac_cv_func_strncasecmp=yes' in content, \
+            "Missing ac_cv_func_strncasecmp cache entry (fixes patch-2.8)"
+        assert 'gl_cv_func_working_mktime=yes' in content, \
+            "Missing gl_cv_func_working_mktime cache entry"
+        assert 'gl_cv_func_strnlen_works=yes' in content, \
+            "Missing gl_cv_func_strnlen_works cache entry"
+
+        # The per-package cache copy must be used in the configure invocation
+        assert '--cache-file=' in content, \
+            "Missing --cache-file flag in configure invocation"
+        assert 'PKG_CACHE' in content, \
+            "Missing PKG_CACHE per-package cache variable"
+
+        # diffutils and patch must be in the package build loop
+        assert 'diffutils' in content
+        assert 'patch' in content
+
+        # libstdc++ must be built BEFORE the essential-tools loop (correct LFS order)
+        libstdc_pos = content.find('Building libstdc++')
+        cross_cache_pos = content.find('Cross-compile configure cache')
+        tools_loop_pos = content.find('Building essential tools for /tools')
+        assert libstdc_pos < cross_cache_pos < tools_loop_pos, \
+            "libstdc++ must be built before the cross-compile cache and tools loop"
+
     def test_shellcheck_on_scripts(self):
         """Exécuter shellcheck sur tous les scripts (si installé)"""
         try:
