@@ -1,0 +1,128 @@
+name: Cache LFS/BLFS Packages
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 1 * *'  # First day of month at 2 AM UTC
+
+jobs:
+  download-packages:
+    name: Download and Cache Packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create sources directory
+        run: |
+          mkdir -p /tmp/lfs-sources
+          chmod 777 /tmp/lfs-sources
+
+      - name: Download LFS/BLFS packages
+        run: |
+          cd ${{ github.workspace }}
+          python3 << 'PYTHON_SCRIPT'
+          import sys
+          sys.path.insert(0, '.')
+          from pathlib import Path
+          from builder import SourceDownloader
+          import logging
+          
+          logging.basicConfig(level=logging.INFO)
+          logger = logging.getLogger("PackageCache")
+          
+          sources_dir = Path("/tmp/lfs-sources")
+          sources_dir.mkdir(parents=True, exist_ok=True)
+          
+          downloader = SourceDownloader(
+              sources_dir=sources_dir,
+              logger=logger,
+              timeout=60,
+              retries=3
+          )
+          
+          # Download from main sources list
+          sources_list = Path("packages/sources.list")
+          if sources_list.exists():
+              logger.info(f"Downloading from {sources_list}")
+              downloader.download_from_list(sources_list, parallel=6)
+          
+          # Download from custom sources
+          custom_sources = Path("packages/custom-sources.list")
+          if custom_sources.exists():
+              logger.info(f"Downloading from {custom_sources}")
+              downloader.download_from_list(custom_sources, parallel=4)
+          
+          PYTHON_SCRIPT
+
+      - name: Check downloaded packages
+        run: |
+          ls -lh /tmp/lfs-sources/ | head -20
+          du -sh /tmp/lfs-sources/
+          echo "Total files: $(find /tmp/lfs-sources -type f | wc -l)"
+
+      - name: Create checksums
+        run: |
+          cd /tmp/lfs-sources
+          sha256sum * > SHA256SUMS 2>/dev/null || true
+          wc -l SHA256SUMS
+
+      - name: Split packages into artifacts (max 5GB per artifact)
+        run: |
+          mkdir -p /tmp/artifacts
+          cd /tmp/lfs-sources
+          
+          # Create tar.gz archives split by size (~4.5GB each to stay under 5GB limit)
+          tar --exclude='SHA256SUMS' \
+              --listed-incremental=/tmp/packages-metadata.snar \
+              -czf /tmp/artifacts/lfs-packages-part-1.tar.gz \
+              -C /tmp lfs-sources/ 2>/dev/null || true
+          
+          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
+            size=$(du -sh /tmp/artifacts/lfs-packages-part-1.tar.gz | cut -f1)
+            echo "Part 1 size: $size"
+          fi
+
+      - name: Upload packages artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-blfs-packages-cache
+          path: /tmp/artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+          compression-level: 0
+
+      - name: Upload SHA256 checksums
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-packages-checksums
+          path: /tmp/lfs-sources/SHA256SUMS
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Create cache summary
+        if: success()
+        run: |
+          echo "# 📦 Package Cache Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ✅ Cache updated" >> $GITHUB_STEP_SUMMARY
+          echo "**Time**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Total packages**: $(find /tmp/lfs-sources -type f | wc -l)" >> $GITHUB_STEP_SUMMARY
+          echo "**Total size**: $(du -sh /tmp/lfs-sources | cut -f1)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Use `actions/download-artifact@v4` to retrieve in build workflows" >> $GITHUB_STEP_SUMMARY
+
+      - name: Report any failures
+        if: failure()
+        run: |
+          echo "⚠️ Package download partially failed" >> $GITHUB_STEP_SUMMARY
+          echo "Review logs for details" >> $GITHUB_STEP_SUMMARY

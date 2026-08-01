@@ -1,0 +1,52 @@
+name: Use Package Cache
+
+# This is a reusable workflow that downloads cached packages
+# Usage in other workflows:
+# - uses: ./.github/workflows/use-cache.yml
+
+on:
+  workflow_call:
+    outputs:
+      cache-hit:
+        description: 'Whether package cache was found'
+        value: ${{ jobs.restore-cache.outputs.hit }}
+      packages-path:
+        description: 'Path to extracted packages'
+        value: /tmp/lfs-sources
+
+jobs:
+  restore-cache:
+    name: Restore Package Cache
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.check.outputs.hit }}
+    steps:
+      - name: Download cached packages
+        uses: actions/download-artifact@v4
+        with:
+          name: lfs-blfs-packages-cache
+          path: /tmp/artifacts/
+        continue-on-error: true
+
+      - name: Extract packages
+        run: |
+          mkdir -p /tmp/lfs-sources
+          
+          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
+            echo "Extracting cached packages..."
+            tar -xzf /tmp/artifacts/lfs-packages-part-1.tar.gz -C /tmp/
+            echo "✅ Cache restored successfully"
+          else
+            echo "⚠️ No cached packages found"
+          fi
+
+      - name: Check cache status
+        id: check
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f | wc -l) -gt 0 ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "❌ Cache MISS"
+          fi
