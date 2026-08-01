@@ -19,16 +19,21 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.1.0"
-LPM_CONF="/etc/lpm/lpm.conf"
-LPM_ETC="/etc/lpm"
-LPM_DB="/var/lib/lpm"
-LPM_LOGS="/var/log/lpm"
-LPM_PACKAGES_DIR="/usr/share/lpm/packages"
+LPM_VERSION="2.2.0"
+LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
+LPM_ETC="${LPM_ETC:-/etc/lpm}"
+LPM_DB="${LPM_DB:-/var/lib/lpm}"
+LPM_LOGS="${LPM_LOGS:-/var/log/lpm}"
+LPM_PACKAGES_DIR="${LPM_PACKAGES_DIR:-/usr/share/lpm/packages}"
+LPM_ROOT="${LPM_ROOT:-/}"                 # Install root (for testing/chroots)
+# shellcheck disable=SC2034  # kept for config file compat
 LPM_REPOS=( "local" )
-REPO_LOCAL_PATH="$LPM_PACKAGES_DIR"
-LOCK_FILE="/var/lock/lpm.lock"
+REPO_LOCAL_PATH="${REPO_LOCAL_PATH:-$LPM_PACKAGES_DIR}"
+REPO_REMOTE_URLS=()                        # HTTP(S) repo base URLs
+LOCK_FILE="${LOCK_FILE:-/var/lock/lpm.lock}"
 VERIFY_CHECKSUMS=true
+VERIFY_SIGNATURES=false                    # GPG signature verification
+GPG_KEYRING="${GPG_KEYRING:-/etc/lpm/trusted.gpg}"
 LOG_TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
 
 # Runtime variables
@@ -73,16 +78,48 @@ escape_regex() {
     printf '%s\n' "$1" | sed -e 's/[]\/$*.^[]/\\&/g'
 }
 
-# Acquire exclusive lock
+# Portable in-place sed (GNU sed on Linux, BSD sed on macOS/BSD)
+sed_inplace() {
+    if sed --version >/dev/null 2>&1; then
+        sed -i "$@"
+    else
+        local expr="$1"; shift
+        sed -i '' "$expr" "$@"
+    fi
+}
+
+# Portable SHA256
+sha256_of() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+# Acquire exclusive lock (flock on Linux, atomic mkdir fallback elsewhere)
+LOCK_DIR_USED=false
 acquire_lock() {
-    exec {LOCK_FD}>"$LOCK_FILE"
-    if ! flock -n "$LOCK_FD"; then
-        die "Another lpm instance is running. Exiting."
+    if command -v flock >/dev/null 2>&1; then
+        exec {LOCK_FD}>"$LOCK_FILE"
+        if ! flock -n "$LOCK_FD"; then
+            die "Another lpm instance is running. Exiting."
+        fi
+    else
+        if ! mkdir "${LOCK_FILE}.d" 2>/dev/null; then
+            die "Another lpm instance is running. Exiting."
+        fi
+        LOCK_DIR_USED=true
     fi
 }
 
 release_lock() {
-    flock -u "$LOCK_FD" 2>/dev/null || true
+    if [ -n "$LOCK_FD" ]; then
+        flock -u "$LOCK_FD" 2>/dev/null || true
+    fi
+    if [ "$LOCK_DIR_USED" = true ]; then
+        rmdir "${LOCK_FILE}.d" 2>/dev/null || true
+    fi
 }
 
 refresh_runtime_paths() {
@@ -114,11 +151,11 @@ init_dirs() {
 refresh_runtime_paths
 
 # Read package metadata from DB with proper field parsing
+# Exact name match on field 1 (fixes prefix collisions like foo vs libfoo)
 get_pkg_field() {
     local pkg="$1" field="$2"
     local line
-    # Use grep -F for literal matching (prevents regex interpretation)
-    line=$(grep -F "${pkg}|" "$db_file" 2>/dev/null | head -1 || true)
+    line=$(awk -F'|' -v p="$pkg" '$1 == p { print; exit }' "$db_file" 2>/dev/null || true)
     [ -z "$line" ] && return
     
     case "$field" in
@@ -130,23 +167,51 @@ get_pkg_field() {
     esac
 }
 
-# Check if package is installed (using -F for literal matching)
+# Check if package is installed (exact first-column match)
 is_installed() {
-    grep -qF "$1 " "$installed_file" 2>/dev/null
+    awk -v p="$1" '$1 == p { found=1; exit } END { exit !found }' "$installed_file" 2>/dev/null
 }
 
-# Get installed version
+# Get installed version (exact first-column match)
 installed_version() {
-    grep -F "$1 " "$installed_file" 2>/dev/null | head -1 | awk '{print $2}'
+    awk -v p="$1" '$1 == p { print $2; exit }' "$installed_file" 2>/dev/null
 }
 
-# Dependency resolver with circular dependency detection
+# Compare versions: returns 0 if $1 >= $2 (sort -V based)
+version_gte() {
+    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
+
+# Parse dep spec "name>=1.2" / "name=1.2" / "name" -> sets DEP_NAME, DEP_OP, DEP_VER
+parse_dep_spec() {
+    local spec="$1"
+    if [[ "$spec" =~ ^([a-zA-Z0-9._+-]+)(\>=|=)(.+)$ ]]; then
+        DEP_NAME="${BASH_REMATCH[1]}"; DEP_OP="${BASH_REMATCH[2]}"; DEP_VER="${BASH_REMATCH[3]}"
+    else
+        DEP_NAME="$spec"; DEP_OP=""; DEP_VER=""
+    fi
+}
+
+# Check installed/available version satisfies constraint
+dep_satisfied() {
+    local name="$1" op="$2" want="$3"
+    is_installed "$name" || return 1
+    [ -z "$op" ] && return 0
+    local have
+    have=$(installed_version "$name")
+    case "$op" in
+        '>=') version_gte "$have" "$want" ;;
+        '=')  [ "$have" = "$want" ] ;;
+    esac
+}
+
+# Dependency resolver with circular dependency detection and version constraints
 resolve_deps() {
     local pkg="$1"
     local deps
     
     # Check for circular dependency
-    if [[ " ${VISITED_DEPS[@]} " =~ " ${pkg} " ]]; then
+    if [[ " ${VISITED_DEPS[*]} " == *" ${pkg} "* ]]; then
         log_error "Circular dependency detected: $pkg"
         return 1
     fi
@@ -161,12 +226,23 @@ resolve_deps() {
     for dep in "${DEPLIST[@]}"; do
         dep=$(echo "$dep" | xargs)  # trim whitespace
         [ -z "$dep" ] && continue
-        if ! is_installed "$dep"; then
-            log_info "Resolving dependency: $dep"
-            echo "$dep"
-            resolve_deps "$dep" || return 1
+        parse_dep_spec "$dep"
+        if ! dep_satisfied "$DEP_NAME" "$DEP_OP" "$DEP_VER"; then
+            if [ -n "$DEP_OP" ]; then
+                # Verify repo version can satisfy the constraint
+                local avail
+                avail=$(get_pkg_field "$DEP_NAME" version)
+                [ -z "$avail" ] && { log_error "Dependency '$DEP_NAME' not found in database"; return 1; }
+                case "$DEP_OP" in
+                    '>=') version_gte "$avail" "$DEP_VER" || { log_error "No version of '$DEP_NAME' satisfies >=$DEP_VER (available: $avail)"; return 1; } ;;
+                    '=')  [ "$avail" = "$DEP_VER" ] || { log_error "No version of '$DEP_NAME' satisfies =$DEP_VER (available: $avail)"; return 1; } ;;
+                esac
+            fi
+            log_info "Resolving dependency: $DEP_NAME"
+            echo "$DEP_NAME"
+            resolve_deps "$DEP_NAME" || return 1
         else
-            log_verbose "Dependency $dep already installed"
+            log_verbose "Dependency $DEP_NAME already satisfied"
         fi
     done
 }
@@ -198,7 +274,56 @@ install_order() {
 }
 
 # ======================================================================
-# Package installation
+# Package fetching (local + HTTP repos)
+# ======================================================================
+fetch_package() {
+    local pkg_name="$1" pkg_version="$2"
+    local fname="${pkg_name}-${pkg_version}.tar.xz"
+    
+    # 1. Local repo
+    if [ -f "$REPO_LOCAL_PATH/$fname" ]; then
+        echo "$REPO_LOCAL_PATH/$fname"
+        return 0
+    fi
+    
+    # 2. Remote HTTP(S) repos
+    local url
+    for url in "${REPO_REMOTE_URLS[@]}"; do
+        log_info "Fetching $fname from $url"
+        if curl -fsSL --connect-timeout 15 -o "$REPO_LOCAL_PATH/$fname.part" "$url/$fname" 2>/dev/null; then
+            mv "$REPO_LOCAL_PATH/$fname.part" "$REPO_LOCAL_PATH/$fname"
+            # Fetch detached signature if signature verification enabled
+            if $VERIFY_SIGNATURES; then
+                curl -fsSL --connect-timeout 15 -o "$REPO_LOCAL_PATH/$fname.sig" "$url/$fname.sig" 2>/dev/null \
+                    || log_warn "No signature available for $fname"
+            fi
+            echo "$REPO_LOCAL_PATH/$fname"
+            return 0
+        fi
+        rm -f "$REPO_LOCAL_PATH/$fname.part"
+    done
+    
+    return 1
+}
+
+# GPG signature verification
+verify_signature() {
+    local pkg_file="$1"
+    local sig_file="${pkg_file}.sig"
+    
+    command -v gpg >/dev/null 2>&1 || die "gpg not found but VERIFY_SIGNATURES=true"
+    [ -f "$sig_file" ] || die "Signature file missing: $sig_file"
+    [ -f "$GPG_KEYRING" ] || die "Trusted keyring not found: $GPG_KEYRING"
+    
+    if gpg --no-default-keyring --keyring "$GPG_KEYRING" --verify "$sig_file" "$pkg_file" >/dev/null 2>&1; then
+        log_verbose "GPG signature verified for $(basename "$pkg_file")"
+        return 0
+    fi
+    die "GPG signature verification FAILED for $(basename "$pkg_file")"
+}
+
+# ======================================================================
+# Package installation (transactional with rollback)
 # ======================================================================
 install_package() {
     local pkg_input="$1"
@@ -215,6 +340,7 @@ install_package() {
     fi
     
     [ -z "$pkg_name" ] && die "Usage: lpm install <package>"
+    [ -z "$pkg_version" ] && die "Package '$pkg_name' not found in database (run: lpm update-db)"
     
     if is_installed "$pkg_name"; then
         if $FORCE; then
@@ -226,24 +352,19 @@ install_package() {
         fi
     fi
     
-    # Locate package file (search repos)
-    pkg_file=""
-    for repo in "${LPM_REPOS[@]}"; do
-        case "$repo" in
-            local)
-                if [ -f "$REPO_LOCAL_PATH/${pkg_name}-${pkg_version}.tar.xz" ]; then
-                    pkg_file="$REPO_LOCAL_PATH/${pkg_name}-${pkg_version}.tar.xz"
-                    break
-                fi
-                ;;
-        esac
-    done
-    
-    [ -z "$pkg_file" ] && die "Package file not found: ${pkg_name}-${pkg_version}.tar.xz"
+    # Locate/fetch package file
+    if ! pkg_file=$(fetch_package "$pkg_name" "$pkg_version"); then
+        die "Package file not found: ${pkg_name}-${pkg_version}.tar.xz (local + remote repos)"
+    fi
     
     log_info "Installing $pkg_name-$pkg_version"
     
-    # Checksum verification
+    # GPG signature verification (authenticity)
+    if $VERIFY_SIGNATURES; then
+        verify_signature "$pkg_file"
+    fi
+    
+    # Checksum verification (integrity)
     if $VERIFY_CHECKSUMS; then
         local expected_checksum actual_checksum
         expected_checksum=$(get_pkg_field "$pkg_name" checksum)
@@ -266,13 +387,55 @@ install_package() {
         (cd "$pkg_dir" && bash pre-install.sh) || die "Pre-install script failed"
     fi
     
-    # Install files
+    # ------------------------------------------------------------------
+    # Transactional file installation with rollback
+    # ------------------------------------------------------------------
     if [ -d "$pkg_dir/files" ]; then
-        # Track installed files
-        (cd "$pkg_dir/files" && find . -type f -o -type l | sed 's/^\.//') | while read -r f; do
-            echo "$f $pkg_name-$pkg_version" >> "$file_index"
-        done
-        cp -rL "$pkg_dir/files"/* / 2>/dev/null || true
+        local backup_dir="$LPM_DB/.txn-$pkg_name-$pkg_version"
+        local -a installed_files=()
+        rm -rf "$backup_dir"
+        mkdir -p "$backup_dir"
+        
+        rollback_install() {
+            log_error "Installation failed - rolling back $pkg_name-$pkg_version"
+            local rf
+            for rf in "${installed_files[@]}"; do
+                if [ -f "$backup_dir/$rf" ] || [ -L "$backup_dir/$rf" ]; then
+                    mkdir -p "$(dirname "${LPM_ROOT%/}/$rf")"
+                    cp -a "$backup_dir/$rf" "${LPM_ROOT%/}/$rf" 2>/dev/null || true
+                else
+                    rm -f "${LPM_ROOT%/}/$rf" 2>/dev/null || true
+                fi
+                escaped_rf=$(escape_regex "/$rf")
+                sed -i "/^${escaped_rf} ${pkg_name}-${pkg_version}$/d" "$file_index" 2>/dev/null || true
+            done
+            rm -rf "$backup_dir" "$pkg_dir"
+            die "Rolled back $pkg_name-$pkg_version (system unchanged)"
+        }
+        
+        local f src dest
+        while IFS= read -r f; do
+            f="${f#./}"
+            [ -z "$f" ] && continue
+            src="$pkg_dir/files/$f"
+            dest="${LPM_ROOT%/}/$f"
+            
+            # Backup existing file for rollback
+            if [ -e "$dest" ] || [ -L "$dest" ]; then
+                mkdir -p "$(dirname "$backup_dir/$f")"
+                cp -a "$dest" "$backup_dir/$f" 2>/dev/null || true
+            fi
+            
+            mkdir -p "$(dirname "$dest")"
+            if ! cp -a "$src" "$dest"; then
+                installed_files+=("$f")
+                rollback_install
+            fi
+            installed_files+=("$f")
+            echo "/$f $pkg_name-$pkg_version" >> "$file_index"
+        done < <(cd "$pkg_dir/files" && find . \( -type f -o -type l \) | sed 's|^\./||')
+        
+        rm -rf "$backup_dir"
     fi
     
     # Post-install hook
@@ -327,23 +490,23 @@ remove_package() {
         
         if ! $keep_files && [ -d "$pkg_dir/files" ]; then
             log_info "Removing installed files (if not owned by other packages)"
-            (cd "$pkg_dir/files" && find . -type f -o -type l | sed 's/^\.//') | while read -r f; do
-                local owners
+            local f owners owner_count total_count escaped_f
+            while IFS= read -r f; do
+                [ -z "$f" ] && continue
                 owners=$(grep -F "$f " "$file_index" 2>/dev/null | awk '{print $2}' || true)
                 # Only remove if this package is the sole owner
                 if [ -n "$owners" ]; then
-                    local owner_count total_count
                     owner_count=$(echo "$owners" | grep -c "^${pkg_name}-${installed_ver}$" || true)
                     total_count=$(echo "$owners" | wc -l)
                     if [ "$owner_count" -eq "$total_count" ]; then
-                        rm -f "/$f" 2>/dev/null || log_warn "Failed to remove /$f"
+                        rm -f "${LPM_ROOT%/}$f" 2>/dev/null || log_warn "Failed to remove ${LPM_ROOT%/}$f"
                         escaped_f=$(escape_regex "$f")
                         sed -i "/^${escaped_f} ${pkg_name}-${installed_ver}$/d" "$file_index"
                     else
-                        log_verbose "File /$f is shared, not removing"
+                        log_verbose "File $f is shared, not removing"
                     fi
                 fi
-            done
+            done < <(cd "$pkg_dir/files" && find . \( -type f -o -type l \) | sed 's/^\.//')
         fi
         
         # Post-remove hook
@@ -360,15 +523,17 @@ remove_package() {
 }
 
 # ======================================================================
-# Update (reinstall) a single package
+# Update (reinstall) a single package — atomic via transactional install
 # ======================================================================
 update_package() {
     local pkg="$1"
     [ -z "$pkg" ] && die "Usage: lpm update <package>"
-    if is_installed "$pkg"; then
-        remove_package "$pkg"
-    fi
+    # Transactional install with FORCE: old files stay in place until the
+    # new version's files are copied (with rollback on failure).
+    local old_force=$FORCE
+    FORCE=true
     install_package "$pkg"
+    FORCE=$old_force
 }
 
 # ======================================================================
@@ -380,37 +545,35 @@ upgrade_all() {
     # Read installed list once to prevent race conditions
     installed_list=$(cat "$installed_file")
     
-    local upgradable=false
-    echo "$installed_list" | while read -r line; do
+    # Build list of upgradable packages (no subshell: process substitution keeps vars)
+    local -a to_upgrade=()
+    local line name version latest
+    while IFS= read -r line; do
         [ -z "$line" ] && continue
-        local name version
         name=$(echo "$line" | awk '{print $1}')
         version=$(echo "$line" | awk '{print $2}')
-        local latest
         latest=$(get_pkg_field "$name" version)
         if [ -n "$latest" ] && [ "$version" != "$latest" ]; then
             echo "  $name $version -> $latest"
-            upgradable=true
+            to_upgrade+=("$name")
         fi
-    done
+    done <<< "$installed_list"
     
-    if ! $DRY_RUN && [ "$upgradable" = true ]; then
-        log_info "Upgrading packages..."
-        echo "$installed_list" | while read -r line; do
-            [ -z "$line" ] && continue
-            local name version latest
-            name=$(echo "$line" | awk '{print $1}')
-            version=$(echo "$line" | awk '{print $2}')
-            latest=$(get_pkg_field "$name" version)
-            if [ -n "$latest" ] && [ "$version" != "$latest" ]; then
-                update_package "$name"
-            fi
-        done
-    elif $DRY_RUN; then
-        log_info "Dry run complete, no changes made."
-    else
+    if [ ${#to_upgrade[@]} -eq 0 ]; then
         log_info "All packages are up to date."
+        return 0
     fi
+    
+    if $DRY_RUN; then
+        log_info "Dry run complete, no changes made."
+        return 0
+    fi
+    
+    log_info "Upgrading ${#to_upgrade[@]} package(s)..."
+    local pkg
+    for pkg in "${to_upgrade[@]}"; do
+        update_package "$pkg"
+    done
 }
 
 # ======================================================================
@@ -462,9 +625,31 @@ show_info() {
 # ======================================================================
 update_db() {
     log_info "Updating package database..."
-    # Example: fetch from remote repo (commented for demonstration)
-    # curl -s https://repo.example.com/packages.list | tee "$db_file"
-    # For now, initialize with sample data in pipe-separated format
+    
+    # Sync from remote repositories if configured
+    if [ ${#REPO_REMOTE_URLS[@]} -gt 0 ]; then
+        local url tmp_db merged=false
+        tmp_db=$(mktemp)
+        for url in "${REPO_REMOTE_URLS[@]}"; do
+            log_info "Syncing package list from $url"
+            if curl -fsSL --connect-timeout 15 "$url/packages.list" >> "$tmp_db" 2>/dev/null; then
+                merged=true
+            else
+                log_warn "Failed to sync from $url"
+            fi
+        done
+        if $merged; then
+            # Deduplicate by package name (first occurrence wins = repo priority order)
+            awk -F'|' '!seen[$1]++' "$tmp_db" > "$db_file"
+            rm -f "$tmp_db"
+            log_success "Database updated ($(wc -l < "$db_file") packages)"
+            return 0
+        fi
+        rm -f "$tmp_db"
+        log_warn "All remote syncs failed, falling back to sample data"
+    fi
+    
+    # Fallback: initialize with sample data in pipe-separated format
     cat > "$db_file" << 'EOF'
 bash|5.3|Bourne Again Shell|readline|sha256-dummy
 coreutils|9.4|GNU core utilities|glibc|sha256-dummy
@@ -516,6 +701,15 @@ Options:
   --quiet               Suppress non-error output
   --verbose             Enable detailed debug output
   --no-color            Disable colored output
+
+Configuration (/etc/lpm/lpm.conf):
+  REPO_REMOTE_URLS=("https://repo.example.com/x86_64")   # HTTP(S) repos
+  VERIFY_SIGNATURES=true                                  # GPG verification
+  GPG_KEYRING=/etc/lpm/trusted.gpg                        # Trusted keys
+  VERIFY_CHECKSUMS=true                                   # SHA256 integrity
+
+Dependency version constraints (in package database):
+  name|1.0|desc|glibc>=2.40,openssl=3.6.1|checksum
 
 Examples:
   lpm install bash
