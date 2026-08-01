@@ -1,0 +1,58 @@
+name: Deploy MkDocs to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/deploy-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install MkDocs and theme
+        run: |
+          pip install mkdocs mkdocs-material mkdocs-awesome-pages-plugin mkdocs-mermaid2-plugin
+
+      - name: Build MkDocs site
+        run: |
+          mkdocs build --strict
+
+      - name: Copy compiled site to docs folder
+        run: |
+          rm -rf docs/site
+          # Keep markdown and yml files, add compiled HTML
+          cp -r site/* docs/
+          cp .nojekyll docs/
+
+      - name: Commit and push compiled docs
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add docs/
+          git add .nojekyll
+          git diff --cached --quiet || git commit -m "docs: rebuild with MkDocs Material theme"
+          git push
+
+      - name: Create deployment summary
+        run: |
+          echo "## 📚 MkDocs Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Site compiled and deployed to /docs" >> $GITHUB_STEP_SUMMARY
+          echo "🎨 Theme: Material (Green)" >> $GITHUB_STEP_SUMMARY
+          echo "🌙 Dark/Light toggle: Enabled" >> $GITHUB_STEP_SUMMARY
+          echo "📊 Mermaid diagrams: Enabled" >> $GITHUB_STEP_SUMMARY
