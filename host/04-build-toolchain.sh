@@ -317,28 +317,32 @@ build_toolchain() {
 			CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
 		fi
 
-		# Configure avec vérification d'erreur
-		if ! CC="$LFS_TGT-gcc" \
-			CXX="$LFS_TGT-g++" \
-			AR="$LFS_TGT-ar" \
-			RANLIB="$LFS_TGT-ranlib" \
-			CFLAGS="$CFLAGS" \
-			./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
-			--build=$(uname -m)-linux-gnu \
-			--disable-nls; then
-			log_error "Configure failed for $pkg"
-			exit 1
-		fi
-
-		# Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
-		if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
-			sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
-		fi
-
-		make -j"$NUM_JOBS"
+		# bzip2 has no autoconf configure script; build it directly with make
 		if [ "$pkg" = "bzip2" ]; then
-			make PREFIX="$LFS/tools" install
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				-j"$NUM_JOBS"
+			make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
+				PREFIX="$LFS/tools" install
 		else
+			# Configure avec vérification d'erreur
+			if ! CC="$LFS_TGT-gcc" \
+				CXX="$LFS_TGT-g++" \
+				AR="$LFS_TGT-ar" \
+				RANLIB="$LFS_TGT-ranlib" \
+				CFLAGS="$CFLAGS" \
+				./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
+				--build=$(uname -m)-linux-gnu \
+				--disable-nls; then
+				log_error "Configure failed for $pkg"
+				exit 1
+			fi
+
+			# Retirer gnulib-tests des SUBDIRS pour éviter PATH_MAX et autres erreurs
+			if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ]; then
+				sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
+			fi
+
+			make -j"$NUM_JOBS"
 			make install
 		fi
 		cd "$LFS/sources"
