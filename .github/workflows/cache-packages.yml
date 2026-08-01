@@ -77,28 +77,29 @@ jobs:
           sha256sum * > SHA256SUMS 2>/dev/null || true
           wc -l SHA256SUMS
 
-      - name: Split packages into artifacts (max 5GB per artifact)
+      - name: Split packages into artifacts (max 2GB per part for GitHub Release limit)
         run: |
           mkdir -p /tmp/artifacts
-          cd /tmp/lfs-sources
           
-          # Create tar.gz archives split by size (~4.5GB each to stay under 5GB limit)
-          tar --exclude='SHA256SUMS' \
-              --listed-incremental=/tmp/packages-metadata.snar \
-              -czf /tmp/artifacts/lfs-packages-part-1.tar.gz \
-              -C /tmp lfs-sources/ 2>/dev/null || true
+          # Stream tar output and split into 1900MB parts (safely under GitHub's 2GB release asset limit)
+          tar --exclude='SHA256SUMS' -czf - -C /tmp lfs-sources/ | \
+            split -b 1900m -d -a 2 - /tmp/artifacts/lfs-packages-part-
           
-          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
-            size=$(du -sh /tmp/artifacts/lfs-packages-part-1.tar.gz | cut -f1)
-            echo "Part 1 size: $size"
-          fi
+          # Add .tar.gz extension to each numbered part
+          for f in /tmp/artifacts/lfs-packages-part-[0-9][0-9]; do
+            mv "$f" "${f}.tar.gz"
+          done
+          
+          echo "Archive parts created:"
+          ls -lh /tmp/artifacts/lfs-packages-part-*.tar.gz
+          echo "Part count: $(ls /tmp/artifacts/lfs-packages-part-*.tar.gz | wc -l)"
 
       - name: Upload packages to GitHub Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            /tmp/artifacts/lfs-packages-part-1.tar.gz
+            /tmp/artifacts/lfs-packages-part-*.tar.gz
             /tmp/lfs-sources/SHA256SUMS
           tag_name: packages-cache-latest
           name: LFS/BLFS Packages Cache
