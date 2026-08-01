@@ -83,9 +83,7 @@ markdown_extensions:
   - pymdownx.critic
   - pymdownx.details
   - pymdownx.inlinehilite
-  - pymdownx.snippets:
-      base_path: ['.', 'docs']
-      check_paths: true
+  - pymdownx.snippets
   - pymdownx.smartsymbols
   - pymdownx.tasklist:
       custom_checkbox: true
