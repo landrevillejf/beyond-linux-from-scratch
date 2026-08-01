@@ -39,7 +39,7 @@ LOG_TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
 # Runtime variables
 QUIET=false; VERBOSE=false; DRY_RUN=false; FORCE=false; NO_COLOR=false
 LOCK_FD=""
-declare -a VISITED_DEPS=()
+VISITED_DEPS=""  # Visited packages as pipe-separated list (e.g., "pkg1|pkg2|pkg3|")
 
 # ======================================================================
 # Logging helpers (respecting NO_COLOR and USE_COLOR)
@@ -177,15 +177,27 @@ installed_version() {
     awk -v p="$1" '$1 == p { print $2; exit }' "$installed_file" 2>/dev/null
 }
 
-# Compare versions: returns 0 if $1 >= $2 (sort -V based)
+# Compare versions: returns 0 if $1 >= $2 (portable, no sort -V)
 version_gte() {
-    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+    local v1="$1" v2="$2"
+    # Split versions into parts and compare numerically/lexically
+    local IFS='.'; local -a p1 p2
+    read -ra p1 <<< "$v1"; read -ra p2 <<< "$v2"
+    local i; for ((i=0; i<${#p1[@]} || i<${#p2[@]}; i++)); do
+        local n1=${p1[$i]:-0} n2=${p2[$i]:-0}
+        if [[ "$n1" =~ ^[0-9]+$ ]] && [[ "$n2" =~ ^[0-9]+$ ]]; then
+            ((n1 > n2)) && return 0; ((n1 < n2)) && return 1
+        else
+            [[ "$n1" > "$n2" ]] && return 0; [[ "$n1" < "$n2" ]] && return 1
+        fi
+    done
+    return 0
 }
 
 # Parse dep spec "name>=1.2" / "name=1.2" / "name" -> sets DEP_NAME, DEP_OP, DEP_VER
 parse_dep_spec() {
     local spec="$1"
-    if [[ "$spec" =~ ^([a-zA-Z0-9._+-]+)(\>=|=)(.+)$ ]]; then
+    if [[ "$spec" =~ ^([a-zA-Z0-9._+-]+)(>=|=)(.+)$ ]]; then
         DEP_NAME="${BASH_REMATCH[1]}"; DEP_OP="${BASH_REMATCH[2]}"; DEP_VER="${BASH_REMATCH[3]}"
     else
         DEP_NAME="$spec"; DEP_OP=""; DEP_VER=""
@@ -210,14 +222,14 @@ resolve_deps() {
     local pkg="$1"
     local deps
     
-    # Check for circular dependency
-    if [[ " ${VISITED_DEPS[*]} " == *" ${pkg} "* ]]; then
+    # Check for circular dependency (pipe-separated list, fast substring search)
+    if [[ "$VISITED_DEPS" == *"|${pkg}|"* ]]; then
         log_error "Circular dependency detected: $pkg"
         return 1
     fi
     
-    # Mark as visited
-    VISITED_DEPS+=("$pkg")
+    # Mark as visited (append to pipe-separated list)
+    VISITED_DEPS="${VISITED_DEPS}${pkg}|"
     
     deps=$(get_pkg_field "$pkg" dependencies)
     [ -z "$deps" ] && return 0
@@ -252,7 +264,7 @@ install_order() {
     local pkgs="$*"
     local order=()
     local pkg
-    VISITED_DEPS=()  # Reset circular dependency tracking
+    VISITED_DEPS="|"  # Reset circular dependency tracking (pipe-separated list, starts with |)
     
     for pkg in $pkgs; do
         if ! is_installed "$pkg"; then
@@ -260,12 +272,13 @@ install_order() {
             if ! deps=$(resolve_deps "$pkg"); then
                 die "Cannot resolve dependencies for $pkg (circular detected)"
             fi
+            # Efficiently check if package already in order array using awk
             for d in $deps; do
-                if ! printf '%s\n' "${order[@]}" | grep -qFx "$d"; then
+                if ! printf '%s\n' "${order[@]}" | awk -v x="$d" '$0 == x { exit 1 }'; then
                     order+=("$d")
                 fi
             done
-            if ! printf '%s\n' "${order[@]}" | grep -qFx "$pkg"; then
+            if ! printf '%s\n' "${order[@]}" | awk -v x="$pkg" '$0 == x { exit 1 }'; then
                 order+=("$pkg")
             fi
         fi
@@ -331,6 +344,7 @@ install_package() {
     
     # Parse package name and version more robustly
     # Support formats: name, name-version (where version starts with digit)
+    # Allow hyphens in package names (e.g. lib-foo-1.0)
     if [[ "$pkg_input" =~ ^([a-zA-Z0-9._+-]+)-([0-9].*)$ ]]; then
         pkg_name="${BASH_REMATCH[1]}"
         pkg_version="${BASH_REMATCH[2]}"
@@ -369,7 +383,7 @@ install_package() {
         local expected_checksum actual_checksum
         expected_checksum=$(get_pkg_field "$pkg_name" checksum)
         if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "sha256-dummy" ]; then
-            actual_checksum=$(sha256sum "$pkg_file" | awk '{print $1}')
+            actual_checksum=$(sha256_of "$pkg_file")
             if [ "$expected_checksum" != "$actual_checksum" ]; then
                 die "Checksum mismatch for $pkg_name-$pkg_version"
             fi
@@ -407,7 +421,7 @@ install_package() {
                     rm -f "${LPM_ROOT%/}/$rf" 2>/dev/null || true
                 fi
                 escaped_rf=$(escape_regex "/$rf")
-                sed -i "/^${escaped_rf} ${pkg_name}-${pkg_version}$/d" "$file_index" 2>/dev/null || true
+                sed_inplace "/^${escaped_rf} ${pkg_name}-${pkg_version}$/d" "$file_index" 2>/dev/null || true
             done
             rm -rf "$backup_dir" "$pkg_dir"
             die "Rolled back $pkg_name-$pkg_version (system unchanged)"
@@ -447,7 +461,7 @@ install_package() {
     # Record installation
     escaped_name=$(escape_regex "$pkg_name")
     if grep -qF "$pkg_name " "$installed_file"; then
-        sed -i "/^${escaped_name} /d" "$installed_file"
+        sed_inplace "/^${escaped_name} /d" "$installed_file"
     fi
     echo "$pkg_name $pkg_version" >> "$installed_file"
     echo "$(timestamp) - Installed $pkg_name-$pkg_version" >> "$LPM_LOGS/install.log"
@@ -494,14 +508,14 @@ remove_package() {
             while IFS= read -r f; do
                 [ -z "$f" ] && continue
                 owners=$(grep -F "$f " "$file_index" 2>/dev/null | awk '{print $2}' || true)
-                # Only remove if this package is the sole owner
+                # Only remove if this package is the sole owner (use awk for efficient counting)
                 if [ -n "$owners" ]; then
-                    owner_count=$(echo "$owners" | grep -c "^${pkg_name}-${installed_ver}$" || true)
-                    total_count=$(echo "$owners" | wc -l)
+                    owner_count=$(echo "$owners" | awk -v pkg="$pkg_name-$installed_ver" '$0 == pkg { count++ } END { print count+0 }')
+                    total_count=$(echo "$owners" | awk 'END { print NR }')
                     if [ "$owner_count" -eq "$total_count" ]; then
                         rm -f "${LPM_ROOT%/}$f" 2>/dev/null || log_warn "Failed to remove ${LPM_ROOT%/}$f"
                         escaped_f=$(escape_regex "$f")
-                        sed -i "/^${escaped_f} ${pkg_name}-${installed_ver}$/d" "$file_index"
+                        sed_inplace "/^${escaped_f} ${pkg_name}-${installed_ver}$/d" "$file_index"
                     else
                         log_verbose "File $f is shared, not removing"
                     fi
@@ -517,7 +531,7 @@ remove_package() {
     fi
     
     escaped_name=$(escape_regex "$pkg_name")
-    sed -i "/^${escaped_name} /d" "$installed_file"
+    sed_inplace "/^${escaped_name} /d" "$installed_file"
     echo "$(timestamp) - Removed $pkg_name-$installed_ver" >> "$LPM_LOGS/remove.log"
     log_success "Package '$pkg_name' removed"
 }
