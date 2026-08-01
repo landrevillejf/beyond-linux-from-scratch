@@ -33,7 +33,6 @@ This file provides context and guidelines for AI agents (e.g. GitHub Copilot, au
 ├── tests/                      # Python test suite (pytest + pytest-bdd)
 ├── docs/                       # Extended documentation
 ├── tools/                      # Utility scripts
-├── lpm.py                      # LFS Package Manager CLI
 ├── wblfs-wallpaper-generator.py
 ├── requirements.txt
 └── .github/workflows/          # CI/CD workflows
@@ -70,10 +69,6 @@ Stage execution order (xfce profile, live enabled):
 5. `lfs-basic` → `lfs/05-build-lfs-basic.sh`
 6. `lfs-system` → `lfs/06-build-lfs-system.sh`
 7. … (see `BUILD_STAGES` in `builder.py` for the complete list)
-
-### `lpm.py`
-
-Standalone LFS Package Manager CLI. Has its own test suite in `tests/test_lpm*.py`.
 
 ### `branding/`
 
