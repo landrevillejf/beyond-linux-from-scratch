@@ -6,6 +6,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+	# shellcheck source=/dev/null
 	source "$SCRIPT_DIR/../common/utils.sh"
 else
 	log_info() { echo "[INFO] $*"; }
@@ -18,6 +19,7 @@ KERNEL_TYPE=${KERNEL_TYPE:-linux}
 
 detect_distro() {
 	if [ -f /etc/os-release ]; then
+		# shellcheck source=/dev/null
 		. /etc/os-release
 		echo "$ID"
 	elif [ -f /etc/debian_version ]; then
@@ -128,7 +130,9 @@ mkdir -p "$LFS_HOME"
 	echo "umask 022"
 	printf 'LFS=%q\n' "$LFS"
 	echo "LC_ALL=POSIX"
+	# shellcheck disable=SC2016
 	echo 'LFS_TGT=$(uname -m)-lfs-linux-gnu'
+	# shellcheck disable=SC2016
 	echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
 	echo "export LFS LC_ALL LFS_TGT PATH"
 } >"$LFS_HOME/.bashrc"
@@ -196,7 +200,7 @@ build_toolchain() {
 	GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
 	# Embed GMP, MPFR, MPC into GCC source tree
 	for lib in gmp mpfr mpc; do
-		LIB_TAR=$(ls ${lib}-*.tar.* 2>/dev/null | head -1)
+		LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
 		if [ -n "$LIB_TAR" ]; then
 			tar -xf "$LIB_TAR"
 			LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
@@ -331,7 +335,7 @@ build_toolchain() {
 				RANLIB="$LFS_TGT-ranlib" \
 				CFLAGS="$CFLAGS" \
 				./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
-				--build=$(uname -m)-linux-gnu \
+				--build="$(uname -m)-linux-gnu" \
 				--disable-nls; then
 				log_error "Configure failed for $pkg"
 				exit 1
