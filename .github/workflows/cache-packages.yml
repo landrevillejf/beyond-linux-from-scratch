@@ -90,24 +90,28 @@ jobs:
             echo "Part 1 size: $size"
           fi
 
-      - name: Upload packages artifact
+      - name: Upload packages to GitHub Release
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: softprops/action-gh-release@v2
         with:
-          name: lfs-blfs-packages-cache
-          path: /tmp/artifacts/
-          retention-days: 90
-          if-no-files-found: warn
-          compression-level: 0
-
-      - name: Upload SHA256 checksums
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: lfs-packages-checksums
-          path: /tmp/lfs-sources/SHA256SUMS
-          retention-days: 90
-          if-no-files-found: warn
+          files: |
+            /tmp/artifacts/lfs-packages-part-1.tar.gz
+            /tmp/lfs-sources/SHA256SUMS
+          tag_name: packages-cache-latest
+          name: LFS/BLFS Packages Cache
+          body: |
+            # 📦 LFS/BLFS Packages Cache
+            
+            Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+            Total packages: $(find /tmp/lfs-sources -type f | wc -l)
+            Cache size: $(du -sh /tmp/lfs-sources | cut -f1)
+            
+            Use these cached packages to speed up builds.
+          prerelease: true
+          draft: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create cache summary
         if: success()

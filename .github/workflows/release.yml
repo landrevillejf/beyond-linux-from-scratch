@@ -13,11 +13,19 @@ jobs:
     outputs:
       cache-hit: ${{ steps.check.outputs.hit }}
     steps:
-      - name: Download cached packages
-        uses: actions/download-artifact@v4
-        with:
-          name: lfs-blfs-packages-cache
-          path: /tmp/artifacts/
+      - name: Download cached packages from release
+        run: |
+          mkdir -p /tmp/artifacts
+          cd /tmp/artifacts
+          
+          # Try to download latest packages cache release
+          gh release download packages-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "lfs-packages-part-1.tar.gz" \
+            --pattern "SHA256SUMS" \
+            2>/dev/null || echo "⚠️ No cache release found, will download packages during build"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
       - name: Extract packages
@@ -52,19 +60,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Restore package cache
-        uses: actions/download-artifact@v4
-        with:
-          name: lfs-blfs-packages-cache
-          path: /tmp/artifacts/
-        continue-on-error: true
-
-      - name: Extract cached packages
+      - name: Restore package cache from release
         run: |
+          mkdir -p /tmp/artifacts
+          cd /tmp/artifacts
+          
+          gh release download packages-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "lfs-packages-part-1.tar.gz" \
+            2>/dev/null || echo "⚠️ Cache release not found"
+          
           mkdir -p /tmp/lfs-sources
-          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
-            tar -xzf /tmp/artifacts/lfs-packages-part-1.tar.gz -C /tmp/ && echo "✅ Packages restored from cache"
+          if [ -f lfs-packages-part-1.tar.gz ]; then
+            tar -xzf lfs-packages-part-1.tar.gz -C /tmp/ && echo "✅ Cache restored"
           fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
 
       - name: Free disk space
         run: |
