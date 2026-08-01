@@ -139,6 +139,7 @@ jobs:
           if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
             sudo mkdir -p /tmp/lfs-build/build-release/sources
             sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            sudo chown -R lfs:lfs /tmp/lfs-build/build-release
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
