@@ -37,7 +37,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install MkDocs and plugins
+      - name: Install MkDocs and Material theme
         run: |
           pip install --no-cache-dir \
             'mkdocs>=${{ env.MKDOCS_VERSION }},<2.0' \
@@ -74,8 +74,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for git-based plugins
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -83,7 +81,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Install MkDocs and plugins
+      - name: Install MkDocs and Material theme
         run: |
           pip install --no-cache-dir \
             'mkdocs>=${{ env.MKDOCS_VERSION }},<2.0' \
