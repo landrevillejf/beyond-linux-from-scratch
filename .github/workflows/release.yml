@@ -7,13 +7,64 @@ on:
       - 'v*'
 
 jobs:
+  restore-cache:
+    name: Restore Package Cache
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.check.outputs.hit }}
+    steps:
+      - name: Download cached packages
+        uses: actions/download-artifact@v4
+        with:
+          name: lfs-blfs-packages-cache
+          path: /tmp/artifacts/
+        continue-on-error: true
+
+      - name: Extract packages
+        run: |
+          mkdir -p /tmp/lfs-sources
+          
+          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
+            echo "Extracting cached packages..."
+            tar -xzf /tmp/artifacts/lfs-packages-part-1.tar.gz -C /tmp/
+            echo "✅ Cache restored successfully"
+          else
+            echo "⚠️ No cached packages found, will download during build"
+          fi
+
+      - name: Check cache status
+        id: check
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "❌ Cache MISS: Will download packages during build"
+          fi
+
   release:
+    needs: restore-cache
     runs-on: ubuntu-latest
     timeout-minutes: 480
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore package cache
+        uses: actions/download-artifact@v4
+        with:
+          name: lfs-blfs-packages-cache
+          path: /tmp/artifacts/
+        continue-on-error: true
+
+      - name: Extract cached packages
+        run: |
+          mkdir -p /tmp/lfs-sources
+          if [ -f /tmp/artifacts/lfs-packages-part-1.tar.gz ]; then
+            tar -xzf /tmp/artifacts/lfs-packages-part-1.tar.gz -C /tmp/ && echo "✅ Packages restored from cache"
+          fi
 
       - name: Free disk space
         run: |
@@ -68,12 +119,23 @@ jobs:
       - name: Ensure sources directory is clean
         run: sudo rm -rf /tmp/lfs-build/build-release/sources
 
+      - name: Link cached packages to build directory
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            mkdir -p /tmp/lfs-build/build-release/sources
+            cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+          fi
+
       - name: Run tests
         run: python3 -m pytest tests/ -q
 
       - name: Build release profile (xfce + sysvinit live)
         run: |
           cd /tmp/lfs-build
+          CACHE_STATUS="${{ needs.restore-cache.outputs.cache-hit }}"
+          echo "📦 Package cache status: $CACHE_STATUS"
+          
           sudo -u lfs python3 builder.py \
             --profile xfce \
             --init sysvinit \
