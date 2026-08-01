@@ -296,25 +296,12 @@ build_toolchain() {
         cd "$dir"
 
         # Correctif pour findutils : _POSIX_ARG_MAX manquant avec glibc récente
+        # Use sed instead of a patch file to avoid brittle line-number/context matching
         if [ "$pkg" = "findutils" ]; then
-            cat > /tmp/fix-posix-arg-max.patch << 'PATCH'
---- a/lib/buildcmd.c
-+++ b/lib/buildcmd.c
-@@ -491,7 +491,11 @@ bc_init_controlinfo(struct bc_controlinfo *ctl)
-   ctl->arg_max = MIN (ARG_MAX, bc_arg_max_limit ());
-
-   /* Set posix_arg_size_min to _POSIX_ARG_MAX if defined, otherwise 4096.  */
-+#ifdef _POSIX_ARG_MAX
-   ctl->posix_arg_size_min = _POSIX_ARG_MAX;
-+#else
-+  ctl->posix_arg_size_min = 4096;
-+#endif
-
-   ctl->exit_if_size_exceeded = true;
-   ctl->exec_callback = NULL;
-PATCH
-            patch -p1 < /tmp/fix-posix-arg-max.patch
-            rm -f /tmp/fix-posix-arg-max.patch
+            if grep -q "ctl->posix_arg_size_min = _POSIX_ARG_MAX;" lib/buildcmd.c && \
+               ! grep -q "#ifdef _POSIX_ARG_MAX" lib/buildcmd.c; then
+                sed -i 's/  ctl->posix_arg_size_min = _POSIX_ARG_MAX;/#ifdef _POSIX_ARG_MAX\n  ctl->posix_arg_size_min = _POSIX_ARG_MAX;\n#else\n  ctl->posix_arg_size_min = 4096;\n#endif/' lib/buildcmd.c
+            fi
         fi
 
         CFLAGS=""
