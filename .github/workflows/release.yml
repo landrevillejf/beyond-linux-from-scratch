@@ -146,6 +146,9 @@ jobs:
       - name: Run tests
         run: python3 -m pytest tests/ -q
 
+      - name: Ensure build directory is fully owned by lfs user
+        run: sudo chown -R lfs:lfs /tmp/lfs-build
+
       - name: Build release profile (xfce + sysvinit live)
         run: |
           cd /tmp/lfs-build
