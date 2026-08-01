@@ -57,6 +57,11 @@ bump_version() {
     # Update VERSION file
     echo "$new_version" > VERSION
     echo -e "${GREEN}Version set to $new_version in VERSION file${NC}"
+    # Update version shown in documentation
+    if [ -f docs/index.md ]; then
+        sed -i.bak "s/\*\*Version:\*\* .*/\*\*Version:\*\* $new_version  /" docs/index.md && rm -f docs/index.md.bak
+        echo -e "${GREEN}Version updated in docs/index.md${NC}"
+    fi
 }
 
 # ---------- Parse arguments ----------
@@ -92,9 +97,9 @@ fi
 if [ -n "$BUMP_VERSION" ]; then
     echo -e "${BLUE}Bumping version to ${BUMP_VERSION}...${NC}"
     bump_version "$BUMP_VERSION"
-    if ! git diff --quiet VERSION; then
+    if ! git diff --quiet VERSION docs/index.md; then
         echo -e "${YELLOW}VERSION file has been modified. Committing the version bump...${NC}"
-        git add VERSION
+        git add VERSION docs/index.md
         git commit -m "Bump version to ${BUMP_VERSION}"
         echo -e "${GREEN}Version bump committed.${NC}"
     fi
