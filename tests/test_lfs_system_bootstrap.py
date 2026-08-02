@@ -224,6 +224,15 @@ def test_lfs_system_copies_bison_datadir_into_chroot():
     assert 'run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/' in content
 
 
+def test_lfs_system_copies_libtinfo_following_symlink():
+    """Copy the real libtinfo file, not a dangling symlink, into /lib."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert 'run_privileged cp -Lv "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"' in content
+
+
 def test_lfs_system_glibc_install_uses_toolchain_bash():
     """glibc 2.34+ ld.so requires the private __nptl_change_stack_perm symbol
     from any libc.so.6 it loads.  The bootstrapped /bin/bash is linked against
