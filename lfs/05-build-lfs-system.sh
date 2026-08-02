@@ -175,7 +175,7 @@ ensure_bootstrap_chroot_shell() {
 				log_warning "libtinfo.so.6 not found – chroot bash may fail after glibc install"
 			fi
 		else
-			run_privileged cp -v "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"
+			run_privileged cp -Lv "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"
 		fi
 	fi
 
