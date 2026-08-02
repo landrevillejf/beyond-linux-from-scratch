@@ -93,7 +93,7 @@ ensure_bootstrap_chroot_shell() {
 		run_privileged ln -sfn bash "$LFS/bin/sh"
 	fi
 
-	for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod gcc ld; do
+	for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld; do
 		if [ ! -x "$LFS/usr/bin/$tool" ]; then
 			log_info "Bootstrapping /usr/bin/$tool into chroot"
 			local host_tool
@@ -247,7 +247,11 @@ if [ ! -d "$LINUX_DIR" ]; then
 fi
 cd "$LINUX_DIR"
 make mrproper
-make headers
+if command -v "${LFS_TGT}-gcc" >/dev/null 2>&1; then
+    make HOSTCC="${LFS_TGT}-gcc" headers
+else
+    make headers
+fi
 find usr/include -name '.*' -delete
 rm -f usr/include/Makefile
 cp -rv usr/include/. /usr/include
