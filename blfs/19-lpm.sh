@@ -19,7 +19,7 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.2.0"
+LPM_VERSION="2.3.0"
 LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
 LPM_ETC="${LPM_ETC:-/etc/lpm}"
 LPM_DB="${LPM_DB:-/var/lib/lpm}"
@@ -35,6 +35,9 @@ VERIFY_CHECKSUMS=true
 VERIFY_SIGNATURES=false                    # GPG signature verification
 GPG_KEYRING="${GPG_KEYRING:-/etc/lpm/trusted.gpg}"
 LOG_TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
+LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-30}"  # Keep logs for 30 days
+ALLOW_DUMMY_CHECKSUMS="${ALLOW_DUMMY_CHECKSUMS:-false}"  # Warn on dummy checksums
+HAS_JQ=false                               # Detect jq availability at runtime
 
 # Runtime variables
 QUIET=false; VERBOSE=false; DRY_RUN=false; FORCE=false; NO_COLOR=false
@@ -122,6 +125,50 @@ release_lock() {
     fi
 }
 
+# Detect jq availability at runtime
+detect_jq() {
+    if command -v jq >/dev/null 2>&1; then
+        HAS_JQ=true
+        log_verbose "jq detected for robust JSON parsing"
+    else
+        HAS_JQ=false
+        log_verbose "jq not available; using portable sed/grep parser"
+    fi
+}
+
+# Validate JSON structure (requires Python or jq)
+validate_json() {
+    local json_file="$1"
+    if [ ! -f "$json_file" ]; then
+        return 1
+    fi
+    if $HAS_JQ; then
+        jq empty "$json_file" 2>/dev/null
+    else
+        python3 -m json.tool "$json_file" >/dev/null 2>&1
+    fi
+}
+
+# Rotate logs based on LOG_RETENTION_DAYS
+rotate_logs() {
+    if [ ! -d "$LPM_LOGS" ]; then
+        return 0
+    fi
+    
+    local retention_days=${LOG_RETENTION_DAYS:-30}
+    local rotated=0
+    
+    # Find and remove logs older than retention_days
+    while IFS= read -r logfile; do
+        rm -f "$logfile"
+        rotated=$((rotated + 1))
+    done < <(find "$LPM_LOGS" -name "*.log*" -type f -mtime "+$retention_days" 2>/dev/null)
+    
+    if [ "$rotated" -gt 0 ]; then
+        log_verbose "Rotated $rotated log files older than $retention_days days"
+    fi
+}
+
 refresh_runtime_paths() {
     db_file="$LPM_DB/packages.list"
     installed_file="$LPM_DB/installed.list"
@@ -142,6 +189,9 @@ load_config() {
 init_dirs() {
     mkdir -p "$LPM_DB" "$LPM_LOGS" "$LPM_ETC" "$LPM_PACKAGES_DIR" "$(dirname "$LOCK_FILE")"
     touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index"
+    # Rotate old logs and detect jq availability
+    rotate_logs
+    detect_jq
 }
 
 # ======================================================================
@@ -177,21 +227,48 @@ installed_version() {
     awk -v p="$1" '$1 == p { print $2; exit }' "$installed_file" 2>/dev/null
 }
 
-# Compare versions: returns 0 if $1 >= $2 (portable, no sort -V)
+# Compare versions: returns 0 if $1 >= $2 (portable, handles suffixes like a, b, rc)
 version_gte() {
     local v1="$1" v2="$2"
-    # Split versions into parts and compare numerically/lexically
-    local IFS='.'; local -a p1 p2
-    read -ra p1 <<< "$v1"; read -ra p2 <<< "$v2"
-    local i; for ((i=0; i<${#p1[@]} || i<${#p2[@]}; i++)); do
-        local n1=${p1[$i]:-0} n2=${p2[$i]:-0}
-        if [[ "$n1" =~ ^[0-9]+$ ]] && [[ "$n2" =~ ^[0-9]+$ ]]; then
-            ((n1 > n2)) && return 0; ((n1 < n2)) && return 1
-        else
-            [[ "$n1" > "$n2" ]] && return 0; [[ "$n1" < "$n2" ]] && return 1
-        fi
-    done
-    return 0
+    
+    # Extract suffix (alpha, beta, rc, etc) - e.g., "1.2.3rc1" -> base="1.2.3", suffix="rc1"
+    local base1 base2 suffix1 suffix2
+    # Use parameter expansion to extract base (before first letter)
+    base1=$(echo "$v1" | sed 's/[a-zA-Z].*//')
+    base2=$(echo "$v2" | sed 's/[a-zA-Z].*//')
+    suffix1=$(echo "$v1" | sed 's/^[0-9.]*//')
+    suffix2=$(echo "$v2" | sed 's/^[0-9.]*//')
+    
+    # If base is empty, use the whole version
+    base1=${base1:-$v1}
+    base2=${base2:-$v2}
+    
+    # Split and compare base versions numerically
+    local IFS='.' p1_str p2_str
+    p1_str="$base1"
+    p2_str="$base2"
+    
+    # Use awk for numeric comparison to avoid array issues
+    awk -v v1="$base1" -v v2="$base2" -v s1="$suffix1" -v s2="$suffix2" 'BEGIN {
+        # Split versions
+        n1 = split(v1, p1, ".")
+        n2 = split(v2, p2, ".")
+        max = (n1 > n2) ? n1 : n2
+        
+        # Compare numeric parts
+        for (i = 1; i <= max; i++) {
+            a = p1[i] + 0
+            b = p2[i] + 0
+            if (a > b) exit 0
+            if (a < b) exit 1
+        }
+        
+        # If bases equal, release > rc > beta > alpha
+        if (s1 == "" && s2 != "") exit 0
+        if (s1 != "" && s2 == "") exit 1
+        if (s1 > s2) exit 0
+        exit 1
+    }' && return 0 || return 1
 }
 
 # Parse dep spec "name>=1.2" / "name=1.2" / "name" -> sets DEP_NAME, DEP_OP, DEP_VER
@@ -382,12 +459,24 @@ install_package() {
     if $VERIFY_CHECKSUMS; then
         local expected_checksum actual_checksum
         expected_checksum=$(get_pkg_field "$pkg_name" checksum)
-        if [ -n "$expected_checksum" ] && [ "$expected_checksum" != "sha256-dummy" ]; then
-            actual_checksum=$(sha256_of "$pkg_file")
-            if [ "$expected_checksum" != "$actual_checksum" ]; then
-                die "Checksum mismatch for $pkg_name-$pkg_version"
+        if [ -n "$expected_checksum" ]; then
+            if [ "$expected_checksum" = "sha256-dummy" ]; then
+                # Dummy checksum - warn if configured to do so
+                if [ "$ALLOW_DUMMY_CHECKSUMS" = "true" ]; then
+                    log_warn "Package $pkg_name has dummy checksum (no integrity verification)"
+                else
+                    if $VERBOSE; then
+                        log_warn "Package $pkg_name has dummy checksum; skipping verification"
+                    fi
+                fi
+            else
+                # Real checksum - verify
+                actual_checksum=$(sha256_of "$pkg_file")
+                if [ "$expected_checksum" != "$actual_checksum" ]; then
+                    die "Checksum mismatch for $pkg_name-$pkg_version"
+                fi
+                log_verbose "Checksum verified: $expected_checksum"
             fi
-            log_verbose "Checksum verified"
         fi
     fi
     
@@ -755,14 +844,26 @@ list_available_profiles() {
         return 1
     fi
     
+    # Validate JSON structure first
+    if ! validate_json "$profiles_file"; then
+        log_error "profiles.json is not valid JSON"
+        return 1
+    fi
+    
     echo -e "$(_apply_color "${C_BLUE}")Available profiles:$(_apply_color "${C_NC}")"
     
-    # Use grep to extract profile names  from JSON
-    grep -o '"[^"]*": {' "$profiles_file" | sed 's/": {$//' | sed 's/^"//' | while read -r name; do
-        # Extract description for this profile
-        desc=$(sed -n "/\"$name\": {/,/^  },*$/p" "$profiles_file" | grep '"description"' | sed 's/.*"description": "//' | sed 's/".*//')
-        printf "  %-20s %s\n" "$name" "${desc:- No description}"
-    done
+    # Use jq if available (more robust), otherwise fallback to sed/grep
+    if $HAS_JQ; then
+        jq -r 'to_entries | .[] | "\(.key) \(.value.description // \"No description\")"' "$profiles_file" | \
+            awk '{ printf "  %-20s %s\n", $1, substr($0, index($0, $2)) }'
+    else
+        # Fallback: grep to extract profile names from JSON
+        grep -o '"[^"]*": {' "$profiles_file" | sed 's/": {$//' | sed 's/^"//' | while read -r name; do
+            # Extract description for this profile
+            desc=$(sed -n "/\"$name\": {/,/^  },*$/p" "$profiles_file" | grep '"description"' | sed 's/.*"description": "//' | sed 's/".*//')
+            printf "  %-20s %s\n" "$name" "${desc:- No description}"
+        done
+    fi
 }
 
 get_profile_packages() {
@@ -773,12 +874,22 @@ get_profile_packages() {
         die "Profiles database not found at $profiles_file"
     fi
     
-    # Extract packages array for profile from JSON
-    sed -n "/\"$profile\": {/,/^  },*$/p" "$profiles_file" | \
-        sed -n '/"packages": \[/,/\]/p' | \
-        grep -o '"[^"]*"' | \
-        sed 's/"//g' | \
-        grep -v '^packages$'
+    # Validate JSON structure first
+    if ! validate_json "$profiles_file"; then
+        die "profiles.json is not valid JSON"
+    fi
+    
+    # Use jq if available (more robust), otherwise fallback to sed/grep
+    if $HAS_JQ; then
+        jq -r ".\"$profile\".packages[]?" "$profiles_file" 2>/dev/null
+    else
+        # Fallback: extract packages array for profile from JSON
+        sed -n "/\"$profile\": {/,/^  },*$/p" "$profiles_file" | \
+            sed -n '/"packages": \[/,/\]/p' | \
+            grep -o '"[^"]*"' | \
+            sed 's/"//g' | \
+            grep -v '^packages$'
+    fi
 }
 
 add_profile() {
