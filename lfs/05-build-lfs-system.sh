@@ -106,6 +106,21 @@ ensure_bootstrap_chroot_shell() {
 		fi
 	done
 
+	# glibc's gettext build invokes bison, which needs its m4 templates from
+	# bison's datadir (typically /usr/share/bison). Ensure they are available
+	# when bison is bootstrapped from the host.
+	if [ -x "$LFS/usr/bin/bison" ] && [ ! -f "$LFS/usr/share/bison/m4sugar/m4sugar.m4" ]; then
+		local host_bison_datadir
+		host_bison_datadir="$(bison --print-datadir 2>/dev/null || true)"
+		if [ -n "$host_bison_datadir" ] && [ -d "$host_bison_datadir" ]; then
+			log_info "Copying bison data directory into chroot at $host_bison_datadir"
+			run_privileged mkdir -p "$LFS$host_bison_datadir"
+			run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/
+		else
+			log_warning "Unable to locate host bison data directory, glibc build may fail"
+		fi
+	fi
+
 	# Bootstrap python3 and create python symlink for glibc configure
 	if command -v python3 &>/dev/null && [ ! -x "$LFS/usr/bin/python3" ]; then
 		log_info "Bootstrapping /usr/bin/python3 into chroot"
