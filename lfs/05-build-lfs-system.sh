@@ -110,6 +110,15 @@ ensure_bootstrap_chroot_shell() {
 	if command -v python3 &>/dev/null && [ ! -x "$LFS/usr/bin/python3" ]; then
 		log_info "Bootstrapping /usr/bin/python3 into chroot"
 		copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"
+		# Copy Python standard library so glibc build scripts work inside the chroot.
+		# glibc 2.39+ uses Python scripts (e.g. gen-as-const.py) during compilation;
+		# without the stdlib the build fails with "No module named 'encodings'".
+		PYTHON_STDLIB=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))" 2>/dev/null || true)
+		if [ -n "$PYTHON_STDLIB" ] && [ -d "$PYTHON_STDLIB" ]; then
+			log_info "Copying Python stdlib into chroot at $PYTHON_STDLIB"
+			run_privileged mkdir -p "$LFS$PYTHON_STDLIB"
+			run_privileged cp -r "$PYTHON_STDLIB"/. "$LFS$PYTHON_STDLIB"/
+		fi
 	fi
 	if [ ! -e "$LFS/usr/bin/python" ] && [ -x "$LFS/usr/bin/python3" ]; then
 		run_privileged ln -sfn python3 "$LFS/usr/bin/python"

@@ -197,3 +197,16 @@ def test_lfs_system_uses_cross_compiler_hostcc_for_linux_headers():
     assert expected_tool_loop in content
     assert 'copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"' in content
     assert 'ln -sfn python3 "$LFS/usr/bin/python"' in content
+
+
+def test_lfs_system_copies_python_stdlib_into_chroot():
+    """glibc 2.39+ runs Python scripts (gen-as-const.py) during compilation.
+    Without the Python standard library in the chroot, the build fails with
+    'ModuleNotFoundError: No module named encodings'.  The script must copy
+    the stdlib directory into the chroot alongside the python3 binary."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert 'python3 -c "import sysconfig; print(sysconfig.get_path(\'stdlib\'))"' in content
+    assert 'run_privileged cp -r "$PYTHON_STDLIB"/. "$LFS$PYTHON_STDLIB"/' in content
