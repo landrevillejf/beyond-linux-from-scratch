@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # LPM – Linux Package Manager
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# Improved version: Robustness, security, and cycle detection
+# Version: 2.5.0
 
 set -euo pipefail
 
@@ -19,13 +19,14 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.4.0"
+LPM_VERSION="2.5.0"
 LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
 LPM_ETC="${LPM_ETC:-/etc/lpm}"
 LPM_DB="${LPM_DB:-/var/lib/lpm}"
 LPM_LOGS="${LPM_LOGS:-/var/log/lpm}"
 LPM_PACKAGES_DIR="${LPM_PACKAGES_DIR:-/usr/share/lpm/packages}"
 LPM_ROOT="${LPM_ROOT:-/}"                 # Install root (alias: --sysroot; for chroots/testing)
+LPM_BUILD_DIR="${LPM_BUILD_DIR:-/var/lib/lpm/build}"   # Source build directory
 # shellcheck disable=SC2034  # kept for config file compat
 LPM_REPOS=( "local" )
 REPO_LOCAL_PATH="${REPO_LOCAL_PATH:-$LPM_PACKAGES_DIR}"
@@ -37,6 +38,8 @@ GPG_KEYRING="${GPG_KEYRING:-/etc/lpm/trusted.gpg}"
 LOG_TIMESTAMP_FORMAT="%Y-%m-%d %H:%M:%S"
 LOG_RETENTION_DAYS="${LOG_RETENTION_DAYS:-30}"  # Keep logs for 30 days
 ALLOW_DUMMY_CHECKSUMS="${ALLOW_DUMMY_CHECKSUMS:-false}"  # Warn on dummy checksums
+BUILD_JOBS="${BUILD_JOBS:-$(nproc)}"
+KEEP_BUILD_ARTIFACTS="${KEEP_BUILD_ARTIFACTS:-false}"
 HAS_JQ=false                               # Detect jq availability at runtime
 
 # Runtime variables
@@ -189,6 +192,7 @@ load_config() {
 init_dirs() {
     mkdir -p "$LPM_DB" "$LPM_LOGS" "$LPM_ETC" "$LPM_PACKAGES_DIR" "$(dirname "$LOCK_FILE")"
     touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index"
+    mkdir -p "$LPM_BUILD_DIR"/{sources,src,pkg}
     # Rotate old logs and detect jq availability
     rotate_logs
     detect_jq
@@ -862,6 +866,299 @@ clean_cache() {
 }
 
 # ======================================================================
+# SOURCE-BASED BUILD SYSTEM
+# ======================================================================
+
+# Download or copy source archive
+fetch_source() {
+    local src="$1"
+    local dest="$LPM_BUILD_DIR/sources/$(basename "$src")"
+    mkdir -p "$LPM_BUILD_DIR/sources"
+    if [[ "$src" =~ ^https?:// ]]; then
+        log_info "Downloading source: $src"
+        if ! curl -fsSL --connect-timeout 30 -o "$dest" "$src"; then
+            die "Failed to download $src"
+        fi
+    elif [ -f "$src" ]; then
+        cp -f "$src" "$dest"
+    else
+        die "Source not found: $src"
+    fi
+    echo "$dest"
+}
+
+# Extract archive (tar.xz, tar.gz, tar.bz2, etc.)
+extract_source() {
+    local archive="$1"
+    local destdir="$2"
+    mkdir -p "$destdir"
+    tar -xf "$archive" -C "$destdir" --strip-components=1 2>/dev/null || tar -xf "$archive" -C "$destdir"
+    # Return the actual directory (the one containing the files)
+    find "$destdir" -maxdepth 1 -mindepth 1 -type d | head -1
+}
+
+# Determine build system and create a build script dynamically
+detect_build_system() {
+    local srcdir="$1"
+    if [ -f "$srcdir/configure" ]; then
+        echo "autotools"
+    elif [ -f "$srcdir/meson.build" ]; then
+        echo "meson"
+    elif [ -f "$srcdir/CMakeLists.txt" ]; then
+        echo "cmake"
+    else
+        echo "generic"
+    fi
+}
+
+# Execute build following a recipe if provided, else auto-detect
+run_build() {
+    local srcdir="$1"
+    local pkg_name="$2"
+    local pkg_version="$3"
+    local builddir="$LPM_BUILD_DIR/src/${pkg_name}-${pkg_version}"
+    local staging="$LPM_BUILD_DIR/pkg/${pkg_name}-${pkg_version}/files"
+    local recipe="$4"   # optional recipe file
+
+    # If recipe provided, source it and run build()
+    if [ -n "$recipe" ] && [ -f "$recipe" ]; then
+        log_info "Using build recipe: $recipe"
+        # shellcheck disable=SC1090
+        source "$recipe"
+        if declare -f build >/dev/null 2>&1; then
+            cd "$srcdir"
+            build
+        else
+            die "Recipe does not define a build() function"
+        fi
+        return
+    fi
+
+    # Auto-detect build system
+    local system
+    system=$(detect_build_system "$srcdir")
+    log_info "Detected build system: $system"
+    mkdir -p "$staging"
+    cd "$srcdir"
+
+    case "$system" in
+        autotools)
+            ./configure --prefix=/usr \
+                --sysconfdir=/etc \
+                --localstatedir=/var \
+                ${BUILD_CFLAGS:+"CFLAGS=$BUILD_CFLAGS"} \
+                ${BUILD_CXXFLAGS:+"CXXFLAGS=$BUILD_CXXFLAGS"}
+            make -j"$BUILD_JOBS"
+            make install DESTDIR="$staging"
+            ;;
+        meson)
+            meson setup builddir --prefix=/usr
+            ninja -C builddir
+            DESTDIR="$staging" ninja -C builddir install
+            ;;
+        cmake)
+            cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr
+            cmake --build builddir -j"$BUILD_JOBS"
+            DESTDIR="$staging" cmake --install builddir
+            ;;
+        generic)
+            # Default: try configure, then fallback to make
+            if [ -f ./configure ]; then
+                ./configure --prefix=/usr
+                make -j"$BUILD_JOBS"
+                make install DESTDIR="$staging"
+            elif [ -f ./Makefile ]; then
+                make -j"$BUILD_JOBS"
+                make install DESTDIR="$staging"
+            else
+                die "Unable to determine build method. Provide a recipe with --recipe."
+            fi
+            ;;
+    esac
+    cd "$OLDPWD"
+}
+
+# Assemble LPM package archive from staged files
+assemble_package() {
+    local pkg_name="$1"
+    local pkg_version="$2"
+    local staging="$LPM_BUILD_DIR/pkg/${pkg_name}-${pkg_version}/files"
+    local pkg_dir="$LPM_BUILD_DIR/pkg/${pkg_name}-${pkg_version}"
+    local archive_name="${pkg_name}-${pkg_version}.tar.xz"
+    local dest_archive="$REPO_LOCAL_PATH/$archive_name"
+
+    log_info "Assembling package $pkg_name-$pkg_version"
+
+    # Create the package directory structure
+    mkdir -p "$pkg_dir/files"
+    # Move staged files into the package files/ directory (if not already there)
+    if [ "$staging" != "$pkg_dir/files" ]; then
+        rm -rf "$pkg_dir/files"
+        mv "$staging" "$pkg_dir/files"
+    fi
+
+    # Add optional hooks (could be empty, but we keep the structure)
+    [ -x "$pkg_dir/pre-install.sh" ] || touch "$pkg_dir/pre-install.sh"
+    [ -x "$pkg_dir/post-install.sh" ] || touch "$pkg_dir/post-install.sh"
+    [ -x "$pkg_dir/pre-remove.sh" ] || touch "$pkg_dir/pre-remove.sh"
+    [ -x "$pkg_dir/post-remove.sh" ] || touch "$pkg_dir/post-remove.sh"
+
+    # Create archive
+    cd "$LPM_BUILD_DIR/pkg"
+    tar -Jcf "$dest_archive" "${pkg_name}-${pkg_version}"
+    log_success "Package archive created: $dest_archive"
+    echo "$dest_archive"
+}
+
+# Register the package in the database
+register_package() {
+    local pkg_name="$1"
+    local pkg_version="$2"
+    local description="$3"
+    local dependencies="$4"
+    local archive="$5"
+    local checksum
+    checksum=$(sha256_of "$archive")
+    # Remove existing entry if present
+    sed_inplace "/^${pkg_name}|/d" "$db_file"
+    echo "${pkg_name}|${pkg_version}|${description}|${dependencies}|${checksum}" >> "$db_file"
+    log_success "Package $pkg_name-$pkg_version registered in database"
+}
+
+# Main build command
+build_package() {
+    local src=""
+    local recipe=""
+    local install_after_build=true
+    local description=""
+    local dependencies=""
+
+    # Parse build-specific options
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --recipe)
+                recipe="$2"
+                shift 2
+                ;;
+            --no-install)
+                install_after_build=false
+                shift
+                ;;
+            --desc|--description)
+                description="$2"
+                shift 2
+                ;;
+            --deps|--dependencies)
+                dependencies="$2"
+                shift 2
+                ;;
+            -*)
+                die "Unknown build option: $1"
+                ;;
+            *)
+                if [ -z "$src" ]; then
+                    src="$1"
+                    shift
+                else
+                    die "Too many arguments: $1"
+                fi
+                ;;
+        esac
+    done
+
+    [ -z "$src" ] && die "Usage: lpm build <source.tar.xz|URL|.lpm recipe> [--recipe <recipe>] [--no-install] [--desc ...] [--deps ...]"
+
+    # Detect if argument is a recipe file (ending in .lpm)
+    if [ -z "$recipe" ] && [[ "$src" == *.lpm ]]; then
+        recipe="$src"
+        # Source the recipe to get name, version, source, etc.
+        # shellcheck disable=SC1090
+        source "$recipe"
+        [ -n "${name:-}" ] || die "Recipe missing 'name'"
+        [ -n "${version:-}" ] || die "Recipe missing 'version'"
+        src="${source:-${name}-${version}.tar.xz}"
+        # description and dependencies from recipe if not overridden
+        description="${description:-${desc:-}}"
+        dependencies="${dependencies:-${deps:-}}"
+    fi
+
+    # If recipe not yet set, try to infer name/version from src filename
+    if [ -z "$recipe" ]; then
+        local base
+        base=$(basename "$src")
+        # Remove common extensions
+        base="${base%.tar.*}"
+        base="${base%.tgz}"
+        base="${base%.tar}"
+        # Parse name-version (last dash before digit? heuristic)
+        if [[ "$base" =~ ^(.+)-([0-9].*)$ ]]; then
+            pkg_name="${BASH_REMATCH[1]}"
+            pkg_version="${BASH_REMATCH[2]}"
+        else
+            pkg_name="$base"
+            pkg_version="unknown"
+        fi
+    else
+        pkg_name="${name}"
+        pkg_version="${version}"
+    fi
+
+    [ -z "$pkg_name" ] && die "Could not determine package name"
+    [ -z "$pkg_version" ] && die "Could not determine package version"
+
+    # Resolve build dependencies? For now, we just ensure runtime dependencies are installed.
+    # The user can pre-install them manually or via recipe deps.
+    if [ -n "$dependencies" ]; then
+        log_info "Ensuring dependencies: $dependencies"
+        local deps_order
+        deps_order=$(install_order $dependencies)
+        if [ -n "$deps_order" ]; then
+            while IFS= read -r dep; do
+                [ -z "$dep" ] && continue
+                if ! is_installed "$dep"; then
+                    log_info "Installing missing dependency: $dep"
+                    install_package "$dep"
+                fi
+            done <<< "$deps_order"
+        fi
+    fi
+
+    # Fetch and extract source
+    local archive_path
+    archive_path=$(fetch_source "$src")
+    local srcdir="$LPM_BUILD_DIR/src/${pkg_name}-${pkg_version}"
+    rm -rf "$srcdir"
+    mkdir -p "$srcdir"
+    extract_source "$archive_path" "$srcdir" >/dev/null
+
+    # Build
+    log_info "Building $pkg_name-$pkg_version"
+    run_build "$srcdir" "$pkg_name" "$pkg_version" "$recipe"
+
+    # Assemble
+    local pkg_archive
+    pkg_archive=$(assemble_package "$pkg_name" "$pkg_version")
+
+    # Register in database
+    description="${description:-User built package}"
+    dependencies="${dependencies:-}"
+    register_package "$pkg_name" "$pkg_version" "$description" "$dependencies" "$pkg_archive"
+
+    # Optionally install
+    if $install_after_build; then
+        log_info "Installing newly built package: $pkg_name-$pkg_version"
+        install_package "$pkg_name"
+    else
+        log_info "Package built but not installed (use lpm install $pkg_name)"
+    fi
+
+    # Cleanup build artifacts unless KEEP_BUILD_ARTIFACTS
+    if ! $KEEP_BUILD_ARTIFACTS; then
+        rm -rf "$srcdir" "$LPM_BUILD_DIR/pkg/${pkg_name}-${pkg_version}"
+    fi
+}
+
+# ======================================================================
 # Help
 # ======================================================================
 show_help() {
@@ -874,6 +1171,7 @@ Commands:
   remove <pkg>          Remove a package
   update <pkg>          Update (reinstall) a specific package
   upgrade               Upgrade all installed packages to latest versions
+  build <source|.lpm>   Build, package, and install from source
   add-profile <prof>    Install all packages from a build profile
   list-profiles         List available profiles
   list                  List installed packages
@@ -893,26 +1191,37 @@ Options:
   --no-color            Disable colored output
   --sysroot <dir>       Operate on an alternate root (chroots); alias of LPM_ROOT
 
+Build options (with 'build' command):
+  --recipe <file>       Use a .lpm recipe file for custom build steps
+  --no-install          Build and package but do not install
+  --desc <description>  Set package description
+  --deps <pkg1,pkg2>    Specify runtime dependencies (comma-separated)
+
+Recipe format (.lpm file):
+  name="myapp"
+  version="1.0"
+  source="https://example.com/myapp-1.0.tar.xz"
+  desc="My application"
+  deps="glibc>=2.37,openssl"
+  build() {
+      ./configure --prefix=/usr
+      make -j$(nproc)
+  }
+
 Configuration (/etc/lpm/lpm.conf):
   REPO_REMOTE_URLS=("https://repo.example.com/x86_64")   # HTTP(S) repos
   VERIFY_SIGNATURES=true                                  # GPG verification
   GPG_KEYRING=/etc/lpm/trusted.gpg                        # Trusted keys
   VERIFY_CHECKSUMS=true                                   # SHA256 integrity
-
-Profiles (/etc/lpm/profiles.json):
-  Predefined package collections for different workflows:
-    minimal          Minimal base system
-    java-dev         Java development environment
-    audio-studio     Full audio production studio
-    gnome            GNOME desktop environment
-    kde              KDE Plasma desktop
-
-Dependency version constraints (in package database):
-  name|1.0|desc|glibc>=2.40,openssl=3.6.1|checksum
+  BUILD_JOBS=4                                            # Parallel compilation jobs
+  KEEP_BUILD_ARTIFACTS=false                              # Retain build directories
 
 Examples:
   lpm install bash
   lpm remove coreutils
+  lpm build https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz
+  lpm build mypkg.lpm
+  lpm build myapp-2.0.tar.xz --desc "My App" --deps "glibc,curl"
   lpm add-profile audio-studio
   lpm upgrade --dry-run
   lpm search gcc
@@ -1074,6 +1383,9 @@ main() {
         upgrade)
             upgrade_all
             ;;
+        build)
+            build_package "$@"
+            ;;
         list)
             list_packages
             ;;
@@ -1107,7 +1419,7 @@ main() {
         version|--version|-v)
             echo "LPM version $LPM_VERSION (LFS Package Manager)"
             echo "Built for LFS 13.0 and Beyond Linux from Scratch"
-            echo "Improvements: Circular dependency detection, robust parsing, secure regex handling"
+            echo "Improvements: Source build support, automatic packaging, recipe system"
             ;;
         *)
             log_error "Unknown command: $cmd"

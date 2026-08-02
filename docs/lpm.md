@@ -16,6 +16,7 @@ It handles package installation, removal, upgrades, dependency resolution, integ
 - **Pre/post install/remove hooks** – run custom scripts during package lifecycle.
 - **Transactional installation** – atomic file installation with automatic rollback on failure.
 - **Integrity verification** – check installed files against the package database for modifications or deletions (`lpm verify`).
+- **Source‑based builds** – lpm build compiles software from source, auto‑detects build systems (autotools, meson, cmake, Makefile), creates native LPM packages, and registers them in the database. Custom recipes (.lpm files) are supported for full control over the build process.
 - **System root redirection** – operate on an alternate root directory (chroots) via `--sysroot` or `LPM_ROOT`.
 - **Concurrent execution lock** – prevents multiple LPM instances from interfering (flock, with portable fallback).
 - **Profile management** – install predefined package collections for specific use cases (audio studio, Java dev, etc.) with automatic dependency resolution.
@@ -208,6 +209,60 @@ Respects version constraints from the installed package's dependency specificati
 lpm upgrade --dry-run               # Check upgradable packages
 lpm upgrade                         # Upgrade all available packages
 ```
+
+### `build <source|.lpm>` (new in v2.5.0)
+
+Build a package from source, create a native LPM package, and optionally install it.
+This command compiles software using the appropriate build system (autotools, meson, cmake, or generic Makefile), assembles the package, registers it in the database, and installs it (unless --no-install is given).
+
+You can provide a source archive (local or URL) or a .lpm recipe file.
+
+Options:
+
+--recipe <file> : use a custom .lpm recipe for build steps and metadata
+--no-install : build and package, but do not install
+--desc <description> : set package description
+--deps <pkg1,pkg2> : specify runtime dependencies (comma‑separated)
+
+Recipe format (.lpm file):
+
+```
+name="myapp"
+version="1.0"
+source="https://example.com/myapp-1.0.tar.xz"   # optional, can be omitted if source provided separately
+desc="My application"
+deps="glibc>=2.37,openssl"
+
+build() {
+./configure --prefix=/usr
+make -j$(nproc)
+}
+```
+Examples:
+
+```bash
+# Build from a tarball (auto-detect build system)
+lpm build https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz
+
+# Build using a recipe file
+lpm build mypkg.lpm
+
+# Build but do not install
+lpm build myapp-2.0.tar.xz --no-install --desc "My App" --deps "glibc,curl"
+
+# Build with explicit recipe and dependencies
+lpm build --recipe custom.lpm --deps "pkg1,pkg2" source.tar.xz
+The build process automatically:
+```
+
+-Downloads the source (if URL).
+-Extracts it into a staging directory.
+-Detects the build system or uses a supplied recipe.
+-Runs the build (with parallel jobs from BUILD_JOBS).
+-Stages the installed files into a temporary directory.
+-Creates a .tar.xz package and places it in the local repository.
+Registers the package in the database.
+Installs the package (unless --no-install).
 
 ### `list` (or `ls`)
 
