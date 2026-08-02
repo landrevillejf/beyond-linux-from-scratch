@@ -19,13 +19,13 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.3.0"
+LPM_VERSION="2.4.0"
 LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
 LPM_ETC="${LPM_ETC:-/etc/lpm}"
 LPM_DB="${LPM_DB:-/var/lib/lpm}"
 LPM_LOGS="${LPM_LOGS:-/var/log/lpm}"
 LPM_PACKAGES_DIR="${LPM_PACKAGES_DIR:-/usr/share/lpm/packages}"
-LPM_ROOT="${LPM_ROOT:-/}"                 # Install root (for testing/chroots)
+LPM_ROOT="${LPM_ROOT:-/}"                 # Install root (alias: --sysroot; for chroots/testing)
 # shellcheck disable=SC2034  # kept for config file compat
 LPM_REPOS=( "local" )
 REPO_LOCAL_PATH="${REPO_LOCAL_PATH:-$LPM_PACKAGES_DIR}"
@@ -699,7 +699,9 @@ search_package() {
     local pattern="$1"
     [ -z "$pattern" ] && die "Usage: lpm search <pattern>"
     echo -e "$(_apply_color "${C_BLUE}")Search results for '$pattern':$(_apply_color "${C_NC}")"
-    grep -i "$pattern" "$db_file" 2>/dev/null | while IFS='|' read -r name ver desc deps _chk; do
+    # Use fixed-string matching (-F) so regex metacharacters (., *, [, etc.)
+    # in the pattern are treated literally and cannot alter the search.
+    grep -iF "$pattern" "$db_file" 2>/dev/null | while IFS='|' read -r name ver desc deps _chk; do
         printf "  %-20s %-10s %s\n" "$name" "$ver" "${desc:-}"
     done || echo "  No matches found"
 }
@@ -721,6 +723,88 @@ show_info() {
     else
         echo -e "$(_apply_color "${C_BLUE}")Status:$(_apply_color "${C_NC}") not installed"
     fi
+}
+
+# ======================================================================
+# Integrity verification of installed packages
+# Compares files currently on disk against the pristine copies retained
+# in the package database ($LPM_DB/<pkg>-<ver>/files). Detects files that
+# were modified or removed after installation.
+# ======================================================================
+verify_package() {
+    local target="$1"
+    local -a pkgs=()
+
+    if [ -n "$target" ]; then
+        if ! is_installed "$target"; then
+            die "Package '$target' is not installed"
+        fi
+        pkgs=("$target")
+    else
+        local _name _ver
+        while read -r _name _ver; do
+            [ -z "$_name" ] && continue
+            pkgs+=("$_name")
+        done < "$installed_file"
+    fi
+
+    if [ ${#pkgs[@]} -eq 0 ]; then
+        log_info "No packages installed to verify"
+        return 0
+    fi
+
+    local total_ok=0 total_modified=0 total_missing=0 pkg
+    for pkg in "${pkgs[@]}"; do
+        local ver pkg_dir
+        ver=$(installed_version "$pkg")
+        pkg_dir="$LPM_DB/$pkg-$ver"
+
+        if [ ! -d "$pkg_dir/files" ]; then
+            log_verbose "No file manifest for $pkg-$ver; skipping"
+            continue
+        fi
+
+        local ok=0 modified=0 missing=0 f ref dest
+        while IFS= read -r f; do
+            f="${f#./}"
+            [ -z "$f" ] && continue
+            ref="$pkg_dir/files/$f"
+            dest="${LPM_ROOT%/}/$f"
+
+            if [ -L "$ref" ]; then
+                if [ ! -L "$dest" ]; then
+                    log_warn "MISSING  $dest (symlink)"; missing=$((missing + 1)); continue
+                fi
+                if [ "$(readlink "$ref")" != "$(readlink "$dest")" ]; then
+                    log_warn "MODIFIED $dest (symlink target)"; modified=$((modified + 1)); continue
+                fi
+                ok=$((ok + 1))
+            elif [ -f "$ref" ]; then
+                if [ ! -f "$dest" ]; then
+                    log_warn "MISSING  $dest"; missing=$((missing + 1)); continue
+                fi
+                if [ "$(sha256_of "$ref")" != "$(sha256_of "$dest")" ]; then
+                    log_warn "MODIFIED $dest"; modified=$((modified + 1)); continue
+                fi
+                ok=$((ok + 1))
+            fi
+        done < <(cd "$pkg_dir/files" && find . \( -type f -o -type l \) | sed 's|^\./||')
+
+        if [ "$modified" -eq 0 ] && [ "$missing" -eq 0 ]; then
+            log_success "$pkg-$ver: OK ($ok files verified)"
+        else
+            log_error "$pkg-$ver: $ok OK, $modified modified, $missing missing"
+        fi
+        total_ok=$((total_ok + ok))
+        total_modified=$((total_modified + modified))
+        total_missing=$((total_missing + missing))
+    done
+
+    log_info "Verification complete: $total_ok OK, $total_modified modified, $total_missing missing"
+    if [ "$total_modified" -gt 0 ] || [ "$total_missing" -gt 0 ]; then
+        return 1
+    fi
+    return 0
 }
 
 # ======================================================================
@@ -795,6 +879,7 @@ Commands:
   list                  List installed packages
   search <pattern>      Search for packages in database
   info <pkg>            Show detailed package information
+  verify [pkg]          Verify integrity of installed files (all if no pkg)
   update-db             Synchronize package database
   clean                 Remove downloaded package files (cache)
   help                  Show this help
@@ -806,6 +891,7 @@ Options:
   --quiet               Suppress non-error output
   --verbose             Enable detailed debug output
   --no-color            Disable colored output
+  --sysroot <dir>       Operate on an alternate root (chroots); alias of LPM_ROOT
 
 Configuration (/etc/lpm/lpm.conf):
   REPO_REMOTE_URLS=("https://repo.example.com/x86_64")   # HTTP(S) repos
@@ -832,6 +918,9 @@ Examples:
   lpm search gcc
   lpm install --no-color bash
   lpm list-profiles
+  lpm verify
+  lpm verify bash
+  lpm --sysroot /mnt/lfs install coreutils
 HELP
 }
 
@@ -942,6 +1031,8 @@ main() {
             --quiet)    QUIET=true; shift ;;
             --verbose)  VERBOSE=true; shift ;;
             --no-color) NO_COLOR=true; shift ;;
+            --sysroot)  LPM_ROOT="${2:?--sysroot requires a directory}"; shift 2 ;;
+            --sysroot=*) LPM_ROOT="${1#*=}"; shift ;;
             *) break ;;
         esac
     done
@@ -993,6 +1084,9 @@ main() {
         info)
             [ "$#" -eq 0 ] && die "Missing package name"
             show_info "$1"
+            ;;
+        verify|check)
+            verify_package "${1:-}"
             ;;
         update-db)
             update_db

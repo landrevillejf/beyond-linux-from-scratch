@@ -4,6 +4,15 @@
 
 ### Added
 
+- **LPM v2.4.0 quality-of-life features**
+  - New `lpm verify` (alias `check`) command to verify the integrity of installed
+    packages — compares on-disk files against the pristine copies in the package
+    database (SHA-256 for files, target for symlinks) and reports modified/missing files
+  - New global `--sysroot <dir>` option: an explicit alias of `LPM_ROOT` for operating
+    on alternate roots/chroots (also accepts `--sysroot=<dir>`)
+  - `lpm search` now matches patterns literally (`grep -F`) so regex metacharacters
+    (`.`, `*`, `[`, …) can no longer be misinterpreted
+
 - **LPM Profile Management System**
   - New `lpm list-profiles` command to list all available build profiles
   - New `lpm add-profile <profile>` command to install preset package collections

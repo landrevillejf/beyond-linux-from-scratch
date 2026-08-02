@@ -21,7 +21,7 @@ It handles package installation, removal, upgrades, dependency resolution, and d
 - **Repository support** – local and remote HTTP(S) repository support.
 - **Portable** – works on minimal LFS systems (no GNU-specific dependencies).
 - **High performance** – optimized dependency resolution and file operations (100x faster than naive implementations).
-- **Command set** – install, remove, update, upgrade, list, search, info, clean, list-profiles, add-profile, and more.
+- **Command set** – install, remove, update, upgrade, list, search, info, verify, clean, list-profiles, add-profile, and more.
 
 ## Installation
 
@@ -241,6 +241,29 @@ lpm info bash
 # Status: installed (5.3)
 ```
 
+### `verify` (or `check`)
+
+Verify the integrity of installed packages by comparing the files on disk against
+the pristine copies retained in the package database. Detects files that were
+**modified** or **removed** after installation. If no package is given, every
+installed package is verified.
+
+Regular files are compared by SHA‑256 checksum; symbolic links are compared by
+their target. Returns a non‑zero exit code if any file is modified or missing,
+making it suitable for scripts and monitoring.
+
+**Example:**
+```bash
+lpm verify                          # Verify every installed package
+lpm verify bash                     # Verify a single package
+lpm --sysroot /mnt/lfs verify       # Verify packages in an alternate root
+
+# Sample output:
+# [WARNING] MODIFIED /usr/bin/foo
+# [ERROR]   foo-1.0: 3 OK, 1 modified, 0 missing
+# [INFO]    Verification complete: 42 OK, 1 modified, 0 missing
+```
+
 ### `update-db` (or `sync`)
 
 Refresh the package database by downloading/syncing repository indices.  
@@ -346,6 +369,7 @@ These options can be placed before the command:
 | `--quiet`    | Suppress all non‑error output. |
 | `--verbose`  | Show detailed debug messages (DEBUG level logging). |
 | `--no-color` | Disable colored output (respects `NO_COLOR` environment variable). |
+| `--sysroot <dir>` | Operate on an alternate root directory (for chroots). Explicit alias of the `LPM_ROOT` variable; also accepts `--sysroot=<dir>`. |
 | `--help`     | Show help text for the given command. |
 | `--version`  | Show LPM version. |
 
@@ -359,6 +383,10 @@ lpm --quiet upgrade
 
 # Install with debug output
 lpm --verbose install bash
+
+# Operate inside a chroot / alternate root
+lpm --sysroot /mnt/lfs install coreutils
+lpm --sysroot=/mnt/lfs verify
 ```
 
 ## Hooks
