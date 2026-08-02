@@ -247,11 +247,7 @@ if [ ! -d "$LINUX_DIR" ]; then
 fi
 cd "$LINUX_DIR"
 make mrproper
-if command -v "${LFS_TGT}-gcc" >/dev/null 2>&1; then
-    make HOSTCC="${LFS_TGT}-gcc" headers
-else
-    make headers
-fi
+make HOSTCC=gcc headers
 find usr/include -name '.*' -delete
 rm -f usr/include/Makefile
 cp -rv usr/include/. /usr/include

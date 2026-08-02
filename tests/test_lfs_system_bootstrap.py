@@ -175,10 +175,15 @@ def test_lfs_system_does_not_bind_mount_host_usr():
     assert 'umount "$LFS"/usr' not in content
 
 
-def test_lfs_system_uses_cross_hostcc_for_linux_headers():
+def test_lfs_system_uses_native_hostcc_for_linux_headers():
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    assert 'make HOSTCC="${LFS_TGT}-gcc" headers' in content
+    # HOSTCC must be the native host gcc, not the cross-compiler, so that
+    # host-side build tools (e.g. fixdep) can find sys/types.h in the host
+    # libc headers.  Using the cross-compiler here fails because its sysroot
+    # points at the LFS tree where glibc has not been installed yet.
+    assert 'make HOSTCC=gcc headers' in content
+    assert 'make HOSTCC="${LFS_TGT}-gcc" headers' not in content
     assert "for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld; do" in content
