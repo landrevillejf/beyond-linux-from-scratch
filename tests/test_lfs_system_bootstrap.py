@@ -164,3 +164,12 @@ def test_lfs_system_diffutils_pathmax_workaround_present():
     assert 'cflags="-D_GNU_SOURCE -DPATH_MAX=4096"' in content
     assert 'CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc' in content
     assert 'CFLAGS="$cflags" make -j$(nproc)' in content
+
+
+def test_lfs_system_does_not_bind_mount_host_usr():
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert 'mount --bind /usr "$LFS"/usr' not in content
+    assert 'umount "$LFS"/usr' not in content

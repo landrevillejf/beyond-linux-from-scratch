@@ -174,7 +174,6 @@ run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
-run_privileged mount --bind /usr "$LFS"/usr 2>/dev/null || true
 
 # -----------------------------------------------------------------
 # Copy sources into chroot
@@ -441,6 +440,5 @@ run_privileged umount "$LFS"/dev 2>/dev/null || true
 run_privileged umount "$LFS"/proc 2>/dev/null || true
 run_privileged umount "$LFS"/sys 2>/dev/null || true
 run_privileged umount "$LFS"/run 2>/dev/null || true
-run_privileged umount "$LFS"/usr 2>/dev/null || true
 
 log_success "LFS system build complete"
