@@ -3,7 +3,7 @@
 LPM is a lightweight, full‑featured package manager designed specifically for Linux From Scratch (LFS) and other custom distributions.  
 It handles package installation, removal, upgrades, dependency resolution, and database management without relying on any external package management infrastructure.
 
-**Status**: ✅ Production-Ready (v2.2.0+) – Performance-competitive with YUM/DNF/APT
+**Status**: ✅ Production-Ready
 
 ## Features
 
