@@ -798,6 +798,53 @@ The builder creates the necessary directories and populates the package database
 
 *(Build Stage Integration diagram is shown in the Architecture section.)*
 
+## Building Packages from Source
+
+LPM does **not** compile source code. It installs pre‑built packages (`.tar.xz` archives) that you have already compiled yourself.
+
+This separation keeps the package manager lightweight and gives you full control over the build process.  
+You can use any build system or script (GNU Make, CMake, Meson, custom shell scripts, etc.) to produce the binaries.
+
+### Typical workflow
+
+1. **Compile the software** as you normally would (e.g., following the LFS/BLFS book).
+2. **Assemble the LPM package manually** – create the directory structure described in the [Package Format](#package-format) section.
+3. **Add the package to the database** (`/var/lib/lpm/packages.list`) and copy the archive to the local repository.
+4. **Install with LPM** – `lpm install <name>` will then manage the files, dependencies, and future upgrades.
+
+This approach ensures that LPM can manage *any* software, regardless of how it was built, while still providing all the benefits of a modern package manager (clean removal, integrity checks, dependency tracking, etc.).
+
+### Example: creating a package from source
+
+```bash
+# 1. Compile the software (this is just an example – replace with your actual build steps)
+tar -xf myapp-1.0.tar.gz
+cd myapp-1.0
+./configure --prefix=/usr
+make -j$(nproc)
+make install DESTDIR=/tmp/myapp-staging
+
+# 2. Build the LPM package structure
+mkdir -p myapp-1.0/files
+cp -a /tmp/myapp-staging/usr myapp-1.0/files/
+
+# (Optional) Add hooks
+cat > myapp-1.0/post-install.sh << 'EOF'
+#!/bin/bash
+echo "myapp $2 installed"
+EOF
+chmod +x myapp-1.0/post-install.sh
+
+# 3. Create the archive and add it to the repository
+tar -Jcf myapp-1.0.tar.xz myapp-1.0/
+cp myapp-1.0.tar.xz /usr/share/lpm/packages/
+
+# 4. Register the package in the database (append to packages.list)
+echo "myapp|1.0|My custom application|glibc|sha256-$(sha256sum myapp-1.0.tar.xz | cut -d' ' -f1)" >> /var/lib/lpm/packages.list
+```
+
+After these steps, `lpm install myapp` will install the package, track its files, and allow clean removal and upgrades.
+
 ## Troubleshooting
 
 ### "Another lpm instance is running"
