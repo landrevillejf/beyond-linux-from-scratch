@@ -235,8 +235,16 @@ set -e
 
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export LD_LIBRARY_PATH=/tools/lib
-export SHELL=/bin/bash
-export CONFIG_SHELL=/bin/bash
+# Use the cross-compiled toolchain bash so that make recipes survive the
+# moment glibc installs its new ld.so.  The bootstrapped /bin/bash is linked
+# against the HOST libc (/lib/x86_64-linux-gnu/libc.so.6) which lacks the
+# GLIBC_PRIVATE __nptl_change_stack_perm symbol required by glibc 2.34+
+# ld.so, causing an immediate symbol-lookup error.  /tools/bin/bash was
+# cross-compiled against the LFS toolchain glibc at /usr/lib/libc.so.6 and
+# is therefore compatible with both the pre-install toolchain glibc and the
+# newly installed system glibc.
+export SHELL=/tools/bin/bash
+export CONFIG_SHELL=/tools/bin/bash
 
 cd /sources
 
@@ -328,8 +336,14 @@ cd build
              --enable-cet \
              --enable-multi-arch
 make -j$(nproc)
-# Use LD_LIBRARY_PATH and SHELL to ensure /bin/sh can find libtinfo
-LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make RM=/tools/bin/rm SHELL=/bin/bash install
+# Use /tools/bin/bash (cross-compiled toolchain bash) as SHELL so that make
+# recipes keep working after glibc installs its new ld.so.  The new ld.so
+# (glibc 2.34+) requires __nptl_change_stack_perm@GLIBC_PRIVATE from
+# libc.so.6; the toolchain bash links against /usr/lib/libc.so.6 which is
+# updated to glibc 2.42 early in the install sequence, while the bootstrapped
+# /bin/bash links against the HOST /lib/x86_64-linux-gnu/libc.so.6 which
+# does not carry that private symbol.
+make RM=/tools/bin/rm SHELL=/tools/bin/bash install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
