@@ -187,7 +187,8 @@ build_toolchain() {
 		--target="$LFS_TGT" \
 		--disable-nls \
 		--enable-gprofng=no \
-		--disable-werror
+		--disable-werror \
+		--without-zstd
 	make -j"$NUM_JOBS"
 	make install
 	cd "$LFS/sources"

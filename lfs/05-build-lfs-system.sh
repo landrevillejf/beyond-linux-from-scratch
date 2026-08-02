@@ -149,9 +149,34 @@ ensure_bootstrap_chroot_shell() {
 		fi
 	fi
 
-	# Copy libtinfo.so.6 to /lib (instead of symlink) to ensure it's found
-	if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
-		run_privileged cp -v "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" "$LFS/lib/libtinfo.so.6"
+	# Copy libtinfo.so.6 to /lib so the LFS glibc ld.so can find it after glibc
+	# install replaces the dynamic linker.  On Ubuntu 24.04 (UsrMerge) ldd may
+	# report the canonical path under /usr/lib rather than /lib, so search both
+	# locations inside the chroot and fall back to the host if neither is present.
+	if [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
+		_libtinfo_src=""
+		for _dir in \
+			"$LFS/lib/x86_64-linux-gnu" \
+			"$LFS/usr/lib/x86_64-linux-gnu" \
+			"$LFS/lib" \
+			"$LFS/usr/lib"; do
+			if [ -f "$_dir/libtinfo.so.6" ]; then
+				_libtinfo_src="$_dir/libtinfo.so.6"
+				break
+			fi
+		done
+		if [ -z "$_libtinfo_src" ]; then
+			_libtinfo_host=$(find /lib /usr/lib -name "libtinfo.so.6" 2>/dev/null | head -1)
+			if [ -n "$_libtinfo_host" ]; then
+				run_privileged mkdir -p "$LFS/lib"
+				run_privileged cp -Lv "$_libtinfo_host" "$LFS/lib/libtinfo.so.6"
+				log_info "Copied libtinfo.so.6 from host to chroot /lib"
+			else
+				log_warning "libtinfo.so.6 not found – chroot bash may fail after glibc install"
+			fi
+		else
+			run_privileged cp -v "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"
+		fi
 	fi
 
 	# If the toolchain built a newer liblzma (e.g. xz-5.6+), prefer it over the
