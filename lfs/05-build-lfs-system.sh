@@ -230,30 +230,40 @@ find_archive() {
 }
 
 # ---- Install Linux API headers into /usr/include ----
-echo "Installing Linux API headers"
-LINUX_ARCHIVE=$(find_archive linux)
-if [ -z "$LINUX_ARCHIVE" ]; then
-    echo "ERROR: linux source not found"
-    echo "Available source archives:"
-    ls -la
-    exit 1
+# The toolchain stage (04-build-toolchain.sh) installs Linux API headers to
+# $LFS/usr/include before entering the chroot.  Re-use them when already
+# present to avoid invoking make inside a chroot where the host gcc is not
+# accessible.  When the headers are absent (e.g. partial resume), fall back
+# to a full installation using the cross-compiler with --sysroot=/ so that
+# it can locate the C headers already present in the chroot under /usr/include.
+if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then
+    echo "Linux API headers already present from toolchain stage, skipping reinstallation"
+else
+    echo "Installing Linux API headers"
+    LINUX_ARCHIVE=$(find_archive linux)
+    if [ -z "$LINUX_ARCHIVE" ]; then
+        echo "ERROR: linux source not found"
+        echo "Available source archives:"
+        ls -la
+        exit 1
+    fi
+    echo "Extracting $LINUX_ARCHIVE"
+    tar -xf "$LINUX_ARCHIVE"
+    LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    if [ ! -d "$LINUX_DIR" ]; then
+        echo "ERROR: extracted directory $LINUX_DIR not found"
+        exit 1
+    fi
+    cd "$LINUX_DIR"
+    make mrproper
+    make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers
+    find usr/include -name '.*' -delete
+    rm -f usr/include/Makefile
+    cp -rv usr/include/. /usr/include
+    cd /sources
+    rm -rf "$LINUX_DIR"
+    echo "Linux headers installed"
 fi
-echo "Extracting $LINUX_ARCHIVE"
-tar -xf "$LINUX_ARCHIVE"
-LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
-if [ ! -d "$LINUX_DIR" ]; then
-    echo "ERROR: extracted directory $LINUX_DIR not found"
-    exit 1
-fi
-cd "$LINUX_DIR"
-make mrproper
-make HOSTCC=gcc headers
-find usr/include -name '.*' -delete
-rm -f usr/include/Makefile
-cp -rv usr/include/. /usr/include
-cd /sources
-rm -rf "$LINUX_DIR"
-echo "Linux headers installed"
 
 # ---- Set cross-compiler variables ----
 CC="${LFS_TGT}-gcc"
