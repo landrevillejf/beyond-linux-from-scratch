@@ -1,0 +1,22 @@
+# LFS 13.0 — 8.41. Inetutils-2.6
+name="inetutils"
+version="2.6"
+source="https://ftp.gnu.org/gnu/inetutils/inetutils-2.6.tar.xz"
+desc="Basic networking utilities"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr        \
+                --bindir=/usr/bin    \
+                --localstatedir=/var \
+                --disable-logger     \
+                --disable-whois      \
+                --disable-rcp        \
+                --disable-rexec      \
+                --disable-rlogin     \
+                --disable-rsh        \
+                --disable-servers
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    mv -v "$PKG/usr/bin/ifconfig" "$PKG/usr/sbin/ifconfig"
+}

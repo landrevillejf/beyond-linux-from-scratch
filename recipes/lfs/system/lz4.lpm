@@ -1,0 +1,11 @@
+# LFS 13.0 — 8.9. Lz4-1.10.0
+name="lz4"
+version="1.10.0"
+source="https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz"
+desc="Fast compression algorithm library and tools"
+deps="glibc"
+
+build() {
+    make BUILD_STATIC=no PREFIX=/usr -j"$(nproc)"
+    make BUILD_STATIC=no PREFIX=/usr DESTDIR="$PKG" install
+}

@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.55. Setuptools-80.9.0
+name="setuptools"
+version="80.9.0"
+source="https://pypi.org/packages/source/s/setuptools/setuptools-80.9.0.tar.gz"
+desc="Python packaging build system"
+deps="wheel"
+
+build() {
+    pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
+    pip3 install --no-index --no-user --find-links dist \
+         --root="$PKG" setuptools
+}

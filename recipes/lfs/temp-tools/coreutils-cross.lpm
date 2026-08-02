@@ -1,0 +1,23 @@
+# LFS 13.0 — 6.5. Coreutils-9.7 (cross)
+name="coreutils-cross"
+version="9.7"
+source="https://ftp.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz"
+desc="GNU core utilities (temporary)"
+deps="bash-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr                        \
+                --host="$LFS_TGT"                    \
+                --build="$(build-aux/config.guess)"  \
+                --enable-install-program=hostname    \
+                --enable-no-install-program=kill,uptime \
+                gl_cv_macro_MB_CUR_MAX_good=y
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+
+    mv -v "$LFS/usr/bin/chroot" "$LFS/usr/sbin"
+    mkdir -pv "$LFS/usr/share/man/man8"
+    mv -v "$LFS/usr/share/man/man1/chroot.1" "$LFS/usr/share/man/man8/chroot.8"
+    sed -i 's/"1"/"8"/' "$LFS/usr/share/man/man8/chroot.8"
+}

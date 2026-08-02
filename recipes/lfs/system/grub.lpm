@@ -1,0 +1,21 @@
+# LFS 13.0 — 8.64. GRUB-2.12 (BIOS)
+name="grub"
+version="2.12"
+source="https://ftp.gnu.org/gnu/grub/grub-2.12.tar.xz"
+desc="GRand Unified Bootloader (BIOS target)"
+deps="glibc"
+
+build() {
+    unset "${!GRUB_@}"
+    ./configure --prefix=/usr          \
+                --sysconfdir=/etc      \
+                --disable-efiemu       \
+                --disable-werror
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    if [ -f "$PKG/etc/bash_completion.d/grub" ]; then
+        install -vdm755 "$PKG/usr/share/bash-completion/completions"
+        mv -v "$PKG/etc/bash_completion.d/grub" \
+              "$PKG/usr/share/bash-completion/completions/grub"
+    fi
+}

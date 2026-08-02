@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.44. XML::Parser-2.47
+name="xml-parser"
+version="2.47"
+source="https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.47.tar.gz"
+desc="Perl module interface to expat"
+deps="expat perl"
+
+build() {
+    perl Makefile.PL
+    make -j"$(nproc)"
+    make install DESTDIR="$PKG"
+}

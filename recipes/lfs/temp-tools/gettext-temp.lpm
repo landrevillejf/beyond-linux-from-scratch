@@ -1,0 +1,13 @@
+# LFS 13.0 — 7.7. Gettext-0.26 (chroot temporary)
+# Installs only the three programs needed to build the final system.
+name="gettext-temp"
+version="0.26"
+source="https://ftp.gnu.org/gnu/gettext/gettext-0.26.tar.xz"
+desc="GNU internationalization tools (temporary)"
+deps="gcc-pass2"
+
+build() {
+    ./configure --disable-shared
+    make -j"$(nproc)"
+    cp -v gettext-tools/src/{msgfmt,msgmerge,xgettext} /usr/bin
+}

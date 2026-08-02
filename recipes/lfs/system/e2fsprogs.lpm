@@ -1,0 +1,21 @@
+# LFS 13.0 — 8.82. E2fsprogs-1.47.3
+name="e2fsprogs"
+version="1.47.3"
+source="https://downloads.sourceforge.net/project/e2fsprogs/e2fsprogs/v1.47.3/e2fsprogs-1.47.3.tar.gz"
+desc="Ext2/3/4 filesystem utilities"
+deps="util-linux"
+
+build() {
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr           \
+                 --sysconfdir=/etc       \
+                 --enable-elf-shlibs     \
+                 --disable-libblkid      \
+                 --disable-libuuid       \
+                 --disable-uuidd         \
+                 --disable-fsck
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    rm -fv "$PKG"/usr/lib/{libcom_err,libe2p,libext2fs,libss}.a
+}

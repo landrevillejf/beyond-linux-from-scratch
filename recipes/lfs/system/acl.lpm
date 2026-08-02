@@ -1,0 +1,14 @@
+# LFS 13.0 — 8.25. Acl-2.3.2
+name="acl"
+version="2.3.2"
+source="https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz"
+desc="Access control list utilities"
+deps="attr"
+
+build() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir=/usr/share/doc/acl-2.3.2
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

@@ -1,0 +1,21 @@
+# LFS 13.0 — 8.12. Readline-8.3
+name="readline"
+version="8.3"
+source="https://ftp.gnu.org/gnu/readline/readline-8.3.tar.gz"
+desc="Command line editing library"
+deps="glibc"
+
+build() {
+    sed -i '/MV.*old/d' Makefile.in
+    sed -i '/{OLDSUFF}/c:' support/shlib-install
+    sed -i 's/-Wl,-rpath,[^ ]*//' support/shobj-conf
+
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --with-curses    \
+                --docdir=/usr/share/doc/readline-8.3
+    make SHLIB_LIBS="-lncursesw" -j"$(nproc)"
+    make DESTDIR="$PKG" SHLIB_LIBS="-lncursesw" install
+    install -v -m644 doc/*.{ps,pdf,html,dvi} \
+        "$PKG/usr/share/doc/readline-8.3" 2>/dev/null || true
+}

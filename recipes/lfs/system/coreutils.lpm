@@ -1,0 +1,27 @@
+# LFS 13.0 — 8.58. Coreutils-9.7 (final)
+name="coreutils"
+version="9.7"
+source="https://ftp.gnu.org/gnu/coreutils/coreutils-9.7.tar.xz"
+desc="GNU core utilities"
+deps="glibc"
+
+build() {
+    source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
+    local patch
+    patch=$(companion "coreutils-9.7-i18n-1.patch" \
+        "https://www.linuxfromscratch.org/patches/lfs/13.0/coreutils-9.7-i18n-1.patch") || true
+    [ -f "$patch" ] && patch -Np1 -i "$patch"
+    autoreconf -fiv
+    automake -a 2>/dev/null || true
+
+    FORCE_UNSAFE_CONFIGURE=1 ./configure \
+                --prefix=/usr            \
+                --enable-no-install-program=kill,uptime
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+
+    mv -v "$PKG/usr/bin/chroot" "$PKG/usr/sbin"
+    mkdir -pv "$PKG/usr/share/man/man8"
+    mv -v "$PKG/usr/share/man/man1/chroot.1" "$PKG/usr/share/man/man8/chroot.8"
+    sed -i 's/"1"/"8"/' "$PKG/usr/share/man/man8/chroot.8"
+}

@@ -1,0 +1,15 @@
+# LFS 13.0 — 6.10. Grep-3.12 (cross)
+name="grep-cross"
+version="3.12"
+source="https://ftp.gnu.org/gnu/grep/grep-3.12.tar.xz"
+desc="Pattern matching utilities (temporary)"
+deps="gawk-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr   \
+                --host="$LFS_TGT" \
+                --build="$(./build-aux/config.guess)"
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+}

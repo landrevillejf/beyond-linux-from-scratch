@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.24. Attr-2.5.2
+name="attr"
+version="2.5.2"
+source="https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz"
+desc="Extended attribute management utilities"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr     \
+                --disable-static  \
+                --sysconfdir=/etc \
+                --docdir=/usr/share/doc/attr-2.5.2
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.70. Patch-2.8 (final)
+name="patch"
+version="2.8"
+source="https://ftp.gnu.org/gnu/patch/patch-2.8.tar.xz"
+desc="Apply diff files to originals"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

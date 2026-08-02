@@ -234,10 +234,29 @@ desc="My application"
 deps="glibc>=2.37,openssl"
 
 build() {
-./configure --prefix=/usr
-make -j$(nproc)
+    # Exported by the engine: PKG (staging dir), SRC (source dir), JOBS (parallel jobs)
+    ./configure --prefix=/usr
+    make -j"$JOBS"
+    make DESTDIR="$PKG" install
 }
 ```
+
+Inside `build()` the current directory is the extracted source tree and these
+variables are available:
+
+| Variable | Meaning |
+|----------|---------|
+| `PKG`    | Staging directory — install here (`make DESTDIR="$PKG" install`) so the files are packaged and tracked. |
+| `SRC`    | The extracted source directory (equal to the current directory). |
+| `JOBS`   | Configured parallel job count (`BUILD_JOBS`). |
+
+> **Building a whole LFS system with recipes.** The repository ships a complete,
+> ordered set of recipes that reconstruct LFS 13.0 (cross-toolchain → temporary
+> tools → final system) under [`recipes/lfs/`](https://github.com/landrevillejf/beyond-linux-from-scratch/tree/main/recipes/lfs).
+> Use `recipes/lfs/build-all.sh` to drive the full build. See
+> `recipes/lfs/README.md` for details.
+
+
 Examples:
 
 ```bash

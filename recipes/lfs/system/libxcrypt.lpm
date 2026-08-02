@@ -1,0 +1,16 @@
+# LFS 13.0 — 8.27. Libxcrypt-4.4.38
+name="libxcrypt"
+version="4.4.38"
+source="https://github.com/besser82/libxcrypt/releases/download/v4.4.38/libxcrypt-4.4.38.tar.xz"
+desc="Modern password hashing library"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr                \
+                --enable-hashes=strong,glibc \
+                --enable-obsolete-api=no     \
+                --disable-static             \
+                --disable-failure-tokens
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

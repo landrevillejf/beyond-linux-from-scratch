@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.69. Make-4.4.1 (final)
+name="make"
+version="4.4.1"
+source="https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz"
+desc="GNU make build tool"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

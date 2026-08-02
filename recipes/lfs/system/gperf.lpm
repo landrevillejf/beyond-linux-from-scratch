@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.39. Gperf-3.3
+name="gperf"
+version="3.3"
+source="https://ftp.gnu.org/gnu/gperf/gperf-3.3.tar.gz"
+desc="Perfect hash function generator"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr --docdir=/usr/share/doc/gperf-3.3
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

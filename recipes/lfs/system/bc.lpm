@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.14. Bc-7.0.3
+name="bc"
+version="7.0.3"
+source="https://github.com/gavinhoward/bc/releases/download/7.0.3/bc-7.0.3.tar.xz"
+desc="Arbitrary precision numeric processing language"
+deps="readline"
+
+build() {
+    CC=gcc ./configure --prefix=/usr -G -O3 -r
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

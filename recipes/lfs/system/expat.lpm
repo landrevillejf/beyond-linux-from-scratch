@@ -1,0 +1,14 @@
+# LFS 13.0 — 8.40. Expat-2.7.1
+name="expat"
+version="2.7.1"
+source="https://github.com/libexpat/libexpat/releases/download/R_2_7_1/expat-2.7.1.tar.xz"
+desc="XML parsing library"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir=/usr/share/doc/expat-2.7.1
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

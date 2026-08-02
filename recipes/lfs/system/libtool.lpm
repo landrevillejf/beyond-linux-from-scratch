@@ -1,0 +1,13 @@
+# LFS 13.0 — 8.37. Libtool-2.5.4
+name="libtool"
+version="2.5.4"
+source="https://ftp.gnu.org/gnu/libtool/libtool-2.5.4.tar.xz"
+desc="Generic library support script"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    rm -fv "$PKG/usr/lib/libltdl.a"
+}

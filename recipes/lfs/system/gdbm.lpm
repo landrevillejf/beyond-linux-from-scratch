@@ -1,0 +1,14 @@
+# LFS 13.0 — 8.38. GDBM-1.26
+name="gdbm"
+version="1.26"
+source="https://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz"
+desc="GNU database manager library"
+deps="readline"
+
+build() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --enable-libgdbm-compat
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.4. Iana-Etc-20250807
+# Data-only package: network service and protocol names.
+name="iana-etc"
+version="20250807"
+source="https://github.com/Mic92/iana-etc/releases/download/20250807/iana-etc-20250807.tar.gz"
+desc="Data for network services and protocols"
+deps=""
+
+build() {
+    install -vdm755 "$PKG/etc"
+    cp -v services protocols "$PKG/etc"
+}

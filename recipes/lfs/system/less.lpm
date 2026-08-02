@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.42. Less-679
+name="less"
+version="679"
+source="https://www.greenwoodsoftware.com/less/less-679.tar.gz"
+desc="Terminal-based file pager"
+deps="ncurses"
+
+build() {
+    ./configure --prefix=/usr --sysconfdir=/etc
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.71. Tar-1.35 (final)
+name="tar"
+version="1.35"
+source="https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz"
+desc="Tape archiver"
+deps="glibc"
+
+build() {
+    FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

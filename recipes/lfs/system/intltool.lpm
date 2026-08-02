@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.45. Intltool-0.51.0
+name="intltool"
+version="0.51.0"
+source="https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz"
+desc="Internationalization tool for gettext"
+deps="xml-parser"
+
+build() {
+    sed -i 's:\\\${:\\\$\\{:' intltool-update.in
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make install DESTDIR="$PKG"
+    install -v -Dm644 doc/I18N-HOWTO \
+        "$PKG/usr/share/doc/intltool-0.51.0/I18N-HOWTO"
+}

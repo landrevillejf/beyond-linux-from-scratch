@@ -1,0 +1,13 @@
+# LFS 13.0 — 6.11. Gzip-1.14 (cross)
+name="gzip-cross"
+version="1.14"
+source="https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.xz"
+desc="GNU compression utilities (temporary)"
+deps="grep-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr --host="$LFS_TGT"
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+}

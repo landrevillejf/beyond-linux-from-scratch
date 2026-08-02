@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.32. Psmisc-23.7
+name="psmisc"
+version="23.7"
+source="https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.7.tar.xz"
+desc="Utilities for the /proc filesystem"
+deps="ncurses"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

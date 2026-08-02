@@ -1,3 +1,5 @@
+### TODO
+
 Oui, absolument. Avec la nouvelle commande `build` et les recettes, LPM peut être utilisé **durant la construction du système LFS** pour compiler et installer les paquets un par un, de manière automatisée et reproductible.
 
 C’est même l’un des cas d’usage principaux de cette fonctionnalité : on peut remplacer les traditionnels `tar -xf`, `./configure`, `make`, `make install` par des recettes LPM qui décrivent exactement les mêmes étapes. LPM s’occupera alors de :

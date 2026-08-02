@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.62. Findutils-4.10.0 (final)
+name="findutils"
+version="4.10.0"
+source="https://ftp.gnu.org/gnu/findutils/findutils-4.10.0.tar.xz"
+desc="Utilities to find files"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr --localstatedir=/var/lib/locate
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

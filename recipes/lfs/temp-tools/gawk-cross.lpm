@@ -1,0 +1,16 @@
+# LFS 13.0 — 6.9. Gawk-5.3.2 (cross)
+name="gawk-cross"
+version="5.3.2"
+source="https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz"
+desc="GNU awk text processing (temporary)"
+deps="findutils-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    sed -i 's/extras//' Makefile.in
+    ./configure --prefix=/usr   \
+                --host="$LFS_TGT" \
+                --build="$(build-aux/config.guess)"
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+}

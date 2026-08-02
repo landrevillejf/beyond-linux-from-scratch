@@ -1,0 +1,34 @@
+# LFS 13.0 — 8.29. GCC-15.2.0 (final)
+# NOTE: post-install steps that must run in the live system (moving *gdb.py to
+# /usr/share/gdb/auto-load, registering the LTO plugin) are handled by the
+# system stage scripts. This recipe stages the compiler files for LPM.
+name="gcc"
+version="15.2.0"
+source="https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz"
+desc="GNU Compiler Collection"
+deps="binutils mpc"
+
+build() {
+    case $(uname -m) in
+        x86_64)
+            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+    esac
+
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr            \
+                 LD=ld                    \
+                 --enable-languages=c,c++ \
+                 --enable-default-pie     \
+                 --enable-default-ssp     \
+                 --enable-host-pie        \
+                 --disable-multilib       \
+                 --disable-bootstrap      \
+                 --disable-fixincludes    \
+                 --with-system-zlib
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    ln -svr "$PKG/usr/bin/cpp" "$PKG/usr/lib"
+    ln -sfv gcc "$PKG/usr/bin/cc"
+}

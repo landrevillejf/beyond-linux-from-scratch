@@ -1,0 +1,13 @@
+# LFS 13.0 — 8.6. Zlib-1.3.1
+name="zlib"
+version="1.3.1"
+source="https://zlib.net/fossils/zlib-1.3.1.tar.gz"
+desc="Compression library"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    rm -fv "$PKG/usr/lib/libz.a"
+}

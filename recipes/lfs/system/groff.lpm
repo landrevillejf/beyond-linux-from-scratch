@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.63. Groff-1.23.0
+name="groff"
+version="1.23.0"
+source="https://ftp.gnu.org/gnu/groff/groff-1.23.0.tar.gz"
+desc="Document formatting system"
+deps="perl"
+
+build() {
+    PAGE=letter ./configure --prefix=/usr
+    make -j1
+    make DESTDIR="$PKG" install
+}

@@ -1,0 +1,28 @@
+# LFS 13.0 — 6.17. Binutils-2.45 (Pass 2)
+name="binutils-pass2"
+version="2.45"
+source="https://sourceware.org/pub/binutils/releases/binutils-2.45.tar.xz"
+desc="GNU Binutils (temporary pass 2)"
+deps="xz-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    sed '6031s/$add_dir//' -i ltmain.sh
+
+    mkdir -v build
+    cd build
+    ../configure                   \
+        --prefix=/usr              \
+        --build="$(../config.guess)" \
+        --host="$LFS_TGT"         \
+        --disable-nls             \
+        --enable-shared           \
+        --enable-gprofng=no       \
+        --disable-werror          \
+        --enable-64-bit-bfd       \
+        --enable-new-dtags        \
+        --enable-default-hash-style=gnu
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+    rm -v "$LFS"/usr/lib/lib{bfd,ctf,ctf-nobfd,opcodes,sframe}.{a,la}
+}

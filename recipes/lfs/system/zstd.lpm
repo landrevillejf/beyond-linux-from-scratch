@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.10. Zstd-1.5.7
+name="zstd"
+version="1.5.7"
+source="https://github.com/facebook/zstd/releases/download/v1.5.7/zstd-1.5.7.tar.gz"
+desc="Zstandard real-time compression library"
+deps="glibc"
+
+build() {
+    make prefix=/usr -j"$(nproc)"
+    make prefix=/usr DESTDIR="$PKG" install
+    rm -v "$PKG/usr/lib/libzstd.a"
+}

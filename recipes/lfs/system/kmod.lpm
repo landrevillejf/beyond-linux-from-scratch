@@ -1,0 +1,18 @@
+# LFS 13.0 — 8.49. Kmod-34.2 (meson build)
+name="kmod"
+version="34.2"
+source="https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.2.tar.xz"
+desc="Linux kernel module handling utilities"
+deps="zstd openssl"
+
+build() {
+    mkdir -p build
+    cd build
+    meson setup --prefix=/usr       \
+                --sbindir=/usr/bin  \
+                --buildtype=release \
+                -D manpages=false   \
+                ..
+    ninja
+    DESTDIR="$PKG" ninja install
+}

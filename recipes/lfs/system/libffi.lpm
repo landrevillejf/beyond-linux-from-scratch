@@ -1,0 +1,14 @@
+# LFS 13.0 — 8.51. Libffi-3.5.2
+name="libffi"
+version="3.5.2"
+source="https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz"
+desc="Foreign Function Interface library"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr          \
+                --disable-static       \
+                --with-gcc-arch=native
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

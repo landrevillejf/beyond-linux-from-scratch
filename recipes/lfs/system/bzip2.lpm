@@ -1,0 +1,30 @@
+# LFS 13.0 — 8.7. Bzip2-1.0.8
+name="bzip2"
+version="1.0.8"
+source="https://www.sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz"
+desc="Block-sorting compression utilities"
+deps="glibc"
+
+build() {
+    source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
+    local patch
+    patch=$(companion "bzip2-1.0.8-install_docs-1.patch" \
+        "https://www.linuxfromscratch.org/patches/lfs/13.0/bzip2-1.0.8-install_docs-1.patch") || true
+    [ -f "$patch" ] && patch -Np1 -i "$patch"
+
+    sed -i 's@\(ln -s -f \)$(PREFIX)/bin/@\1@' Makefile
+    sed -i "s@(PREFIX)/man@(PREFIX)/share/man@g" Makefile
+
+    make -f Makefile-libbz2_so
+    make clean
+    make
+    make PREFIX="$PKG/usr" install
+
+    cp -av libbz2.so.* "$PKG/usr/lib"
+    ln -sv libbz2.so.1.0.8 "$PKG/usr/lib/libbz2.so"
+    cp -v bzip2-shared "$PKG/usr/bin/bzip2"
+    for i in "$PKG"/usr/bin/{bzcat,bunzip2}; do
+        ln -sfv bzip2 "$i"
+    done
+    rm -fv "$PKG/usr/lib/libbz2.a"
+}

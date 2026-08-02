@@ -1,0 +1,17 @@
+# LFS 13.0 — 8.50. Elfutils-0.193 (libelf)
+# Only libelf is installed here (full elfutils is not needed by base LFS).
+name="libelf"
+version="0.193"
+source="https://sourceware.org/ftp/elfutils/0.193/elfutils-0.193.tar.bz2"
+desc="Library for handling ELF object files"
+deps="zstd"
+
+build() {
+    ./configure --prefix=/usr                \
+                --disable-debuginfod         \
+                --enable-libdebuginfod=dummy
+    make -j"$(nproc)"
+    make -C libelf DESTDIR="$PKG" install
+    install -vm644 config/libelf.pc "$PKG/usr/lib/pkgconfig"
+    rm -fv "$PKG/usr/lib/libelf.a"
+}

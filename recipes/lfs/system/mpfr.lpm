@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.22. MPFR-4.2.2
+name="mpfr"
+version="4.2.2"
+source="https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz"
+desc="Multiple-precision floating-point library"
+deps="gmp"
+
+build() {
+    ./configure --prefix=/usr        \
+                --disable-static     \
+                --enable-thread-safe \
+                --docdir=/usr/share/doc/mpfr-4.2.2
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

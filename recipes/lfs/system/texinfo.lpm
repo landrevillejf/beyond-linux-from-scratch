@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.72. Texinfo-7.2 (final)
+name="texinfo"
+version="7.2"
+source="https://ftp.gnu.org/gnu/texinfo/texinfo-7.2.tar.xz"
+desc="Documentation system for on-line and printed manuals"
+deps="ncurses"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

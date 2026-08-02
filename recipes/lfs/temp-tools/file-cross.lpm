@@ -1,0 +1,23 @@
+# LFS 13.0 — 6.7. File-5.46 (cross)
+name="file-cross"
+version="5.46"
+source="https://astron.com/pub/file/file-5.46.tar.gz"
+desc="File type recognition utility (temporary)"
+deps="diffutils-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    mkdir build
+    pushd build
+        ../configure --disable-bzlib      \
+                     --disable-libseccomp \
+                     --disable-xzlib      \
+                     --disable-zlib
+        make
+    popd
+
+    ./configure --prefix=/usr --host="$LFS_TGT" --build="$(./config.guess)"
+    make FILE_COMPILE="$(pwd)/build/src/file"
+    make DESTDIR="$LFS" install
+    rm -v "$LFS/usr/lib/libmagic.la"
+}

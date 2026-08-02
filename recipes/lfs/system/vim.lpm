@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.73. Vim-9.1.1629
+name="vim"
+version="9.1.1629"
+source="https://github.com/vim/vim/archive/v9.1.1629/vim-9.1.1629.tar.gz"
+desc="Vi IMproved text editor"
+deps="ncurses"
+
+build() {
+    echo '#define SYS_VIMRC_FILE "/etc/vimrc"' >> src/feature.h
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    ln -sv vim "$PKG/usr/bin/vi"
+    ln -sv vim.1 "$PKG/usr/share/man/man1/vi.1"
+}

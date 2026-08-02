@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.26. Libcap-2.76
+name="libcap"
+version="2.76"
+source="https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.76.tar.xz"
+desc="POSIX capabilities library"
+deps="glibc"
+
+build() {
+    sed -i '/install -m.*STA/d' libcap/Makefile
+    make prefix=/usr lib=lib -j"$(nproc)"
+    make prefix=/usr lib=lib DESTDIR="$PKG" install
+}

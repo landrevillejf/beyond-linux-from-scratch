@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.75. Jinja2-3.1.6
+name="jinja2"
+version="3.1.6"
+source="https://pypi.org/packages/source/J/Jinja2/jinja2-3.1.6.tar.gz"
+desc="Python templating engine"
+deps="markupsafe"
+
+build() {
+    pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
+    pip3 install --no-index --no-user --find-links dist \
+         --root="$PKG" Jinja2
+}

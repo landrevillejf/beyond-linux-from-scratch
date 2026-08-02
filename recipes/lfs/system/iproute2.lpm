@@ -1,0 +1,13 @@
+# LFS 13.0 — 8.66. IPRoute2-6.16.0
+name="iproute2"
+version="6.16.0"
+source="https://www.kernel.org/pub/linux/utils/net/iproute2/iproute2-6.16.0.tar.xz"
+desc="IP and network traffic control utilities"
+deps="libelf"
+
+build() {
+    sed -i /ARPD/d Makefile
+    rm -fv man/man8/arpd.8
+    make NETNS_RUN_DIR=/run/netns -j"$(nproc)"
+    make SBINDIR=/usr/sbin DESTDIR="$PKG" install
+}

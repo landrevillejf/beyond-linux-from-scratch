@@ -1,0 +1,38 @@
+# LFS 13.0 — 8.76/8.77. Systemd-257.8 (also provides udev)
+# NOTE: runtime setup (machine-id, systemd-sysusers, presets) is performed by
+# the system stage scripts. Use recipes/lfs/system/sysvinit.lpm instead if the
+# build profile selects a SysVinit userland.
+name="systemd"
+version="257.8"
+source="https://github.com/systemd/systemd/archive/v257.8/systemd-257.8.tar.gz"
+desc="System and service manager (with udev)"
+deps="kmod libcap util-linux"
+
+build() {
+    sed -e 's/GROUP="render"/GROUP="video"/' \
+        -e 's/GROUP="sgx", //' -i rules.d/50-udev-default.rules.in
+
+    mkdir -p build
+    cd build
+    meson setup ..                  \
+          --prefix=/usr             \
+          --buildtype=release       \
+          -D default-dnssec=no      \
+          -D firstboot=false        \
+          -D install-tests=false    \
+          -D ldconfig=false         \
+          -D sysusers=false         \
+          -D rpmmacrosdir=no        \
+          -D homed=disabled         \
+          -D userdb=false           \
+          -D man=disabled           \
+          -D mode=release           \
+          -D pamconfdir=no          \
+          -D dev-kvm-mode=0660      \
+          -D nobody-group=nogroup   \
+          -D sysupdate=disabled     \
+          -D ukify=disabled         \
+          -D docdir=/usr/share/doc/systemd-257.8
+    ninja
+    DESTDIR="$PKG" ninja install
+}

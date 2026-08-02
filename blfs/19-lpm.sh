@@ -57,7 +57,7 @@ _apply_color() {
 }
 
 log_info()  { 
-    $QUIET || echo -e "$(_apply_color "${C_GREEN}")[INFO]$(_apply_color "${C_NC}") $*"
+    $QUIET || echo -e "$(_apply_color "${C_GREEN}")[INFO]$(_apply_color "${C_NC}") $*" >&2
 }
 log_warn()  { 
     echo -e "$(_apply_color "${C_YELLOW}")[WARNING]$(_apply_color "${C_NC}") $*" >&2
@@ -66,10 +66,10 @@ log_error() {
     echo -e "$(_apply_color "${C_RED}")[ERROR]$(_apply_color "${C_NC}") $*" >&2
 }
 log_success(){ 
-    echo -e "$(_apply_color "${C_GREEN}")[SUCCESS]$(_apply_color "${C_NC}") $*"
+    echo -e "$(_apply_color "${C_GREEN}")[SUCCESS]$(_apply_color "${C_NC}") $*" >&2
 }
 log_verbose(){ 
-    $VERBOSE && echo -e "$(_apply_color "${C_BLUE}")[DEBUG]$(_apply_color "${C_NC}") $*" || true
+    $VERBOSE && echo -e "$(_apply_color "${C_BLUE}")[DEBUG]$(_apply_color "${C_NC}") $*" >&2 || true
 }
 
 # ======================================================================
@@ -485,8 +485,11 @@ install_package() {
     fi
     
     local pkg_dir="$LPM_DB/$pkg_name-$pkg_version"
+    rm -rf "$pkg_dir"
     mkdir -p "$pkg_dir"
-    tar -xf "$pkg_file" -C "$pkg_dir" --no-same-owner --strip-components=0
+    # Package archives are laid out as "<name>-<version>/{files,hooks}" (see docs);
+    # strip that leading directory so files land directly under $pkg_dir.
+    tar -xf "$pkg_file" -C "$pkg_dir" --no-same-owner --strip-components=1
     
     # Pre-install hook
     if [ -x "$pkg_dir/pre-install.sh" ]; then
@@ -926,6 +929,17 @@ run_build() {
         # shellcheck disable=SC1090
         source "$recipe"
         if declare -f build >/dev/null 2>&1; then
+            # Expose build context to the recipe:
+            #   PKG  - staging directory; recipes should `make DESTDIR="$PKG" install`
+            #          so the result is packaged and tracked by LPM.
+            #   SRC  - extracted source directory (== cwd when build() runs).
+            #   JOBS - number of parallel jobs (recipes may use `make -j"$JOBS"`).
+            # Toolchain/temporary phase recipes that install directly into $LFS may
+            # ignore PKG; their package archive will simply be empty.
+            mkdir -p "$staging"
+            export PKG="$staging"
+            export SRC="$srcdir"
+            export JOBS="$BUILD_JOBS"
             cd "$srcdir"
             build
         else
@@ -1204,8 +1218,10 @@ Recipe format (.lpm file):
   desc="My application"
   deps="glibc>=2.37,openssl"
   build() {
+      # Available: PKG (staging dir), SRC (source dir), JOBS (parallel jobs)
       ./configure --prefix=/usr
-      make -j$(nproc)
+      make -j"$JOBS"
+      make DESTDIR="$PKG" install
   }
 
 Configuration (/etc/lpm/lpm.conf):

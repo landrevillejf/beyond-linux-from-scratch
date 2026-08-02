@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.52. Python-3.13.7 (final)
+name="python"
+version="3.13.7"
+source="https://www.python.org/ftp/python/3.13.7/Python-3.13.7.tar.xz"
+desc="Python 3 interpreter and standard library"
+deps="libffi openssl expat"
+
+build() {
+    ./configure --prefix=/usr        \
+                --enable-shared      \
+                --with-system-expat  \
+                --enable-optimizations
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

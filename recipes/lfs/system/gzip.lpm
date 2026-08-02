@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.65. Gzip-1.14 (final)
+name="gzip"
+version="1.14"
+source="https://ftp.gnu.org/gnu/gzip/gzip-1.14.tar.xz"
+desc="GNU compression utilities"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

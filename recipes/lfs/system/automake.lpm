@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.47. Automake-1.18.1
+name="automake"
+version="1.18.1"
+source="https://ftp.gnu.org/gnu/automake/automake-1.18.1.tar.xz"
+desc="Tools for generating Makefile.in files"
+deps="autoconf"
+
+build() {
+    ./configure --prefix=/usr --docdir=/usr/share/doc/automake-1.18.1
+    make -j"$(nproc)"
+    make install DESTDIR="$PKG"
+}

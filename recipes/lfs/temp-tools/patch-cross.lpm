@@ -1,0 +1,15 @@
+# LFS 13.0 — 6.13. Patch-2.8 (cross)
+name="patch-cross"
+version="2.8"
+source="https://ftp.gnu.org/gnu/patch/patch-2.8.tar.xz"
+desc="Apply diff files to originals (temporary)"
+deps="make-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr   \
+                --host="$LFS_TGT" \
+                --build="$(build-aux/config.guess)"
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+}

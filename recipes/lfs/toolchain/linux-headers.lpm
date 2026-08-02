@@ -1,0 +1,14 @@
+# LFS 13.0 — 5.4. Linux-6.16.1 API Headers
+# Exposes the kernel's API headers into $LFS/usr.
+name="linux-headers"
+version="6.16.1"
+source="https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz"
+desc="Sanitised Linux kernel API headers"
+deps="gcc-pass1"
+
+build() {
+    make mrproper
+    make headers
+    find usr/include -type f ! -name '*.h' -delete
+    cp -rv usr/include "$LFS/usr"
+}

@@ -1,0 +1,15 @@
+# LFS 13.0 — 6.15. Tar-1.35 (cross)
+name="tar-cross"
+version="1.35"
+source="https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz"
+desc="Tape archiver (temporary)"
+deps="sed-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr                     \
+                --host="$LFS_TGT"                \
+                --build="$(build-aux/config.guess)"
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+}

@@ -1,0 +1,16 @@
+# LFS 13.0 — 8.19. Pkgconf-2.5.1
+name="pkgconf"
+version="2.5.1"
+source="https://distfiles.ariadne.space/pkgconf/pkgconf-2.5.1.tar.xz"
+desc="System for managing library compile/link flags"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir=/usr/share/doc/pkgconf-2.5.1
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    ln -sv pkgconf "$PKG/usr/bin/pkg-config"
+    ln -sv pkgconf.1 "$PKG/usr/share/man/man1/pkg-config.1"
+}

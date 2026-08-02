@@ -1,0 +1,17 @@
+# LFS 13.0 — 8.78. D-Bus-1.16.2
+name="dbus"
+version="1.16.2"
+source="https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz"
+desc="Freedesktop message bus system"
+deps="systemd expat"
+
+build() {
+    mkdir -p build
+    cd build
+    meson setup --prefix=/usr              \
+                --buildtype=release        \
+                -D session-socket-dir=/tmp \
+                ..
+    ninja
+    DESTDIR="$PKG" ninja install
+}

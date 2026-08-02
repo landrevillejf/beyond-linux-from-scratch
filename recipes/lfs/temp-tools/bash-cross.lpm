@@ -1,0 +1,18 @@
+# LFS 13.0 — 6.4. Bash-5.3 (cross)
+name="bash-cross"
+version="5.3"
+source="https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"
+desc="Bourne-Again SHell (temporary)"
+deps="ncurses-cross"
+
+build() {
+    : "${LFS_TGT:?LFS_TGT must be set}"
+    ./configure --prefix=/usr                      \
+                --build="$(sh support/config.guess)" \
+                --host="$LFS_TGT"                  \
+                --without-bash-malloc              \
+                bash_cv_strtold_broken=no
+    make -j"$(nproc)"
+    make DESTDIR="$LFS" install
+    ln -sv bash "$LFS/usr/bin/sh"
+}

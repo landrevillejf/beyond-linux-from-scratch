@@ -1,0 +1,30 @@
+# LFS 13.0 — 8.5. Glibc-2.42 (final)
+# NOTE: runtime configuration (locale generation, nsswitch.conf, timezone data,
+# ld.so.conf, ldconfig) is performed by the LFS system stage scripts, not here.
+# This recipe stages the library files so LPM can track/package them.
+name="glibc"
+version="2.42"
+source="https://ftp.gnu.org/gnu/glibc/glibc-2.42.tar.xz"
+desc="GNU C Library"
+deps=""
+
+build() {
+    source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"
+    local patch
+    patch=$(companion "glibc-2.42-fhs-1.patch" \
+        "https://www.linuxfromscratch.org/patches/lfs/13.0/glibc-2.42-fhs-1.patch") || true
+    [ -f "$patch" ] && patch -Np1 -i "$patch"
+
+    mkdir -v build
+    cd build
+    echo "rootsbindir=/usr/sbin" > configparms
+    ../configure --prefix=/usr                   \
+                 --disable-werror                \
+                 --enable-kernel=5.4             \
+                 --enable-stack-protector=strong \
+                 --disable-nscd                  \
+                 libc_cv_slibdir=/usr/lib
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    sed '/RTLDLIST=/s@/usr@@g' -i "$PKG/usr/bin/ldd"
+}

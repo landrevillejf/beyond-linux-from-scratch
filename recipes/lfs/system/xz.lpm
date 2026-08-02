@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.8. Xz-5.8.1
+name="xz"
+version="5.8.1"
+source="https://github.com//tukaani-project/xz/releases/download/v5.8.1/xz-5.8.1.tar.xz"
+desc="LZMA compression utilities"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir=/usr/share/doc/xz-5.8.1
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    rm -v "$PKG/usr/lib/liblzma.la"
+}

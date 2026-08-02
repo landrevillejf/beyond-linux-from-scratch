@@ -1,0 +1,12 @@
+# LFS 13.0 — 7.11. Texinfo-7.2 (chroot temporary)
+name="texinfo-temp"
+version="7.2"
+source="https://ftp.gnu.org/gnu/texinfo/texinfo-7.2.tar.xz"
+desc="Documentation system (temporary)"
+deps="python-temp"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make install
+}

@@ -1,0 +1,15 @@
+# LFS 13.0 — 8.21. GMP-6.3.0
+name="gmp"
+version="6.3.0"
+source="https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz"
+desc="GNU Multiple Precision arithmetic library"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr    \
+                --enable-cxx     \
+                --disable-static \
+                --docdir=/usr/share/doc/gmp-6.3.0
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

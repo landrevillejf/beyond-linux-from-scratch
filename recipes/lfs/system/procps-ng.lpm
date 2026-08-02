@@ -1,0 +1,17 @@
+# LFS 13.0 — 8.80. Procps-ng-4.0.5
+name="procps-ng"
+version="4.0.5"
+source="https://sourceforge.net/projects/procps-ng/files/Production/procps-ng-4.0.5.tar.xz"
+desc="Utilities for monitoring the /proc filesystem"
+deps="ncurses systemd"
+
+build() {
+    ./configure --prefix=/usr                            \
+                --docdir=/usr/share/doc/procps-ng-4.0.5  \
+                --disable-static                         \
+                --disable-kill                           \
+                --enable-watch8bit                       \
+                --with-systemd
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

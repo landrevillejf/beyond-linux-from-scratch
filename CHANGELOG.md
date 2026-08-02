@@ -4,6 +4,18 @@
 
 ### Added
 
+- **LFS build recipes for LPM** (`recipes/lfs/`)
+  - Complete, ordered set of `.lpm` recipes reconstructing the entire LFS 13.0 book
+    (cross-toolchain → temporary tools → final system) — one package per recipe
+  - `recipes/lfs/build-order.txt` canonical build order and `recipes/lfs/build-all.sh`
+    driver (supports `--phase`, `--start`, `--dry-run`, `--list`)
+  - Shared helper library `recipes/lfs/lib.sh` (companion-tarball fetcher) and
+    `recipes/lfs/TEMPLATE.lpm`
+  - Final-system recipes install via `DESTDIR="$PKG"` so every package is tracked in
+    the LPM database and can be verified, reinstalled, upgraded and removed
+  - `lpm build` now exports `PKG` (staging dir), `SRC` (source dir) and `JOBS`
+    (parallel jobs) to recipe `build()` functions
+
 - **LPM v2.4.0 quality-of-life features**
   - New `lpm verify` (alias `check`) command to verify the integrity of installed
     packages — compares on-disk files against the pristine copies in the package
@@ -23,6 +35,13 @@
   - Modular system composition workflow: start minimal, add profiles incrementally
 
 ### Fixed
+- **LPM `build`/`install` package pipeline** — made source builds installable
+  - Routed `log_info`/`log_success`/`log_verbose` to stderr so value-returning
+    helpers (`fetch_source`, `assemble_package`, `fetch_package`) no longer leak
+    log lines into captured return values (which corrupted checksums and paths)
+  - Fixed package extraction in `install_package` to strip the leading
+    `<name>-<version>/` directory (`--strip-components=1`), so packaged files are
+    actually copied into the install root instead of being silently skipped
 - **LPM Critical Fixes** - Achieved production-ready status
   - Fixed regex escape bug in `parse_dep_spec()` for dependency version constraints
   - Replaced non-portable `sort -V` with pure-bash version comparison (10x faster)

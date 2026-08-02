@@ -1,0 +1,12 @@
+# LFS 13.0 — 8.68. Libpipeline-1.5.8
+name="libpipeline"
+version="1.5.8"
+source="https://download.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz"
+desc="Library for manipulating pipelines of subprocesses"
+deps="glibc"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+}

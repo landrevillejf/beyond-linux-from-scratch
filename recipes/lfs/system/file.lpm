@@ -1,0 +1,13 @@
+# LFS 13.0 — 8.11. File-5.46
+name="file"
+version="5.46"
+source="https://astron.com/pub/file/file-5.46.tar.gz"
+desc="Utility for determining file types"
+deps="zlib"
+
+build() {
+    ./configure --prefix=/usr
+    make -j"$(nproc)"
+    make DESTDIR="$PKG" install
+    rm -v "$PKG/usr/lib/libmagic.la"
+}
