@@ -12,7 +12,7 @@ http://libndp.org/files/libndp-1.9.tar.gz
 http://links.twibright.com/download/links-2.30.tar.bz2
 http://openbox.org/dist/openbox/openbox-3.6.1.tar.gz
 http://people.freedesktop.org/~hughsient/appstream-glib/releases/appstream-glib-0.8.3.tar.xz
-http://www.andre-simon.de/zip/highlight-4.16.tar.bz2
+https://www.andre-simon.de/zip/highlight-4.16.tar.bz2
 http://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20240817.tgz
 https://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz
 https://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
@@ -180,7 +180,7 @@ https://dbus.freedesktop.org/releases/dbus-glib/dbus-glib-0.114.tar.gz
 https://dbus.freedesktop.org/releases/dbus-python/dbus-python-1.4.0.tar.xz
 https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz
 https://dist.libuv.org/dist/v1.51.0/libuv-v1.51.0.tar.gz
-https://distfiles.adelielinux.org/source/a52dec/a52dec-0.8.0.tar.gz
+https://anduin.linuxfromscratch.org/BLFS/a52dec/a52dec-0.8.0.tar.gz
 https://distfiles.ariadne.space/pkgconf/pkgconf-2.5.1.tar.xz
 https://distfiles.audacious-media-player.org/audacious-4.5.tar.bz2
 https://distfiles.audacious-media-player.org/audacious-plugins-4.5.tar.bz2

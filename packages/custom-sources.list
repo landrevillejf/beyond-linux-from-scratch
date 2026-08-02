@@ -94,7 +94,10 @@ https://docs.oasis-open.org/docbook/sgml/4.5/docbook-4.5.zip
 https://download-mirror.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz
 
 # a52dec
-https://distfiles.adelielinux.org/source/a52dec/a52dec-0.8.0.tar.gz
+https://anduin.linuxfromscratch.org/BLFS/a52dec/a52dec-0.8.0.tar.gz
+
+# highlight
+https://www.andre-simon.de/zip/highlight-4.16.tar.bz2
 
 # exim
 https://ftp.exim.org/pub/pub/exim/exim4/exim-4.99.5.tar.gz
