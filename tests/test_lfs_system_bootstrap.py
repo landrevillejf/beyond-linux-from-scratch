@@ -210,3 +210,15 @@ def test_lfs_system_copies_python_stdlib_into_chroot():
 
     assert 'python3 -c "import sysconfig; print(sysconfig.get_path(\'stdlib\'))"' in content
     assert 'run_privileged cp -r "$PYTHON_STDLIB"/. "$LFS$PYTHON_STDLIB"/' in content
+
+
+def test_lfs_system_copies_bison_datadir_into_chroot():
+    """Bootstrapped host bison needs its datadir templates in the chroot.
+    Without /usr/share/bison/m4sugar/m4sugar.m4, glibc's gettext build fails."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert '[ ! -f "$LFS/usr/share/bison/m4sugar/m4sugar.m4" ]' in content
+    assert 'host_bison_datadir="$(bison --print-datadir 2>/dev/null || true)"' in content
+    assert 'run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/' in content
