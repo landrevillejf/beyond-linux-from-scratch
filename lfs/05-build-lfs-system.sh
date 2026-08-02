@@ -6,12 +6,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
-    source "$SCRIPT_DIR/../common/utils.sh"
+	# shellcheck source=/dev/null
+	source "$SCRIPT_DIR/../common/utils.sh"
 else
-    log_info() { echo "[INFO] $*"; }
-    log_error() { echo "[ERROR] $*" >&2; }
-    log_warning() { echo "[WARNING] $*"; }
-    log_success() { echo "[SUCCESS] $*"; }
+	log_info() { echo "[INFO] $*"; }
+	log_error() { echo "[ERROR] $*" >&2; }
+	log_warning() { echo "[WARNING] $*"; }
+	log_success() { echo "[SUCCESS] $*"; }
 fi
 
 KERNEL_TYPE="${KERNEL_TYPE:-linux}"
@@ -22,103 +23,103 @@ LFS_TGT="${LFS_TGT:-$(uname -m)-lfs-linux-gnu}"
 
 IN_DOCKER=false
 if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
-    IN_DOCKER=true
-    log_info "Running in Docker container"
+	IN_DOCKER=true
+	log_info "Running in Docker container"
 fi
 
 if [ "$IN_DOCKER" = true ]; then
-    LFS=${LFS:-/output/image}
+	LFS=${LFS:-/output/image}
 else
-    LFS=${LFS:-/mnt/lfs}
+	LFS=${LFS:-/mnt/lfs}
 fi
 
 if [ -z "$LFS" ]; then
-    log_error "LFS variable not set"
-    exit 1
+	log_error "LFS variable not set"
+	exit 1
 fi
 
 if [ -d "$LFS/image/tools" ] && [ -d "$LFS/image/usr" ] && [ ! -d "$LFS/tools" ]; then
-    log_warning "Detected image-root layout at $LFS/image, switching LFS root"
-    LFS="$LFS/image"
+	log_warning "Detected image-root layout at $LFS/image, switching LFS root"
+	LFS="$LFS/image"
 fi
 
 run_privileged() {
-    if [ "$(whoami)" = "root" ]; then
-        "$@"
-    else
-        sudo "$@"
-    fi
+	if [ "$(whoami)" = "root" ]; then
+		"$@"
+	else
+		sudo "$@"
+	fi
 }
 
 copy_tool_with_libs() {
-    local source_path="$1"
-    local dest_path="$2"
+	local source_path="$1"
+	local dest_path="$2"
 
-    if [ ! -x "$source_path" ]; then
-        return 1
-    fi
+	if [ ! -x "$source_path" ]; then
+		return 1
+	fi
 
-    run_privileged mkdir -p "$(dirname "$dest_path")"
-    run_privileged cp -Lv "$source_path" "$dest_path"
-    run_privileged chmod +x "$dest_path"
+	run_privileged mkdir -p "$(dirname "$dest_path")"
+	run_privileged cp -Lv "$source_path" "$dest_path"
+	run_privileged chmod +x "$dest_path"
 
-    ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} $1 ~ /^\/lib/ {print $1}' | while read -r lib; do
-        [ -z "$lib" ] && continue
-        run_privileged mkdir -p "$LFS$(dirname "$lib")"
-        if [ ! -e "$LFS$lib" ]; then
-            run_privileged cp -Lv "$lib" "$LFS$lib"
-        fi
-    done
+	ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} $1 ~ /^\/lib/ {print $1}' | while read -r lib; do
+		[ -z "$lib" ] && continue
+		run_privileged mkdir -p "$LFS$(dirname "$lib")"
+		if [ ! -e "$LFS$lib" ]; then
+			run_privileged cp -Lv "$lib" "$LFS$lib"
+		fi
+	done
 }
 
 ensure_bootstrap_chroot_shell() {
-    if [ ! -x "$LFS/bin/bash" ]; then
-        log_info "Bootstrapping /bin/bash into chroot"
-        if [ -x "$LFS/usr/bin/bash" ]; then
-            run_privileged mkdir -p "$LFS/bin"
-            run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
-        else
-            local host_bash
-            host_bash="$(command -v bash 2>/dev/null || true)"
-            if [ -z "$host_bash" ] || [ ! -x "$host_bash" ]; then
-                log_error "Unable to locate a host bash binary for chroot bootstrap"
-                exit 1
-            fi
-            copy_tool_with_libs "$host_bash" "$LFS/bin/bash"
-        fi
-    fi
+	if [ ! -x "$LFS/bin/bash" ]; then
+		log_info "Bootstrapping /bin/bash into chroot"
+		if [ -x "$LFS/usr/bin/bash" ]; then
+			run_privileged mkdir -p "$LFS/bin"
+			run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
+		else
+			local host_bash
+			host_bash="$(command -v bash 2>/dev/null || true)"
+			if [ -z "$host_bash" ] || [ ! -x "$host_bash" ]; then
+				log_error "Unable to locate a host bash binary for chroot bootstrap"
+				exit 1
+			fi
+			copy_tool_with_libs "$host_bash" "$LFS/bin/bash"
+		fi
+	fi
 
-    if [ ! -e "$LFS/bin/sh" ]; then
-        run_privileged ln -sfn bash "$LFS/bin/sh"
-    fi
+	if [ ! -e "$LFS/bin/sh" ]; then
+		run_privileged ln -sfn bash "$LFS/bin/sh"
+	fi
 
-    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod gcc ld; do
-        if [ ! -x "$LFS/usr/bin/$tool" ]; then
-            log_info "Bootstrapping /usr/bin/$tool into chroot"
-            local host_tool
-            host_tool="$(command -v "$tool" 2>/dev/null || true)"
-            if [ -n "$host_tool" ] && [ -x "$host_tool" ]; then
-                copy_tool_with_libs "$host_tool" "$LFS/usr/bin/$tool"
-            else
-                log_warning "Host tool '$tool' not found, chroot may fail"
-            fi
-        fi
-    done
+	for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod gcc ld; do
+		if [ ! -x "$LFS/usr/bin/$tool" ]; then
+			log_info "Bootstrapping /usr/bin/$tool into chroot"
+			local host_tool
+			host_tool="$(command -v "$tool" 2>/dev/null || true)"
+			if [ -n "$host_tool" ] && [ -x "$host_tool" ]; then
+				copy_tool_with_libs "$host_tool" "$LFS/usr/bin/$tool"
+			else
+				log_warning "Host tool '$tool' not found, chroot may fail"
+			fi
+		fi
+	done
 
-   # Ensure /bin/awk exists
-   if [ ! -x "$LFS/bin/awk" ]; then
-       if [ -x "$LFS/usr/bin/awk" ]; then
-           run_privileged cp -v "$LFS/usr/bin/awk" "$LFS/bin/awk"
-           run_privileged chmod +x "$LFS/bin/awk"
-       else
-           log_warning "/usr/bin/awk not found in chroot, awk may be missing"
-       fi
-   fi
+	# Ensure /bin/awk exists
+	if [ ! -x "$LFS/bin/awk" ]; then
+		if [ -x "$LFS/usr/bin/awk" ]; then
+			run_privileged cp -v "$LFS/usr/bin/awk" "$LFS/bin/awk"
+			run_privileged chmod +x "$LFS/bin/awk"
+		else
+			log_warning "/usr/bin/awk not found in chroot, awk may be missing"
+		fi
+	fi
 
-   # Copy libtinfo.so.6 to /lib (instead of symlink) to ensure it's found
-   if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
-       run_privileged cp -v "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" "$LFS/lib/libtinfo.so.6"
-   fi
+	# Copy libtinfo.so.6 to /lib (instead of symlink) to ensure it's found
+	if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
+		run_privileged cp -v "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" "$LFS/lib/libtinfo.so.6"
+	fi
 }
 
 log_info "========================================="
@@ -129,31 +130,31 @@ INIT_SYSTEM=${INIT_SYSTEM:-sysvinit}
 log_info "Init system: $INIT_SYSTEM"
 
 if [ "$IN_DOCKER" = true ]; then
-    log_info "Docker mode – skipping compilation"
-    exit 0
+	log_info "Docker mode – skipping compilation"
+	exit 0
 fi
 
 ensure_bootstrap_chroot_shell
 
 if [ ! -f "$LFS/bin/bash" ]; then
-    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
-    exit 1
+	log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+	exit 1
 fi
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot not working – run lfs-basic first"
-    exit 1
+	log_error "chroot not working – run lfs-basic first"
+	exit 1
 fi
 
 # Check for temporary toolchain
 if [ ! -x "$LFS/tools/bin/${LFS_TGT}-gcc" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-ld" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-as" ]; then
-    log_error "Missing temporary toolchain in $LFS/tools/bin (${LFS_TGT}-gcc/${LFS_TGT}-ld/${LFS_TGT}-as)"
-    log_error "Cannot proceed – run lfs-basic first"
-    exit 1
+	log_error "Missing temporary toolchain in $LFS/tools/bin (${LFS_TGT}-gcc/${LFS_TGT}-ld/${LFS_TGT}-as)"
+	log_error "Cannot proceed – run lfs-basic first"
+	exit 1
 fi
 
 if [ ! -x "$LFS/bin/sh" ]; then
-    log_info "Creating /bin/sh symlink"
-    run_privileged ln -sf bash "$LFS/bin/sh"
+	log_info "Creating /bin/sh symlink"
+	run_privileged ln -sf bash "$LFS/bin/sh"
 fi
 
 # -----------------------------------------------------------------
@@ -172,22 +173,22 @@ run_privileged mount --bind /usr "$LFS"/usr 2>/dev/null || true
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
-    log_info "Using existing sources in $SOURCES_DIR"
+	log_info "Using existing sources in $SOURCES_DIR"
 elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
-    log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
-    run_privileged mkdir -p "$SOURCES_DIR"
-    run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
-    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+	log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
+	run_privileged mkdir -p "$SOURCES_DIR"
+	run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
+	run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
-    exit 1
+	log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
+	exit 1
 fi
 
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
-cat > "$LFS/build-lfs-system.sh" << 'INNEREOF'
+cat >"$LFS/build-lfs-system.sh" <<'INNEREOF'
 #!/bin/bash
 set -e
 
@@ -421,8 +422,8 @@ log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
 if [ -x "$LFS/usr/bin/bash" ]; then
-    run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
-    run_privileged ln -sfn bash "$LFS/bin/sh"
+	run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
+	run_privileged ln -sfn bash "$LFS/bin/sh"
 fi
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
