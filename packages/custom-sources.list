@@ -93,12 +93,6 @@ https://docs.oasis-open.org/docbook/sgml/4.5/docbook-4.5.zip
 # libpipeline
 https://download-mirror.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz
 
-# a52dec
-https://anduin.linuxfromscratch.org/BLFS/a52dec/a52dec-0.8.0.tar.gz
-
-# highlight
-https://www.andre-simon.de/zip/highlight-4.16.tar.bz2
-
 # exim
 https://ftp.exim.org/pub/pub/exim/exim4/exim-4.99.5.tar.gz
 
@@ -119,3 +113,6 @@ https://sourceforge.net/projects/mylfs/files/sources/docbook-xml-4.5.zip
 
 # lua – version 5.4.8
 https://sourceforge.net/projects/luabinaries/files/5.4.8/Docs%20and%20Sources/lua-5.4.8_Sources.tar.gz/
+
+# a52dec – version 0.8.0
+https://ftp2.osuosl.org/pub/blfs/conglomeration/a52dec/a52dec-0.8.0.tar.gz
