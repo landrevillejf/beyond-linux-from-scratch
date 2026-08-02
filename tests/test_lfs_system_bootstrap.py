@@ -222,3 +222,30 @@ def test_lfs_system_copies_bison_datadir_into_chroot():
     assert '[ ! -f "$LFS/usr/share/bison/m4sugar/m4sugar.m4" ]' in content
     assert 'host_bison_datadir="$(bison --print-datadir 2>/dev/null || true)"' in content
     assert 'run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/' in content
+
+
+def test_lfs_system_glibc_install_uses_toolchain_bash():
+    """glibc 2.34+ ld.so requires the private __nptl_change_stack_perm symbol
+    from any libc.so.6 it loads.  The bootstrapped /bin/bash is linked against
+    the HOST libc (e.g. /lib/x86_64-linux-gnu/libc.so.6 on ubuntu-latest) which
+    does not expose that private symbol, so make recipes fail the moment the new
+    ld.so is installed.  The inner build script must export
+    SHELL=/tools/bin/bash and the glibc 'make install' must also pass
+    SHELL=/tools/bin/bash explicitly so that all make recipe subshells use the
+    cross-compiled toolchain bash, which links against /usr/lib/libc.so.6
+    (replaced by the new glibc early in the install sequence) and is therefore
+    always ABI-compatible with the new ld.so."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    # Inner script env must use the toolchain bash, not the HOST-bootstrapped one
+    assert 'export SHELL=/tools/bin/bash' in content
+    assert 'export CONFIG_SHELL=/tools/bin/bash' in content
+    assert 'export SHELL=/bin/bash' not in content
+    assert 'export CONFIG_SHELL=/bin/bash' not in content
+
+    # glibc make install must also explicitly pass the toolchain bash
+    assert 'make RM=/tools/bin/rm SHELL=/tools/bin/bash install' in content
+    # The old workaround that used HOST-libc paths must be gone
+    assert 'LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make' not in content
