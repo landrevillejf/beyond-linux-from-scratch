@@ -93,7 +93,7 @@ ensure_bootstrap_chroot_shell() {
 		run_privileged ln -sfn bash "$LFS/bin/sh"
 	fi
 
-	for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld; do
+	for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4; do
 		if [ ! -x "$LFS/usr/bin/$tool" ]; then
 			log_info "Bootstrapping /usr/bin/$tool into chroot"
 			local host_tool
@@ -105,6 +105,15 @@ ensure_bootstrap_chroot_shell() {
 			fi
 		fi
 	done
+
+	# Bootstrap python3 and create python symlink for glibc configure
+	if command -v python3 &>/dev/null && [ ! -x "$LFS/usr/bin/python3" ]; then
+		log_info "Bootstrapping /usr/bin/python3 into chroot"
+		copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"
+	fi
+	if [ ! -e "$LFS/usr/bin/python" ] && [ -x "$LFS/usr/bin/python3" ]; then
+		run_privileged ln -sfn python3 "$LFS/usr/bin/python"
+	fi
 
 	# Ensure /bin/awk exists
 	if [ ! -x "$LFS/bin/awk" ]; then
