@@ -120,6 +120,15 @@ ensure_bootstrap_chroot_shell() {
 	if [ -f "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" ] && [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
 		run_privileged cp -v "$LFS/lib/x86_64-linux-gnu/libtinfo.so.6" "$LFS/lib/libtinfo.so.6"
 	fi
+
+	# If the toolchain built a newer liblzma (e.g. xz-5.6+), prefer it over the
+	# host version.  The host liblzma may be an older rollback package that does
+	# not export the XZ_5.6.0 version symbol required by the cross-compiled xz
+	# binary placed in /tools/bin by the toolchain stage.
+	if [ -f "$LFS/tools/lib/liblzma.so.5" ] && [ -f "$LFS/lib/x86_64-linux-gnu/liblzma.so.5" ]; then
+		run_privileged cp -Lv "$LFS/tools/lib/liblzma.so.5" "$LFS/lib/x86_64-linux-gnu/liblzma.so.5"
+		log_info "Updated /lib/x86_64-linux-gnu/liblzma.so.5 from toolchain"
+	fi
 }
 
 log_info "========================================="
@@ -193,6 +202,7 @@ cat >"$LFS/build-lfs-system.sh" <<'INNEREOF'
 set -e
 
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
+export LD_LIBRARY_PATH=/tools/lib
 export SHELL=/bin/bash
 export CONFIG_SHELL=/bin/bash
 
