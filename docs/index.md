@@ -2,7 +2,7 @@
 
 Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`). Works on Linux, macOS, and Windows (WSL2).
 
-**Version:** 0.52.25  
+**Version:** 0.52.26  
 **Author:** Jean-Francois Landreville
 
 This repository is designed for reproducible, profile‑driven builds and CI/CD publication workflows that separate:
