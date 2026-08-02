@@ -457,7 +457,299 @@ Log files are automatically rotated (deleted) after the number of days configure
 
 ## Architecture
 
-*(The architecture diagrams remain unchanged.)*
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "LPM Package Manager"
+        CLI["Command-Line Interface"]
+        Core["Core Functions"]
+        DB["Database Layer"]
+        Lock["Lock Manager"]
+    end
+    
+    subgraph "Repositories"
+        Local["Local Repository"]
+        Remote["Remote Repository"]
+        Cache["Package Cache"]
+    end
+    
+    subgraph "System Integration"
+        Hooks["Pre/Post Hooks"]
+        FileTrack["File Tracker"]
+        Logs["Logging System"]
+    end
+    
+    CLI -->|install/remove/upgrade| Core
+    Core -->|read/write| DB
+    Core -->|acquire/release| Lock
+    Core -->|fetch packages| Local
+    Core -->|fetch packages| Remote
+    Local --> Cache
+    Remote --> Cache
+    Core -->|track files| FileTrack
+    Core -->|execute| Hooks
+    Core -->|log operations| Logs
+    
+    DB -->|packages.list| Packages["📦 Package Database"]
+    DB -->|installed.list| Installed["✅ Installed Packages"]
+    DB -->|file_index| FileIndex["🗂️ File Index"]
+```
+
+### Command Flow Diagram
+
+```mermaid
+graph LR
+    Start(["lpm install bash"]) -->|Parse args| Parse["Parse: package name<br/>& version constraints"]
+    Parse -->|Check lock| Lock{Lock acquired?}
+    Lock -->|No| Error["❌ Another instance<br/>running"]
+    Lock -->|Yes| Load["📖 Load config &<br/>set up paths"]
+    Load -->|Resolve deps| Resolve["Dependency resolver<br/>with constraints"]
+    Resolve -->|Check cycles| Cycle{Circular<br/>detected?}
+    Cycle -->|Yes| Fail["❌ Abort<br/>(circular dep)"]
+    Cycle -->|No| Order["📋 Topological<br/>sort for install"]
+    Order -->|For each dep| Fetch["Fetch package<br/>from local/remote"]
+    Fetch -->|Verify| Verify{Checksum &<br/>signature OK?}
+    Verify -->|No| Fail
+    Verify -->|Yes| PreInstall["🔨 Run pre-install.sh"]
+    PreInstall -->|Extract| Extract["Extract files<br/>to staging dir"]
+    Extract -->|Backup| Backup["💾 Backup existing<br/>files"]
+    Backup -->|Install| Install["📦 Install files<br/>to system"]
+    Install -->|Track| Track["🗂️ Update file_index<br/>& installed.list"]
+    Track -->|Post-install| PostInstall["✨ Run post-install.sh"]
+    PostInstall -->|Log| Log["📝 Log success"]
+    Log -->|Next pkg| Order
+    Order -->|Done| Release["🔓 Release lock"]
+    Release -->|Success| End(["✅ Installation complete"])
+    Error --> Release
+    Fail --> Release
+```
+
+### Dependency Resolution Flow
+
+```mermaid
+graph TD
+    Start(["Resolve bash>=5.0"])
+    Start -->|Check installed| Installed{Already<br/>installed & satisfied?}
+    
+    Installed -->|Yes| Return["✅ Return (already have<br/>satisfying version)"]
+    Installed -->|No| CheckCycle{Package in<br/>VISITED_DEPS?}
+    
+    CheckCycle -->|Yes| Circular["❌ Circular dependency<br/>detected"]
+    CheckCycle -->|No| Mark["📍 Mark package<br/>as visited"]
+    
+    Mark -->|Query| Query["Query packages.list<br/>for 'bash' entry"]
+    Query -->|Parse| Parse["Parse version<br/>from database"]
+    Parse -->|Version check| VerCheck{bash version<br/>satisfies >= 5.0?}
+    
+    VerCheck -->|No| VersionFail["❌ No version satisfies<br/>constraint"]
+    VerCheck -->|Yes| GetDeps["📦 Get dependencies<br/>field from database"]
+    
+    GetDeps -->|Split| Split["Split on commas<br/>readline, ncurses"]
+    Split -->|For each dep| RecurseStart["Recursively resolve<br/>each dependency"]
+    
+    RecurseStart -->|resolve readline| Readline["Resolve readline<br/>dependencies..."]
+    RecurseStart -->|resolve ncurses| Ncurses["Resolve ncurses<br/>dependencies..."]
+    
+    Readline -->|No deps| AddReadline["✅ Add readline<br/>to install list"]
+    Ncurses -->|No deps| AddNcurses["✅ Add ncurses<br/>to install list"]
+    
+    AddReadline -->|Continue| AddBash["✅ Add bash<br/>to install list"]
+    AddNcurses -->|Continue| AddBash
+    
+    AddBash -->|Return| End(["Installation order:<br/>1. ncurses<br/>2. readline<br/>3. bash"])
+    
+    Circular --> End
+    VersionFail --> End
+    Return --> End
+```
+
+### Package Removal Flow
+
+```mermaid
+graph TD
+    Start(["lpm remove bash"])
+    Start -->|Acquire lock| Lock["🔒 Acquire lock"]
+    Lock -->|Load config| Load["📖 Load paths & config"]
+    Load -->|Check installed| Check{bash<br/>installed?}
+    
+    Check -->|No| NotInstalled["⚠️ Warn: package<br/>not installed"]
+    Check -->|Yes| PreRemove["🔨 Run pre-remove.sh"]
+    
+    PreRemove -->|Get version| GetVer["Get installed version<br/>from installed.list"]
+    GetVer -->|Find files| FindFiles["Find all files owned<br/>by bash-5.3 in<br/>file_index"]
+    
+    FindFiles -->|For each file| CheckOwner{File owned by<br/>other packages?}
+    
+    CheckOwner -->|Yes| Keep["⏭️ Keep file<br/>(shared)"]
+    CheckOwner -->|No| Backup["💾 Backup original<br/>file"]
+    
+    Backup -->|Remove| Remove["🗑️ Remove file<br/>from system"]
+    Remove -->|Update index| UpdateIndex["Update file_index<br/>& installed.list"]
+    
+    Keep -->|Continue| UpdateIndex
+    UpdateIndex -->|Loop| FindFiles
+    
+    FindFiles -->|No more files| PostRemove["✨ Run post-remove.sh"]
+    PostRemove -->|Cleanup| CleanBuild["Clean build artifacts"]
+    CleanBuild -->|Log| Log["📝 Log removal"]
+    Log -->|Release| Release["🔓 Release lock"]
+    
+    NotInstalled --> Release
+    
+    Release -->|Done| End(["✅ Removal complete"])
+```
+
+### File Installation with Rollback
+
+```mermaid
+graph TD
+    Start(["Install package"])
+    Start -->|Create| CreateBkp["Create backup dir<br/>$LPM_DB/.txn-pkg-ver"]
+    
+    CreateBkp -->|Initialize| Init["installed_files = ()"]
+    Init -->|List files| List["Find all files in<br/>package/files/"]
+    
+    List -->|For each file| Loop["Process file"]
+    Loop -->|Check exists| Exists{File exists<br/>on system?}
+    
+    Exists -->|Yes| BackupFile["💾 Backup to<br/>$backup_dir/$file"]
+    Exists -->|No| MkParent["Create parent<br/>directories"]
+    
+    BackupFile --> MkParent
+    MkParent -->|Copy file| Copy["📦 Copy file<br/>to system<br/>(cp -a)"]
+    
+    Copy -->|Success| AddList["Add file to<br/>installed_files[]"]
+    Copy -->|Failure| Rollback["🔄 ROLLBACK:<br/>Restore all backups"]
+    
+    AddList -->|Continue| Loop
+    List -->|All done| LogInstall["📝 Log installation<br/>Record in<br/>installed.list"]
+    LogInstall -->|Cleanup| CleanBkp["Delete backup dir"]
+    CleanBkp -->|Done| Success(["✅ Installation<br/>complete"])
+    
+    Rollback -->|For each file| RestoreLoop["Restore backed-up<br/>file or remove<br/>installed file"]
+    RestoreLoop -->|Remove index| RemoveIndex["Remove entries from<br/>file_index"]
+    RemoveIndex -->|Cleanup| Cleanup["Delete backup dir<br/>& package dir"]
+    Cleanup -->|Exit| Fail(["❌ Installation FAILED<br/>(rolled back)"])
+```
+
+### Lock Mechanism
+
+```mermaid
+graph LR
+    Start(["LPM Command"])
+    Start -->|acquire_lock| AcquireLock["Check for flock"]
+    
+    AcquireLock -->|flock available| Flock["exec {LOCK_FD} > /var/lock/lpm.lock<br/>flock -n $LOCK_FD"]
+    AcquireLock -->|no flock| Mkdir["Fallback: mkdir<br/>/var/lock/lpm.lock.d"]
+    
+    Flock -->|Success| Work["🔒 Work with lock held"]
+    Flock -->|EWOULDBLOCK| Busy["❌ Another instance<br/>running (fail)"]
+    
+    Mkdir -->|Success| Work
+    Mkdir -->|EEXIST| Busy
+    
+    Work -->|release_lock| Release["flock -u $LOCK_FD<br/>OR<br/>rmdir /var/lock/lpm.lock.d"]
+    Release -->|Cleanup| Done(["✅ Lock released"])
+    
+    Busy --> Exit(["❌ Exit (locked)"])
+```
+
+### Repository Priority
+
+```mermaid
+graph LR
+    Start(["Fetch package"]) -->|Look in| Local["1️⃣ Local repo<br/>$REPO_LOCAL_PATH"]
+    Local -->|Found?| LocalYes{Yes}
+    LocalYes -->|Yes| Return["✅ Use local copy"]
+    LocalYes -->|No| Remote["2️⃣ Remote repos<br/>for url in REPO_REMOTE_URLS"]
+    Remote -->|Try URL| Curl["curl -fsSL<br/>$url/$pkg.tar.xz"]
+    Curl -->|Success| Cache["💾 Cache in<br/>REPO_LOCAL_PATH"]
+    Cache -->|Return| Return
+    Curl -->|Failure| NextURL{More URLs?}
+    NextURL -->|Yes| Remote
+    NextURL -->|No| Fail["❌ Not found<br/>in any repo"]
+```
+
+### Build Stage Integration
+
+```mermaid
+graph TD
+    subgraph "Beyond Linux from Scratch Build"
+        Stage["Stage 19: LPM Install"]
+        CreateDirs["Create LPM directories<br/>/var/lib/lpm<br/>/var/log/lpm<br/>/etc/lpm"]
+        SourceLPM["Source 19-lpm.sh<br/>with exports"]
+        LoadConfig["Load LPM config<br/>from build.conf"]
+        PopDB["Populate packages.list<br/>from available packages"]
+        InitDB["Initialize<br/>installed.list<br/>& file_index"]
+        TestLPM["Run basic LPM<br/>functionality tests"]
+    end
+    
+    Stage -->|Execute| CreateDirs
+    CreateDirs -->|Setup| SourceLPM
+    SourceLPM -->|Configure| LoadConfig
+    LoadConfig -->|Populate| PopDB
+    PopDB -->|Initialize| InitDB
+    InitDB -->|Verify| TestLPM
+    TestLPM -->|Success| Done(["✅ LPM ready"])
+```
+
+### Performance Characteristics
+
+```mermaid
+graph TD
+    subgraph "LPM v2.2.0+ Performance"
+        InstallSingle["Single package install<br/>(no deps): 50-200ms"]
+        DepsSmall["Small dep tree<br/>(5-10 packages): 500ms-2s"]
+        DepsMedium["Medium dep tree<br/>(50+ packages): 5-30s"]
+        DepsLarge["Large dep tree<br/>(100+ packages): 30-120s"]
+    end
+    
+    subgraph "Operations"
+        DepRes["Dependency resolution"]
+        FileOps["File operations"]
+        Verify["Verification"]
+    end
+    
+    DepRes -->|O(n) optimized| InstallSingle
+    DepRes -->|Circular detection O(1)| DepsSmall
+    FileOps -->|Backup/restore| DepsSmall
+    Verify -->|SHA256/GPG| DepsSmall
+    
+    DepRes -->|Large graphs| DepsMedium
+    FileOps -->|File tracking| DepsMedium
+    
+    DepRes -->|Complex constraints| DepsLarge
+    Verify -->|Many signatures| DepsLarge
+    
+    style InstallSingle fill:#90EE90
+    style DepsSmall fill:#87CEEB
+    style DepsMedium fill:#FFD700
+    style DepsLarge fill:#FFA07A
+```
+
+### Security Architecture
+
+```mermaid
+graph TB
+    subgraph "Security Layers"
+        Lock["🔒 Mutual Exclusion<br/>flock / mkdir atomicity"]
+        Verify["🔐 Integrity Verification<br/>SHA256 checksums"]
+        Sig["✍️ Authenticity Verification<br/>GPG signatures"]
+        Rollback["🔄 Atomic Rollback<br/>Transaction support"]
+        Perms["👤 Permission Check<br/>REQUIRE_ROOT"]
+    end
+    
+    Lock -->|Prevents race<br/>conditions| Safety["Safe concurrent access"]
+    Verify -->|Detects corruption<br/>or tampering| Safety
+    Sig -->|Verifies package<br/>origin| Trust["Trusted package<br/>installation"]
+    Rollback -->|Restores on<br/>failure| Integrity["System integrity<br/>preserved"]
+    Perms -->|Limits who can<br/>modify| Trust
+    
+    Safety -->|Combined| Result(["✅ Production-Ready<br/>Security"])
+    Trust -->|Combined| Result
+    Integrity -->|Combined| Result
+```
 
 ---
 
@@ -497,22 +789,14 @@ echo 'REPO_REMOTE_URLS=("https://packages.example.com/lpm")' >> /etc/lpm/lpm.con
 lpm update-db
 ```
 
-*(Repository Priority diagram unchanged.)*
+*(Repository Priority diagram is shown in the Architecture section.)*
 
 ## Integration with LFS/BLFS Builder
 
 LPM is automatically installed as part of the `19-lpm` stage in the LFS/BLFS builder.  
 The builder creates the necessary directories and populates the package database with pre‑built packages.
 
-*(Build Stage Integration diagram unchanged.)*
-
-## Performance Characteristics
-
-*(Diagram unchanged.)*
-
-## Security Architecture
-
-*(Diagram unchanged.)*
+*(Build Stage Integration diagram is shown in the Architecture section.)*
 
 ## Troubleshooting
 
