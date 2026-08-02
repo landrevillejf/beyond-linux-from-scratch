@@ -175,15 +175,23 @@ def test_lfs_system_does_not_bind_mount_host_usr():
     assert 'umount "$LFS"/usr' not in content
 
 
-def test_lfs_system_uses_native_hostcc_for_linux_headers():
+def test_lfs_system_uses_cross_compiler_hostcc_for_linux_headers():
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    # HOSTCC must be the native host gcc, not the cross-compiler, so that
-    # host-side build tools (e.g. fixdep) can find sys/types.h in the host
-    # libc headers.  Using the cross-compiler here fails because its sysroot
-    # points at the LFS tree where glibc has not been installed yet.
-    assert 'make HOSTCC=gcc headers' in content
-    assert 'make HOSTCC="${LFS_TGT}-gcc" headers' not in content
-    assert "for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld; do" in content
+    # The toolchain stage already installs Linux API headers to $LFS/usr/include
+    # before lfs-system runs.  lfs-system must check for their presence and skip
+    # reinstallation when they already exist, because the host gcc is not
+    # accessible inside the chroot (PATH=/tools/bin:/bin:/usr/bin:/sbin).
+    # When the headers are absent, the cross-compiler is used as HOSTCC with an
+    # explicit --sysroot=/ override so that it can find the C headers (glibc +
+    # Linux) that were installed to /usr/include by the toolchain stage.
+    assert 'if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then' in content
+    assert 'make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers' in content
+    assert 'make HOSTCC=gcc headers' not in content
+    expected_tool_loop = (
+        "for tool in env xz bzip2 expr grep sed awk find xargs cut head tail"
+        " wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld; do"
+    )
+    assert expected_tool_loop in content
