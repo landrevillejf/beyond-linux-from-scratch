@@ -178,6 +178,18 @@ ensure_bootstrap_chroot_shell() {
 			run_privileged cp -Lv "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"
 		fi
 	fi
+	# Also mirror libtinfo.so.6 to /usr/lib, which is one of the new glibc
+	# ld.so's compiled-in default search directories.  This acts as a
+	# belt-and-suspenders safeguard: the inner script runs ldconfig after glibc
+	# installs to rebuild the cache, but having the file in /usr/lib ensures
+	# /bin/bash keeps working even if ldconfig is unavailable or misconfigured.
+	if [ -e "$LFS/lib/libtinfo.so.6" ]; then
+		run_privileged mkdir -p "$LFS/usr/lib"
+		if [ ! -e "$LFS/usr/lib/libtinfo.so.6" ]; then
+			run_privileged cp -Lv "$LFS/lib/libtinfo.so.6" "$LFS/usr/lib/libtinfo.so.6"
+			log_info "Mirrored libtinfo.so.6 to chroot /usr/lib for new glibc ld.so"
+		fi
+	fi
 
 	# If the toolchain built a newer liblzma (e.g. xz-5.6+), prefer it over the
 	# host version.  The host liblzma may be an older rollback package that does
@@ -372,6 +384,18 @@ make RM=/tools/bin/rm SHELL=/tools/bin/bash install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
+
+# After glibc installs its new runtime linker (/lib64/ld-linux-x86-64.so.2),
+# the new ld.so only searches /lib64 and /usr/lib by default.  The
+# bootstrapped /bin/bash (copied from the Ubuntu host) depends on libraries
+# such as libtinfo.so.6 and libreadline.so.8 that live under /lib, which is
+# NOT in the new ld.so's compiled-in search path.  Create /etc/ld.so.conf
+# and rebuild the dynamic linker cache so every subsequent shell invocation
+# (/bin/sh, ../configure, etc.) can find those bootstrap host libraries.
+mkdir -p /etc
+printf '/lib\n/lib/x86_64-linux-gnu\n/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
+/sbin/ldconfig || true
+echo "ldconfig cache rebuilt after glibc install"
 
 # ============================================================
 # 2. BUILD BINUTILS (official LFS)

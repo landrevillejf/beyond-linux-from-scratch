@@ -258,3 +258,31 @@ def test_lfs_system_glibc_install_uses_toolchain_bash():
     assert 'make RM=/tools/bin/rm SHELL=/tools/bin/bash install' in content
     # The old workaround that used HOST-libc paths must be gone
     assert 'LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make' not in content
+
+
+def test_lfs_system_ldconfig_after_glibc_install():
+    """After glibc installs its new ld.so the dynamic linker cache must be
+    rebuilt so that /bin/bash can find its host-copied dependencies (e.g.
+    libtinfo.so.6) that live under /lib, which is NOT in the new ld.so's
+    compiled-in search path (/lib64 and /usr/lib).  The inner script must
+    create /etc/ld.so.conf covering the bootstrap library directories and
+    run /sbin/ldconfig immediately after glibc make install."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert '/etc/ld.so.conf' in content
+    assert '/sbin/ldconfig' in content
+    # /etc/ld.so.conf must cover /lib so libtinfo.so.6 is findable
+    assert "'/lib\\n" in content or "printf '/lib\\n" in content or "/lib\\\n" in content
+
+
+def test_lfs_system_libtinfo_mirrored_to_usr_lib():
+    """libtinfo.so.6 must also be copied to $LFS/usr/lib so that the new
+    glibc ld.so (which searches /usr/lib by default) can find it without
+    relying solely on ldconfig or /etc/ld.so.conf."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert '"$LFS/usr/lib/libtinfo.so.6"' in content
