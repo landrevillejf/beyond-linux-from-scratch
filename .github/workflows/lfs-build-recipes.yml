@@ -163,13 +163,34 @@ jobs:
     timeout-minutes: 1440  # 24 hours
     strategy:
       matrix:
-        arch: ${{ fromJson(format('["{0}"]', replace(inputs.architectures, ',', '", "'))) }}
+        include:
+          - arch: x86_64
+          - arch: arm64
       fail-fast: false
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check if architecture should run
+        id: check_arch
+        run: |
+          REQUESTED="${{ inputs.architectures }}"
+          CURRENT="${{ matrix.arch }}"
+           
+          # Default to x86_64 if not specified
+          if [ -z "$REQUESTED" ]; then
+            REQUESTED="x86_64"
+          fi
+           
+          # Check if current arch is in requested list
+          if echo "$REQUESTED" | grep -q "$CURRENT"; then
+            echo "run=true" >> $GITHUB_OUTPUT
+          else
+            echo "run=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Free disk space
+        if: steps.check_arch.outputs.run == 'true'
         run: |
           echo "🗑️ Freeing up disk space..."
           df -h /
@@ -182,11 +203,13 @@ jobs:
           echo "Disk space freed"
 
       - name: Set up Python
+        if: steps.check_arch.outputs.run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
 
       - name: Install system dependencies
+        if: steps.check_arch.outputs.run == 'true'
         run: |
           echo "Installing system dependencies..."
           sudo apt-get update -qq
@@ -197,24 +220,27 @@ jobs:
           echo "System dependencies installed"
 
       - name: Install Python dependencies
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Installing Python dependencies..."
+          echo "🐍 Installing Python dependencies..."
           python3 -m pip install --upgrade pip setuptools wheel
           pip install -q -r requirements.txt 2>/dev/null || true
-          echo "Python dependencies installed"
+          echo "✅ Python dependencies installed"
 
       - name: Create LFS build user
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Setting up lfs build user..."
+          echo "👤 Setting up lfs build user..."
           sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
           echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
           sudo chmod 440 /etc/sudoers.d/lfs
           sudo -u lfs mkdir -p /home/lfs/.cache
-          echo "LFS user configured"
+          echo "✅ LFS user configured"
 
       - name: Prepare build environment
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Preparing build environment..."
+          echo "🏗️ Preparing build environment..."
           
           # Create build directory structure
           sudo rm -rf /tmp/lfs-build
@@ -235,9 +261,9 @@ jobs:
           echo "Build environment ready"
 
       - name: Download package cache (optional)
-        if: inputs.use_cache
+        if: inputs.use_cache && steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Checking for cached packages..."
+          echo "📥 Checking for cached packages..."
           
           # Try to download latest package cache release
           if gh release list --repo "${{ github.repository }}" 2>/dev/null | grep -q "packages-cache-latest"; then
@@ -269,176 +295,179 @@ jobs:
         continue-on-error: true
 
       - name: Validate configuration
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Validating configuration..."
+          echo "🔍 Validating configuration..."
           python3 -m json.tool config/build.conf > /dev/null
-          echo "Configuration valid"
+          echo "✅ Configuration valid"
 
       - name: List available recipes
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Available recipes:"
+          echo "📋 Available recipes:"
           find recipes -name "*.lpm" | sort | head -20
           echo "..."
           echo "Total recipes: $(find recipes -name "*.lpm" | wc -l)"
 
       - name: Build LFS System
+        if: steps.check_arch.outputs.run == 'true'
         run: |
-          echo "Starting LFS build (profile: ${{ inputs.profile }})..."
-          
+          echo "🔨 Starting LFS build (profile: ${{ inputs.profile }})..."
+           
           # Prepare arguments
           BUILD_ARGS="--profile ${{ inputs.profile }}"
-          
+           
           if [ -n "${{ inputs.resume_from }}" ]; then
-            echo "Resuming from stage: ${{ inputs.resume_from }}"
+            echo "📍 Resuming from stage: ${{ inputs.resume_from }}"
             BUILD_ARGS="$BUILD_ARGS --resume-from ${{ inputs.resume_from }}"
           fi
-          
+           
           if [ "${{ inputs.use_cache }}" = "true" ]; then
-            echo "Using cached packages"
+            echo "💾 Using cached packages"
             BUILD_ARGS="$BUILD_ARGS --use-cache"
           fi
-          
+           
           # Run builder as lfs user
           echo "Running: python3 builder.py $BUILD_ARGS"
           sudo -u lfs python3 builder.py $BUILD_ARGS \
             --output /tmp/lfs-build \
             --verbose
-          
-          echo "LFS build completed"
+           
+          echo "✅ LFS build completed"
         timeout-minutes: 1200
 
       - name: Verify build results
-       if: success()
-       run: |
-         echo "✅ Verifying build results..."
+        if: success() && steps.check_arch.outputs.run == 'true'
+        run: |
+          echo "✅ Verifying build results..."
           
-         if [ -d "/tmp/lfs-build" ]; then
-           echo "📦 Build output:"
-           ls -lh /tmp/lfs-build/ | head -20
-           du -sh /tmp/lfs-build/
+          if [ -d "/tmp/lfs-build" ]; then
+            echo "📦 Build output:"
+            ls -lh /tmp/lfs-build/ | head -20
+            du -sh /tmp/lfs-build/
             
-           if [ -d "/tmp/lfs-build/root" ]; then
-             echo "✅ Root filesystem found"
-             du -sh /tmp/lfs-build/root
-           fi
-         else
-           echo "⚠️ Build output directory not found"
-         fi
+            if [ -d "/tmp/lfs-build/root" ]; then
+              echo "✅ Root filesystem found"
+              du -sh /tmp/lfs-build/root
+            fi
+          else
+            echo "⚠️ Build output directory not found"
+          fi
 
       - name: Generate rootfs archive
-       if: success()
-       run: |
-         echo "📦 Generating rootfs archive..."
+        if: success() && steps.check_arch.outputs.run == 'true'
+        run: |
+          echo "📦 Generating rootfs archive..."
           
-         if [ ! -d "/tmp/lfs-build/root" ]; then
-           echo "⚠️ Root filesystem not found, skipping archive generation"
-           exit 0
-         fi
+          if [ ! -d "/tmp/lfs-build/root" ]; then
+            echo "⚠️ Root filesystem not found, skipping archive generation"
+            exit 0
+          fi
           
-         cd /tmp/lfs-build
+          cd /tmp/lfs-build
           
-         echo "Creating rootfs.tar.gz..."
-         tar --exclude='lost+found' \
-             --exclude='proc/*' \
-             --exclude='sys/*' \
-             --exclude='tmp/*' \
-             --exclude='.cache' \
-             -czf rootfs-${{ matrix.arch }}.tar.gz root/
+          echo "Creating rootfs.tar.gz..."
+          tar --exclude='lost+found' \
+              --exclude='proc/*' \
+              --exclude='sys/*' \
+              --exclude='tmp/*' \
+              --exclude='.cache' \
+              -czf rootfs-${{ matrix.arch }}.tar.gz root/
           
-         ls -lh rootfs-${{ matrix.arch }}.tar.gz
-         echo "✅ Rootfs archive created"
+          ls -lh rootfs-${{ matrix.arch }}.tar.gz
+          echo "✅ Rootfs archive created"
 
       - name: Generate live ISO (if enabled)
-       if: success() && inputs.generate_iso
-       run: |
-         echo "🖴 Generating live ISO image..."
+        if: success() && inputs.generate_iso && steps.check_arch.outputs.run == 'true'
+        run: |
+          echo "🖴 Generating live ISO image..."
           
-         if [ ! -d "/tmp/lfs-build/root" ]; then
-           echo "⚠️ Root filesystem not found, skipping ISO generation"
-           exit 0
-         fi
+          if [ ! -d "/tmp/lfs-build/root" ]; then
+            echo "⚠️ Root filesystem not found, skipping ISO generation"
+            exit 0
+          fi
           
-         # Check if we have GRUB and other ISO requirements
-         if ! command -v grub-mkrescue &> /dev/null; then
-           echo "Installing GRUB and ISO tools..."
-           sudo apt-get update -qq
-           sudo apt-get install -y --no-install-recommends grub-pc-bin grub-efi-amd64-bin xorriso
-         fi
+          # Check if we have GRUB and other ISO requirements
+          if ! command -v grub-mkrescue &> /dev/null; then
+            echo "Installing GRUB and ISO tools..."
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends grub-pc-bin grub-efi-amd64-bin xorriso
+          fi
           
-         cd /tmp/lfs-build
+          cd /tmp/lfs-build
           
-         # Create ISO directory structure
-         mkdir -p iso-root/boot/grub
+          # Create ISO directory structure
+          mkdir -p iso-root/boot/grub
           
-         # Copy rootfs to ISO
-         echo "Copying rootfs to ISO structure..."
-         sudo cp -r root/* iso-root/ 2>/dev/null || true
+          # Copy rootfs to ISO
+          echo "Copying rootfs to ISO structure..."
+          sudo cp -r root/* iso-root/ 2>/dev/null || true
           
-         # Create minimal grub.cfg
-         cat > iso-root/boot/grub/grub.cfg << 'GRUB_EOF'
-         set timeout=10
-         set default=0
+          # Create minimal grub.cfg
+          cat > iso-root/boot/grub/grub.cfg << 'GRUB_EOF'
+          set timeout=10
+          set default=0
           
-         menuentry 'LFS Live System' {
-             echo 'Booting LFS Live System...'
-             insmod gzio
-             insmod part_msdos
-             insmod ext2
-             set root='hd0,msdos1'
-             linux /boot/vmlinuz root=/dev/ram0 rw
-             initrd /boot/initrd.img
-         }
-         GRUB_EOF
+          menuentry 'LFS Live System' {
+              echo 'Booting LFS Live System...'
+              insmod gzio
+              insmod part_msdos
+              insmod ext2
+              set root='hd0,msdos1'
+              linux /boot/vmlinuz root=/dev/ram0 rw
+              initrd /boot/initrd.img
+          }
+          GRUB_EOF
           
-         # Copy kernel if it exists
-         if [ -f "root/boot/vmlinuz" ]; then
-           cp root/boot/vmlinuz iso-root/boot/
-           echo "✅ Kernel copied"
-         fi
+          # Copy kernel if it exists
+          if [ -f "root/boot/vmlinuz" ]; then
+            cp root/boot/vmlinuz iso-root/boot/
+            echo "✅ Kernel copied"
+          fi
           
-         # Generate ISO
-         echo "Creating ISO image..."
-         if grub-mkrescue --version &>/dev/null; then
-           grub-mkrescue -o lfs-live-${{ matrix.arch }}.iso iso-root/ 2>/dev/null || true
-         else
-           # Fallback: create with xorriso
-           xorriso -as mkisofs -R -J -V "LFS-${{ matrix.arch }}" \
-             -boot-load-size 4 -boot-info-table \
-             -o lfs-live-${{ matrix.arch }}.iso iso-root/ 2>/dev/null || true
-         fi
+          # Generate ISO
+          echo "Creating ISO image..."
+          if grub-mkrescue --version &>/dev/null; then
+            grub-mkrescue -o lfs-live-${{ matrix.arch }}.iso iso-root/ 2>/dev/null || true
+          else
+            # Fallback: create with xorriso
+            xorriso -as mkisofs -R -J -V "LFS-${{ matrix.arch }}" \
+              -boot-load-size 4 -boot-info-table \
+              -o lfs-live-${{ matrix.arch }}.iso iso-root/ 2>/dev/null || true
+          fi
           
-         if [ -f "lfs-live-${{ matrix.arch }}.iso" ]; then
-           ls -lh lfs-live-${{ matrix.arch }}.iso
-           echo "✅ ISO image generated"
-         else
-           echo "⚠️ ISO generation skipped (dependencies not available)"
-         fi
+          if [ -f "lfs-live-${{ matrix.arch }}.iso" ]; then
+            ls -lh lfs-live-${{ matrix.arch }}.iso
+            echo "✅ ISO image generated"
+          else
+            echo "⚠️ ISO generation skipped (dependencies not available)"
+          fi
           
-         # Cleanup
-         sudo rm -rf iso-root
+          # Cleanup
+          sudo rm -rf iso-root
 
       - name: Run post-build validation tests
-       if: success()
-       run: |
-         echo "🧪 Running post-build validation tests..."
+        if: success() && steps.check_arch.outputs.run == 'true'
+        run: |
+          echo "🧪 Running post-build validation tests..."
           
-         if [ ! -d "/tmp/lfs-build/root" ]; then
-           echo "⚠️ Root filesystem not found, skipping tests"
-           exit 0
-         fi
+          if [ ! -d "/tmp/lfs-build/root" ]; then
+            echo "⚠️ Root filesystem not found, skipping tests"
+            exit 0
+          fi
           
-         ROOT="/tmp/lfs-build/root"
-         PASS_COUNT=0
-         FAIL_COUNT=0
+          ROOT="/tmp/lfs-build/root"
+          PASS_COUNT=0
+          FAIL_COUNT=0
           
-         # Test 1: Check essential system directories
-         echo "Test 1: Checking essential directories..."
-         for dir in bin sbin lib usr/bin usr/sbin usr/lib etc boot proc sys dev; do
-           if [ -d "$ROOT/$dir" ]; then
-             echo "  ✅ /$dir exists"
-             PASS_COUNT=$((PASS_COUNT + 1))
-           else
-             echo "  ❌ /$dir missing"
+          # Test 1: Check essential system directories
+          echo "Test 1: Checking essential directories..."
+          for dir in bin sbin lib usr/bin usr/sbin usr/lib etc boot proc sys dev; do
+            if [ -d "$ROOT/$dir" ]; then
+              echo "  ✅ /$dir exists"
+              PASS_COUNT=$((PASS_COUNT + 1))
+            else
+              echo "  ❌ /$dir missing"
              FAIL_COUNT=$((FAIL_COUNT + 1))
            fi
          done
@@ -476,60 +505,60 @@ jobs:
            else
              echo "  ⚠️  /etc/$file not found"
            fi
-         done
+          done
           
-         # Test 5: Check package manager (lpm)
-         echo ""
-         echo "Test 5: Checking package manager..."
-         if command -v lpm &>/dev/null || [ -f "$ROOT/usr/bin/lpm" ]; then
-           echo "  ✅ lpm package manager available"
-           PASS_COUNT=$((PASS_COUNT + 1))
-         else
-           echo "  ⚠️  lpm package manager not found"
-         fi
+          # Test 5: Check package manager (lpm)
+          echo ""
+          echo "Test 5: Checking package manager..."
+          if command -v lpm &>/dev/null || [ -f "$ROOT/usr/bin/lpm" ]; then
+            echo "  ✅ lpm package manager available"
+            PASS_COUNT=$((PASS_COUNT + 1))
+          else
+            echo "  ⚠️  lpm package manager not found"
+          fi
           
-         # Test 6: Verify file count
-         echo ""
-         echo "Test 6: File statistics..."
-         FILE_COUNT=$(find "$ROOT" -type f 2>/dev/null | wc -l)
-         DIR_COUNT=$(find "$ROOT" -type d 2>/dev/null | wc -l)
-         echo "  📊 Files: $FILE_COUNT"
-         echo "  📁 Directories: $DIR_COUNT"
-         if [ "$FILE_COUNT" -gt 100 ]; then
-           echo "  ✅ Reasonable file count"
-           PASS_COUNT=$((PASS_COUNT + 1))
-         else
-           echo "  ⚠️  Unexpectedly low file count"
-         fi
+          # Test 6: Verify file count
+          echo ""
+          echo "Test 6: File statistics..."
+          FILE_COUNT=$(find "$ROOT" -type f 2>/dev/null | wc -l)
+          DIR_COUNT=$(find "$ROOT" -type d 2>/dev/null | wc -l)
+          echo "  📊 Files: $FILE_COUNT"
+          echo "  📁 Directories: $DIR_COUNT"
+          if [ "$FILE_COUNT" -gt 100 ]; then
+            echo "  ✅ Reasonable file count"
+            PASS_COUNT=$((PASS_COUNT + 1))
+          else
+            echo "  ⚠️  Unexpectedly low file count"
+          fi
           
-         # Test 7: Check rootfs size
-         echo ""
-         echo "Test 7: Rootfs size validation..."
-         ROOT_SIZE=$(du -s "$ROOT" 2>/dev/null | cut -f1)
-         ROOT_SIZE_MB=$((ROOT_SIZE / 1024))
-         echo "  💾 Rootfs size: ${ROOT_SIZE_MB}MB"
-         if [ "$ROOT_SIZE_MB" -gt 50 ]; then
-           echo "  ✅ Reasonable rootfs size"
-           PASS_COUNT=$((PASS_COUNT + 1))
-         else
-           echo "  ⚠️  Rootfs size suspiciously small"
-         fi
+          # Test 7: Check rootfs size
+          echo ""
+          echo "Test 7: Rootfs size validation..."
+          ROOT_SIZE=$(du -s "$ROOT" 2>/dev/null | cut -f1)
+          ROOT_SIZE_MB=$((ROOT_SIZE / 1024))
+          echo "  💾 Rootfs size: ${ROOT_SIZE_MB}MB"
+          if [ "$ROOT_SIZE_MB" -gt 50 ]; then
+            echo "  ✅ Reasonable rootfs size"
+            PASS_COUNT=$((PASS_COUNT + 1))
+          else
+            echo "  ⚠️  Rootfs size suspiciously small"
+          fi
           
-         echo ""
-         echo "═════════════════════════════════════"
-         echo "Test Summary:"
-         echo "  ✅ Passed: $PASS_COUNT"
-         echo "  ❌ Failed: $FAIL_COUNT"
-         echo "═════════════════════════════════════"
+          echo ""
+          echo "═════════════════════════════════════"
+          echo "Test Summary:"
+          echo "  ✅ Passed: $PASS_COUNT"
+          echo "  ❌ Failed: $FAIL_COUNT"
+          echo "═════════════════════════════════════"
           
-         if [ $FAIL_COUNT -gt 3 ]; then
-           echo "⚠️  Build validation warnings detected"
-           exit 1
-         fi
-         echo "✅ Post-build validation successful"
+          if [ $FAIL_COUNT -gt 3 ]; then
+            echo "⚠️  Build validation warnings detected"
+            exit 1
+          fi
+          echo "✅ Post-build validation successful"
 
       - name: Generate build summary
-        if: always()
+        if: always() && steps.check_arch.outputs.run == 'true'
         run: |
           echo "# 🔨 LFS Build Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -566,7 +595,7 @@ jobs:
           fi
 
       - name: Upload build artifacts (if successful)
-        if: success()
+        if: success() && steps.check_arch.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: lfs-build-${{ inputs.profile }}-${{ matrix.arch }}-${{ github.run_number }}
@@ -593,10 +622,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-       uses: actions/download-artifact@v4
-       with:
-         path: artifacts
-       continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+        continue-on-error: true
 
       - name: Generate release notes
        if: success()
@@ -627,26 +656,26 @@ jobs:
          cat release_notes.md
 
       - name: Create release summary
-       run: |
-         echo "# 🎉 Multi-Architecture LFS Build Complete" >> $GITHUB_STEP_SUMMARY
-         echo "" >> $GITHUB_STEP_SUMMARY
+        run: |
+          echo "# 🎉 Multi-Architecture LFS Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
-         echo "## Build Specifications" >> $GITHUB_STEP_SUMMARY
-         echo "- **Profile**: ${{ inputs.profile }}" >> $GITHUB_STEP_SUMMARY
-         echo "- **Architectures**: ${{ inputs.architectures }}" >> $GITHUB_STEP_SUMMARY
-         echo "- **Package cache**: ${{ inputs.use_cache }}" >> $GITHUB_STEP_SUMMARY
-         echo "- **Live ISO**: ${{ inputs.generate_iso }}" >> $GITHUB_STEP_SUMMARY
-         echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Specifications" >> $GITHUB_STEP_SUMMARY
+          echo "- **Profile**: ${{ inputs.profile }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Architectures**: ${{ inputs.architectures }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package cache**: ${{ inputs.use_cache }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Live ISO**: ${{ inputs.generate_iso }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           
-         if [ -d "artifacts" ]; then
-           FILE_COUNT=$(find artifacts -type f | wc -l)
-           echo "## 📊 Artifacts Generated" >> $GITHUB_STEP_SUMMARY
-           echo "**Total files**: $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
-           echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -d "artifacts" ]; then
+            FILE_COUNT=$(find artifacts -type f | wc -l)
+            echo "## 📊 Artifacts Generated" >> $GITHUB_STEP_SUMMARY
+            echo "**Total files**: $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
             
-           find artifacts -type f | while read f; do
-             SIZE=$(ls -lh "$f" | awk '{print $5}')
-             NAME=$(basename "$f")
-             echo "- \`$NAME\` - $SIZE" >> $GITHUB_STEP_SUMMARY
-           done
-         fi
+            find artifacts -type f | while read f; do
+              SIZE=$(ls -lh "$f" | awk '{print $5}')
+              NAME=$(basename "$f")
+              echo "- \`$NAME\` - $SIZE" >> $GITHUB_STEP_SUMMARY
+            done
+          fi
