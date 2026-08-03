@@ -1,5 +1,5 @@
 # LFS Sources - Automatically generated from official wget-lists
-# Generated: 2026-08-01T21:46:15.537684
+# Generated: 2026-08-03T15:18:20.586498
 # DO NOT EDIT MANUALLY – changes will be overwritten
 
 http://archive.xfce.org/src/xfce/xfce4-dev-tools/4.20/xfce4-dev-tools-4.20.0.tar.bz2
@@ -12,6 +12,7 @@ http://libndp.org/files/libndp-1.9.tar.gz
 http://links.twibright.com/download/links-2.30.tar.bz2
 http://openbox.org/dist/openbox/openbox-3.6.1.tar.gz
 http://people.freedesktop.org/~hughsient/appstream-glib/releases/appstream-glib-0.8.3.tar.xz
+http://www.andre-simon.de/zip/highlight-4.16.tar.bz2
 http://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20240817.tgz
 https://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz
 https://0pointer.de/lennart/projects/libdaemon/libdaemon-0.14.tar.gz
