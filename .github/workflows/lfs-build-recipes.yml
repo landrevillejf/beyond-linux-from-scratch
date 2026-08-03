@@ -171,6 +171,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Fix repository permissions for lfs
+        if: steps.check_arch.outputs.run == 'true'
+        run: |
+          sudo chmod o+x /home/runner
+          sudo chmod -R o+r /home/runner/work
+
       - name: Check if architecture should run
         id: check_arch
         run: |
