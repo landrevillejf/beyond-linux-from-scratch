@@ -296,3 +296,23 @@ def test_lfs_system_libtinfo_mirrored_to_usr_lib():
     content = script.read_text()
 
     assert '"$LFS/usr/lib/libtinfo.so.6"' in content
+
+
+def test_lfs_system_cross_compiler_uses_sysroot_slash():
+    """The cross-compiler was built with --with-sysroot=$LFS pointing at the
+    host-side LFS directory.  Inside the chroot that absolute path does not
+    exist (the chroot root IS that directory), so the linker cannot locate
+    target headers or libraries and configure reports
+    'C compiler cannot create executables' for binutils (and later gcc).
+    The inner build script must set CC and CXX to include --sysroot=/ so that
+    headers and libraries are resolved relative to the chroot root instead of
+    the non-existent host-side sysroot path."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert 'CC="${LFS_TGT}-gcc --sysroot=/"' in content
+    assert 'CXX="${LFS_TGT}-g++ --sysroot=/"' in content
+    # Bare cross-compiler without sysroot must not be used as CC/CXX
+    assert 'CC="${LFS_TGT}-gcc"\n' not in content
+    assert 'CXX="${LFS_TGT}-g++"\n' not in content
