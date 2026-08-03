@@ -50,7 +50,7 @@ on:
         default: true
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.profile }}-${{ matrix.arch }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.profile }}
   cancel-in-progress: false
 
 permissions:
