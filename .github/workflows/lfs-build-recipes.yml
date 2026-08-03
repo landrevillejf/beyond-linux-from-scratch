@@ -1,0 +1,255 @@
+name: LFS Build from Recipes
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile to use'
+        required: true
+        default: 'minimal'
+        type: choice
+        options:
+          - minimal
+          - gnu-free
+          - gnu-free-full
+          - xfce
+          - gnome
+          - kde
+          - lxqt
+          - java-dev
+          - server
+          - secure
+          - full
+          - audio-cli
+          - audio-studio
+          - arm64
+          - pinebook
+          - custom
+      resume_from:
+        description: 'Resume from stage (leave empty to build from start)'
+        required: false
+        type: string
+      use_cache:
+        description: 'Use cached packages'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.profile }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build-lfs:
+    name: Build LFS (${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 1440  # 24 hours
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          echo "🗑️ Freeing up disk space..."
+          df -h /
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h /
+          echo "Disk space freed"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install system dependencies
+        run: |
+          echo "Installing system dependencies..."
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            zstd ca-certificates curl tar gzip rsync sudo fakeroot
+          echo "System dependencies installed"
+
+      - name: Install Python dependencies
+        run: |
+          echo "Installing Python dependencies..."
+          python3 -m pip install --upgrade pip setuptools wheel
+          pip install -q -r requirements.txt 2>/dev/null || true
+          echo "Python dependencies installed"
+
+      - name: Create LFS build user
+        run: |
+          echo "Setting up lfs build user..."
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs mkdir -p /home/lfs/.cache
+          echo "LFS user configured"
+
+      - name: Prepare build environment
+        run: |
+          echo "Preparing build environment..."
+          
+          # Create build directory structure
+          sudo rm -rf /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-sources
+          
+          # Set permissions
+          sudo chown -R lfs:lfs /tmp/lfs-build
+          sudo chown -R lfs:lfs /tmp/lfs-sources
+          
+          # Create LFS mount point
+          sudo mkdir -p /mnt/lfs
+          sudo chown -R lfs:lfs /mnt/lfs
+          
+          # Show environment
+          echo "Build directory: $(ls -ld /tmp/lfs-build)"
+          echo "Sources directory: $(ls -ld /tmp/lfs-sources)"
+          echo "Build environment ready"
+
+      - name: Download package cache (optional)
+        if: inputs.use_cache
+        run: |
+          echo "Checking for cached packages..."
+          
+          # Try to download latest package cache release
+          if gh release list --repo "${{ github.repository }}" 2>/dev/null | grep -q "packages-cache-latest"; then
+            echo "Found packages cache, downloading..."
+            
+            mkdir -p /tmp/cache-dl
+            cd /tmp/cache-dl
+            
+            # Download all parts
+            for part in $(gh release view packages-cache-latest --repo "${{ github.repository }}" --json assets --jq '.assets[].name | select(startswith("lfs-packages-part"))' 2>/dev/null | sort); do
+              echo "Downloading $part..."
+              gh release download packages-cache-latest --repo "${{ github.repository }}" -p "$part" --dir /tmp/cache-dl 2>/dev/null || true
+            done
+            
+            # Extract packages
+            if ls /tmp/cache-dl/lfs-packages-part-*.tar.gz >/dev/null 2>&1; then
+              echo "Extracting packages..."
+              cat /tmp/cache-dl/lfs-packages-part-*.tar.gz | tar -xzf - -C / --strip-components=1
+              ls -lh /tmp/lfs-sources/ | head -10
+              echo "Package cache restored"
+            else
+              echo "No package cache available, will download during build"
+            fi
+          else
+            echo "No cached packages found"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Validate configuration
+        run: |
+          echo "Validating configuration..."
+          python3 -m json.tool config/build.conf > /dev/null
+          echo "Configuration valid"
+
+      - name: List available recipes
+        run: |
+          echo "Available recipes:"
+          find recipes -name "*.lpm" | sort | head -20
+          echo "..."
+          echo "Total recipes: $(find recipes -name "*.lpm" | wc -l)"
+
+      - name: Build LFS System
+        run: |
+          echo "Starting LFS build (profile: ${{ inputs.profile }})..."
+          
+          # Prepare arguments
+          BUILD_ARGS="--profile ${{ inputs.profile }}"
+          
+          if [ -n "${{ inputs.resume_from }}" ]; then
+            echo "Resuming from stage: ${{ inputs.resume_from }}"
+            BUILD_ARGS="$BUILD_ARGS --resume-from ${{ inputs.resume_from }}"
+          fi
+          
+          if [ "${{ inputs.use_cache }}" = "true" ]; then
+            echo "Using cached packages"
+            BUILD_ARGS="$BUILD_ARGS --use-cache"
+          fi
+          
+          # Run builder as lfs user
+          echo "Running: python3 builder.py $BUILD_ARGS"
+          sudo -u lfs python3 builder.py $BUILD_ARGS \
+            --output /tmp/lfs-build \
+            --verbose
+          
+          echo "LFS build completed"
+        timeout-minutes: 1200
+
+      - name: Verify build results
+        if: success()
+        run: |
+          echo "Verifying build results..."
+          
+          if [ -d "/tmp/lfs-build" ]; then
+            echo "Build output:"
+            ls -lh /tmp/lfs-build/ | head -20
+            du -sh /tmp/lfs-build/
+            
+            if [ -d "/tmp/lfs-build/root" ]; then
+              echo "Root filesystem found"
+              du -sh /tmp/lfs-build/root
+            fi
+          else
+            echo "Build output directory not found"
+          fi
+
+      - name: Generate build summary
+        if: always()
+        run: |
+          echo "# LFS Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile**: ${{ inputs.profile }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Started**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "/tmp/lfs-build" ]; then
+            SIZE=$(du -sh /tmp/lfs-build 2>/dev/null | cut -f1)
+            echo "**Build Size**: $SIZE" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          if [ -d "/tmp/lfs-build/root" ]; then
+            echo "- Root filesystem ($(du -sh /tmp/lfs-build/root 2>/dev/null | cut -f1))" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "/tmp/lfs-build/lfs-system.img" ]; then
+            echo "- System image ($(ls -lh /tmp/lfs-build/lfs-system.img | awk '{print $5}'))" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -f "/tmp/lfs-build/lfs-live.iso" ]; then
+            echo "- Live ISO ($(ls -lh /tmp/lfs-build/lfs-live.iso | awk '{print $5}'))" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload build artifacts (if successful)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lfs-build-${{ inputs.profile }}-${{ github.run_number }}
+          path: /tmp/lfs-build/
+          retention-days: 7
+          compression-level: 6
+        continue-on-error: true
+
+      - name: Cleanup build space
+        if: always()
+        run: |
+          echo "Cleaning up build artifacts..."
+          sudo rm -rf /tmp/lfs-build
+          sudo rm -rf /tmp/lfs-sources
+          sudo rm -rf /mnt/lfs
+          echo "Cleanup complete"
