@@ -435,7 +435,8 @@ cd build
              --enable-shared \
              --disable-werror \
              --enable-64-bit-bfd \
-             --with-system-zlib
+             --with-system-zlib \
+             --disable-doc
 make -j$(nproc) tooldir=/usr
 make tooldir=/usr install
 cd /sources
