@@ -10,7 +10,7 @@ import os
 import logging
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
-from builder import LFSBuilder, ScriptExecutor, SourceDownloader, main
+from builder import LFSBuilder, LFSConfig, ScriptExecutor, SourceDownloader, main
 
 class TestLFSBuilder:
     """Test LFSBuilder class"""
@@ -680,3 +680,55 @@ class TestVersionHandling:
             # This should trigger the return "dev" path
             result2 = builder._get_version()
             assert result2 == "dev"
+
+
+class TestLFSConfigSave:
+    """Tests for LFSConfig.save() permission-error resilience."""
+
+    def test_save_succeeds_with_writable_file(self, tmp_path):
+        """LFSConfig.save() should write to a writable config file without error."""
+        config_path = tmp_path / "build.conf"
+        config = LFSConfig(config_path)
+        config.data["test_key"] = "test_value"
+        config.save()
+        with open(config_path) as f:
+            saved = json.load(f)
+        assert saved["test_key"] == "test_value"
+
+    def test_save_logs_warning_on_permission_error(self, tmp_path, caplog):
+        """LFSConfig.save() must not raise PermissionError when the config file
+        is read-only (e.g. running as an unprivileged build user against a
+        checkout owned by a different user such as 'runner').
+        The in-memory configuration must remain intact so that env-var export
+        to stage scripts is unaffected."""
+        config_path = tmp_path / "build.conf"
+        config = LFSConfig(config_path)
+        config.data["desktop"] = {"type": "xfce"}
+
+        config_path.chmod(0o444)  # read-only
+        try:
+            with caplog.at_level(logging.WARNING, logger="builder"):
+                config.save()  # must NOT raise
+            assert any("permission denied" in r.message.lower() for r in caplog.records), (
+                "Expected a WARNING log mentioning permission denied"
+            )
+            # In-memory data must still be correct
+            assert config.data["desktop"]["type"] == "xfce"
+        finally:
+            config_path.chmod(0o644)
+
+    def test_apply_profile_settings_with_readonly_config(self, tmp_path, mock_config_file):
+        """LFSBuilder initialisation must succeed even when config/build.conf is
+        read-only – simulating running 'sudo -u lfs python3 builder.py' when the
+        checkout is owned by the 'runner' user."""
+        mock_config_file.chmod(0o444)  # read-only
+        try:
+            builder = LFSBuilder(
+                profile="xfce",
+                output_dir=tmp_path / "lfs-build",
+                config_file=mock_config_file,
+            )
+            # The profile settings must still be applied in memory
+            assert builder.config.get("desktop.type") == "xfce"
+        finally:
+            mock_config_file.chmod(0o644)

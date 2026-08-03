@@ -106,9 +106,22 @@ class LFSConfig:
         return self.data
 
     def save(self):
-        """Save configuration to JSON file"""
-        with open(self.config_file, 'w') as f:
-            json.dump(self.data, f, indent=2)
+        """Save configuration to JSON file.
+
+        Silently skips the write when the process lacks write permission for the
+        config file (e.g. when running builder.py as an unprivileged build user
+        against a checkout owned by a different user).  In that scenario the
+        in-memory configuration is still valid and is used for environment-variable
+        export to stage scripts.
+        """
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(self.data, f, indent=2)
+        except PermissionError:
+            logging.getLogger(__name__).warning(
+                "Cannot write config file '%s' (permission denied); "
+                "configuration will be used from memory only.", self.config_file
+            )
 
     def get_default_config(self) -> Dict:
         """Return default configuration for LFS 13.0"""
