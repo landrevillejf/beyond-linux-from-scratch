@@ -226,6 +226,9 @@ jobs:
           sudo chmod o+x /home/runner
           sudo chmod -R o+r /home/runner/work
           sudo find /home/runner/work -type d -exec chmod o+x {} +
+          # Also grant write access to config/build.conf so the lfs user
+          # can persist profile overrides written by builder.py
+          sudo chmod o+w "$GITHUB_WORKSPACE/config/build.conf"
 
       - name: Free disk space
         if: steps.check_arch.outputs.run == 'true'
@@ -316,10 +319,10 @@ jobs:
               gh release download packages-cache-latest --repo "${{ github.repository }}" -p "$part" --dir /tmp/cache-dl 2>/dev/null || true
             done
             
-            # Extract packages
+            # Extract packages as lfs user (who owns /tmp/lfs-sources)
             if ls /tmp/cache-dl/lfs-packages-part-*.tar.gz >/dev/null 2>&1; then
               echo "Extracting packages..."
-              cat /tmp/cache-dl/lfs-packages-part-*.tar.gz | tar -xzf - -C / --strip-components=1
+              cat /tmp/cache-dl/lfs-packages-part-*.tar.gz | sudo -u lfs tar -xzf - -C / --strip-components=1
               ls -lh /tmp/lfs-sources/ | head -10
               echo "Package cache restored"
             else
