@@ -470,35 +470,35 @@ jobs:
               echo "  ❌ /$dir missing"
              FAIL_COUNT=$((FAIL_COUNT + 1))
            fi
-         done
+          done
           
          # Test 2: Check for critical binaries
-         echo ""
-         echo "Test 2: Checking critical binaries..."
-         for bin in bash ls cat grep find sed awk; do
+          echo ""
+          echo "Test 2: Checking critical binaries..."
+          for bin in bash ls cat grep find sed awk; do
            if [ -f "$ROOT/bin/$bin" ] || [ -f "$ROOT/usr/bin/$bin" ]; then
              echo "  ✅ $bin found"
              PASS_COUNT=$((PASS_COUNT + 1))
            else
              echo "  ⚠️  $bin not found"
            fi
-         done
+          done
           
          # Test 3: Check libc availability
-         echo ""
-         echo "Test 3: Checking C library..."
-         if find "$ROOT/lib" "$ROOT/usr/lib" -name "libc.so*" 2>/dev/null | grep -q .; then
+          echo ""
+          echo "Test 3: Checking C library..."
+          if find "$ROOT/lib" "$ROOT/usr/lib" -name "libc.so*" 2>/dev/null | grep -q .; then
            echo "  ✅ libc found"
            PASS_COUNT=$((PASS_COUNT + 1))
-         else
+          else
            echo "  ❌ libc not found"
            FAIL_COUNT=$((FAIL_COUNT + 1))
-         fi
+          fi
           
          # Test 4: Check /etc essential files
-         echo ""
-         echo "Test 4: Checking /etc configuration..."
-         for file in fstab hostname passwd group; do
+          echo ""
+          echo "Test 4: Checking /etc configuration..."
+          for file in fstab hostname passwd group; do
            if [ -f "$ROOT/etc/$file" ]; then
              echo "  ✅ /etc/$file exists"
              PASS_COUNT=$((PASS_COUNT + 1))
@@ -630,30 +630,30 @@ jobs:
       - name: Generate release notes
         if: success()
         run: |
-         echo "# 🔨 LFS Build Complete" > release_notes.md
-         echo "" >> release_notes.md
-         echo "**Profile**: ${{ inputs.profile }}" >> release_notes.md
-         echo "**Architectures**: ${{ inputs.architectures }}" >> release_notes.md
-         echo "**Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release_notes.md
-         echo "" >> release_notes.md
+          echo "# 🔨 LFS Build Complete" > release_notes.md
+          echo "" >> release_notes.md
+          echo "**Profile**: ${{ inputs.profile }}" >> release_notes.md
+          echo "**Architectures**: ${{ inputs.architectures }}" >> release_notes.md
+          echo "**Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release_notes.md
+          echo "" >> release_notes.md
           
-         echo "## 📦 Build Artifacts" >> release_notes.md
-         if [ -d "artifacts" ]; then
+          echo "## 📦 Build Artifacts" >> release_notes.md
+          if [ -d "artifacts" ]; then
            find artifacts -type f \( -name "*.tar.gz" -o -name "*.iso" \) | while read f; do
              SIZE=$(ls -lh "$f" | awk '{print $5}')
              NAME=$(basename "$f")
              echo "- **$NAME** ($SIZE)" >> release_notes.md
            done
-         fi
+          fi
           
-         echo "" >> release_notes.md
-         echo "## 🎯 Build Configuration" >> release_notes.md
-         echo "- Profile: \`${{ inputs.profile }}\`" >> release_notes.md
-         echo "- Architectures: \`${{ inputs.architectures }}\`" >> release_notes.md
-         echo "- Cached packages: \`${{ inputs.use_cache }}\`" >> release_notes.md
-         echo "- ISO generation: \`${{ inputs.generate_iso }}\`" >> release_notes.md
+          echo "" >> release_notes.md
+          echo "## 🎯 Build Configuration" >> release_notes.md
+          echo "- Profile: \`${{ inputs.profile }}\`" >> release_notes.md
+          echo "- Architectures: \`${{ inputs.architectures }}\`" >> release_notes.md
+          echo "- Cached packages: \`${{ inputs.use_cache }}\`" >> release_notes.md
+          echo "- ISO generation: \`${{ inputs.generate_iso }}\`" >> release_notes.md
           
-         cat release_notes.md
+          cat release_notes.md
 
       - name: Create release summary
         run: |
