@@ -266,15 +266,25 @@ def test_lfs_system_ldconfig_after_glibc_install():
     libtinfo.so.6) that live under /lib, which is NOT in the new ld.so's
     compiled-in search path (/lib64 and /usr/lib).  The inner script must
     create /etc/ld.so.conf covering the bootstrap library directories and
-    run /sbin/ldconfig immediately after glibc make install."""
+    run /sbin/ldconfig immediately after glibc make install.
+
+    /usr/lib must be listed BEFORE /lib so that the newly-installed glibc
+    libc.so.6 takes priority over the Ubuntu host libc copied to
+    /lib/x86_64-linux-gnu, preventing a GLIBC_PRIVATE symbol mismatch when
+    the new ld.so loads libc at bootstrap-tool startup."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
     assert '/etc/ld.so.conf' in content
     assert '/sbin/ldconfig' in content
-    # /etc/ld.so.conf must cover /lib so libtinfo.so.6 is findable
-    assert "'/lib\\n" in content or "printf '/lib\\n" in content or "/lib\\\n" in content
+    # /etc/ld.so.conf must still cover /lib so libtinfo.so.6 is findable
+    assert '/lib' in content
+    # /usr/lib must be listed first so glibc 2.42 libc.so.6 takes priority over
+    # the Ubuntu host libc, avoiding the __nptl_change_stack_perm symbol error
+    assert "printf '/usr/lib" in content
+    # LD_LIBRARY_PATH must be updated after glibc install to prefer /usr/lib
+    assert 'LD_LIBRARY_PATH=/usr/lib' in content
 
 
 def test_lfs_system_libtinfo_mirrored_to_usr_lib():
