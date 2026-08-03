@@ -26,9 +26,40 @@ on:
           - pinebook
           - custom
       resume_from:
-        description: 'Resume from stage (leave empty to build from start)'
+        description: 'Resume from stage (select "(from start)" to build from the beginning)'
         required: false
-        type: string
+        default: '(from start)'
+        type: choice
+        options:
+          - '(from start)'
+          - host-check
+          - host-prepare
+          - qemu-setup
+          - disk-image
+          - toolchain
+          - uboot
+          - lfs-system
+          - init-system
+          - service-abstraction
+          - configure-lfs
+          - blfs-base
+          - build-kernel
+          - desktop
+          - applications
+          - configure-desktop
+          - java-dev
+          - package-manager
+          - base-packages
+          - security
+          - privacy
+          - branding
+          - first-boot
+          - system-updater
+          - lpm
+          - initramfs
+          - bootloader
+          - installer
+          - live-system
       use_cache:
         description: 'Use cached packages'
         required: false
