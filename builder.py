@@ -798,15 +798,24 @@ class ScriptExecutor:
             self.logger.error(f"Script not found: {script_path}")
             return False
 
-        script.chmod(0o755)
+        use_bash_fallback = False
+        try:
+            script.chmod(0o755)
+        except PermissionError:
+            self.logger.warning(
+                f"Could not chmod {script}, falling back to explicit bash invocation"
+            )
+            use_bash_fallback = True
 
         log_file = self.output_dir / 'logs' / f"{stage_name}.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
+        cmd = ['bash', str(script)] if use_bash_fallback else [str(script)]
+
         try:
             with open(log_file, 'w') as log:
                 result = subprocess.run(
-                    [str(script)],
+                    cmd,
                     env={**os.environ, **self.env},
                     stdout=log,
                     stderr=subprocess.STDOUT,
