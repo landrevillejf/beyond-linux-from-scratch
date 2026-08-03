@@ -472,7 +472,7 @@ jobs:
            fi
           done
           
-         # Test 2: Check for critical binaries
+          # Test 2: Check for critical binaries
           echo ""
           echo "Test 2: Checking critical binaries..."
           for bin in bash ls cat grep find sed awk; do
@@ -484,7 +484,7 @@ jobs:
            fi
           done
           
-         # Test 3: Check libc availability
+          # Test 3: Check libc availability
           echo ""
           echo "Test 3: Checking C library..."
           if find "$ROOT/lib" "$ROOT/usr/lib" -name "libc.so*" 2>/dev/null | grep -q .; then
@@ -495,7 +495,7 @@ jobs:
            FAIL_COUNT=$((FAIL_COUNT + 1))
           fi
           
-         # Test 4: Check /etc essential files
+          # Test 4: Check /etc essential files
           echo ""
           echo "Test 4: Checking /etc configuration..."
           for file in fstab hostname passwd group; do
