@@ -514,6 +514,28 @@ class TestLFSBuilder:
         finally:
             os.chdir(old_cwd)
 
+    def test_run_script_chmod_permission_error_fallback(self, tmp_path):
+        """When chmod raises PermissionError, run_script falls back to bash invocation."""
+        from builder import ScriptExecutor
+        import logging
+        import pathlib
+
+        script_path = tmp_path / "stage.sh"
+        script_path.write_text("#!/bin/bash\necho hello\n")
+        script_path.chmod(0o755)
+
+        executor = ScriptExecutor(env={}, output_dir=tmp_path, logger=logging.getLogger())
+
+        with patch('pathlib.Path.chmod', side_effect=PermissionError("not permitted")), \
+             patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run, \
+             patch.object(executor, 'find_script', return_value=script_path):
+            result = executor.run_script("stage.sh", "test-stage")
+
+        assert result is True
+        called_cmd = mock_run.call_args[0][0]
+        assert called_cmd[0] == 'bash'
+        assert str(script_path) in called_cmd[1]
+
     def test_main_entry_point(self):
         """Couvre la ligne 1790 (if __name__ == '__main__') en exécutant builder.py en sous-processus."""
         import subprocess
