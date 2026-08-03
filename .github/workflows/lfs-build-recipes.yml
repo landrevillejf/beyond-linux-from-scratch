@@ -224,8 +224,8 @@ jobs:
         if: steps.check_arch.outputs.run == 'true'
         run: |
           sudo chmod o+x /home/runner
-          sudo find /home/runner/work -type d -exec chmod o+rx {} +
-          sudo find /home/runner/work -type f -exec chmod o+r {} +
+          sudo chmod -R o+r /home/runner/work
+          sudo find /home/runner/work -type d -exec chmod o+x {} +
 
       - name: Free disk space
         if: steps.check_arch.outputs.run == 'true'
