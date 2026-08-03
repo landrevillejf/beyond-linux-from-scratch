@@ -94,28 +94,36 @@ jobs:
           ls -lh /tmp/artifacts/lfs-packages-part-*.tar.gz
           echo "Part count: $(ls /tmp/artifacts/lfs-packages-part-*.tar.gz | wc -l)"
 
+      - name: Generate release body
+        id: release_body
+        run: |
+         {
+           echo 'body<<EOF'
+           echo '# 📦 LFS/BLFS Packages Cache'
+           echo ''
+           echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+           echo "Total packages: $(find /tmp/lfs-sources -type f | wc -l)"
+           echo "Cache size: $(du -sh /tmp/lfs-sources | cut -f1)"
+           echo ''
+           echo 'Use these cached packages to speed up builds.'
+           echo 'EOF'
+         } >> $GITHUB_OUTPUT
+
       - name: Upload packages to GitHub Release
         if: success()
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            /tmp/artifacts/lfs-packages-part-*.tar.gz
-            /tmp/lfs-sources/SHA256SUMS
-          tag_name: packages-cache-latest
-          name: LFS/BLFS Packages Cache
-          body: |
-            # 📦 LFS/BLFS Packages Cache
-            
-            Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-            Total packages: $(find /tmp/lfs-sources -type f | wc -l)
-            Cache size: $(du -sh /tmp/lfs-sources | cut -f1)
-            
-            Use these cached packages to speed up builds.
-          prerelease: true
-          draft: false
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+         files: |
+           /tmp/artifacts/lfs-packages-part-*.tar.gz
+           /tmp/lfs-sources/SHA256SUMS
+         tag_name: packages-cache-latest
+         name: LFS/BLFS Packages Cache
+         body: ${{ steps.release_body.outputs.body }}
+         prerelease: true
+         draft: false
+         generate_release_notes: false
+       env:
+         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create cache summary
         if: success()
