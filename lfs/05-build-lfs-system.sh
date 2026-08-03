@@ -392,10 +392,20 @@ echo "glibc done"
 # NOT in the new ld.so's compiled-in search path.  Create /etc/ld.so.conf
 # and rebuild the dynamic linker cache so every subsequent shell invocation
 # (/bin/sh, ../configure, etc.) can find those bootstrap host libraries.
+# /usr/lib is listed first so that the newly-installed glibc 2.42 libc.so.6
+# takes precedence over the Ubuntu host libc copied to /lib/x86_64-linux-gnu.
 mkdir -p /etc
-printf '/lib\n/lib/x86_64-linux-gnu\n/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
+printf '/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib\n/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
 /sbin/ldconfig || true
 echo "ldconfig cache rebuilt after glibc install"
+# The new glibc 2.42 ld.so (/lib64/ld-linux-x86-64.so.2) requires the
+# __nptl_change_stack_perm@GLIBC_PRIVATE symbol from a matching libc.so.6.
+# The old cross-toolchain libc at /tools/lib/libc.so.6 uses a different
+# GLIBC_PRIVATE ABI, causing a symbol-lookup failure when bootstrapped host
+# tools (tar, head, cut ...) are executed after glibc installs its new ld.so.
+# Prefer the newly-installed /usr/lib/libc.so.6 (glibc 2.42) so both the
+# Ubuntu-bootstrapped binaries and the toolchain binaries use a compatible libc.
+export LD_LIBRARY_PATH=/usr/lib:/tools/lib
 
 # ============================================================
 # 2. BUILD BINUTILS (official LFS)
