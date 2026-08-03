@@ -344,8 +344,14 @@ else
 fi
 
 # ---- Set cross-compiler variables ----
-CC="${LFS_TGT}-gcc"
-CXX="${LFS_TGT}-g++"
+# The cross-compiler was built with --with-sysroot=$LFS pointing at the
+# host-side LFS directory.  Inside the chroot that absolute path does not
+# exist (the chroot root IS that directory), so the linker cannot find
+# target libraries and configure reports "C compiler cannot create
+# executables".  Override the built-in sysroot with --sysroot=/ so that
+# headers and libraries are resolved relative to the chroot root.
+CC="${LFS_TGT}-gcc --sysroot=/"
+CXX="${LFS_TGT}-g++ --sysroot=/"
 LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
 export CC CXX LD AS
