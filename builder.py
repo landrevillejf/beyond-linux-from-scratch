@@ -1416,11 +1416,22 @@ class LFSBuilder:
         # Update sources.list from official repositories
         self._update_sources_list()
 
-        sources_candidates = [
+        sources_candidates = []
+        generated_sources_list = getattr(self, '_generated_sources_list', None)
+        if generated_sources_list is not None:
+            sources_candidates.append(generated_sources_list)
+        sources_candidates.extend([
             Path('packages/sources.list'),
             self.output_dir / 'packages' / 'sources.list'
-        ]
-        sources_list = next((p for p in sources_candidates if p.exists()), sources_candidates[0])
+        ])
+        seen_sources = set()
+        unique_sources_candidates = []
+        for candidate in sources_candidates:
+            if candidate in seen_sources:
+                continue
+            seen_sources.add(candidate)
+            unique_sources_candidates.append(candidate)
+        sources_list = next((p for p in unique_sources_candidates if p.exists()), unique_sources_candidates[0])
 
         checksum_candidates = [
             Path('packages/md5sums'),
@@ -1542,8 +1553,22 @@ class LFSBuilder:
 
     def _update_sources_list(self) -> bool:
         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""
-        sources_file = Path('packages/sources.list')
-        custom_file = Path('packages/custom-sources.list')
+        repo_sources_file = Path('packages/sources.list')
+        output_sources_file = self.output_dir / 'packages' / 'sources.list'
+        sources_file = repo_sources_file
+        if repo_sources_file.exists():
+            if not os.access(repo_sources_file, os.W_OK):
+                sources_file = output_sources_file
+        else:
+            repo_parent = repo_sources_file.parent if repo_sources_file.parent.exists() else Path('.')
+            if not os.access(repo_parent, os.W_OK):
+                sources_file = output_sources_file
+
+        custom_candidates = [
+            Path('packages/custom-sources.list'),
+            self.output_dir / 'packages' / 'custom-sources.list'
+        ]
+        custom_file = next((p for p in custom_candidates if p.exists()), custom_candidates[0])
         repo_urls = self.config.get('repositories', [])
 
         if not repo_urls:
@@ -1630,6 +1655,7 @@ class LFSBuilder:
             for url in sorted(urls_by_key.values()):
                 f.write(f"{url}\n")
 
+        self._generated_sources_list = sources_file
         if override_count:
             self.logger.info(f"Applied {override_count} custom source override(s)")
         self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom) -> {sources_file}")
