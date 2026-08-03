@@ -628,8 +628,8 @@ jobs:
         continue-on-error: true
 
       - name: Generate release notes
-       if: success()
-       run: |
+        if: success()
+        run: |
          echo "# 🔨 LFS Build Complete" > release_notes.md
          echo "" >> release_notes.md
          echo "**Profile**: ${{ inputs.profile }}" >> release_notes.md
