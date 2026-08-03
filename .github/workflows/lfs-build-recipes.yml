@@ -348,7 +348,7 @@ jobs:
           # Prepare arguments
           BUILD_ARGS="--profile ${{ inputs.profile }}"
            
-          if [ -n "${{ inputs.resume_from }}" ]; then
+          if [ -n "${{ inputs.resume_from }}" ] && [ "${{ inputs.resume_from }}" != "(from start)" ]; then
             echo "📍 Resuming from stage: ${{ inputs.resume_from }}"
             BUILD_ARGS="$BUILD_ARGS --resume-from ${{ inputs.resume_from }}"
           fi
