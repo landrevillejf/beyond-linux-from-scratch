@@ -446,8 +446,8 @@ cd build
              --enable-64-bit-bfd \
              --with-system-zlib \
              --disable-doc
-make -j$(nproc) tooldir=/usr MAKEINFO=missing CC_FOR_BUILD="${LFS_TGT}-gcc --sysroot=/" HOSTCC="${LFS_TGT}-gcc"
-make tooldir=/usr install
+make -j$(nproc) tooldir=/usr MAKEINFO=missing INFO_DEPS= CC_FOR_BUILD="${LFS_TGT}-gcc --sysroot=/" HOSTCC="${LFS_TGT}-gcc"
+make tooldir=/usr install MAKEINFO=missing INFO_DEPS=
 cd /sources
 rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "binutils done"
