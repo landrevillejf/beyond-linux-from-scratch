@@ -49,7 +49,7 @@ log_info "Init system selected: $INIT_SYSTEM"
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – creating minimal init structure"
     mkdir -pv "$LFS"/{etc/init.d,bin,sbin,usr/sbin}
-    cat > "$LFS/etc/init.d/rcS" << 'EOF'
+    cat >"$LFS/etc/init.d/rcS" <<'EOF'
 #!/bin/sh
 echo "Starting minimal init..."
 exec /bin/bash
@@ -73,11 +73,11 @@ fi
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
 
 cleanup_mounts() {
-	run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
-	run_privileged umount "$LFS"/dev 2>/dev/null || true
-	run_privileged umount "$LFS"/proc 2>/dev/null || true
-	run_privileged umount "$LFS"/sys 2>/dev/null || true
-	run_privileged umount "$LFS"/run 2>/dev/null || true
+    run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+    run_privileged umount "$LFS"/dev 2>/dev/null || true
+    run_privileged umount "$LFS"/proc 2>/dev/null || true
+    run_privileged umount "$LFS"/sys 2>/dev/null || true
+    run_privileged umount "$LFS"/run 2>/dev/null || true
 }
 trap cleanup_mounts EXIT
 
@@ -119,7 +119,7 @@ copy_tool_with_libs() {
 # Only copy essential utilities; DO NOT copy gcc, cc, install, ln, chmod, etc.
 for tool in tar head cut xz make nproc sed mktemp rm echo id getconf; do
     tool_path="$(command -v "$tool" 2>/dev/null || true)"
-    if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ "$tool_path" = /* ]]; then
+    if [ -n "$tool_path" ] && [ -x "$tool_path" ] && [[ $tool_path == /* ]]; then
         copy_tool_with_libs "$tool_path"
     else
         log_warning "Host tool '$tool' not found, chroot may fail"
@@ -155,7 +155,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
 fi
 
 # Internal script (no toolchain repair; assumes it works)
-cat > "$LFS/build-init.sh" << 'INNEREOF'
+cat >"$LFS/build-init.sh" <<'INNEREOF'
 #!/bin/bash
 # Force PATH to include /usr/bin, /bin and the temporary toolchain
 export PATH=/bin:/usr/bin:/sbin:/usr/sbin:/tools/bin

@@ -22,7 +22,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -31,10 +34,10 @@ log_info "Desktop type requested: $DESKTOP_TYPE"
 
 unsupported_desktop() {
     case "$1" in
-        gnome) log_error "gnome desktop is not yet implemented; requires Mutter, GNOME Shell, GDM, gsettings-desktop-schemas, gtk4, libadwaita, tracker, evolution-data-server" ;;
-        kde) log_error "kde desktop is not yet implemented; requires Qt6, KDE Frameworks, Plasma Workspace, KWin, SDDM, extra-cmake-modules" ;;
-        lxqt) log_error "lxqt desktop is not yet implemented; requires Qt6, libqtxdg, liblxqt, lxqt-panel, pcmanfm-qt, openbox or kwin" ;;
-        *) log_error "Unknown desktop type '$1'" ;;
+    gnome) log_error "gnome desktop is not yet implemented; requires Mutter, GNOME Shell, GDM, gsettings-desktop-schemas, gtk4, libadwaita, tracker, evolution-data-server" ;;
+    kde) log_error "kde desktop is not yet implemented; requires Qt6, KDE Frameworks, Plasma Workspace, KWin, SDDM, extra-cmake-modules" ;;
+    lxqt) log_error "lxqt desktop is not yet implemented; requires Qt6, libqtxdg, liblxqt, lxqt-panel, pcmanfm-qt, openbox or kwin" ;;
+    *) log_error "Unknown desktop type '$1'" ;;
     esac
 }
 
@@ -103,13 +106,22 @@ EOF
 }
 
 if [ "$IN_DOCKER" = true ]; then
-    [ "$DESKTOP_TYPE" = "xfce" ] || { unsupported_desktop "$DESKTOP_TYPE"; exit 1; }
+    [ "$DESKTOP_TYPE" = "xfce" ] || {
+        unsupported_desktop "$DESKTOP_TYPE"
+        exit 1
+    }
     install_xfce_docker_config
     exit 0
 fi
 
-[ "$DESKTOP_TYPE" = "xfce" ] || { unsupported_desktop "$DESKTOP_TYPE"; exit 1; }
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
+[ "$DESKTOP_TYPE" = "xfce" ] || {
+    unsupported_desktop "$DESKTOP_TYPE"
+    exit 1
+}
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
 
 mount_chroot_fs() {
     run_privileged mkdir -p "$LFS"/{dev,dev/pts,proc,sys,run,sources}

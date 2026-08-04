@@ -49,7 +49,7 @@ copy_binaries() {
             # Copy libraries
             ldd "$src" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read lib; do
                 lib_dir="$dest/lib"
-                [[ "$lib" == *"/lib64/"* ]] && lib_dir="$dest/lib64"
+                [[ $lib == *"/lib64/"* ]] && lib_dir="$dest/lib64"
                 run_privileged mkdir -p "$lib_dir"
                 run_privileged cp -v "$lib" "$lib_dir/"
             done
@@ -68,7 +68,7 @@ if [ "$IN_DOCKER" = true ]; then
     run_privileged mkdir -pv "$LFS"/etc/X11/xorg.conf.d
     run_privileged mkdir -pv "$LFS"/usr/bin
 
-    cat > "$LFS/configure-system.sh" << 'INNEREOF'
+    cat >"$LFS/configure-system.sh" <<'INNEREOF'
 #!/bin/bash
 set -e
 echo "Configuring LFS system (Docker mode)..."
@@ -109,11 +109,11 @@ log_info "Native mode – full configuration"
 
 # Mount virtual filesystems
 cleanup_mounts() {
-	run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
-	run_privileged umount "$LFS"/dev 2>/dev/null || true
-	run_privileged umount "$LFS"/proc 2>/dev/null || true
-	run_privileged umount "$LFS"/sys 2>/dev/null || true
-	run_privileged umount "$LFS"/run 2>/dev/null || true
+    run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+    run_privileged umount "$LFS"/dev 2>/dev/null || true
+    run_privileged umount "$LFS"/proc 2>/dev/null || true
+    run_privileged umount "$LFS"/sys 2>/dev/null || true
+    run_privileged umount "$LFS"/run 2>/dev/null || true
 }
 trap cleanup_mounts EXIT
 
@@ -134,7 +134,7 @@ for tool in groupadd useradd chpasswd; do
         run_privileged cp -L -v "$src" "$LFS/usr/sbin/"
         ldd "$src" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read lib; do
             lib_dir="$LFS/lib"
-            [[ "$lib" == *"/lib64/"* ]] && lib_dir="$LFS/lib64"
+            [[ $lib == *"/lib64/"* ]] && lib_dir="$LFS/lib64"
             run_privileged mkdir -p "$lib_dir"
             run_privileged cp -v "$lib" "$lib_dir/"
         done
@@ -142,7 +142,7 @@ for tool in groupadd useradd chpasswd; do
 done
 
 # Create a simplified configuration script (without depending on grub, systemd, etc.)
-cat > "$LFS/configure-system.sh" << 'INNEREOF'
+cat >"$LFS/configure-system.sh" <<'INNEREOF'
 #!/bin/bash
 set -e
 echo "========================================="

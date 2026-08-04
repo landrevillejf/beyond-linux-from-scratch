@@ -47,7 +47,7 @@ if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – minimal desktop config inside $LFS"
     run_privileged mkdir -pv "$LFS"/etc/X11/xorg.conf.d
     run_privileged mkdir -pv "$LFS"/usr/share/xsessions
-    cat > "$LFS/usr/share/xsessions/xfce.desktop" << 'XFCE'
+    cat >"$LFS/usr/share/xsessions/xfce.desktop" <<'XFCE'
 [Desktop Entry]
 Name=XFCE
 Exec=startxfce4
@@ -68,7 +68,7 @@ run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
-cat > "$LFS/configure-desktop.sh" << 'INNEREOF'
+cat >"$LFS/configure-desktop.sh" <<'INNEREOF'
 #!/bin/bash
 set -e
 echo "Configuring desktop..."

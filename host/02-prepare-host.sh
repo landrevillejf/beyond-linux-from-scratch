@@ -46,34 +46,34 @@ install_packages() {
     log_info "Installing packages: ${packages[*]}"
 
     case "$distro" in
-        debian|ubuntu)
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq "${packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky)
-            if command -v dnf &>/dev/null; then
-                sudo dnf install -y "${packages[@]}"
-            else
-                sudo yum install -y "${packages[@]}"
-            fi
-            ;;
-        opensuse*|sles)
-            sudo zypper install -y "${packages[@]}"
-            ;;
-        arch|manjaro)
-            sudo pacman -Syu --noconfirm "${packages[@]}"
-            ;;
-        alpine)
-            sudo apk add "${packages[@]}"
-            ;;
-        gentoo)
-            log_error "Gentoo detected. Please install the following packages manually using emerge: ${packages[*]}"
-            exit 1
-            ;;
-        *)
-            log_error "Unknown distribution. Please install the following packages manually: ${packages[*]}"
-            exit 1
-            ;;
+    debian | ubuntu)
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq "${packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky)
+        if command -v dnf &>/dev/null; then
+            sudo dnf install -y "${packages[@]}"
+        else
+            sudo yum install -y "${packages[@]}"
+        fi
+        ;;
+    opensuse* | sles)
+        sudo zypper install -y "${packages[@]}"
+        ;;
+    arch | manjaro)
+        sudo pacman -Syu --noconfirm "${packages[@]}"
+        ;;
+    alpine)
+        sudo apk add "${packages[@]}"
+        ;;
+    gentoo)
+        log_error "Gentoo detected. Please install the following packages manually using emerge: ${packages[*]}"
+        exit 1
+        ;;
+    *)
+        log_error "Unknown distribution. Please install the following packages manually: ${packages[*]}"
+        exit 1
+        ;;
     esac
 }
 
@@ -121,7 +121,7 @@ create_lfs_user() {
             useradd -s /bin/bash -g lfs -m -d /home/lfs -k /dev/null lfs
         }
         echo "lfs:lfs123" | chpasswd 2>/dev/null || true
-        echo "lfs ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers 2>/dev/null || true
+        echo "lfs ALL=(ALL) NOPASSWD: ALL" >>/etc/sudoers 2>/dev/null || true
     else
         log_info "User lfs already exists"
     fi
@@ -190,7 +190,7 @@ setup_user_env() {
     fi
 
     if [ ! -f /home/lfs/.bashrc ]; then
-        cat > /home/lfs/.bashrc << "EOF"
+        cat >/home/lfs/.bashrc <<"EOF"
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -208,7 +208,7 @@ EOF
     fi
 
     if [ ! -f /home/lfs/.bash_profile ]; then
-        cat > /home/lfs/.bash_profile << "EOF"
+        cat >/home/lfs/.bash_profile <<"EOF"
 if [ -f "$HOME/.bashrc" ] ; then
     source "$HOME/.bashrc"
 fi
@@ -240,47 +240,47 @@ install_dependencies() {
 
     # Adjust package names per distribution
     case "$distro" in
-        debian|ubuntu)
-            install_packages "$distro" "${common_packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky)
-            # Map Debian names to Red Hat equivalents
-            local rh_packages=(
-                gcc gcc-c++ make bison flex gawk texinfo
-                wget curl git python3 python3-pip
-                xorriso syslinux mtools dosfstools
-                parted rsync sudo
-                bc cpio unzip xz
-                openssl-devel elfutils-libelf-devel kmod cpio
-            )
-            install_packages "$distro" "${rh_packages[@]}"
-            ;;
-        arch|manjaro)
-            local arch_packages=(
-                base-devel bison flex gawk texinfo
-                wget curl git python python-pip
-                xorriso libisoburn mtools
-                dosfstools parted rsync sudo
-                bc cpio unzip xz
-                openssl elfutils kmod cpio
-            )
-            install_packages "$distro" "${arch_packages[@]}"
-            ;;
-        opensuse*|sles)
-            local suse_packages=(
-                gcc gcc-c++ make bison flex gawk texinfo
-                wget curl git python3 python3-pip
-                xorriso syslinux mtools dosfstools
-                parted rsync sudo
-                bc cpio unzip xz
-                libopenssl-devel libelf-devel kmod cpio
-            )
-            install_packages "$distro" "${suse_packages[@]}"
-            ;;
-        *)
-            log_warning "Unknown distribution, attempt to install common packages anyway"
-            install_packages "$distro" "${common_packages[@]}" || true
-            ;;
+    debian | ubuntu)
+        install_packages "$distro" "${common_packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky)
+        # Map Debian names to Red Hat equivalents
+        local rh_packages=(
+            gcc gcc-c++ make bison flex gawk texinfo
+            wget curl git python3 python3-pip
+            xorriso syslinux mtools dosfstools
+            parted rsync sudo
+            bc cpio unzip xz
+            openssl-devel elfutils-libelf-devel kmod cpio
+        )
+        install_packages "$distro" "${rh_packages[@]}"
+        ;;
+    arch | manjaro)
+        local arch_packages=(
+            base-devel bison flex gawk texinfo
+            wget curl git python python-pip
+            xorriso libisoburn mtools
+            dosfstools parted rsync sudo
+            bc cpio unzip xz
+            openssl elfutils kmod cpio
+        )
+        install_packages "$distro" "${arch_packages[@]}"
+        ;;
+    opensuse* | sles)
+        local suse_packages=(
+            gcc gcc-c++ make bison flex gawk texinfo
+            wget curl git python3 python3-pip
+            xorriso syslinux mtools dosfstools
+            parted rsync sudo
+            bc cpio unzip xz
+            libopenssl-devel libelf-devel kmod cpio
+        )
+        install_packages "$distro" "${suse_packages[@]}"
+        ;;
+    *)
+        log_warning "Unknown distribution, attempt to install common packages anyway"
+        install_packages "$distro" "${common_packages[@]}" || true
+        ;;
     esac
 }
 
@@ -288,7 +288,7 @@ install_dependencies() {
 create_build_script() {
     log_info "Creating LFS build script..."
 
-    cat > "$LFS/build-lfs.sh" << "EOF"
+    cat >"$LFS/build-lfs.sh" <<"EOF"
 #!/usr/bin/env bash
 # Main LFS build script to be run as lfs user
 

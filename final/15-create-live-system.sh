@@ -70,7 +70,7 @@ if [ -d "/usr/lib/syslinux/modules/bios" ]; then
 fi
 
 # Configuration isolinux
-cat > "$ISO_DIR/isolinux/isolinux.cfg" << EOF
+cat >"$ISO_DIR/isolinux/isolinux.cfg" <<EOF
 default ${DEFAULT_BOOT}
 label live
   kernel vmlinuz
