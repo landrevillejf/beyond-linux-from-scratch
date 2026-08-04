@@ -70,6 +70,13 @@ fi
 log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
+cleanup_mounts() {
+	run_privileged umount "$LFS"/dev 2>/dev/null || true
+	run_privileged umount "$LFS"/proc 2>/dev/null || true
+	run_privileged umount "$LFS"/sys 2>/dev/null || true
+}
+trap cleanup_mounts EXIT
+
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
@@ -102,10 +109,7 @@ run_privileged chmod +x "$LFS/etc/profile.d/svc-aliases.sh"
 # Si systemd, créer les liens symboliques pour les commandes legacy
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     log_info "Creating legacy symlinks for systemd"
-    run_privileged chroot "$LFS" /bin/bash -c "
-        ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true
-        ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true
-    "
+    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true; ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true'
 fi
 
 # Nettoyer les montages
