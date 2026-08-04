@@ -437,19 +437,42 @@
     },
     "desktop-xfce": {
       "description": "Lightweight XFCE desktop - optimal balance of features and resources",
-      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications.web_browsers", "applications.office_suites", "applications.multimedia"],
+      "categories": [
+        "lfs_core", "init_systems", "blfs_core", "display_managers", "desktop",
+        "applications.web_browsers", "applications.office_suites", "applications.multimedia"
+      ],
       "desktop": "xfce",
       "init_system": "systemd",
       "features": ["xfce-full", "file-manager", "terminal", "taskmanager", "screenshot-tool", "document-viewer"],
-      "optimization": "balanced"
+      "optimization": "balanced",
+      "applications": {
+        "web_browser": "firefox",
+        "text_editor": "mousepad",
+        "file_manager": "thunar",
+        "terminal": "xfce4-terminal",
+        "media_player": "vlc",
+        "image_viewer": "ristretto"
+      }
     },
     "desktop-gnome": {
       "description": "Full GNOME desktop - modern and feature-rich",
-      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications.web_browsers", "applications.email_clients", "applications.office_suites", "applications.multimedia"],
+      "categories": [
+        "lfs_core", "init_systems", "blfs_core", "display_managers", "desktop",
+        "applications.web_browsers", "applications.email_clients", "applications.office_suites", "applications.multimedia"
+      ],
       "desktop": "gnome",
       "init_system": "systemd",
       "features": ["gnome-full", "nautilus-file-manager", "evolution-mail", "documents-viewer", "gnome-maps", "gnome-calendar"],
-      "optimization": "features"
+      "optimization": "features",
+      "applications": {
+        "web_browser": "firefox",
+        "text_editor": "gedit",
+        "file_manager": "nautilus",
+        "email_client": "evolution",
+        "office_suite": "libreoffice",
+        "media_player": "vlc",
+        "image_viewer": "eog"
+      }
     },
     "audio-cli": {
       "description": "Terminal-only audio production - lightweight professional tools",
