@@ -79,24 +79,31 @@
         "xfce": {
           "enabled": true,
           "version": "4.20",
-          "description": "Lightweight GTK-based desktop",
+          "description": "Lightweight GTK-based desktop - fast and resource-efficient",
           "packages": [
             "libxfce4util-4.20.0", "xfconf-4.20.0", "libxfce4ui-4.20.0",
             "exo-4.20.0", "garcon-4.20.0", "xfce4-panel-4.20.0",
             "thunar-4.20.0", "xfwm4-4.20.0", "xfce4-session-4.20.0",
-            "xfce4-settings-4.20.0", "xfdesktop-4.20.0", "xfce4-appfinder-4.20.0"
+            "xfce4-settings-4.20.0", "xfdesktop-4.20.0", "xfce4-appfinder-4.20.0",
+            "xfce4-power-manager-4.20.0", "xfce4-screensaver-4.20.0"
           ],
-          "goodies": ["xfce4-terminal-1.1.3", "xfce4-taskmanager-1.5.7", "ristretto-0.13.2"],
+          "goodies": [
+            "xfce4-terminal-1.1.3", "xfce4-taskmanager-1.5.7", "ristretto-0.13.2",
+            "xfce4-notifyd-0.9.2", "xfce4-pulseaudio-plugin-0.4.9", "xfce4-weather-plugin-0.11.2",
+            "tumbler-4.20.0", "xfce4-sensor-plugin-1.4.6"
+          ],
           "display_manager": "lightdm"
         },
         "gnome": {
           "enabled": false,
           "version": "46",
-          "description": "Full-featured GNOME desktop",
+          "description": "Full-featured GNOME desktop - modern and integrated",
           "packages": [
             "gnome-shell-46.5", "mutter-46.5", "gnome-session-46.0",
             "nautilus-46.2", "gnome-control-center-46.5", "gnome-terminal-3.52.0",
-            "gnome-settings-daemon-46.0", "gdm-46.2"
+            "gnome-settings-daemon-46.0", "gdm-46.2", "gnome-calendar-46.1",
+            "gnome-maps-46.3", "gnome-clocks-46.0", "gnome-weather-46.0",
+            "gedit-46.2", "eog-46.1", "evolution-46.0"
           ],
           "display_manager": "gdm",
           "requires": ["pipewire", "wireplumber"]
@@ -104,18 +111,24 @@
         "kde": {
           "enabled": false,
           "version": "6.2",
-          "description": "KDE Plasma desktop",
+          "description": "KDE Plasma desktop - highly customizable and powerful",
           "packages": [
             "plasma-desktop-6.2.0", "kwin-6.2.0", "dolphin-24.08.0",
-            "konsole-24.08.0", "systemsettings-6.2.0", "discover-6.2.0"
+            "konsole-24.08.0", "systemsettings-6.2.0", "discover-6.2.0",
+            "kate-24.08.0", "kmail-24.08.0", "korganizer-24.08.0",
+            "okular-24.08.0", "gwenview-24.08.0"
           ],
           "display_manager": "sddm"
         },
         "lxqt": {
           "enabled": false,
           "version": "2.1.0",
-          "description": "Lightweight Qt desktop",
-          "packages": ["lxqt-session-2.1.0", "pcmanfm-qt-2.1.0", "lxqt-panel-2.1.0"],
+          "description": "Lightweight Qt desktop - minimal resource usage",
+          "packages": [
+            "lxqt-session-2.1.0", "pcmanfm-qt-2.1.0", "lxqt-panel-2.1.0",
+            "lxqt-config-2.1.0", "lxqt-runner-2.1.0", "lxqt-sudo-2.1.0",
+            "lximage-qt-2.1.0", "lxqt-openssh-askpass-2.1.0"
+          ],
           "display_manager": "sddm"
         },
         "none": {
