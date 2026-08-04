@@ -321,11 +321,14 @@ def test_lfs_system_cross_compiler_uses_sysroot_slash():
 
 def test_lfs_system_binutils_build_disables_makeinfo():
     """Binutils 2.45 may still try to build doc/chew.stamp even with
-    --disable-doc. Force MAKEINFO=true so make does not invoke host gcc via
-    doc helpers that are unavailable inside the chroot."""
+    --disable-doc.  Pass MAKEINFO=missing so make skips info doc generation
+    inside the chroot where texinfo/makeinfo is not yet installed, and set
+    CC_FOR_BUILD to the cross-compiler so build-side host tools (e.g. chew)
+    are not linked against the absent host gcc."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
     assert '--disable-doc' in content
-    assert 'make -j$(nproc) tooldir=/usr MAKEINFO=true' in content
+    assert 'MAKEINFO=missing' in content
+    assert 'CC_FOR_BUILD=' in content
