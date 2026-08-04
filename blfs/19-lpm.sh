@@ -246,19 +246,18 @@ version_gte() {
     # Extract suffix (alpha, beta, rc, etc) - e.g., "1.2.3rc1" -> base="1.2.3", suffix="rc1"
     local base1 base2 suffix1 suffix2
     # Use parameter expansion to extract base (before first letter)
+    # shellcheck disable=SC2001
     base1=$(echo "$v1" | sed 's/[a-zA-Z].*//')
+    # shellcheck disable=SC2001
     base2=$(echo "$v2" | sed 's/[a-zA-Z].*//')
+    # shellcheck disable=SC2001
     suffix1=$(echo "$v1" | sed 's/^[0-9.]*//')
+    # shellcheck disable=SC2001
     suffix2=$(echo "$v2" | sed 's/^[0-9.]*//')
 
     # If base is empty, use the whole version
     base1=${base1:-$v1}
     base2=${base2:-$v2}
-
-    # Split and compare base versions numerically
-    local IFS='.' p1_str p2_str
-    p1_str="$base1"
-    p2_str="$base2"
 
     # Use awk for numeric comparison to avoid array issues
     awk -v v1="$base1" -v v2="$base2" -v s1="$suffix1" -v s2="$suffix2" 'BEGIN {
@@ -910,7 +909,8 @@ clean_cache() {
 # Download or copy source archive
 fetch_source() {
     local src="$1"
-    local dest="$LPM_BUILD_DIR/sources/$(basename "$src")"
+    local dest
+    dest="$LPM_BUILD_DIR/sources/$(basename "$src")"
     mkdir -p "$LPM_BUILD_DIR/sources"
     if [[ $src =~ ^https?:// ]]; then
         log_info "Downloading source: $src"
@@ -954,7 +954,6 @@ run_build() {
     local srcdir="$1"
     local pkg_name="$2"
     local pkg_version="$3"
-    local builddir="$LPM_BUILD_DIR/src/${pkg_name}-${pkg_version}"
     local staging="$LPM_BUILD_DIR/pkg/${pkg_name}-${pkg_version}/files"
     local recipe="$4" # optional recipe file
 
