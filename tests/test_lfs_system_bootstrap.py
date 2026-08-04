@@ -316,3 +316,15 @@ def test_lfs_system_cross_compiler_uses_sysroot_slash():
     # Bare cross-compiler without sysroot must not be used as CC/CXX
     assert 'CC="${LFS_TGT}-gcc"\n' not in content
     assert 'CXX="${LFS_TGT}-g++"\n' not in content
+
+
+def test_lfs_system_binutils_build_disables_makeinfo():
+    """Binutils 2.45 may still try to build doc/chew.stamp even with
+    --disable-doc. Force MAKEINFO=true so make does not invoke host gcc via
+    doc helpers that are unavailable inside the chroot."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert '--disable-doc' in content
+    assert 'make -j$(nproc) tooldir=/usr MAKEINFO=true' in content
