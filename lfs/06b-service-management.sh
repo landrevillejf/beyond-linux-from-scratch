@@ -70,6 +70,13 @@ fi
 log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
+cleanup_mounts() {
+	run_privileged umount "$LFS"/dev 2>/dev/null || true
+	run_privileged umount "$LFS"/proc 2>/dev/null || true
+	run_privileged umount "$LFS"/sys 2>/dev/null || true
+}
+trap cleanup_mounts EXIT
+
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true

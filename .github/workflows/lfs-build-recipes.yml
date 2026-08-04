@@ -651,9 +651,17 @@ jobs:
         if: always()
         run: |
           echo "🧹 Cleaning up build artifacts..."
-          sudo rm -rf /tmp/lfs-build
-          sudo rm -rf /tmp/lfs-sources
-          sudo rm -rf /mnt/lfs
+          # Unmount any virtual filesystems that may have been mounted inside the build tree
+          for mnt in /tmp/lfs-build/dev/pts /tmp/lfs-build/dev /tmp/lfs-build/proc \
+                     /tmp/lfs-build/sys /tmp/lfs-build/run /mnt/lfs/dev/pts \
+                     /mnt/lfs/dev /mnt/lfs/proc /mnt/lfs/sys /mnt/lfs/run; do
+            if mountpoint -q "$mnt" 2>/dev/null; then
+              sudo umount -lf "$mnt" 2>/dev/null || true
+            fi
+          done
+          sudo rm -rf /tmp/lfs-build || true
+          sudo rm -rf /tmp/lfs-sources || true
+          sudo rm -rf /mnt/lfs || true
           echo "✅ Cleanup complete"
 
   build-summary:

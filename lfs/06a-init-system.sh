@@ -72,6 +72,15 @@ fi
 # Ensure /bin/sh resolves to a working shell inside chroot for make/autotools.
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
 
+cleanup_mounts() {
+	run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
+	run_privileged umount "$LFS"/dev 2>/dev/null || true
+	run_privileged umount "$LFS"/proc 2>/dev/null || true
+	run_privileged umount "$LFS"/sys 2>/dev/null || true
+	run_privileged umount "$LFS"/run 2>/dev/null || true
+}
+trap cleanup_mounts EXIT
+
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
