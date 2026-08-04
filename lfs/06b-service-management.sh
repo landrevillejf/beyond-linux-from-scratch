@@ -109,10 +109,7 @@ run_privileged chmod +x "$LFS/etc/profile.d/svc-aliases.sh"
 # Si systemd, créer les liens symboliques pour les commandes legacy
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     log_info "Creating legacy symlinks for systemd"
-    run_privileged chroot "$LFS" /bin/bash -c "
-        ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true
-        ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true
-    "
+    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true; ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true'
 fi
 
 # Nettoyer les montages
