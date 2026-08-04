@@ -154,6 +154,8 @@ if [ -z "$VERSION" ]; then
     exit 1
 fi
 
+SPLIT_CREATED=false
+
 echo -e "${GREEN}Detected version: ${VERSION}${NC}"
 
 # ---------- Check if tag already exists ----------
@@ -211,6 +213,23 @@ if [ "$CREATE_TAR" = true ]; then
     echo -e "${GREEN}Tarball created: $TAR_NAME${NC}"
 fi
 
+# ---------- Split tarball if it exceeds 2GB (GitHub's file size limit) ----------
+if [ "$CREATE_TAR" = true ]; then
+    TAR_SIZE=$(stat -f%z "$TAR_NAME" 2>/dev/null || stat -c%s "$TAR_NAME" 2>/dev/null)
+    SIZE_LIMIT=$((2 * 1024 * 1024 * 1024))  # 2GB in bytes
+    
+    if [ "$TAR_SIZE" -gt "$SIZE_LIMIT" ]; then
+        echo -e "${YELLOW}Tarball exceeds 2GB GitHub limit ($((TAR_SIZE / 1024 / 1024 / 1024))GB). Splitting...${NC}"
+        split -b 1G "$TAR_NAME" "$TAR_NAME.part"
+        echo -e "${GREEN}Split into parts:${NC}"
+        ls -lh "$TAR_NAME".part*
+        # Remove the original if split was successful
+        rm "$TAR_NAME"
+        echo -e "${GREEN}Original tarball removed. Use .part* files for release.${NC}"
+        SPLIT_CREATED=true
+    fi
+fi
+
 # ---------- Create tag ----------
 if [ "$CREATE_TAG" = true ]; then
     echo -e "${BLUE}Creating tag v$VERSION...${NC}"
@@ -228,14 +247,22 @@ if [ "$CREATE_TAG" = true ]; then
     echo "     git push origin v$VERSION"
 fi
 if [ "$CREATE_TAR" = true ]; then
-    echo "  2. Publish the tarball:"
-    echo "     - Create a GitHub release with the tag v$VERSION"
-    echo "     - Upload $TAR_NAME as an asset"
+    if [ "$SPLIT_CREATED" = true ]; then
+        echo "  2. Publish the split tarballs:"
+        echo "     gh release create v$VERSION lfs-builder-${VERSION}.tar.gz.part* --title \"LFS Builder v$VERSION\" --notes \"Release notes...\""
+        echo
+        echo "     To reconstruct the archive:"
+        echo "     cat lfs-builder-${VERSION}.tar.gz.part* > lfs-builder-${VERSION}.tar.gz"
+    else
+        echo "  2. Publish the tarball:"
+        echo "     gh release create v$VERSION lfs-builder-${VERSION}.tar.gz --title \"LFS Builder v$VERSION\" --notes \"Release notes...\""
+    fi
     echo "  3. (Optional) Verify the tarball content:"
-    echo "     tar -tzf $TAR_NAME | head -20"
+    if [ "$SPLIT_CREATED" = true ]; then
+        echo "     cat lfs-builder-${VERSION}.tar.gz.part* | tar -tzf - | head -20"
+    else
+        echo "     tar -tzf lfs-builder-${VERSION}.tar.gz | head -20"
+    fi
 fi
-echo
-echo "To create a GitHub release from the command line:"
-echo "  gh release create v$VERSION $TAR_NAME --title \"LFS Builder v$VERSION\" --notes \"Release notes...\""
 echo
 echo -e "${BLUE}Happy releasing!${NC}"
