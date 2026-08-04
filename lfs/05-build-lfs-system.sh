@@ -446,7 +446,7 @@ cd build
              --enable-64-bit-bfd \
              --with-system-zlib \
              --disable-doc
-make -j$(nproc) tooldir=/usr MAKEINFO=true
+make -j$(nproc) tooldir=/usr MAKEINFO=true HOSTCC="${LFS_TGT}-gcc"
 make tooldir=/usr install
 cd /sources
 rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"

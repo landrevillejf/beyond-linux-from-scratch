@@ -314,8 +314,9 @@ def test_lfs_system_cross_compiler_uses_sysroot_slash():
     assert 'CC="${LFS_TGT}-gcc --sysroot=/"' in content
     assert 'CXX="${LFS_TGT}-g++ --sysroot=/"' in content
     # Bare cross-compiler without sysroot must not be used as CC/CXX
-    assert 'CC="${LFS_TGT}-gcc"\n' not in content
-    assert 'CXX="${LFS_TGT}-g++"\n' not in content
+    # Use a newline prefix to avoid matching HOSTCC= assignments
+    assert '\nCC="${LFS_TGT}-gcc"\n' not in content
+    assert '\nCXX="${LFS_TGT}-g++"\n' not in content
 
 
 def test_lfs_system_binutils_build_disables_makeinfo():
