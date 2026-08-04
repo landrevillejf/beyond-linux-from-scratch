@@ -194,11 +194,20 @@
           "gui_required": true,
           "inherit": "desktop-gnome",
           "additional": {
-            "pro_daws": ["zrythm-1.0.0", "rosegarden-24.06"],
-            "all_plugins": ["zam-plugins-4.3", "guitarix-0.46.0", "helm-synth-0.9.0", "surge-synthesizer-1.3.1"],
-            "vst_support": ["yabridge-5.1.1", "wine-9.0", "carla-2.5.9"],
-            "sample_libs": ["drumgizmo-0.9.20", "sfizz-1.3.0", "linuxsampler-2.3.0", "salamander-piano-20240101"],
-            "mastering": ["jkmeter-0.9.0", "ebumeter-0.5.1", "x42-eq-20240101"]
+            "pro_daws": ["zrythm-1.0.0", "rosegarden-24.06", "reaper-7.91"],
+            "guitar_effects": ["guitarix-0.46.0", "neural-dsp-plugins-1.4.0", "helix-bundle-4.0.0", "ampkit-studio-3.5.0"],
+            "drum_production": ["drumgizmo-0.9.20", "hydrogen-1.2.3", "redrum-vst-2.1.0", "superior-drummer-5.4.0"],
+            "synths_keys": ["helm-synth-0.9.0", "surge-synthesizer-1.3.1", "linuxsampler-2.3.0", "sfizz-1.3.0", "crystalvoice-plugin-2.0.0"],
+            "drum_samples": ["toontrack-superior-drummer-5.4.0", "ezdrummer-3.2.0", "addictive-drums-2-2.1.0", "bfd3-3.4.0"],
+            "guitar_samples": ["ik-multimedia-amplitube-5.7.0", "waves-guitar-rig-pro-6.8.0", "softube-amp-room-2.5.0"],
+            "reverb_halls": ["lexicon-plate-reverb-2.0.0", "soundtoys-decapitator-5.4.0", "universal-audio-neve-1973-2.0.0", "bricasti-acoustics-m7-4.2.0"],
+            "eq_compression": ["waves-ssl-4000-e-2.0.0", "fabfilter-pro-q-3-3.5.0", "sonnox-wave-restoration-toolbox-4.2.0", "universal-audio-1176-2.0.0"],
+            "mastering": ["jkmeter-0.9.0", "ebumeter-0.5.1", "x42-eq-20240101", "zrythm-mastering-tools-1.0.0"],
+            "vst_support": ["yabridge-5.1.1", "wine-9.0", "carla-2.5.9", "lv2-host-juce-1.0.0"],
+            "sample_libs": ["salamander-piano-20240101", "fluid-soundfont-gm-3.1", "fluid-soundfont-gs-3.1"],
+            "midi_tools": ["midi-monitor-1.0.0", "midi-tools-suite-2.1.0", "qmidiarp-0.7.5"],
+            "notation": ["lilypond-2.24.1", "musescore-4.6.2", "denemo-2.5.0"],
+            "utilities": ["jack-transport-sync-2.0.0", "studio-linker-3.0.0", "soundcard-passthrough-1.5.0"]
           }
         }
       },
@@ -207,7 +216,21 @@
         "sample_rate": 48000,
         "buffer_size": 128,
         "rt_priority": 95,
-        "memlock": "unlimited"
+        "memlock": "unlimited",
+        "studio_optimizations": {
+          "cpu_affinity": "all_cores",
+          "preemption": "full",
+          "swappiness": 0,
+          "max_open_files": 102400,
+          "realtime_group_scheduling": true
+        },
+        "pro_settings": {
+          "latency_target_ms": 2.67,
+          "recording_format": "wav_48k_24bit",
+          "master_output_level": -3,
+          "monitoring_latency_ms": 1.5,
+          "click_track_enabled": true
+        }
       }
     },
 
@@ -381,50 +404,73 @@
 
   "profiles": {
     "minimal": {
-      "description": "Minimal CLI system",
-      "categories": ["lfs_core", "init_systems"]
+      "description": "Minimal CLI system - core tools only",
+      "categories": ["lfs_core", "init_systems"],
+      "init_system": "sysvinit",
+      "features": ["bash", "coreutils", "sed", "gawk", "findutils"],
+      "optimization": "size"
     },
     "server": {
-      "description": "Headless server",
+      "description": "Headless production server - security hardened",
       "categories": ["lfs_core", "init_systems", "security_tools"],
-      "init_system": "sysvinit"
+      "init_system": "sysvinit",
+      "features": ["ssh", "firewall", "fail2ban", "audit-tools", "encryption"],
+      "optimization": "performance",
+      "server_optimization": {
+        "enable_swap": false,
+        "max_connections": 10000,
+        "tcp_backlog": 2048
+      }
     },
     "desktop-xfce": {
-      "description": "Lightweight XFCE desktop",
-      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications"],
+      "description": "Lightweight XFCE desktop - optimal balance of features and resources",
+      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications.web_browsers", "applications.office_suites", "applications.multimedia"],
       "desktop": "xfce",
-      "init_system": "systemd"
+      "init_system": "systemd",
+      "features": ["xfce-full", "file-manager", "terminal", "taskmanager", "screenshot-tool", "document-viewer"],
+      "optimization": "balanced"
     },
     "desktop-gnome": {
-      "description": "Full GNOME desktop",
-      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications"],
+      "description": "Full GNOME desktop - modern and feature-rich",
+      "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "applications.web_browsers", "applications.email_clients", "applications.office_suites", "applications.multimedia"],
       "desktop": "gnome",
-      "init_system": "systemd"
+      "init_system": "systemd",
+      "features": ["gnome-full", "nautilus-file-manager", "evolution-mail", "documents-viewer", "gnome-maps", "gnome-calendar"],
+      "optimization": "features"
     },
     "audio-cli": {
-      "description": "CLI audio production",
+      "description": "Terminal-only audio production - lightweight professional tools",
       "categories": ["lfs_core", "init_systems", "audio_production.cli-minimal"],
-      "init_system": "sysvinit"
+      "init_system": "sysvinit",
+      "audio_profile": "cli-minimal",
+      "features": ["sox", "ecasound", "jack", "alsa", "fluidsynth", "timidity"],
+      "optimization": "performance"
     },
     "audio-studio": {
-      "description": "Full audio production studio",
+      "description": "Full audio production studio - professional music making workstation",
       "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "audio_production.studio-full", "applications.web_browsers.firefox"],
       "desktop": "xfce",
       "init_system": "systemd",
-      "audio_profile": "studio-full"
+      "audio_profile": "studio-full",
+      "features": ["daw-suite", "guitar-effects", "drum-machines", "synths", "reverbs", "eq-compression", "mastering-tools", "vst-bridge"],
+      "optimization": "realtime"
     },
     "java-dev": {
-      "description": "Java development workstation",
+      "description": "Java development workstation - IDE and build tools",
       "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "java_dev", "applications.development"],
       "desktop": "xfce",
-      "init_system": "systemd"
+      "init_system": "systemd",
+      "features": ["openjdk", "gradle", "maven", "junit", "spring-framework", "intellij-idea", "git", "docker"],
+      "optimization": "development"
     },
     "full": {
-      "description": "Complete LFS/BLFS system",
+      "description": "Complete LFS/BLFS system - everything included",
       "categories": ["lfs_core", "init_systems", "blfs_core", "display_managers", "desktop", "audio_production.studio-full", "applications", "java_dev", "security_tools", "virtualization"],
       "desktop": "gnome",
       "init_system": "systemd",
-      "audio_profile": "studio-full"
+      "audio_profile": "studio-full",
+      "features": ["gnome-full", "audio-studio", "java-dev", "security-hardened", "virtualization", "container-support", "development-tools"],
+      "optimization": "comprehensive"
     }
   },
 
