@@ -51,7 +51,19 @@ chmod +x "$root/usr/bin/env"
 exit 0
 """)
 
-    for helper in ("sudo", "mount", "umount", "chroot"):
+    (fake_bin / "ldd").write_text("""#!/bin/sh
+exit 0
+""")
+    (fake_bin / "python3").write_text("""#!/bin/sh
+# Return an empty stdlib path so no stdlib copy is attempted
+if echo "$*" | grep -q "get_path"; then
+    printf ''
+    exit 0
+fi
+exit 0
+""")
+
+    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3"):
         (fake_bin / helper).chmod(0o755)
 
     env = {
@@ -126,7 +138,19 @@ chmod +x "$root/usr/bin/env"
 exit 0
 """)
 
-    for helper in ("sudo", "mount", "umount", "chroot"):
+    (fake_bin / "ldd").write_text("""#!/bin/sh
+exit 0
+""")
+    (fake_bin / "python3").write_text("""#!/bin/sh
+# Return an empty stdlib path so no stdlib copy is attempted
+if echo "$*" | grep -q "get_path"; then
+    printf ''
+    exit 0
+fi
+exit 0
+""")
+
+    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3"):
         (fake_bin / helper).chmod(0o755)
 
     env = {
