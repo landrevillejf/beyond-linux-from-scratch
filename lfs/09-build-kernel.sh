@@ -14,17 +14,17 @@ CROSS_COMPILE=${CROSS_COMPILE:-}
 
 # Normalise ARCH for make
 case "$ARCH" in
-    x86_64|amd64)  MAKE_ARCH="x86_64" ;;
-    aarch64|arm64) MAKE_ARCH="arm64"  ;;
-    armv7l|armhf)  MAKE_ARCH="arm"    ;;
-    riscv64)       MAKE_ARCH="riscv"  ;;
-    *)             MAKE_ARCH="$ARCH"  ;;
+x86_64 | amd64) MAKE_ARCH="x86_64" ;;
+aarch64 | arm64) MAKE_ARCH="arm64" ;;
+armv7l | armhf) MAKE_ARCH="arm" ;;
+riscv64) MAKE_ARCH="riscv" ;;
+*) MAKE_ARCH="$ARCH" ;;
 esac
 
 KERNEL_VERSION=""
 
-log_info()    { echo "[INFO] $*"; }
-log_error()   { echo "[ERROR] $*" >&2; }
+log_info() { echo "[INFO] $*"; }
+log_error() { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
 # ---------------------------------------------------------------------------

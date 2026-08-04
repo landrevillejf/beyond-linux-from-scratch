@@ -14,9 +14,15 @@ else
 fi
 
 IN_DOCKER=false
-if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then IN_DOCKER=true; log_info "Running in Docker container"; fi
+if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
+    IN_DOCKER=true
+    log_info "Running in Docker container"
+fi
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 APPS_TO_BUILD="${LFS_CONFIG_APPS_TO_BUILD:-firefox,vlc}"
 export APPS_TO_BUILD
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
@@ -28,11 +34,13 @@ log_info "========================================="
 install_app_metadata() {
     log_info "Docker mode – installing application desktop files and LPM metadata in $LFS"
     run_privileged mkdir -pv "$LFS"/usr/share/applications "$LFS"/usr/share/metainfo "$LFS"/var/lib/lpm/installed "$LFS"/var/lib/lfs-builder/applications
-    IFS=',' read -r -a apps <<< "$APPS_TO_BUILD"
+    IFS=',' read -r -a apps <<<"$APPS_TO_BUILD"
     for raw_app in "${apps[@]}"; do
-        app="$(echo "$raw_app" | tr '[:upper:]' '[:lower:]' | xargs)"; [ -n "$app" ] || continue
+        app="$(echo "$raw_app" | tr '[:upper:]' '[:lower:]' | xargs)"
+        [ -n "$app" ] || continue
         case "$app" in
-            firefox) run_privileged tee "$LFS/usr/share/applications/firefox.desktop" >/dev/null <<'EOF'
+        firefox)
+            run_privileged tee "$LFS/usr/share/applications/firefox.desktop" >/dev/null <<'EOF'
 [Desktop Entry]
 Name=Firefox
 Comment=Browse the World Wide Web
@@ -43,8 +51,9 @@ Icon=firefox
 Categories=Network;WebBrowser;
 MimeType=text/html;text/xml;application/xhtml+xml;x-scheme-handler/http;x-scheme-handler/https;
 EOF
-                ;;
-            libreoffice) run_privileged tee "$LFS/usr/share/applications/libreoffice-startcenter.desktop" >/dev/null <<'EOF'
+            ;;
+        libreoffice)
+            run_privileged tee "$LFS/usr/share/applications/libreoffice-startcenter.desktop" >/dev/null <<'EOF'
 [Desktop Entry]
 Name=LibreOffice
 Comment=Office productivity suite
@@ -54,8 +63,9 @@ Type=Application
 Icon=libreoffice-startcenter
 Categories=Office;
 EOF
-                ;;
-            gimp) run_privileged tee "$LFS/usr/share/applications/gimp.desktop" >/dev/null <<'EOF'
+            ;;
+        gimp)
+            run_privileged tee "$LFS/usr/share/applications/gimp.desktop" >/dev/null <<'EOF'
 [Desktop Entry]
 Name=GNU Image Manipulation Program
 Comment=Create images and edit photographs
@@ -65,8 +75,9 @@ Type=Application
 Icon=gimp
 Categories=Graphics;RasterGraphics;
 EOF
-                ;;
-            vlc) run_privileged tee "$LFS/usr/share/applications/vlc.desktop" >/dev/null <<'EOF'
+            ;;
+        vlc)
+            run_privileged tee "$LFS/usr/share/applications/vlc.desktop" >/dev/null <<'EOF'
 [Desktop Entry]
 Name=VLC media player
 Comment=Read, capture, broadcast multimedia streams
@@ -76,8 +87,11 @@ Type=Application
 Icon=vlc
 Categories=AudioVideo;Player;
 EOF
-                ;;
-            *) log_warning "Unknown application '$app' requested; metadata not installed"; continue ;;
+            ;;
+        *)
+            log_warning "Unknown application '$app' requested; metadata not installed"
+            continue
+            ;;
         esac
         run_privileged tee "$LFS/var/lib/lpm/installed/${app}.metadata" >/dev/null <<EOF
 name=$app
@@ -90,9 +104,18 @@ EOF
     done
 }
 
-if [ "$IN_DOCKER" = true ]; then install_app_metadata; exit 0; fi
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
-if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then log_error "chroot not working – run lfs-basic first"; exit 1; fi
+if [ "$IN_DOCKER" = true ]; then
+    install_app_metadata
+    exit 0
+fi
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
+if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
+    log_error "chroot not working – run lfs-basic first"
+    exit 1
+fi
 
 mount_chroot_fs() {
     run_privileged mkdir -p "$LFS"/{dev,dev/pts,proc,sys,run,sources}

@@ -23,7 +23,7 @@ ARCH="${ARCH:-arm64}"
 U_BOOT_VERSION="${U_BOOT_VERSION:-2024.07}"
 U_BOOT_URL="https://ftp.denx.de/pub/u-boot/u-boot-${U_BOOT_VERSION}.tar.bz2"
 U_BOOT_DIR="u-boot-${U_BOOT_VERSION}"
-BOARD="${U_BOOT_BOARD:-rpi_4}"   # default to Raspberry Pi 4 (64-bit)
+BOARD="${U_BOOT_BOARD:-rpi_4}" # default to Raspberry Pi 4 (64-bit)
 OUTPUT_DIR="${LFS:-/mnt/lfs}/boot"
 
 # Map boards to U-Boot defconfigs

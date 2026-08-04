@@ -5,8 +5,8 @@ set -e
 
 LFS=${LFS:-/output/image}
 
-log_info()    { echo "[INFO] $*"; }
-log_error()   { echo "[ERROR] $*" >&2; }
+log_info() { echo "[INFO] $*"; }
+log_error() { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
 # Create required directories
@@ -15,7 +15,7 @@ mkdir -pv "$LFS/var/lib/lfs-updater"
 mkdir -pv "$LFS/var/log"
 
 # Write the actual system updater script
-cat > "$LFS/usr/bin/lfs-update" << 'SCRIPT'
+cat >"$LFS/usr/bin/lfs-update" <<'SCRIPT'
 #!/bin/bash
 set -e
 
@@ -139,7 +139,7 @@ chmod +x "$LFS/usr/bin/lfs-update"
 
 # Create default repo manifest if missing
 if [ ! -f "$LFS/var/lib/lfs-updater/repo.list" ]; then
-    cat > "$LFS/var/lib/lfs-updater/repo.list" << 'EOF'
+    cat >"$LFS/var/lib/lfs-updater/repo.list" <<'EOF'
 LFS_VERSION=13.0
 # Additional packages could be listed here
 EOF
@@ -147,7 +147,7 @@ fi
 
 # Create initial version file if missing
 if [ ! -f "$LFS/etc/lfs-version" ]; then
-    echo "13.0" > "$LFS/etc/lfs-version"
+    echo "13.0" >"$LFS/etc/lfs-version"
 fi
 
 log_success "System updater installed (lfs-update)"

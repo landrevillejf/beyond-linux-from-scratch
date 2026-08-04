@@ -74,7 +74,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     run_privileged chown -R lfs:lfs "$LFS/sources"
 fi
 
-cat > "$LFS/install-privacy-tools.sh" << 'INNEREOF'
+cat >"$LFS/install-privacy-tools.sh" <<'INNEREOF'
 #!/bin/bash
 set -e
 

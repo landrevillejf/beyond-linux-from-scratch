@@ -50,7 +50,7 @@ fi
 install_docker_metadata() {
     log_info "Docker mode – installing BLFS base metadata and filesystem skeleton in $LFS"
     mkdir -p "$LFS"/{etc/ssl/certs,etc/pki/tls/certs,etc/ssh,etc/sudoers.d,usr/bin,usr/lib,usr/share/doc,usr/share/man,var/lib/lfs-builder/blfs-base,var/log}
-    cat > "$LFS/var/lib/lfs-builder/blfs-base/packages.list" <<'EOF'
+    cat >"$LFS/var/lib/lfs-builder/blfs-base/packages.list" <<'EOF'
 openssl
 make-ca
 libtasn1
@@ -83,22 +83,22 @@ tzdata
 iana-etc
 sqlite
 EOF
-    cat > "$LFS/etc/ssl/openssl.cnf" <<'EOF'
+    cat >"$LFS/etc/ssl/openssl.cnf" <<'EOF'
 openssl_conf = openssl_init
 [openssl_init]
 [system_default_sect]
 EOF
-    cat > "$LFS/etc/ca-certificates.conf" <<'EOF'
+    cat >"$LFS/etc/ca-certificates.conf" <<'EOF'
 # Managed by Way Beyond Linux From Scratch Docker metadata mode.
 # Native builds install make-ca generated anchors here.
 EOF
-    cat > "$LFS/etc/sudoers.d/README" <<'EOF'
+    cat >"$LFS/etc/sudoers.d/README" <<'EOF'
 # sudo package metadata installed; native builds install sudo itself.
 EOF
     chmod 0755 "$LFS/var/lib/lfs-builder" "$LFS/var/lib/lfs-builder/blfs-base"
     while read -r pkg; do
         [ -n "$pkg" ] && touch "$LFS/var/lib/lfs-builder/blfs-base/${pkg}.docker"
-    done < "$LFS/var/lib/lfs-builder/blfs-base/packages.list"
+    done <"$LFS/var/lib/lfs-builder/blfs-base/packages.list"
     log_success "BLFS base Docker metadata installed"
 }
 
@@ -140,7 +140,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     if ! chown -R lfs:lfs "$LFS/sources" 2>/dev/null; then log_warning "Could not chown $LFS/sources to lfs:lfs"; fi
 fi
 
-cat > "$LFS/build-blfs-base.sh" <<'INNEREOF'
+cat >"$LFS/build-blfs-base.sh" <<'INNEREOF'
 #!/bin/bash
 set -euo pipefail
 

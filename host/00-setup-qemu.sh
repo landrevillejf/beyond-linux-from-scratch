@@ -5,9 +5,9 @@
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
-log_info()    { echo -e "\033[0;32m[INFO]\033[0m $1"; }
+log_info() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
 log_success() { echo -e "\033[0;34m[SUCCESS]\033[0m $1"; }
-log_error()   { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
+log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
 log_warning() { echo -e "\033[1;33m[WARNING]\033[0m $1"; }
 
 # ----------------------------------------------------------------------------
@@ -66,7 +66,8 @@ if [ -e /proc/sys/fs/binfmt_misc/register ]; then
         fi
     else
         log_info "Manual registration via /proc"
-        printf ":${TARGET_ARCH}:M::\\x7f\\x45\\x4c\\x46\\x02\\x01\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\xb7::${INTERPRETER}:OCF\n" | \
+        printf ':%s:M::\x7f\x45\x4c\x46\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\xb7::%s:OCF\n' \
+            "${TARGET_ARCH}" "${INTERPRETER}" |
             sudo tee /proc/sys/fs/binfmt_misc/register >/dev/null 2>&1 || true
     fi
 else

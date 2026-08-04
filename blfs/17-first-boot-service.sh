@@ -46,7 +46,7 @@ log_info "========================================="
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – creating first-boot script inside $LFS"
     run_privileged mkdir -pv "$LFS/usr/sbin"
-    run_privileged tee "$LFS/usr/sbin/first-boot.sh" << 'EOF' > /dev/null
+    run_privileged tee "$LFS/usr/sbin/first-boot.sh" <<'EOF' >/dev/null
 #!/bin/bash
 echo "First-boot script running (Docker mode)"
 touch /var/log/first-boot-done
@@ -68,7 +68,7 @@ run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mkdir -pv "$LFS/usr/sbin"
 
 # Write the script
-run_privileged tee "$LFS/usr/sbin/first-boot.sh" << 'EOF' > /dev/null
+run_privileged tee "$LFS/usr/sbin/first-boot.sh" <<'EOF' >/dev/null
 #!/bin/bash
 echo "Running first-boot configuration..."
 # Add first-boot tasks here
@@ -79,7 +79,7 @@ run_privileged chmod +x "$LFS/usr/sbin/first-boot.sh"
 
 # Create systemd service if systemd is the init, or an rc script for sysvinit
 if [ -d "$LFS/usr/lib/systemd/system" ]; then
-    run_privileged tee "$LFS/usr/lib/systemd/system/first-boot.service" << 'SERVICE' > /dev/null
+    run_privileged tee "$LFS/usr/lib/systemd/system/first-boot.service" <<'SERVICE' >/dev/null
 [Unit]
 Description=First Boot Configuration
 After=network.target
@@ -94,7 +94,7 @@ WantedBy=multi-user.target
 SERVICE
     run_privileged chroot "$LFS" systemctl enable first-boot.service 2>/dev/null || true
 elif [ -d "$LFS/etc/init.d" ]; then
-    run_privileged tee "$LFS/etc/init.d/first-boot" << 'INIT' > /dev/null
+    run_privileged tee "$LFS/etc/init.d/first-boot" <<'INIT' >/dev/null
 #!/bin/sh
 case "$1" in
     start)

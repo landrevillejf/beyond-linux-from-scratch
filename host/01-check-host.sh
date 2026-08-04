@@ -37,34 +37,34 @@ install_packages() {
     log_info "Installing missing packages: ${packages[*]}"
 
     case "$distro" in
-        debian|ubuntu)
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq "${packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky)
-            if command -v dnf &>/dev/null; then
-                sudo dnf install -y "${packages[@]}"
-            else
-                sudo yum install -y "${packages[@]}"
-            fi
-            ;;
-        opensuse*|sles)
-            sudo zypper install -y "${packages[@]}"
-            ;;
-        arch|manjaro)
-            sudo pacman -Syu --noconfirm "${packages[@]}"
-            ;;
-        alpine)
-            sudo apk add "${packages[@]}"
-            ;;
-        gentoo)
-            log_error "Gentoo detected. Please install the following packages manually using emerge: ${packages[*]}"
-            exit 1
-            ;;
-        *)
-            log_error "Unknown distribution. Please install the following packages manually: ${packages[*]}"
-            exit 1
-            ;;
+    debian | ubuntu)
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq "${packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky)
+        if command -v dnf &>/dev/null; then
+            sudo dnf install -y "${packages[@]}"
+        else
+            sudo yum install -y "${packages[@]}"
+        fi
+        ;;
+    opensuse* | sles)
+        sudo zypper install -y "${packages[@]}"
+        ;;
+    arch | manjaro)
+        sudo pacman -Syu --noconfirm "${packages[@]}"
+        ;;
+    alpine)
+        sudo apk add "${packages[@]}"
+        ;;
+    gentoo)
+        log_error "Gentoo detected. Please install the following packages manually using emerge: ${packages[*]}"
+        exit 1
+        ;;
+    *)
+        log_error "Unknown distribution. Please install the following packages manually: ${packages[*]}"
+        exit 1
+        ;;
     esac
 }
 
@@ -126,7 +126,7 @@ if [ "$IN_DOCKER" = true ]; then
 
     missing_commands=()
     for cmd in "${required_commands[@]}"; do
-        if ! command -v $cmd &> /dev/null; then
+        if ! command -v $cmd &>/dev/null; then
             missing_commands+=("$cmd")
         fi
     done
@@ -150,7 +150,7 @@ required_commands=(
 
 missing_commands=()
 for cmd in "${required_commands[@]}"; do
-    if ! command -v $cmd &> /dev/null; then
+    if ! command -v $cmd &>/dev/null; then
         missing_commands+=("$cmd")
     fi
 done
@@ -161,7 +161,7 @@ if [ ${#missing_commands[@]} -ne 0 ]; then
     install_packages "$DISTRO" "${missing_commands[@]}"
     # Re-check after installation
     for cmd in "${missing_commands[@]}"; do
-        if ! command -v $cmd &> /dev/null; then
+        if ! command -v $cmd &>/dev/null; then
             log_error "Command '$cmd' still missing after installation. Please install it manually."
             exit 1
         fi
@@ -175,7 +175,7 @@ check_version() {
     local min_version=$2
     local version
 
-    if ! command -v $cmd &> /dev/null; then
+    if ! command -v $cmd &>/dev/null; then
         return 0
     fi
 

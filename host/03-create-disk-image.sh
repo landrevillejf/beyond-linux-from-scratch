@@ -60,7 +60,7 @@ create_image_docker() {
     }
 
     # Format as ext4 (no loop device needed)
-    if command -v mkfs.ext4 &> /dev/null; then
+    if command -v mkfs.ext4 &>/dev/null; then
         mkfs.ext4 -F "$IMAGE_FILE" 2>/dev/null || {
             log_warning "Could not format $IMAGE_FILE as ext4"
         }
@@ -83,8 +83,8 @@ create_image_docker() {
     log_success "Directory structure created at: $LFS"
 
     # Save the image path for later use
-    echo "$IMAGE_FILE" > /tmp/lfs_image_file
-    echo "file" > /tmp/lfs_mount_type
+    echo "$IMAGE_FILE" >/tmp/lfs_image_file
+    echo "file" >/tmp/lfs_mount_type
 
     return 0
 }
@@ -108,15 +108,15 @@ create_image_native() {
     fi
 
     # Check if losetup is available
-    if ! command -v losetup &> /dev/null; then
+    if ! command -v losetup &>/dev/null; then
         log_error "losetup not found. Installing required package..."
-        if command -v apt-get &> /dev/null; then
+        if command -v apt-get &>/dev/null; then
             $USE_SUDO apt-get install -y util-linux 2>/dev/null || {
                 log_warning "Could not install util-linux, falling back to file-only mode"
                 create_image_docker
                 return $?
             }
-        elif command -v yum &> /dev/null; then
+        elif command -v yum &>/dev/null; then
             $USE_SUDO yum install -y util-linux 2>/dev/null || {
                 log_warning "Could not install util-linux, falling back to file-only mode"
                 create_image_docker
@@ -130,7 +130,7 @@ create_image_native() {
     fi
 
     # Check if partprobe is available
-    if ! command -v parted &> /dev/null; then
+    if ! command -v parted &>/dev/null; then
         log_error "parted not found"
         create_image_docker
         return $?
@@ -138,7 +138,7 @@ create_image_native() {
 
     # Check if mkfs tools are available
     for tool in mkfs.vfat mkfs.ext4 mkswap; do
-        if ! command -v $tool &> /dev/null; then
+        if ! command -v $tool &>/dev/null; then
             log_error "$tool not found"
             create_image_docker
             return $?
@@ -217,8 +217,8 @@ create_image_native() {
 
     log_success "Disk image created and mounted at $LFS"
     log_info "Loop device: $LOOP_DEV"
-    echo "$LOOP_DEV" > /tmp/lfs_loop_device
-    echo "loop" > /tmp/lfs_mount_type
+    echo "$LOOP_DEV" >/tmp/lfs_loop_device
+    echo "loop" >/tmp/lfs_mount_type
 
     return 0
 }

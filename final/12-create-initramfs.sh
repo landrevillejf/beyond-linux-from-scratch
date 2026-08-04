@@ -59,7 +59,7 @@ cd - >/dev/null
 # --------------------------------------------------------------------------
 # Init script (mounts devtmpfs, so no static device nodes needed)
 # --------------------------------------------------------------------------
-cat > "$INITRAMFS_DIR/init" << 'EOF'
+cat >"$INITRAMFS_DIR/init" <<'EOF'
 #!/bin/busybox sh
 /bin/busybox mount -t proc proc /proc
 /bin/busybox mount -t sysfs sysfs /sys
@@ -85,7 +85,7 @@ chmod 755 "$INITRAMFS_DIR/init"
 # Create compressed cpio archive
 # --------------------------------------------------------------------------
 cd "$INITRAMFS_DIR"
-find . | cpio -o -H newc | gzip -9 > "$INITRAMFS_OUTPUT"
+find . | cpio -o -H newc | gzip -9 >"$INITRAMFS_OUTPUT"
 cd - >/dev/null
 
 rm -rf "$INITRAMFS_DIR"

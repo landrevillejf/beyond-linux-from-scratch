@@ -10,8 +10,8 @@ if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
-    log_info()    { echo "[INFO] $*"; }
-    log_error()   { echo "[ERROR] $*" >&2; }
+    log_info() { echo "[INFO] $*"; }
+    log_error() { echo "[ERROR] $*" >&2; }
     log_warning() { echo "[WARNING] $*"; }
     log_success() { echo "[SUCCESS] $*"; }
 fi
@@ -62,7 +62,8 @@ FILES_DIR="$LFS/var/lib/lpm/files"
 # Canonical base package set (LFS 12.4 + minimal BLFS runtime)
 # name|version|description|deps
 # ---------------------------------------------------------------------------
-BASE_PACKAGES=$(cat <<'LIST'
+BASE_PACKAGES=$(
+    cat <<'LIST'
 # ============================================================================
 # LFS 12.4 base package registry
 # Format: name|version|description|comma-separated-deps
@@ -138,20 +139,20 @@ fi
 echo "$BASE_PACKAGES" | while IFS= read -r line; do
     # Skip comments and blank lines
     case "$line" in
-        ''|\#*) continue ;;
+    '' | \#*) continue ;;
     esac
     # Ensure line has 4 pipe-separated fields (name|version|desc|deps)
-    IFS='|' read -r name version description deps <<< "$line"
+    IFS='|' read -r name version description deps <<<"$line"
     [ -z "$name" ] && continue
     # Append a checksum placeholder (real one is set at real install time by LPM)
     checksum="base-$(printf '%s' "$name-$version" | sha256sum | cut -c1-16)"
     # Idempotency: only add if not already in db
     if ! grep -F -q "^$name|" "$TMP_DB" 2>/dev/null; then
-        printf '%s|%s|%s|%s|%s\n' "$name" "$version" "$description" "$deps" "$checksum" >> "$TMP_DB"
+        printf '%s|%s|%s|%s|%s\n' "$name" "$version" "$description" "$deps" "$checksum" >>"$TMP_DB"
     fi
     # Empty file manifest for base packages (they are installed outside LPM)
     manifest="$FILES_DIR/$name"
-    [ -f "$manifest" ] || : > "$manifest"
+    [ -f "$manifest" ] || : >"$manifest"
 done
 
 run_privileged install -m 0644 "$TMP_DB" "$DB_FILE"

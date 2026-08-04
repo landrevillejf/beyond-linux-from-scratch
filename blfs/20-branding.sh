@@ -28,8 +28,8 @@ to_lower() {
 
 is_true() {
     case "$(to_lower "${1:-}")" in
-        1|true|yes|on) return 0 ;;
-        *) return 1 ;;
+    1 | true | yes | on) return 0 ;;
+    *) return 1 ;;
     esac
 }
 
@@ -48,7 +48,7 @@ resolve_branding_dir() {
     local repo_root="$SCRIPT_DIR/.."
 
     if [ -n "$override" ]; then
-        if [[ "$override" = /* ]]; then
+        if [[ $override == /* ]]; then
             BRANDING_DIR="$override"
         else
             BRANDING_DIR="$repo_root/$override"
@@ -73,11 +73,11 @@ resolve_branding_settings() {
 
     BRANDING_THEME_VARIANT="$(to_lower "${LFS_CONFIG_BRANDING_THEME_VARIANT:-dark}")"
     case "$BRANDING_THEME_VARIANT" in
-        dark|light) ;;
-        *)
-            fail_or_warn "Invalid branding theme_variant '$BRANDING_THEME_VARIANT', using 'dark'."
-            BRANDING_THEME_VARIANT="dark"
-            ;;
+    dark | light) ;;
+    *)
+        fail_or_warn "Invalid branding theme_variant '$BRANDING_THEME_VARIANT', using 'dark'."
+        BRANDING_THEME_VARIANT="dark"
+        ;;
     esac
 
     if [ "$BRANDING_THEME_VARIANT" = "light" ]; then
@@ -100,7 +100,7 @@ resolve_wallpaper_path() {
     local source=""
     local candidate=""
 
-    if [[ "$WALLPAPER_SETTING" = /* ]]; then
+    if [[ $WALLPAPER_SETTING == /* ]]; then
         source="$WALLPAPER_SETTING"
     else
         candidate="$BRANDING_DIR/wallpaper/$WALLPAPER_SETTING"
@@ -206,7 +206,7 @@ configure_xfce_branding() {
         cp "$BRANDING_DIR/themes/xfce.xml" "$LFS/etc/xdg/xfce4/xfce-theme.xml"
     fi
 
-    cat > "$LFS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" << EOF
+    cat >"$LFS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xsettings" version="1.0">
   <property name="Net" type="empty">
@@ -222,7 +222,7 @@ configure_gnome_branding() {
     log_info "Applying GNOME branding..."
 
     mkdir -p "$LFS/etc/dconf/db/local.d"
-    cat > "$LFS/etc/dconf/db/local.d/01-lfs-branding" << EOF
+    cat >"$LFS/etc/dconf/db/local.d/01-lfs-branding" <<EOF
 [org/gnome/desktop/interface]
 gtk-theme='$GTK_THEME'
 icon-theme='$ICON_THEME'
@@ -243,7 +243,7 @@ configure_kde_branding() {
     mkdir -p "$LFS/etc/xdg"
     mkdir -p "$LFS/etc/xdg/plasma-workspace/env"
 
-    cat > "$LFS/etc/xdg/kdeglobals" << EOF
+    cat >"$LFS/etc/xdg/kdeglobals" <<EOF
 [Icons]
 Theme=$ICON_THEME
 
@@ -251,7 +251,7 @@ Theme=$ICON_THEME
 widgetStyle=Breeze
 EOF
 
-    cat > "$LFS/etc/xdg/plasma-workspace/env/lfs-branding.sh" << EOF
+    cat >"$LFS/etc/xdg/plasma-workspace/env/lfs-branding.sh" <<EOF
 export GTK_THEME="$GTK_THEME"
 export XDG_CURRENT_DESKTOP="\${XDG_CURRENT_DESKTOP:-KDE}"
 EOF
@@ -262,7 +262,7 @@ configure_lxqt_branding() {
     log_info "Applying LXQt branding..."
 
     mkdir -p "$LFS/etc/xdg/lxqt"
-    cat > "$LFS/etc/xdg/lxqt/lxqt.conf" << EOF
+    cat >"$LFS/etc/xdg/lxqt/lxqt.conf" <<EOF
 [General]
 theme=$GTK_THEME
 icon_theme=$ICON_THEME
@@ -273,7 +273,7 @@ configure_phosh_branding() {
     should_apply_desktop "phosh" || return 0
     log_info "Applying Phosh branding..."
     mkdir -p "$LFS/etc/skel/.config/phosh"
-    cat > "$LFS/etc/skel/.config/phosh/phoc.ini" << EOF
+    cat >"$LFS/etc/skel/.config/phosh/phoc.ini" <<EOF
 [output:default]
 bg-color=0a0a14ff
 EOF
@@ -283,7 +283,7 @@ configure_display_manager() {
     log_info "Configuring display manager branding..."
     mkdir -p "$LFS/etc/lightdm"
 
-    cat > "$LFS/etc/lightdm/lightdm-gtk-greeter.conf" << EOF
+    cat >"$LFS/etc/lightdm/lightdm-gtk-greeter.conf" <<EOF
 [greeter]
 background=${BRANDING_WALLPAPER_TARGET}
 theme-name=${GTK_THEME}
@@ -297,7 +297,7 @@ configure_user_defaults() {
     mkdir -p "$LFS/home/lfsuser/.config"
     mkdir -p "$LFS/root/.config"
 
-    cat > "$LFS/etc/skel/.config/lfs-branding.conf" << EOF
+    cat >"$LFS/etc/skel/.config/lfs-branding.conf" <<EOF
 GTK_THEME=$GTK_THEME
 ICON_THEME=$ICON_THEME
 WALLPAPER=$BRANDING_WALLPAPER_TARGET
@@ -335,8 +335,8 @@ generate_wallpapers_if_needed() {
             --variants "${LFS_CONFIG_BRANDING_WALLPAPER_VARIANTS:-15}" \
             --include-logo \
             --include-branding 2>&1 | while read -r line; do
-                log_info "  $line"
-            done; then
+            log_info "  $line"
+        done; then
             log_success "Wallpapers generated successfully"
         else
             log_warning "Wallpaper generation failed, continuing with existing wallpapers"
@@ -366,7 +366,7 @@ write_builder_parameters_snapshot() {
         /^LFS_VERSION=/ ||
         /^LFS_CONFIG_/ ||
         /^LFS_PROFILE_/
-    ' > "$LFS/etc/lfs-builder-params.env"
+    ' >"$LFS/etc/lfs-builder-params.env"
     log_success "Builder parameters saved to /etc/lfs-builder-params.env"
 }
 
@@ -391,7 +391,7 @@ write_branding_manifest() {
         if command -v sha256sum >/dev/null 2>&1; then
             find "$LFS/usr/share/backgrounds/lfs" "$LFS/usr/share/themes" "$LFS/usr/share/pixmaps/lfs" -type f 2>/dev/null | LC_ALL=C sort | xargs -r sha256sum
         fi
-    } > "$manifest"
+    } >"$manifest"
 
     log_success "Branding manifest written to /etc/lfs-branding-manifest.txt"
 }

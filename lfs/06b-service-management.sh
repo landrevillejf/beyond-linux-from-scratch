@@ -54,7 +54,7 @@ log_info "Detected init system: $INIT_SYSTEM"
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode – creating minimal service scripts inside $LFS"
     run_privileged mkdir -p "$LFS/etc/profile.d"
-    run_privileged tee "$LFS/etc/profile.d/svc-aliases.sh" << 'EOF'
+    run_privileged tee "$LFS/etc/profile.d/svc-aliases.sh" <<'EOF'
 # Service aliases for both sysvinit and systemd
 alias start='sudo /etc/init.d/'
 alias stop='sudo /etc/init.d/'
@@ -71,9 +71,9 @@ log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
 cleanup_mounts() {
-	run_privileged umount "$LFS"/dev 2>/dev/null || true
-	run_privileged umount "$LFS"/proc 2>/dev/null || true
-	run_privileged umount "$LFS"/sys 2>/dev/null || true
+    run_privileged umount "$LFS"/dev 2>/dev/null || true
+    run_privileged umount "$LFS"/proc 2>/dev/null || true
+    run_privileged umount "$LFS"/sys 2>/dev/null || true
 }
 trap cleanup_mounts EXIT
 
@@ -86,7 +86,7 @@ run_privileged mkdir -p "$LFS/etc/profile.d"
 
 # Créer le fichier d'aliases dans le chroot
 log_info "Writing service aliases to $LFS/etc/profile.d/svc-aliases.sh"
-run_privileged tee "$LFS/etc/profile.d/svc-aliases.sh" << 'EOF'
+run_privileged tee "$LFS/etc/profile.d/svc-aliases.sh" <<'EOF'
 # Service management aliases
 if [ -d /etc/init.d ] && [ -x /etc/init.d/rc ]; then
     # sysvinit style

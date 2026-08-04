@@ -10,8 +10,8 @@ if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
     # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
-    log_info()    { echo "[INFO] $*"; }
-    log_error()   { echo "[ERROR] $*" >&2; }
+    log_info() { echo "[INFO] $*"; }
+    log_error() { echo "[ERROR] $*" >&2; }
     log_warning() { echo "[WARNING] $*"; }
     log_success() { echo "[SUCCESS] $*"; }
 fi
@@ -230,7 +230,7 @@ if [ -f "$LFS/etc/login.defs" ]; then
     log_info "Hardening /etc/login.defs"
     run_privileged sed -i \
         -e 's/^PASS_MAX_DAYS.*/PASS_MAX_DAYS   90/' \
-        -e 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS   1/'  \
+        -e 's/^PASS_MIN_DAYS.*/PASS_MIN_DAYS   1/' \
         -e 's/^PASS_WARN_AGE.*/PASS_WARN_AGE   14/' \
         -e 's/^UMASK.*/UMASK           027/' \
         "$LFS/etc/login.defs"
@@ -268,7 +268,7 @@ for f in /etc/shadow /etc/gshadow; do
     [ -f "$LFS$f" ] && run_privileged chmod 0000 "$LFS$f" || true
 done
 [ -f "$LFS/etc/passwd" ] && run_privileged chmod 0644 "$LFS/etc/passwd" || true
-[ -f "$LFS/etc/group" ]  && run_privileged chmod 0644 "$LFS/etc/group"  || true
+[ -f "$LFS/etc/group" ] && run_privileged chmod 0644 "$LFS/etc/group" || true
 
 # ---------------------------------------------------------------------------
 # 10. auditd base rules (applied if auditd is installed)

@@ -59,7 +59,7 @@ load_branding_config() {
 ensure_branding_images() {
     local generator="$BRANDING_DIR/generate-installer-branding.py"
     local grub_bg="$BRANDING_DIR/backgrounds/grub-background.png"
-    
+
     if [ ! -f "$grub_bg" ] || [ -f "$grub_bg.placeholder" ]; then
         if [ -f "$generator" ]; then
             echo "[INFO] Generating branding images..."
@@ -77,26 +77,26 @@ ensure_branding_images() {
 install_branding_assets() {
     local bg_dir="$BRANDING_DIR/backgrounds"
     local logo_dir="$BRANDING_DIR/logo"
-    
+
     # Create branding directories in ISO
     mkdir -p "$ISO_ROOT/branding"/{backgrounds,logo,boot}
-    
+
     # Copy backgrounds
     if [ -d "$bg_dir" ]; then
         find "$bg_dir" -type f -name "*.png" 2>/dev/null | while read -r bg; do
             cp "$bg" "$ISO_ROOT/branding/backgrounds/" 2>/dev/null || true
         done
     fi
-    
+
     # Copy logos
     if [ -d "$logo_dir" ]; then
         find "$logo_dir" -type f 2>/dev/null | while read -r logo; do
             cp "$logo" "$ISO_ROOT/branding/logo/" 2>/dev/null || true
         done
     fi
-    
+
     # Create branding manifest in ISO
-    cat > "$ISO_ROOT/branding/manifest.txt" << EOF
+    cat >"$ISO_ROOT/branding/manifest.txt" <<EOF
 [Installer Branding Manifest]
 preset=$(basename "$BRANDING_DIR")
 version=${BUILD_VERSION:-0.52.7}
@@ -118,11 +118,11 @@ timeout=$GRUB_TIMEOUT
 
 [Branding Files]
 EOF
-    
+
     if [ -d "$ISO_ROOT/branding" ]; then
-        find "$ISO_ROOT/branding" -type f | sort >> "$ISO_ROOT/branding/manifest.txt"
+        find "$ISO_ROOT/branding" -type f | sort >>"$ISO_ROOT/branding/manifest.txt"
     fi
-    
+
     echo "[SUCCESS] Branding assets installed"
 }
 
@@ -158,7 +158,7 @@ load_branding_config
 ensure_branding_images
 
 # Fichier grub.cfg (utilisé par BIOS et UEFI) - WITH BRANDING
-cat > "$ISO_ROOT/boot/grub/grub.cfg" << EOF
+cat >"$ISO_ROOT/boot/grub/grub.cfg" <<EOF
 set timeout=${GRUB_TIMEOUT:-10}
 set default=${GRUB_DEFAULT:-0}
 
@@ -227,7 +227,7 @@ cp "$EFI_IMG" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
 cp /usr/lib/ISOLINUX/isolinux.bin "$ISO_ROOT/isolinux/"
 cp /usr/lib/ISOLINUX/isohdpfx.bin "$ISO_ROOT/isolinux/" 2>/dev/null || true
 
-cat > "$ISO_ROOT/isolinux/isolinux.cfg" << 'EOF'
+cat >"$ISO_ROOT/isolinux/isolinux.cfg" <<'EOF'
 default live
 timeout 10
 label live
