@@ -356,3 +356,5 @@ def test_lfs_system_binutils_build_disables_makeinfo():
     assert '--disable-doc' in content
     assert 'MAKEINFO=missing' in content
     assert 'CC_FOR_BUILD=' in content
+    assert '--without-zstd' in content
+    assert '--with-system-zlib' not in content.split('echo "binutils done"')[0]
