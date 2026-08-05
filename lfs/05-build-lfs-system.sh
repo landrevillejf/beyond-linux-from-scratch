@@ -445,6 +445,7 @@ cd build
              --disable-werror \
              --enable-64-bit-bfd \
              --without-zstd \
+             --disable-gprofng \
              --disable-doc
 make -j$(nproc) tooldir=/usr MAKEINFO=missing INFO_DEPS= CC_FOR_BUILD="${LFS_TGT}-gcc --sysroot=/" HOSTCC="${LFS_TGT}-gcc"
 make tooldir=/usr install MAKEINFO=missing INFO_DEPS=
