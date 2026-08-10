@@ -29,32 +29,48 @@ jobs:
           sudo useradd -m -s /bin/bash lfs || true
           sudo -u lfs touch /home/lfs/.bashrc
 
-      - name: Download package cache from release
+      - name: Download package cache from release (all parts)
         id: get_packages
         run: |
-          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases"
-          ASSET_URL=$(curl -fsSL "$RELEASES_URL" | jq -r '
-            .[]?.assets[]? |
-            select(.name | test("^lfs-packages-part-.*\\.tar\\.gz$")) |
+          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/packages-cache-latest"
+          # Récupère toutes les URLs des assets correspondant aux parties
+          ASSETS=$(curl -fsSL "$RELEASES_URL" | jq -r '
+            .assets[]? |
+            select(.name | test("^lfs-packages-part-[0-9][0-9]\\.tar\\.gz$")) |
             .browser_download_url
-          ' | head -n1)
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "No package cache found; please run the package cache workflow first."
+          ' | sort)
+          if [ -z "$ASSETS" ]; then
+            echo "No package cache parts found. Run the package cache workflow first."
             exit 1
           fi
-          echo "cache_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "asset_urls<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$ASSETS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Download and extract package cache
+      - name: Download and combine package cache parts
         run: |
           sudo mkdir -p /tmp/lfs-sources
           cd /tmp
-          wget -q --show-progress "${{ steps.get_packages.outputs.cache_url }}" -O packages.tar.gz
-          tar -xzf packages.tar.gz
-          # The archive contains lfs-sources/ ; we need its content at /tmp/lfs-sources
-          if [ -d lfs-sources ]; then
-            sudo mv lfs-sources/* /tmp/lfs-sources/
+          # Télécharge chaque partie et les concatène
+          while IFS= read -r url; do
+            echo "Downloading $url"
+            wget -q --show-progress -O - "$url" >> packages-combined.tar.gz
+          done <<< "${{ steps.get_packages.outputs.asset_urls }}"
+          # Vérifie que le fichier combiné n'est pas vide
+          if [ ! -s packages-combined.tar.gz ]; then
+            echo "Combined archive is empty or missing."
+            exit 1
           fi
-          ls -lh /tmp/lfs-sources/
+          echo "Combined archive size: $(du -h packages-combined.tar.gz | cut -f1)"
+
+      - name: Extract combined package cache
+        run: |
+          cd /tmp
+          # Extraction directe (l'archive contient un dossier lfs-sources/)
+          sudo tar -xzf packages-combined.tar.gz -C /tmp/lfs-sources --strip-components=1
+          # --strip-components=1 enlève le dossier lfs-sources/ pour mettre les fichiers directement dans /tmp/lfs-sources
+          ls -lh /tmp/lfs-sources/ | head -20
+          echo "Total files: $(find /tmp/lfs-sources -type f | wc -l)"
 
       - name: Build LFS root filesystem
         run: |
