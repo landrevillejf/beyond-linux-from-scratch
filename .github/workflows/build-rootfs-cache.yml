@@ -1,0 +1,109 @@
+name: Build Rootfs Cache
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 4 15 * *'   # Le 15 de chaque mois, après le cache des paquets (qui tourne le 1er)
+
+permissions:
+  contents: write
+
+jobs:
+  build-rootfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # La construction LFS peut être longue
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            squashfs-tools jq zstd ca-certificates sed
+
+      - name: Create lfs user
+        run: |
+          sudo useradd -m -s /bin/bash lfs || true
+          sudo -u lfs touch /home/lfs/.bashrc
+
+      - name: Download package cache from release
+        id: get_packages
+        run: |
+          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases"
+          ASSET_URL=$(curl -fsSL "$RELEASES_URL" | jq -r '
+            .[]?.assets[]? |
+            select(.name | test("^lfs-packages-part-.*\\.tar\\.gz$")) |
+            .browser_download_url
+          ' | head -n1)
+          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
+            echo "No package cache found; please run the package cache workflow first."
+            exit 1
+          fi
+          echo "cache_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Download and extract package cache
+        run: |
+          sudo mkdir -p /tmp/lfs-sources
+          cd /tmp
+          wget -q --show-progress "${{ steps.get_packages.outputs.cache_url }}" -O packages.tar.gz
+          tar -xzf packages.tar.gz
+          # The archive contains lfs-sources/ ; we need its content at /tmp/lfs-sources
+          if [ -d lfs-sources ]; then
+            sudo mv lfs-sources/* /tmp/lfs-sources/
+          fi
+          ls -lh /tmp/lfs-sources/
+
+      - name: Build LFS root filesystem
+        run: |
+          # Ici, vous devez exécuter vos scripts de construction LFS.
+          # Par exemple :
+          #   sudo -u lfs /bin/bash -c "cd /tmp/lfs-builder && ./scripts/build-lfs.sh"
+          #
+          # Assurez-vous que vos scripts créent le système dans /tmp/lfs-root
+          # (ou ajustez les chemins ci-dessous).
+          #
+          # Pour l'exemple, on crée un dummy :
+          sudo mkdir -p /tmp/lfs-root
+          sudo touch /tmp/lfs-root/placeholder
+
+      - name: Compress rootfs
+        run: |
+          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-root .
+          ls -lh rootfs-cache-*.tar.zst
+
+      - name: Generate release body
+        id: release_body
+        run: |
+          {
+            echo 'body<<EOF'
+            echo '# 🖥️ LFS Root Filesystem Cache'
+            echo ''
+            echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo "Size: $(du -sh rootfs-cache-*.tar.zst | cut -f1)"
+            echo ''
+            echo 'Utilisez ce cache pour construire l’ISO sans recompiler tout LFS.'
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Upload rootfs cache to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rootfs-cache-*.tar.zst
+          tag_name: rootfs-cache-latest
+          name: LFS Root Filesystem Cache
+          body: ${{ steps.release_body.outputs.body }}
+          prerelease: true
+          draft: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create summary
+        if: success()
+        run: |
+          echo "# ✅ Rootfs cache updated" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "**Asset**: rootfs-cache-$(date +%Y%m%d).tar.zst" >> $GITHUB_STEP_SUMMARY
