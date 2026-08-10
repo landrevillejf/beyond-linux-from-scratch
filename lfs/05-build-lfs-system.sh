@@ -454,7 +454,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-
 echo "binutils done"
 
 # ============================================================
-# 3. BUILD GCC (official LFS) – with GMP, MPFR, MPC integrated
+# 3. BUILD GCC (official LFS) – compilation native avec GCC hôte
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(find_archive gcc)
@@ -466,7 +466,8 @@ extract "$GCC_ARCHIVE"
 
 # Ensure GMP, MPFR, MPC are available – download if missing
 for pkg in gmp mpfr mpc; do
-    if [ ! -f "/sources/$pkg"*.tar.* ] && [ ! -d "$pkg" ]; then
+    # Vérifier si un fichier correspondant existe déjà
+    if ! ls "/sources/${pkg}"*.tar.* 2>/dev/null | grep -q .; then
         echo "Downloading $pkg source..."
         case $pkg in
             gmp)  wget -O "/sources/gmp-6.3.0.tar.xz" "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz" ;;
@@ -507,10 +508,10 @@ fi
 
 mkdir -v build
 cd build
-# Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
+# Utiliser les compilateurs hôtes (Ubuntu) pour compiler GCC en mode natif
+export CC=/usr/bin/gcc
+export CXX=/usr/bin/g++
 ../configure --prefix=/usr \
-             --host=$LFS_TGT \
-             --build=$(uname -m)-linux-gnu \
              --enable-languages=c,c++ \
              --disable-multilib \
              --disable-bootstrap \
@@ -518,8 +519,7 @@ cd build
              --enable-default-pie \
              --enable-default-ssp \
              --enable-cet=auto \
-             --enable-linker-build-id \
-             CXXFLAGS="-std=gnu++14"
+             --enable-linker-build-id
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
@@ -527,6 +527,8 @@ ln -sf g++ /usr/bin/c++
 cd /sources
 rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
+# Après installation, on réinitialise pour utiliser le nouveau GCC
+unset CC CXX
 
 # ============================================================
 # 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
