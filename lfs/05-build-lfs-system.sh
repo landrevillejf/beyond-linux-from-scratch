@@ -464,7 +464,19 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
-# Integrate GMP, MPFR, MPC
+# Ensure GMP, MPFR, MPC are available – download if missing
+for pkg in gmp mpfr mpc; do
+    if [ ! -f "/sources/$pkg"*.tar.* ] && [ ! -d "$pkg" ]; then
+        echo "Downloading $pkg source..."
+        case $pkg in
+            gmp)  wget -O "/sources/gmp-6.3.0.tar.xz" "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz" ;;
+            mpfr) wget -O "/sources/mpfr-4.2.1.tar.xz" "https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz" ;;
+            mpc)  wget -O "/sources/mpc-1.3.1.tar.gz"  "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" ;;
+        esac
+    fi
+done
+
+# Integrate GMP, MPFR, MPC into GCC source tree
 echo "Integrating GMP, MPFR, MPC into GCC source tree"
 GMP_ARCHIVE=$(find_archive gmp)
 if [ -n "$GMP_ARCHIVE" ]; then
@@ -495,6 +507,10 @@ fi
 
 mkdir -v build
 cd build
+# Use host compiler (not cross) to build GCC, because the cross compiler
+# may lack C++14 support.
+export CC=gcc
+export CXX=g++
 ../configure --prefix=/usr \
              --host=$LFS_TGT \
              --build=$(uname -m)-linux-gnu \
@@ -513,6 +529,8 @@ ln -sf g++ /usr/bin/c++
 cd /sources
 rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
+# After GCC is installed, unset compiler variables
+unset CC CXX
 
 # ============================================================
 # 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
