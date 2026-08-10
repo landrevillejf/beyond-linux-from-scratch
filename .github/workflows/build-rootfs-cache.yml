@@ -22,11 +22,23 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
-            squashfs-tools jq zstd ca-certificates sed
+            squashfs-tools jq zstd ca-certificates sed \
+            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          # Si vous avez un requirements.txt, décommentez :
+          # pip install -r tests/requirements-test.txt
+          # Sinon, installez les dépendances nécessaires pour builder.py
+          # (par exemple, pyyaml, jinja2, etc.) – adaptez selon votre projet.
+          pip install pyyaml jinja2 requests
 
       - name: Create lfs user
         run: |
-          sudo useradd -m -s /bin/bash lfs || true
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
           sudo -u lfs touch /home/lfs/.bashrc
 
       - name: Download package cache (all parts)
@@ -66,19 +78,42 @@ jobs:
           sudo tar -xzf packages-combined.tar.gz -C /tmp/lfs-sources --strip-components=1
           ls -lh /tmp/lfs-sources/ | head -20
 
-      # --- VRAIE CONSTRUCTION LFS ---
-      - name: Build LFS root filesystem
+      - name: Prepare build directory
         run: |
-          # Exemple : exécuter vos scripts de construction LFS.
-          # Ils doivent produire le système final dans /tmp/lfs-root.
-          # Assurez-vous qu’ils compilent le noyau et le placent dans /boot.
-          sudo -u lfs /bin/bash -c "cd ${{ github.workspace }} && ./scripts/build-lfs.sh /tmp/lfs-sources /tmp/lfs-root"
-          # Après la construction, vérifiez la présence du noyau
-          ls -l /tmp/lfs-root/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
+          sudo rm -rf /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build
+          sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
+          sudo chown -R lfs:lfs /tmp/lfs-build
+
+      - name: Link cached packages to build directory
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            sudo mkdir -p /tmp/lfs-build/build-release/sources
+            sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            sudo chown -R lfs:lfs /tmp/lfs-build/build-release
+            echo "✅ Linked $(find /tmp/lfs-sources -type f | wc -l) cached packages"
+          fi
+
+      - name: Build LFS root filesystem (via builder.py)
+        run: |
+          cd /tmp/lfs-build
+          sudo -u lfs python3 builder.py \
+            --profile xfce \
+            --init sysvinit \
+            --output ./build-release \
+            --verbose \
+            --download-timeout 600 \
+            --download-retries 5
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
+      - name: Verify kernel presence
+        run: |
+          ls -l /tmp/lfs-build/build-release/image/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
 
       - name: Compress rootfs
         run: |
-          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-root .
+          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-build/build-release/image .
           ls -lh rootfs-cache-*.tar.zst
 
       - name: Generate release body
