@@ -25,6 +25,11 @@ jobs:
             squashfs-tools jq zstd ca-certificates sed \
             libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
 
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pyyaml jinja2 requests
+
       - name: Create lfs user
         run: |
           sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
@@ -69,52 +74,44 @@ jobs:
           sudo tar -xzf packages-combined.tar.gz -C /tmp/lfs-sources --strip-components=1
           ls -lh /tmp/lfs-sources/ | head -20
 
+      - name: Copy host development files into chroot (BEFORE builder.py)
+        run: |
+          LFS="/tmp/lfs-build/image"
+          sudo mkdir -p "$LFS/usr/include" "$LFS/usr/lib/x86_64-linux-gnu" "$LFS/usr/lib/gcc/x86_64-linux-gnu"
+          sudo cp -r /usr/include/* "$LFS/usr/include/" 2>/dev/null || true
+          sudo cp -r /usr/lib/x86_64-linux-gnu/*.so* "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
+          sudo cp -r /usr/lib/x86_64-linux-gnu/*.a "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
+          sudo cp -r /usr/lib/gcc/x86_64-linux-gnu/* "$LFS/usr/lib/gcc/x86_64-linux-gnu/" 2>/dev/null || true
+          sudo ln -sf /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$LFS/lib64/ld-linux-x86-64.so.2" 2>/dev/null || true
+
       - name: Prepare build directory
         run: |
           sudo rm -rf /tmp/lfs-build
           sudo mkdir -p /tmp/lfs-build
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
-          # Copier les sources dans le répertoire qui sera monté dans le chroot
-          sudo mkdir -p /tmp/lfs-build/sources
-          sudo cp -r /tmp/lfs-sources/* /tmp/lfs-build/sources/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Copy host development files into chroot
+      - name: Link cached packages to build directory
         run: |
-          LFS="/tmp/lfs-build/image"
-          sudo mkdir -p "$LFS/usr/include"
-          sudo mkdir -p "$LFS/usr/lib/x86_64-linux-gnu"
-          sudo mkdir -p "$LFS/usr/lib/gcc/x86_64-linux-gnu"
-          
-          # Copier les en-têtes système
-          sudo cp -r /usr/include/* "$LFS/usr/include/" 2>/dev/null || true
-          
-          # Copier les bibliothèques partagées et statiques
-          sudo cp -r /usr/lib/x86_64-linux-gnu/*.so* "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
-          sudo cp -r /usr/lib/x86_64-linux-gnu/*.a "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
-          
-          # Copier les spécificités GCC
-          sudo cp -r /usr/lib/gcc/x86_64-linux-gnu/* "$LFS/usr/lib/gcc/x86_64-linux-gnu/" 2>/dev/null || true
-          
-          # Créer le lien pour ld-linux
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$LFS/lib64/ld-linux-x86-64.so.2" 2>/dev/null || true
-          
-          # Mettre à jour ldconfig dans le chroot
-          sudo chroot "$LFS" /sbin/ldconfig 2>/dev/null || true
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            sudo mkdir -p /tmp/lfs-build/build-release/sources
+            sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            sudo chown -R lfs:lfs /tmp/lfs-build/build-release
+            echo "✅ Linked $(find /tmp/lfs-sources -type f | wc -l) cached packages"
+          fi
 
-      - name: Build LFS root filesystem (using custom script)
+      - name: Build LFS root filesystem (via builder.py)
         run: |
-          export LFS="/tmp/lfs-build/image"
-          export LFS_TGT="$(uname -m)-lfs-linux-gnu"
-          export INIT_SYSTEM="sysvinit"
-          export KERNEL_TYPE="linux"
-          
-          # Le script de construction corrigé est déjà présent dans le dépôt (lfs-build-system.sh)
-          # On le rend exécutable
-          sudo chmod +x /tmp/lfs-build/lfs-build-system.sh
-          
-          # On l'exécute en root (il gère lui-même sudo et chroot)
-          sudo /tmp/lfs-build/lfs-build-system.sh
+          cd /tmp/lfs-build
+          sudo -u lfs python3 builder.py \
+            --profile xfce \
+            --init sysvinit \
+            --output ./build-release \
+            --verbose \
+            --download-timeout 600 \
+            --download-retries 5
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
 
       - name: Upload build logs on failure
         if: failure()
@@ -125,11 +122,11 @@ jobs:
 
       - name: Verify kernel presence
         run: |
-          ls -l /tmp/lfs-build/image/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
+          ls -l /tmp/lfs-build/build-release/image/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
 
       - name: Compress rootfs
         run: |
-          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-build/image .
+          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-build/build-release/image .
           ls -lh rootfs-cache-*.tar.zst
 
       - name: Generate release body
