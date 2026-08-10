@@ -507,10 +507,7 @@ fi
 
 mkdir -v build
 cd build
-# Use host compiler (not cross) to build GCC, because the cross compiler
-# may lack C++14 support.
-export CC=gcc
-export CXX=g++
+# Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
 ../configure --prefix=/usr \
              --host=$LFS_TGT \
              --build=$(uname -m)-linux-gnu \
@@ -521,7 +518,8 @@ export CXX=g++
              --enable-default-pie \
              --enable-default-ssp \
              --enable-cet=auto \
-             --enable-linker-build-id
+             --enable-linker-build-id \
+             CXXFLAGS="-std=gnu++14"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
@@ -529,8 +527,6 @@ ln -sf g++ /usr/bin/c++
 cd /sources
 rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
-# After GCC is installed, unset compiler variables
-unset CC CXX
 
 # ============================================================
 # 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
