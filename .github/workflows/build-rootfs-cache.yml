@@ -3,7 +3,7 @@ name: Build Rootfs Cache
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 15 * *'   # Le 15 de chaque mois, après le cache des paquets (qui tourne le 1er)
+    - cron: '0 4 15 * *'   # après le cache des paquets (le 1er)
 
 permissions:
   contents: write
@@ -11,9 +11,9 @@ permissions:
 jobs:
   build-rootfs:
     runs-on: ubuntu-latest
-    timeout-minutes: 360   # La construction LFS peut être longue
+    timeout-minutes: 480   # 8h pour une compilation complète
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install dependencies
@@ -29,11 +29,10 @@ jobs:
           sudo useradd -m -s /bin/bash lfs || true
           sudo -u lfs touch /home/lfs/.bashrc
 
-      - name: Download package cache from release (all parts)
+      - name: Download package cache (all parts)
         id: get_packages
         run: |
           RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/packages-cache-latest"
-          # Récupère toutes les URLs des assets correspondant aux parties
           ASSETS=$(curl -fsSL "$RELEASES_URL" | jq -r '
             .assets[]? |
             select(.name | test("^lfs-packages-part-[0-9][0-9]\\.tar\\.gz$")) |
@@ -47,43 +46,35 @@ jobs:
           echo "$ASSETS" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
 
-      - name: Download and combine package cache parts
+      - name: Download and combine parts
         run: |
           sudo mkdir -p /tmp/lfs-sources
           cd /tmp
-          # Télécharge chaque partie et les concatène
           while IFS= read -r url; do
             echo "Downloading $url"
             wget -q --show-progress -O - "$url" >> packages-combined.tar.gz
           done <<< "${{ steps.get_packages.outputs.asset_urls }}"
-          # Vérifie que le fichier combiné n'est pas vide
           if [ ! -s packages-combined.tar.gz ]; then
-            echo "Combined archive is empty or missing."
+            echo "Combined archive is empty."
             exit 1
           fi
-          echo "Combined archive size: $(du -h packages-combined.tar.gz | cut -f1)"
+          echo "Combined size: $(du -h packages-combined.tar.gz | cut -f1)"
 
-      - name: Extract combined package cache
+      - name: Extract sources
         run: |
           cd /tmp
-          # Extraction directe (l'archive contient un dossier lfs-sources/)
           sudo tar -xzf packages-combined.tar.gz -C /tmp/lfs-sources --strip-components=1
-          # --strip-components=1 enlève le dossier lfs-sources/ pour mettre les fichiers directement dans /tmp/lfs-sources
           ls -lh /tmp/lfs-sources/ | head -20
-          echo "Total files: $(find /tmp/lfs-sources -type f | wc -l)"
 
+      # --- VRAIE CONSTRUCTION LFS ---
       - name: Build LFS root filesystem
         run: |
-          # Ici, vous devez exécuter vos scripts de construction LFS.
-          # Par exemple :
-          #   sudo -u lfs /bin/bash -c "cd /tmp/lfs-builder && ./scripts/build-lfs.sh"
-          #
-          # Assurez-vous que vos scripts créent le système dans /tmp/lfs-root
-          # (ou ajustez les chemins ci-dessous).
-          #
-          # Pour l'exemple, on crée un dummy :
-          sudo mkdir -p /tmp/lfs-root
-          sudo touch /tmp/lfs-root/placeholder
+          # Exemple : exécuter vos scripts de construction LFS.
+          # Ils doivent produire le système final dans /tmp/lfs-root.
+          # Assurez-vous qu’ils compilent le noyau et le placent dans /boot.
+          sudo -u lfs /bin/bash -c "cd ${{ github.workspace }} && ./scripts/build-lfs.sh /tmp/lfs-sources /tmp/lfs-root"
+          # Après la construction, vérifiez la présence du noyau
+          ls -l /tmp/lfs-root/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
 
       - name: Compress rootfs
         run: |
@@ -100,7 +91,7 @@ jobs:
             echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
             echo "Size: $(du -sh rootfs-cache-*.tar.zst | cut -f1)"
             echo ''
-            echo 'Utilisez ce cache pour construire l’ISO sans recompiler tout LFS.'
+            echo 'Contient le noyau et les outils de base.'
             echo 'EOF'
           } >> $GITHUB_OUTPUT
 
@@ -117,9 +108,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create summary
-        if: success()
+      - name: Summary
         run: |
           echo "# ✅ Rootfs cache updated" >> $GITHUB_STEP_SUMMARY
           echo "**Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_STEP_SUMMARY
-          echo "**Asset**: rootfs-cache-$(date +%Y%m%d).tar.zst" >> $GITHUB_STEP_SUMMARY
