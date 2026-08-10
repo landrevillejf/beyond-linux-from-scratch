@@ -116,3 +116,7 @@ https://sourceforge.net/projects/luabinaries/files/5.4.8/Docs%20and%20Sources/lu
 
 # a52dec – version 0.8.0
 https://ftp2.osuosl.org/pub/blfs/conglomeration/a52dec/a52dec-0.8.0.tar.gz
+
+https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
+https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz
+https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz
