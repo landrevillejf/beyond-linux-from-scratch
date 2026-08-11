@@ -15,6 +15,17 @@ This file provides context and guidelines for AI agents (e.g. GitHub Copilot, au
 
 ---
 
+## Goal
+
+The goal of this project is to provide a fully automated, reproducible, and customizable Linux distribution build system that adheres to the principles of LFS and BLFS. It allows users to create a complete Linux system from source, with options for different desktop environments, init systems, and target architectures.
+- Should contain the kernel, bootloader, and initramfs for a fully functional system.
+- Can be built using a GitHub workflow or locally on a Linux host with Python 3.10+.
+- Should be able to produce rootfs tarballs, bootable disk images, and optionally live ISO images.
+- Should be able to produce a live ISO image with optional branding and customization.
+- Should be able to use all the params defined in `config/build.conf`, used by the builder.py and the selected profile.
+- Should be able to use cache packages to speed up the build process, and allow for resuming builds from a specific stage.
+---
+
 ## Project structure
 
 ```

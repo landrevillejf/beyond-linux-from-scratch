@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build LFS system – official LFS compilation with cross-toolchain
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# 05-build-lfs-system.sh – Build the LFS system using the cross-compiled toolchain.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -508,9 +509,8 @@ fi
 
 mkdir -v build
 cd build
-# Utiliser les compilateurs hôtes (Ubuntu) pour compiler GCC en mode natif
-export CC=/usr/bin/gcc
-export CXX=/usr/bin/g++
+# Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
+# On ajoute CXXFLAGS pour forcer le standard C++14
 ../configure --prefix=/usr \
              --enable-languages=c,c++ \
              --disable-multilib \
@@ -519,7 +519,8 @@ export CXX=/usr/bin/g++
              --enable-default-pie \
              --enable-default-ssp \
              --enable-cet=auto \
-             --enable-linker-build-id
+             --enable-linker-build-id \
+             CXXFLAGS="-std=gnu++14"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Install init system – with host tool copying and explicit PATH
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# 06a-init-system.sh is a modified version of the original 06-init-system.sh script from the LFS project.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
