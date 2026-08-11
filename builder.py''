@@ -58,7 +58,7 @@ BUILD_STAGES = [
     ('init-system', 'lfs/06a-init-system.sh'),
     ('service-mgmt', 'lfs/06b-service-management.sh'),
     ('configure-lfs', 'lfs/07-configure-lfs.sh'),
-    ('blfs-base', 'lfs/08-build-blfs-base.sh'),
+    ('blfs-base', 'blfs/08-build-blfs-base.sh'),
     ('desktop', 'blfs/09-build-desktop.sh'),
     ('applications', 'blfs/10-build-applications.sh'),
     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
@@ -1469,7 +1469,7 @@ class LFSBuilder:
         stages.append(('blfs-base', 'blfs/08-build-blfs-base.sh'))
 
         # Build kernel
-        stages.append(('build-kernel', 'lfs/09-build-kernel.sh'))
+        stages.append(('build-kernel', 'lfs/08-build-kernel.sh'))
 
         # ⚠️ SUPPRIMEZ la ligne suivante (initramfs ne doit pas être ici)
         # stages.append(('initramfs', 'final/12-create-initramfs.sh'))  <--- À RETIRER

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Service management abstraction layer - sysvinit/systemd compatibility
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# 06b-service-management.sh
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

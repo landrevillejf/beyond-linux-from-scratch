@@ -1,6 +1,7 @@
 #!/bin/bash
 # Configure LFS system – copy binaries and minimal configuration
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# 07-configure-lfs.sh
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
