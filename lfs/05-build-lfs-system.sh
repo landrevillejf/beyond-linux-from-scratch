@@ -260,17 +260,38 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
-if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
-    log_info "Using existing sources in $SOURCES_DIR"
-elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+
+# 1. Si le chroot a déjà un répertoire /sources, on le vide et on recopie
+if [ -d "$SOURCES_DIR" ]; then
+    log_info "Removing existing $SOURCES_DIR"
+    run_privileged rm -rf "$SOURCES_DIR"
+fi
+
+# 2. Copier depuis LEGACY_SOURCES_HOST (où le workflow a mis les sources)
+if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
     run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
     run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
+    log_error "No sources found in $LEGACY_SOURCES_HOST – cannot compile"
     exit 1
 fi
+
+# 3. FORCER la présence de GMP, MPFR, MPC (les copier depuis /tmp/lfs-sources si manquants)
+for pkg in gmp mpfr mpc; do
+    if ! ls "$SOURCES_DIR"/${pkg}-*.tar.* 2>/dev/null | grep -q .; then
+        log_warning "${pkg} not found in $SOURCES_DIR, trying to copy from /tmp/lfs-sources"
+        if [ -d /tmp/lfs-sources ]; then
+            run_privileged cp -v /tmp/lfs-sources/${pkg}-*.tar.* "$SOURCES_DIR/" 2>/dev/null || true
+        fi
+    fi
+done
+run_privileged chown -R lfs:lfs "$SOURCES_DIR" 2>/dev/null || true
+
+# 4. Vérification finale
+log_info "Sources in $SOURCES_DIR (gmp/mpfr/mpc):"
+ls -lh "$SOURCES_DIR"/{gmp,mpfr,mpc}*.tar.* 2>/dev/null || echo "⚠️ Some files still missing"
 
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
