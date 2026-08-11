@@ -90,6 +90,28 @@ jobs:
             echo "✅ Linked $(find /tmp/lfs-sources -type f | wc -l) cached packages"
           fi
 
+      - name: Ensure GMP/MPFR/MPC sources are present
+        run: |
+          SOURCES_DIR="/tmp/lfs-build/build-release/sources"
+          mkdir -p "$SOURCES_DIR"
+          cd "$SOURCES_DIR"
+          
+          # Télécharger les fichiers manquants
+          for pkg in gmp mpfr mpc; do
+            if ! ls ${pkg}-*.tar.* 2>/dev/null | grep -q .; then
+              echo "Downloading $pkg..."
+              case $pkg in
+                gmp)  wget -q --show-progress -O gmp-6.3.0.tar.xz "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz" ;;
+                mpfr) wget -q --show-progress -O mpfr-4.2.1.tar.xz "https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz" ;;
+                mpc)  wget -q --show-progress -O mpc-1.3.1.tar.gz  "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" ;;
+              esac
+            else
+              echo "$pkg already present"
+            fi
+          done
+          
+          ls -lh ${SOURCES_DIR}/{gmp,mpfr,mpc}*.tar.* || echo "Some files missing"
+
       - name: Build LFS root filesystem (via builder.py)
         run: |
           cd /tmp/lfs-build
