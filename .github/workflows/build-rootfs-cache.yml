@@ -100,15 +100,17 @@ jobs:
             echo "✅ Linked $(find /tmp/lfs-sources -type f | wc -l) cached packages"
           fi
 
-      - name: Copy host headers/libs into chroot image
+      - name: Copy host development files into chroot
         run: |
-          sudo mkdir -p /tmp/lfs-build/image/usr/include
-          sudo cp -r /usr/include/linux /tmp/lfs-build/image/usr/include/
-          sudo cp -r /usr/include/x86_64-linux-gnu /tmp/lfs-build/image/usr/include/
-          sudo cp -r /usr/lib/x86_64-linux-gnu/*.so* /tmp/lfs-build/image/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
-          sudo cp -r /usr/lib/gcc/x86_64-linux-gnu /tmp/lfs-build/image/usr/lib/
+            LFS="/tmp/lfs-build/image"
+            sudo mkdir -p "$LFS/usr/include" "$LFS/usr/lib/x86_64-linux-gnu" "$LFS/usr/lib/gcc/x86_64-linux-gnu"
+            sudo cp -r /usr/include/* "$LFS/usr/include/" 2>/dev/null || true
+            sudo cp -r /usr/lib/x86_64-linux-gnu/*.so* "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
+            sudo cp -r /usr/lib/x86_64-linux-gnu/*.a "$LFS/usr/lib/x86_64-linux-gnu/" 2>/dev/null || true
+            sudo cp -r /usr/lib/gcc/x86_64-linux-gnu/* "$LFS/usr/lib/gcc/x86_64-linux-gnu/" 2>/dev/null || true
+            sudo ln -sf /usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2 "$LFS/lib64/ld-linux-x86-64.so.2" 2>/dev/null || true
 
-      - name: Build LFS root filesystem (via builder.py)
+      - name: Build LFS root filesystem
         run: |
           cd /tmp/lfs-build
           sudo -u lfs python3 builder.py \
