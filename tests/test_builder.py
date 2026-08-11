@@ -661,6 +661,106 @@ class TestLFSBuilder:
 
         # Vérifier le log
 
+    def test_update_sources_list_output_when_repo_exists_but_not_writable(self, tmp_path, monkeypatch):
+        """Test _update_sources_list when repo sources file exists but is not writable."""
+        from builder import LFSBuilder
+        import urllib.request
+        import stat
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / "lfs-build"
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{"repositories": ["https://example.com/wget-list"]}')
+
+        builder = LFSBuilder(profile="xfce", output_dir=output_dir, config_file=config_file)
+
+        # Créer packages/sources.list et le rendre non accessible en écriture
+        repo_sources = Path("packages/sources.list")
+        repo_sources.parent.mkdir(exist_ok=True)
+        repo_sources.touch()
+        # Enlever le bit d'écriture pour le propriétaire (0444)
+        repo_sources.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+
+        # Créer custom-sources.list pour garantir des sources
+        custom_sources = Path("packages/custom-sources.list")
+        custom_sources.write_text("https://example.com/source.tar.gz\n")
+
+        # Mock de urllib.request.urlopen pour simuler une réponse réussie
+        class MockResponse:
+            def read(self):
+                return b"https://example.com/official-source.tar.gz\n"
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        def mock_urlopen(url, timeout=None):
+            return MockResponse()
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+
+        result = builder._update_sources_list()
+        assert result is True
+
+        output_sources = output_dir / "packages" / "sources.list"
+        assert output_sources.exists()
+        content = output_sources.read_text()
+        assert "Generated:" in content
+        # Vérifier que les sources officielles et personnalisées sont présentes
+        assert "https://example.com/source.tar.gz" in content
+        assert "https://example.com/official-source.tar.gz" in content
+
+    def test_update_sources_list_output_when_repo_not_exists_and_parent_not_writable(self, tmp_path, monkeypatch):
+        """Test _update_sources_list when repo sources file does not exist and parent directory is not writable."""
+        from builder import LFSBuilder
+        import urllib.request
+        import stat
+
+        monkeypatch.chdir(tmp_path)
+
+        output_dir = tmp_path / "lfs-build"
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{"repositories": ["https://example.com/wget-list"]}')
+
+        builder = LFSBuilder(profile="xfce", output_dir=output_dir, config_file=config_file)
+
+        # Créer packages/ et custom-sources.list
+        packages_dir = Path("packages")
+        packages_dir.mkdir()
+        custom_sources = packages_dir / "custom-sources.list"
+        custom_sources.write_text("https://example.com/source.tar.gz\n")
+
+        # Rendre le répertoire packages en lecture+exécution (0555) pour interdire l'écriture
+        packages_dir.chmod(stat.S_IRUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+
+        # Vérifier que packages/sources.list n'existe pas
+        repo_sources = packages_dir / "sources.list"
+        assert not repo_sources.exists()  # Accessible car on a les droits de lecture/exécution
+
+        # Mock de urllib.request.urlopen pour simuler une réponse réussie
+        class MockResponse:
+            def read(self):
+                return b"https://example.com/official-source.tar.gz\n"
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda url, timeout=None: MockResponse())
+
+        # Appeler la méthode
+        result = builder._update_sources_list()
+        assert result is True
+
+        # Vérifier que le fichier de sortie a bien été créé
+        output_sources = output_dir / "packages" / "sources.list"
+        assert output_sources.exists()
+        content = output_sources.read_text()
+        assert "Generated:" in content
+        assert "https://example.com/source.tar.gz" in content
+        assert "https://example.com/official-source.tar.gz" in content
+
 
 class TestVersionHandling:
     """Test version file handling"""
