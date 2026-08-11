@@ -94,7 +94,7 @@ ensure_bootstrap_chroot_shell() {
         run_privileged ln -sfn bash "$LFS/bin/sh"
     fi
 
-    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4; do
+    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4 wget; do
         if [ ! -x "$LFS/usr/bin/$tool" ]; then
             log_info "Bootstrapping /usr/bin/$tool into chroot"
             local host_tool
@@ -260,46 +260,17 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
-
-# 1. Supprimer l'ancien /sources s'il existe
-if [ -d "$SOURCES_DIR" ]; then
-    log_info "Removing existing $SOURCES_DIR"
-    run_privileged rm -rf "$SOURCES_DIR"
-fi
-
-# 2. Copier depuis LEGACY_SOURCES_HOST
-if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Using existing sources in $SOURCES_DIR"
+elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
     run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
-    # Chown uniquement si l'utilisateur lfs existe
-    if id "lfs" &>/dev/null; then
-        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
-    else
-        log_warning "User lfs does not exist, skipping chown"
-    fi
+    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $LEGACY_SOURCES_HOST – cannot compile"
+    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
     exit 1
 fi
-
-# 3. Forcer la présence de GMP, MPFR, MPC (copie depuis /tmp/lfs-sources si nécessaire)
-for pkg in gmp mpfr mpc; do
-    if ! ls "$SOURCES_DIR"/${pkg}-*.tar.* 2>/dev/null | grep -q .; then
-        log_warning "${pkg} not found in $SOURCES_DIR, trying to copy from /tmp/lfs-sources"
-        if [ -d /tmp/lfs-sources ]; then
-            run_privileged cp -v /tmp/lfs-sources/${pkg}-*.tar.* "$SOURCES_DIR/" 2>/dev/null || true
-        fi
-    fi
-done
-# Chown également pour les fichiers copiés depuis /tmp/lfs-sources
-if id "lfs" &>/dev/null; then
-    run_privileged chown -R lfs:lfs "$SOURCES_DIR" 2>/dev/null || true
-fi
-
-# 4. Vérification finale
-log_info "Sources in $SOURCES_DIR (gmp/mpfr/mpc):"
-ls -lh "$SOURCES_DIR"/{gmp,mpfr,mpc}*.tar.* 2>/dev/null || echo "⚠️ Some files still missing"
 
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
