@@ -261,24 +261,29 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
 
-# 1. Si le chroot a déjà un répertoire /sources, on le vide et on recopie
+# 1. Supprimer l'ancien /sources s'il existe
 if [ -d "$SOURCES_DIR" ]; then
     log_info "Removing existing $SOURCES_DIR"
     run_privileged rm -rf "$SOURCES_DIR"
 fi
 
-# 2. Copier depuis LEGACY_SOURCES_HOST (où le workflow a mis les sources)
+# 2. Copier depuis LEGACY_SOURCES_HOST
 if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
     run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
-    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+    # Chown uniquement si l'utilisateur lfs existe
+    if id "lfs" &>/dev/null; then
+        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+    else
+        log_warning "User lfs does not exist, skipping chown"
+    fi
 else
     log_error "No sources found in $LEGACY_SOURCES_HOST – cannot compile"
     exit 1
 fi
 
-# 3. FORCER la présence de GMP, MPFR, MPC (les copier depuis /tmp/lfs-sources si manquants)
+# 3. Forcer la présence de GMP, MPFR, MPC (copie depuis /tmp/lfs-sources si nécessaire)
 for pkg in gmp mpfr mpc; do
     if ! ls "$SOURCES_DIR"/${pkg}-*.tar.* 2>/dev/null | grep -q .; then
         log_warning "${pkg} not found in $SOURCES_DIR, trying to copy from /tmp/lfs-sources"
@@ -287,7 +292,10 @@ for pkg in gmp mpfr mpc; do
         fi
     fi
 done
-run_privileged chown -R lfs:lfs "$SOURCES_DIR" 2>/dev/null || true
+# Chown également pour les fichiers copiés depuis /tmp/lfs-sources
+if id "lfs" &>/dev/null; then
+    run_privileged chown -R lfs:lfs "$SOURCES_DIR" 2>/dev/null || true
+fi
 
 # 4. Vérification finale
 log_info "Sources in $SOURCES_DIR (gmp/mpfr/mpc):"
