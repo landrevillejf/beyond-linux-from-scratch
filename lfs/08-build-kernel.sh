@@ -1,4 +1,7 @@
 #!/bin/bash
+# Build and install the Linux kernel in the LFS system.
+# Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# 08-build-kernel.sh
 set -e
 
 if [ "$EUID" -ne 0 ]; then
