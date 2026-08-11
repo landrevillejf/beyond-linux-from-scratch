@@ -100,6 +100,14 @@ jobs:
             echo "✅ Linked $(find /tmp/lfs-sources -type f | wc -l) cached packages"
           fi
 
+      - name: Copy host headers/libs into chroot image
+        run: |
+          sudo mkdir -p /tmp/lfs-build/image/usr/include
+          sudo cp -r /usr/include/linux /tmp/lfs-build/image/usr/include/
+          sudo cp -r /usr/include/x86_64-linux-gnu /tmp/lfs-build/image/usr/include/
+          sudo cp -r /usr/lib/x86_64-linux-gnu/*.so* /tmp/lfs-build/image/usr/lib/x86_64-linux-gnu/ 2>/dev/null || true
+          sudo cp -r /usr/lib/gcc/x86_64-linux-gnu /tmp/lfs-build/image/usr/lib/
+
       - name: Build LFS root filesystem (via builder.py)
         run: |
           cd /tmp/lfs-build
