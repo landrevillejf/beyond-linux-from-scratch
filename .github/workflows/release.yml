@@ -149,7 +149,7 @@ jobs:
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Build release profile (xfce + sysvinit live)
+      - name: Build release profile
         run: |
           cd /tmp/lfs-build
           CACHE_STATUS="${{ needs.restore-cache.outputs.cache-hit }}"
