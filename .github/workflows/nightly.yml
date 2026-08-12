@@ -31,11 +31,18 @@ jobs:
     if: needs.check_changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 480
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ minimal, xfce ]
+        init: [ sysvinit, systemd ]
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          ref: main
+          clean: true
       # ---------- RESTAURATION UNIQUE DU CACHE ----------
       - name: Restore package cache from release
         run: |
@@ -138,21 +145,25 @@ jobs:
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Build release profile
+      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
           cd /tmp/lfs-build
           CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
           echo "📦 Package cache status: $CACHE_STATUS"
 
           sudo -u lfs python3 builder.py \
-            --profile xfce \
-            --init sysvinit \
+            --profile ${{ matrix.profile }} \
+            --init ${{ matrix.init }} \
             --output ./build-release \
             --verbose \
             --download-timeout 600 \
             --download-retries 5
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
+
+      - name: Debug command
+        run: |
+          echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
 
       - name: Verify kernel and ISO
         run: |
