@@ -277,6 +277,8 @@ else
     exit 1
 fi
 
+log_info "Contenu de $SOURCES_DIR après copie :"
+ls -la "$SOURCES_DIR" | head -20
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
