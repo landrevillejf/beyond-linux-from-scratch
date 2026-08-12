@@ -3,7 +3,7 @@ name: Nightly Builds
 on:
   schedule:
     - cron: '0 3 * * *'   # tous les jours à 3h UTC
-  workflow_dispatch:      # déclenchement manuel (toujours permis)
+  workflow_dispatch:      # déclenchement manuel
 
 permissions:
   contents: read
@@ -16,64 +16,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # récupère tout l'historique pour pouvoir faire un git log
+          fetch-depth: 0   # récupère tout l'historique
       - name: Vérifier les commits des dernières 24 heures
         id: check
         run: |
-          # S'il y a au moins un commit dans les 24 dernières heures
           if [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
           else
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-  restore-cache:
-    needs: check_changes
-    name: Restore Package Cache
-    runs-on: ubuntu-latest
-    outputs:
-      cache-hit: ${{ steps.check.outputs.hit }}
-    steps:
-      - name: Download cached packages from release
-        run: |
-          mkdir -p /tmp/artifacts
-          cd /tmp/artifacts
-
-          # Try to download all split parts of the packages cache release
-          gh release download packages-cache-latest \
-            --repo ${{ github.repository }} \
-            --pattern "lfs-packages-part-*.tar.gz" \
-            --pattern "SHA256SUMS" \
-            2>/dev/null || echo "⚠️ No cache release found, will download packages during build"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-      - name: Extract packages
-        run: |
-          mkdir -p /tmp/lfs-sources
-
-          if ls /tmp/artifacts/lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
-            echo "Reassembling and extracting cached packages..."
-            cat $(ls -v /tmp/artifacts/lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
-            echo "✅ Cache restored successfully"
-          else
-            echo "⚠️ No cached packages found, will download during build"
-          fi
-
-      - name: Check cache status
-        id: check
-        run: |
-          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
-            echo "hit=true" >> $GITHUB_OUTPUT
-            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
-          else
-            echo "hit=false" >> $GITHUB_OUTPUT
-            echo "❌ Cache MISS: Will download packages during build"
-          fi
-
   build-profiles:
-    needs: restore-cache
+    needs: check_changes
+    if: needs.check_changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 480
     permissions:
@@ -81,6 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ---------- RESTAURATION UNIQUE DU CACHE ----------
       - name: Restore package cache from release
         run: |
           mkdir -p /tmp/artifacts
@@ -89,15 +45,30 @@ jobs:
           gh release download packages-cache-latest \
             --repo ${{ github.repository }} \
             --pattern "lfs-packages-part-*.tar.gz" \
-            2>/dev/null || echo "⚠️ Cache release not found"
+            --pattern "SHA256SUMS" \
+            2>/dev/null || echo "⚠️ No cache release found"
 
           mkdir -p /tmp/lfs-sources
           if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
-            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/ && echo "✅ Cache restored"
+            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
+            echo "✅ Cache restored successfully"
+          else
+            echo "⚠️ No cached packages found, will download during build"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
+
+      - name: Check cache status
+        id: check_cache
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "❌ Cache MISS: Will download packages during build"
+          fi
 
       - name: Free disk space
         run: |
@@ -170,7 +141,7 @@ jobs:
       - name: Build release profile
         run: |
           cd /tmp/lfs-build
-          CACHE_STATUS="${{ needs.restore-cache.outputs.cache-hit }}"
+          CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
           echo "📦 Package cache status: $CACHE_STATUS"
 
           sudo -u lfs python3 builder.py \
