@@ -43,7 +43,8 @@ jobs:
         with:
           ref: main
           clean: true
-      # ---------- RESTAURATION UNIQUE DU CACHE ----------
+
+      # ---------- RESTAURATION DU CACHE (UNE SEULE FOIS) ----------
       - name: Restore package cache from release
         run: |
           mkdir -p /tmp/artifacts
@@ -139,20 +140,20 @@ jobs:
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
+      # ------- DEBUG (optionnel) -------
+      - name: Debug sources on host (avant build)
+        run: |
+          echo "📂 Contenu de /tmp/lfs-build/build-release/sources :"
+          ls -la /tmp/lfs-build/build-release/sources/ | head -20
+
+      # ------- RUN TESTS -------
       - name: Run tests
         run: python3 -m pytest tests/ -q
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Debug command
-        run: |
-          echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
-
-      - name: Debug sources in chroot
-        run: |
-          sudo ls -la /tmp/lfs-build/build-release/sources/
-
+      # ------- BUILD -------
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
           cd /tmp/lfs-build
@@ -169,6 +170,7 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      # ------- VÉRIFICATIONS FINALES -------
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -187,6 +189,7 @@ jobs:
             /tmp/lfs-build/build-release/build_info.json
           if-no-files-found: error
 
+      # ------- SMOKE TEST QEMU -------
       - name: Boot ISO in QEMU (smoke test)
         if: success()
         run: |
@@ -206,6 +209,9 @@ jobs:
             exit 1
           fi
 
+      # ------- CRÉATION DE LA RELEASE (un seul job, mais exécuté pour chaque combinaison) -------
+      #   Attention : chaque combinaison va créer une Release indépendante.
+      #   Si vous voulez une seule Release, sortez cette étape de la matrice.
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -222,4 +228,4 @@ jobs:
         with:
           name: release-logs-${{ matrix.profile }}-${{ matrix.init }}
           path: /tmp/lfs-build/build-release/logs/
-          if-no-files-found: ignore   # au lieu de error
+          if-no-files-found: ignore
