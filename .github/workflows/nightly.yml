@@ -104,6 +104,10 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      - name: Debug command
+        run: |
+          echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
+
       - name: Verify kernel presence
         run: |
           if ! ls /tmp/lfs-output/image/boot/vmlinuz* >/dev/null 2>&1; then
