@@ -93,9 +93,16 @@ jobs:
 
       - name: Build ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
-          cd /tmp/lfs-build
-          echo "Running: python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output --verbose --download-timeout 600 --download-retries 5"
-          sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output --verbose --download-timeout 600 --download-retries 5
+          # On se place dans le répertoire de sortie
+          cd /tmp/lfs-output
+          # On exécute builder.py depuis le répertoire du code
+          sudo -u lfs python3 /tmp/lfs-build/builder.py \
+            --profile "${{ matrix.profile }}" \
+            --init "${{ matrix.init }}" \
+            --output . \
+            --verbose \
+            --download-timeout 600 \
+            --download-retries 5
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
