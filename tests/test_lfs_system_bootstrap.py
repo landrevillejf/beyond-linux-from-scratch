@@ -216,7 +216,7 @@ def test_lfs_system_uses_cross_compiler_hostcc_for_linux_headers():
     assert 'make HOSTCC=gcc headers' not in content
     expected_tool_loop = (
         "for tool in env xz bzip2 expr grep sed awk find xargs cut head tail"
-        " wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4; do"
+        " wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4 wget; do"
     )
     assert expected_tool_loop in content
     assert 'copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"' in content
