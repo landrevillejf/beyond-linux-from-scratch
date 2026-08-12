@@ -465,18 +465,17 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
-# Ensure GMP, MPFR, MPC are available – download if missing
 for pkg in gmp mpfr mpc; do
-    # Vérifier l'existence avec test -f (plus fiable que ls | grep)
-    if ! test -f "/sources/${pkg}"*.tar.* 2>/dev/null; then
+    # Vérifier l'existence avec ls (gère les globs)
+    if ls "/sources/${pkg}"*.tar.* 2>/dev/null | grep -q .; then
+        echo "$pkg already present"
+    else
         echo "Downloading $pkg source..."
         case $pkg in
             gmp)  wget -O "/sources/gmp-6.3.0.tar.xz" "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz" ;;
             mpfr) wget -O "/sources/mpfr-4.2.1.tar.xz" "https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz" ;;
             mpc)  wget -O "/sources/mpc-1.3.1.tar.gz"  "https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz" ;;
         esac
-    else
-        echo "$pkg already present"
     fi
 done
 
