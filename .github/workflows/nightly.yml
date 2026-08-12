@@ -28,6 +28,7 @@ jobs:
           fi
 
   restore-cache:
+    needs: check_changes
     name: Restore Package Cache
     runs-on: ubuntu-latest
     outputs:
@@ -72,7 +73,7 @@ jobs:
           fi
 
   build-profiles:
-    needs: [check_changes, restore-cache]
+    needs: restore-cache
     runs-on: ubuntu-latest
     timeout-minutes: 480
     permissions:
