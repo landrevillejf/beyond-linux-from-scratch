@@ -260,15 +260,20 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
-if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
-    log_info "Using existing sources in $SOURCES_DIR"
-elif [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+
+# Nettoyer le répertoire cible pour forcer une copie fraîche
+if [ -d "$SOURCES_DIR" ]; then
+    log_info "Removing existing $SOURCES_DIR to force fresh copy"
+    run_privileged rm -rf "$SOURCES_DIR"
+fi
+
+if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
     run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
     run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
+    log_error "No sources found in $LEGACY_SOURCES_HOST – cannot compile"
     exit 1
 fi
 
@@ -465,10 +470,10 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
+# ---- Vérification que GMP, MPFR, MPC sont présents ----
 for pkg in gmp mpfr mpc; do
-    if ! ls "/sources/${pkg}"*.tar.* 2>/dev/null | grep -q .; then
-        echo "ERROR: $pkg source archive not found in /sources"
-        echo "Please ensure your sources.list includes $pkg and the builder downloaded it."
+    if [ -z "$(find_archive "$pkg")" ]; then
+        echo "ERROR: $pkg source not found in /sources – please check sources.list"
         exit 1
     fi
 done
