@@ -261,23 +261,22 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 SOURCES_DIR="$LFS/sources"
 LEGACY_SOURCES_HOST="$(dirname "$LFS")/sources"
 
-# Nettoyer le répertoire cible pour forcer une copie fraîche
-if [ -d "$SOURCES_DIR" ]; then
-    log_info "Removing existing $SOURCES_DIR to force fresh copy"
-    run_privileged rm -rf "$SOURCES_DIR"
-fi
-
-if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
-    log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
-    run_privileged mkdir -p "$SOURCES_DIR"
-    run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
-    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+# 1. Si les sources sont déjà dans $SOURCES_DIR, on les utilise
+if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Using existing sources in $SOURCES_DIR"
 else
-    log_error "No sources found in $LEGACY_SOURCES_HOST – cannot compile"
-    exit 1
+    # 2. Sinon, on essaie de copier depuis LEGACY_SOURCES_HOST (parent)
+    if [ -d "$LEGACY_SOURCES_HOST" ] && [ "$(ls -A "$LEGACY_SOURCES_HOST" 2>/dev/null)" ]; then
+        log_info "Copying sources from $LEGACY_SOURCES_HOST to $SOURCES_DIR"
+        run_privileged mkdir -p "$SOURCES_DIR"
+        run_privileged cp -r "$LEGACY_SOURCES_HOST"/. "$SOURCES_DIR"/
+        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+    else
+        log_error "No sources found in $SOURCES_DIR or $LEGACY_SOURCES_HOST – cannot compile"
+        exit 1
+    fi
 fi
 
-log_info "Contenu de $SOURCES_DIR après copie :"
 ls -la "$SOURCES_DIR" | head -20
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)

@@ -128,9 +128,6 @@ jobs:
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
 
-      - name: Ensure sources directory is clean
-        run: sudo rm -rf /tmp/lfs-build/build-release/sources
-
       - name: Link cached packages to build directory
         run: |
           if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
