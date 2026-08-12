@@ -145,6 +145,10 @@ jobs:
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
+      - name: Debug command
+        run: |
+          echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
+
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
           cd /tmp/lfs-build
@@ -161,10 +165,6 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
-      - name: Debug command
-        run: |
-          echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
-
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -175,7 +175,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}
           path: |
             /tmp/lfs-build/build-release/lfs-installer.iso
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -216,5 +216,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: release-logs
+          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}
           path: /tmp/lfs-build/build-release/logs/
+          if-no-files-found: ignore   # au lieu de error
