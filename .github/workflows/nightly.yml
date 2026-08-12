@@ -139,6 +139,20 @@ jobs:
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
+      - name: Ensure GCC dependencies (gmp, mpfr, mpc) are available
+        run: |
+          cd /tmp/lfs-build/build-release/sources
+          for pkg in gmp mpfr mpc; do
+            if ! ls ${pkg}-*.tar.* 2>/dev/null; then
+              case $pkg in
+                gmp)  wget -O gmp-6.3.0.tar.xz https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz ;;
+                mpfr) wget -O mpfr-4.2.1.tar.xz https://www.mpfr.org/mpfr-current/mpfr-4.2.1.tar.xz ;;
+                mpc)  wget -O mpc-1.3.1.tar.gz  https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz ;;
+              esac
+            fi
+          done
+          sudo chown -R lfs:lfs /tmp/lfs-build/build-release/sources
+
       - name: Run tests
         run: python3 -m pytest tests/ -q
 
