@@ -18,6 +18,10 @@ def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     (lfs_dir / "var").mkdir(parents=True, exist_ok=True)
     (lfs_dir / "sources" / "placeholder.txt").write_text("ok\n")
 
+    # ➕ Créer le répertoire parent "sources" pour que LEGACY_SOURCES_HOST existe
+    (temp_dir / "sources").mkdir(parents=True, exist_ok=True)
+    (temp_dir / "sources" / "placeholder.txt").write_text("ok\n")
+
     for tool in ("gcc", "ld", "as"):
         tool_path = lfs_dir / "tools" / "bin" / f"{lfs_tgt}-{tool}"
         tool_path.write_text("#!/bin/sh\nexit 0\n")
@@ -25,6 +29,7 @@ def test_lfs_system_bootstraps_shell_and_env(temp_dir):
 
     fake_bin.mkdir(parents=True, exist_ok=True)
 
+    # Faux sudo, mount, umount, chroot, ldd, python3 (existants)
     (fake_bin / "sudo").write_text("""#!/bin/sh
 "$@"
 """)
@@ -37,12 +42,10 @@ exit 0
     (fake_bin / "chroot").write_text(f"""#!/bin/sh
 root="$1"
 shift
-
 if [ "$1" = "/bin/bash" ] && [ "$2" = "-c" ] && [ "$3" = "exit 0" ]; then
     [ -x "$root/bin/bash" ] || exit 1
     exit 0
 fi
-
 mkdir -p "$root/usr/bin"
 printf '#!/bin/sh\\nexit 0\\n' > "$root/usr/bin/bash"
 chmod +x "$root/usr/bin/bash"
@@ -50,20 +53,23 @@ printf '#!/bin/sh\\nexit 0\\n' > "$root/usr/bin/env"
 chmod +x "$root/usr/bin/env"
 exit 0
 """)
-
     (fake_bin / "ldd").write_text("""#!/bin/sh
 exit 0
 """)
     (fake_bin / "python3").write_text("""#!/bin/sh
-# Return an empty stdlib path so no stdlib copy is attempted
 if echo "$*" | grep -q "get_path"; then
     printf ''
     exit 0
 fi
 exit 0
 """)
+    # ➕ Ajout d'un faux chown pour éviter l'erreur "illegal group name"
+    (fake_bin / "chown").write_text("""#!/bin/sh
+exit 0
+""")
+    (fake_bin / "chown").chmod(0o755)
 
-    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3"):
+    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3", "chown"):
         (fake_bin / helper).chmod(0o755)
 
     env = {
@@ -112,6 +118,7 @@ def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
 
     fake_bin.mkdir(parents=True, exist_ok=True)
 
+    # Faux sudo, mount, umount, chroot, ldd, python3 (existants)
     (fake_bin / "sudo").write_text("""#!/bin/sh
 "$@"
 """)
@@ -124,12 +131,10 @@ exit 0
     (fake_bin / "chroot").write_text(f"""#!/bin/sh
 root="$1"
 shift
-
 if [ "$1" = "/bin/bash" ] && [ "$2" = "-c" ] && [ "$3" = "exit 0" ]; then
     [ -x "$root/bin/bash" ] || exit 1
     exit 0
 fi
-
 mkdir -p "$root/usr/bin"
 printf '#!/bin/sh\\nexit 0\\n' > "$root/usr/bin/bash"
 chmod +x "$root/usr/bin/bash"
@@ -137,20 +142,23 @@ printf '#!/bin/sh\\nexit 0\\n' > "$root/usr/bin/env"
 chmod +x "$root/usr/bin/env"
 exit 0
 """)
-
     (fake_bin / "ldd").write_text("""#!/bin/sh
 exit 0
 """)
     (fake_bin / "python3").write_text("""#!/bin/sh
-# Return an empty stdlib path so no stdlib copy is attempted
 if echo "$*" | grep -q "get_path"; then
     printf ''
     exit 0
 fi
 exit 0
 """)
+    # ➕ Ajout d'un faux chown pour éviter l'erreur "illegal group name"
+    (fake_bin / "chown").write_text("""#!/bin/sh
+exit 0
+""")
+    (fake_bin / "chown").chmod(0o755)
 
-    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3"):
+    for helper in ("sudo", "mount", "umount", "chroot", "ldd", "python3", "chown"):
         (fake_bin / helper).chmod(0o755)
 
     env = {
