@@ -39,10 +39,10 @@ if [ -z "$LFS" ]; then
     exit 1
 fi
 
-if [ -d "$LFS/image/tools" ] && [ -d "$LFS/image/usr" ] && [ ! -d "$LFS/tools" ]; then
-    log_warning "Detected image-root layout at $LFS/image, switching LFS root"
-    LFS="$LFS/image"
-fi
+#if [ -d "$LFS/image/tools" ] && [ -d "$LFS/image/usr" ] && [ ! -d "$LFS/tools" ]; then
+#    log_warning "Detected image-root layout at $LFS/image, switching LFS root"
+#    LFS="$LFS/image"
+#fi
 
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then

@@ -149,6 +149,10 @@ jobs:
         run: |
           echo "Command: sudo -u lfs python3 builder.py --profile ${{ matrix.profile }} --init ${{ matrix.init }} --output /tmp/lfs-output"
 
+      - name: Debug sources in chroot
+        run: |
+          sudo ls -la /tmp/lfs-build/build-release/sources/
+
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
           cd /tmp/lfs-build
