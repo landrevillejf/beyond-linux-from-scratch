@@ -212,12 +212,6 @@ class TestLFSBuilderCoverage:
             result = builder.check_prerequisites()
             assert result is False
 
-    def test_get_qemu_user_arm(self, builder):
-        """Test QEMU user pour architecture ARM"""
-        with patch.object(builder, 'get_target_architecture', return_value='arm'):
-            qemu = builder.get_qemu_user()
-            assert qemu == 'qemu-arm-static'
-
     def test_get_qemu_user_unknown(self, builder):
         """Test QEMU user pour architecture inconnue"""
         with patch.object(builder, 'get_target_architecture', return_value='unknown'):

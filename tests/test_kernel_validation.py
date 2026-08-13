@@ -254,3 +254,37 @@ class TestKernelValidation:
                 assert kernel_url in calls
                 # Vérifier que le fichier a été supprimé (il ne doit plus exister)
                 assert not tarball_path.exists()
+
+    def test_main_arch_x86_64_sets_grub_bootloader(self, monkeypatch):
+        """Vérifie que --arch x86_64 définit bootloader.type = grub."""
+        from builder import main
+        import sys
+
+        test_args = ['builder.py', '--arch', 'x86_64', '--profile', 'minimal']
+        monkeypatch.setattr(sys, 'argv', test_args)
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MagicMock()
+            MockBuilder.return_value = mock_instance
+
+            # Simuler les appels de config.get pour éviter les erreurs
+            def get_side_effect(key, default=None):
+                # On retourne des valeurs factices pour éviter que main ne plante
+                if key == 'live_system.enabled':
+                    return True
+                if key == 'kernel.type':
+                    return 'linux'
+                if key == 'init_system.choice':
+                    return 'sysvinit'
+                if key == 'desktop.type':
+                    return None
+                return default
+            mock_instance.config.get.side_effect = get_side_effect
+
+            # Mocker ProfileManager.get_profile_info pour éviter l'affichage
+            with patch('builder.ProfileManager.get_profile_info', return_value=''):
+                with patch('sys.exit'):
+                    main()
+                    # Vérifier que config.set a été appelé avec ('bootloader.type', 'grub')
+                    calls = mock_instance.config.set.call_args_list
+                    assert any(call[0] == ('bootloader.type', 'grub') for call in calls)

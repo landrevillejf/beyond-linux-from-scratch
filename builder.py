@@ -1122,11 +1122,7 @@ class LFSBuilder:
         """Get QEMU user emulator for target architecture"""
         arch = self.get_target_architecture()
         qemu_map = {
-            'aarch64': 'qemu-aarch64-static',
-            'arm': 'qemu-arm-static',
-            'armv7l': 'qemu-arm-static',
-            'riscv64': 'qemu-riscv64-static',
-            'mips64': 'qemu-mips64-static'
+            'aarch64': 'qemu-aarch64-static'
         }
         return self.config.get('qemu_user', qemu_map.get(arch, ''))
 
@@ -1938,7 +1934,7 @@ Examples:
     parser.add_argument('--download-retries', type=int,
                         help='Number of retries for failed downloads (default: from config or 3)')
 
-    parser.add_argument('--arch', choices=['x86_64', 'aarch64', 'armv7l', 'riscv64', 'mips64'],
+    parser.add_argument('--arch', choices=['x86_64', 'aarch64'],
                     help='Target architecture (overrides profile default)')
 
     return parser
@@ -2020,10 +2016,7 @@ def main():
 
         triplet_map = {
             'x86_64': 'x86_64-lfs-linux-gnu',
-            'aarch64': 'aarch64-lfs-linux-gnu',
-            'armv7l': 'armv7l-lfs-linux-gnueabihf',
-            'riscv64': 'riscv64-lfs-linux-gnu',
-            'mips64': 'mips64-lfs-linux-gnuabi64'
+            'aarch64': 'aarch64-lfs-linux-gnu'
         }
         builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
 

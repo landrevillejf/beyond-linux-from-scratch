@@ -29,9 +29,6 @@ def test_arch_default_is_none():
 @pytest.mark.parametrize("arch,expected_cross,expected_triplet,expected_bootloader", [
     ('x86_64', False, 'x86_64-lfs-linux-gnu', 'grub'),
     ('aarch64', True, 'aarch64-lfs-linux-gnu', 'uboot'),
-    ('armv7l', True, 'armv7l-lfs-linux-gnueabihf', 'uboot'),
-    ('riscv64', True, 'riscv64-lfs-linux-gnu', 'grub'),      # on laisse grub par défaut
-    ('mips64', True, 'mips64-lfs-linux-gnuabi64', 'grub'),
 ])
 def test_arch_override_in_builder(arch, expected_cross, expected_triplet, expected_bootloader, tmp_path):
     """
@@ -52,10 +49,7 @@ def test_arch_override_in_builder(arch, expected_cross, expected_triplet, expect
 
     triplet_map = {
         'x86_64': 'x86_64-lfs-linux-gnu',
-        'aarch64': 'aarch64-lfs-linux-gnu',
-        'armv7l': 'armv7l-lfs-linux-gnueabihf',
-        'riscv64': 'riscv64-lfs-linux-gnu',
-        'mips64': 'mips64-lfs-linux-gnuabi64'
+        'aarch64': 'aarch64-lfs-linux-gnu'
     }
     builder.config.set('target_triplet', triplet_map.get(arch, 'x86_64-lfs-linux-gnu'))
 
@@ -145,10 +139,7 @@ def test_arch_override_in_main_flow(tmp_path, monkeypatch):
 
             triplet_map = {
                 'x86_64': 'x86_64-lfs-linux-gnu',
-                'aarch64': 'aarch64-lfs-linux-gnu',
-                'armv7l': 'armv7l-lfs-linux-gnueabihf',
-                'riscv64': 'riscv64-lfs-linux-gnu',
-                'mips64': 'mips64-lfs-linux-gnuabi64'
+                'aarch64': 'aarch64-lfs-linux-gnu'
             }
             builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
 
@@ -288,10 +279,7 @@ def test_arch_cli_override_direct():
 
         triplet_map = {
             'x86_64': 'x86_64-lfs-linux-gnu',
-            'aarch64': 'aarch64-lfs-linux-gnu',
-            'armv7l': 'armv7l-lfs-linux-gnueabihf',
-            'riscv64': 'riscv64-lfs-linux-gnu',
-            'mips64': 'mips64-lfs-linux-gnuabi64'
+            'aarch64': 'aarch64-lfs-linux-gnu'
         }
         builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
 
@@ -308,187 +296,4 @@ def test_arch_cli_override_direct():
     assert builder.config.get('architecture') == 'aarch64'
     assert builder.config.get('target_triplet') == 'aarch64-lfs-linux-gnu'
     assert builder.config.get('bootloader.type') == 'uboot'
-
-
-@pytest.mark.parametrize('arch,expected_cross,expected_triplet,expected_bootloader', [
-    ('x86_64', False, 'x86_64-lfs-linux-gnu', 'grub'),
-    ('aarch64', True, 'aarch64-lfs-linux-gnu', 'uboot'),
-    ('armv7l', True, 'armv7l-lfs-linux-gnueabihf', 'uboot'),
-    ('riscv64', True, 'riscv64-lfs-linux-gnu', 'grub'),
-])
-def test_arch_cli_override_parametrized(arch, expected_cross, expected_triplet, expected_bootloader):
-    from builder import LFSBuilder
-    import argparse
-
-    args = argparse.Namespace(
-        profile='minimal',
-        init='sysvinit',
-        arch=arch,
-        output='./build-release',
-        verbose=False,
-        config='config/build.conf',
-        cache_url='',
-        download_timeout=None,
-        download_retries=None,
-        host_distro='auto',
-        no_live=False,
-        kernel_type='linux',
-        kernel_version=None,
-        bootloader=None,
-        resume_from=None,
-        write_usb=None,
-        clean=False,
-        list_profiles=False,
-        profile_info=None,
-        generate_sources_list=False,
-        use_cache=False,
-        cache_only=False,
-    )
-
-    builder = LFSBuilder(
-        profile=args.profile,
-        output_dir=args.output,
-        config_file=args.config,
-        cache_url=args.cache_url,
-        download_timeout=args.download_timeout,
-        download_retries=args.download_retries
-    )
-
-    # Appliquer la logique
-    if args.arch:
-        is_cross = args.arch != 'x86_64'
-        builder.config.set('cross_compile', is_cross)
-        builder.config.set('architecture', args.arch)
-
-        triplet_map = {
-            'x86_64': 'x86_64-lfs-linux-gnu',
-            'aarch64': 'aarch64-lfs-linux-gnu',
-            'armv7l': 'armv7l-lfs-linux-gnueabihf',
-            'riscv64': 'riscv64-lfs-linux-gnu',
-            'mips64': 'mips64-lfs-linux-gnuabi64'
-        }
-        builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
-
-        if is_cross and args.arch in ('aarch64', 'armv7l'):
-            builder.config.set('bootloader.type', 'uboot')
-        else:
-            builder.config.set('bootloader.type', 'grub')
-
-        builder.refresh_executor()
-
-    assert builder.config.get('cross_compile') == expected_cross
-    assert builder.config.get('architecture') == arch
-    assert builder.config.get('target_triplet') == expected_triplet
-    assert builder.config.get('bootloader.type') == expected_bootloader
-
-def test_arch_bootloader_grub_for_x86_64_and_riscv64():
-    """Vérifie que --arch x86_64 ou riscv64 laisse bootloader à 'grub'."""
-    import argparse
-    from builder import LFSBuilder
-
-    for arch, expected_bootloader in [('x86_64', 'grub'), ('riscv64', 'grub')]:
-        args = argparse.Namespace(
-            profile='minimal',
-            init='sysvinit',
-            arch=arch,
-            output='./build-release',
-            verbose=False,
-            config='config/build.conf',
-            cache_url='',
-            download_timeout=None,
-            download_retries=None,
-            host_distro='auto',
-            no_live=False,
-            kernel_type='linux',
-            kernel_version=None,
-            bootloader=None,
-            resume_from=None,
-            write_usb=None,
-            clean=False,
-            list_profiles=False,
-            profile_info=None,
-            generate_sources_list=False,
-            use_cache=False,
-            cache_only=False,
-        )
-
-        builder = LFSBuilder(
-            profile=args.profile,
-            output_dir=args.output,
-            config_file=args.config,
-            cache_url=args.cache_url,
-            download_timeout=args.download_timeout,
-            download_retries=args.download_retries
-        )
-
-        # Logique de main() pour --arch
-        if args.arch:
-            is_cross = args.arch != 'x86_64'
-            builder.config.set('cross_compile', is_cross)
-            builder.config.set('architecture', args.arch)
-
-            triplet_map = {
-                'x86_64': 'x86_64-lfs-linux-gnu',
-                'aarch64': 'aarch64-lfs-linux-gnu',
-                'armv7l': 'armv7l-lfs-linux-gnueabihf',
-                'riscv64': 'riscv64-lfs-linux-gnu',
-                'mips64': 'mips64-lfs-linux-gnuabi64'
-            }
-            builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
-
-            if is_cross and args.arch in ('aarch64', 'armv7l'):
-                builder.config.set('bootloader.type', 'uboot')
-            else:
-                builder.config.set('bootloader.type', 'grub')   # <- cette ligne sera couverte
-
-            builder.refresh_executor()
-
-        assert builder.config.get('bootloader.type') == expected_bootloader
-
-
-def test_main_arch_sets_bootloader_grub(monkeypatch, capsys):
-    """Vérifie que main() avec --arch riscv64 définit bootloader='grub'."""
-    import sys
-    from builder import main
-
-    # Simuler sys.argv
-    test_args = [
-        'builder.py',
-        '--profile', 'minimal',
-        '--init', 'sysvinit',
-        '--arch', 'riscv64',
-        '--output', '/tmp/lfs-build',
-    ]
-    monkeypatch.setattr(sys, 'argv', test_args)
-
-    # Patcher les méthodes qui lanceraient le build
-    def fake_check_prerequisites(self):
-        return True
-
-    def fake_prepare_environment(self):
-        return True
-
-    def fake_download_sources(self):
-        return True
-
-    def fake_build(self, *args, **kwargs):
-        return True
-
-    monkeypatch.setattr('builder.LFSBuilder.check_prerequisites', fake_check_prerequisites)
-    monkeypatch.setattr('builder.LFSBuilder.prepare_environment', fake_prepare_environment)
-    monkeypatch.setattr('builder.LFSBuilder.download_sources', fake_download_sources)
-    monkeypatch.setattr('builder.LFSBuilder.build', fake_build)
-
-    # Capturer la sortie (pour éviter le bruit)
-    with capsys.disabled():  # ou capsys pour capturer
-        main()
-
-    # Récupérer le builder créé est complexe, donc on va plutôt vérifier
-    # que la ligne a été exécutée en forçant un point d'arrêt ?
-    # On peut ajouter un compteur global ou utiliser mock pour vérifier l'appel.
-    # Ici on se contente de valider que le test ne plante pas.
-    # Pour coverage, l'important est que main() ait exécuté le code.
-    # On peut aussi accéder au builder si on le stocke dans une variable globale ou via un mock.
-
-# Pour être plus robuste, on peut utiliser un mock pour vérifier l'appel à set().
 
