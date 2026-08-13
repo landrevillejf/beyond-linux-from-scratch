@@ -36,7 +36,8 @@ jobs:
       matrix:
         profile: [ minimal, xfce ]
         init: [ sysvinit, systemd ]
-        arch: [ x86_64, aarch64 ]
+        arch: [ x86_64 ]
+        #arch: [ x86_64, aarch64 ]
     permissions:
       contents: write
     steps:
