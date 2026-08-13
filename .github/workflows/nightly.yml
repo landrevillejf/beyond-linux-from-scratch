@@ -279,6 +279,7 @@ jobs:
       matrix:
         profile: [ minimal, xfce ]
         init: [ sysvinit, systemd ]
+        arch: [ x86_64, aarch64 ]
     permissions:
       contents: write
     steps:
@@ -394,15 +395,23 @@ jobs:
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
       # ------- BUILD -------
-      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
+      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
           cd /tmp/lfs-build
           CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
           echo "📦 Package cache status: $CACHE_STATUS"
 
+          # Choisir le bon profil en fonction de l'architecture
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+
           sudo -u lfs python3 builder.py \
-            --profile ${{ matrix.profile }} \
+            --profile "$PROFILE" \
             --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
             --output ./build-release \
             --verbose \
             --download-timeout 600 \
@@ -421,7 +430,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
           path: |
             /tmp/lfs-build/build-release/lfs-installer.iso
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -431,7 +440,7 @@ jobs:
 
       # ------- SMOKE TEST QEMU -------
       - name: Boot ISO in QEMU (smoke test)
-        if: success()
+        if: success() && matrix.arch == 'x86_64'
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
@@ -449,23 +458,25 @@ jobs:
             exit 1
           fi
 
-      # ------- CRÉATION DE LA RELEASE (un seul job, mais exécuté pour chaque combinaison) -------
-      #   Attention : chaque combinaison va créer une Release indépendante.
-      #   Si vous voulez une seule Release, sortez cette étape de la matrice.
+      #  # ---------- CRÉATION DE LA RELEASE (UNIQUE) ----------
+  create-release:
+    needs: build-profiles
+    runs-on: ubuntu-latest
+    if: always() && needs.build-profiles.result == 'success'
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: |
+          find artifacts -type f
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            /tmp/lfs-build/build-release/lfs-installer.iso
-            /tmp/lfs-build/build-release/image/boot/vmlinuz*
-            /tmp/lfs-build/build-release/build_info.json
-            /tmp/lfs-build/build-release/SHA256SUMS
+          files: artifacts/**/*
           generate_release_notes: true
-
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}
-          path: /tmp/lfs-build/build-release/logs/
-          if-no-files-found: ignore
