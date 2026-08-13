@@ -140,6 +140,13 @@ jobs:
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
+      - name: Ensure fresh kernel for aarch64
+        run: |
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            sudo rm -f /tmp/lfs-build/build-release/sources/linux-*.tar.xz
+            echo "🗑️ Removed cached kernel to force fresh download"
+          fi
+
       # ------- DEBUG (optionnel) -------
       - name: Debug sources on host (avant build)
         run: |
