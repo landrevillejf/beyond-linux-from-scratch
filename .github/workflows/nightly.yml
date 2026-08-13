@@ -149,10 +149,11 @@ jobs:
           fi
 
       # ------- DEBUG (optionnel) -------
-      - name: Debug sources on host (avant build)
+      - name: Debug sources directory before build
         run: |
-          echo "📂 Contenu de /tmp/lfs-build/build-release/sources :"
-          ls -la /tmp/lfs-build/build-release/sources/ | head -20
+          echo "📂 Sources directory:"
+          ls -la /tmp/lfs-build/build-release/sources/ | head -30
+          echo "files in sources : $(ls /tmp/lfs-build/build-release/sources/ | wc -l)"
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
