@@ -104,9 +104,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          pip install -r tests/requirements-test.txt || true
-          # Installation explicite de pytest (au cas où requirements-test.txt ne contient pas tout)
-          python3 -m pip install pytest pytest-cov pytest-bdd pytest-mock pytest-xdist pytest-timeout requests-mock
+          pip install -r tests/requirements-test.txt
 
       - name: Generate sources.list
         run: python3 builder.py --generate-sources-list
