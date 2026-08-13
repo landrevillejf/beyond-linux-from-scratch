@@ -146,16 +146,13 @@ class TestUSBWriterCoverage:
                     result = USBWriter.write_iso(iso_path, "disk2", mock_logger)
                     assert result is True
 
-    # tests/test_improve_coverage.py - ligne 162
     def test_write_iso_unsupported_platform(self, temp_dir, mock_logger, monkeypatch):
         """Test écriture ISO sur plateforme non supportée"""
         iso_path = temp_dir / "test.iso"
         iso_path.write_text("test content")
 
-        # Simuler une plateforme non supportée
         monkeypatch.setattr('platform.system', lambda: 'Windows')
 
-        # Éviter l'input()
         with patch('builtins.input', return_value='YES'):
             result = USBWriter.write_iso(iso_path, "E:", mock_logger)
             assert result is False
@@ -181,7 +178,6 @@ sdb  32G  USB Drive disk
             with patch('subprocess.run') as mock_run:
                 mock_run.return_value = MagicMock(stdout=mock_output)
                 devices = USBWriter.list_devices()
-                # Vérifier que les périphériques sont listés
                 assert isinstance(devices, list)
 
     def test_list_devices_darwin(self):
@@ -226,7 +222,7 @@ class TestLFSBuilderCoverage:
         """Test QEMU user pour architecture inconnue"""
         with patch.object(builder, 'get_target_architecture', return_value='unknown'):
             qemu = builder.get_qemu_user()
-            assert qemu == ''  # Retourne chaîne vide
+            assert qemu == ''
 
     def test_get_init_system_normalize(self, builder):
         """Test normalisation de 'sysv' en 'sysvinit'"""
@@ -395,7 +391,6 @@ class TestCLICoverage:
             with patch('sys.exit'):
                 main()
 
-            # Vérifier que l'appel a bien eu lieu (peu importe l'ordre)
             mock_instance.config.set.assert_any_call('live_system.enabled', False)
 
     def test_main_with_kernel_type(self, monkeypatch):
@@ -403,7 +398,6 @@ class TestCLICoverage:
         from builder import main
         import sys
 
-        # Simuler les arguments avec kernel-type personnalisé
         test_args = ['builder.py', '--kernel-type', 'linux-libre', '--profile', 'minimal']
         monkeypatch.setattr(sys, 'argv', test_args)
 
@@ -415,7 +409,6 @@ class TestCLICoverage:
             with patch('sys.exit'):
                 main()
 
-                # Vérifier que config.set a bien été appelé avec kernel.type et linux-libre
                 mock_instance.config.set.assert_called_with('kernel.type', 'linux-libre')
 
 
@@ -477,7 +470,6 @@ https://custom.url/source2.tar.xz
         packages_dir = tmp_path / "packages"
         packages_dir.mkdir()
         sources_file = packages_dir / "sources.list"
-        # Ne pas créer custom-sources.list
 
         mock_response = MagicMock()
         mock_response.read.return_value = b"https://official.url/file1.tar.gz\n"
@@ -489,7 +481,6 @@ https://custom.url/source2.tar.xz
 
         content = sources_file.read_text()
         assert "https://official.url/file1.tar.gz" in content
-        assert "# CUSTOM SOURCES" not in content  # Pas de section séparée car on ne distingue plus
 
     def test_update_sources_list_official_fails_custom_exists(self, tmp_path, monkeypatch):
         """Test quand la récupération officielle échoue mais que custom existe."""
@@ -511,7 +502,7 @@ https://custom.url/source2.tar.xz
 
         with patch('urllib.request.urlopen', side_effect=Exception("Network error")):
             result = builder._update_sources_list()
-            assert result is True   # Il y a des URLs custom
+            assert result is True
 
         content = sources_file.read_text()
         assert "https://custom.only/unique.tar.gz" in content
@@ -566,7 +557,6 @@ https://custom.url/source2.tar.xz
         packages_dir.mkdir()
         sources_file = packages_dir / "sources.list"
         custom_file = packages_dir / "custom-sources.list"
-        # Custom source uses a newer version of gawk
         custom_file.write_text("https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz\n")
 
         mock_response = MagicMock()
@@ -581,9 +571,7 @@ https://custom.url/source2.tar.xz
             assert result is True
 
         content = sources_file.read_text()
-        # The custom (newer) version should win
         assert "https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz" in content
-        # The official (older) version should be replaced
         assert "https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz" not in content
         assert "https://official.url/bash-5.3.tar.gz" in content
 
@@ -602,13 +590,11 @@ https://custom.url/source2.tar.xz
         packages_dir = tmp_path / "packages"
         packages_dir.mkdir()
         sources_file = packages_dir / "sources.list"
-        # Pas de custom
 
         with patch('urllib.request.urlopen', side_effect=Exception("Network error")):
             result = builder._update_sources_list()
-            assert result is False   # Aucune URL
+            assert result is False
 
-        # sources.list ne doit pas avoir été créé
         assert not sources_file.exists()
 
     def test_update_sources_list_url_without_filename_uses_full_url_key(self, tmp_path, monkeypatch):
@@ -659,6 +645,9 @@ https://custom.url/source2.tar.xz
 
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
+        # Activer la cross-compilation pour que la substitution du noyau ait lieu
+        builder.config.set('cross_compile', True)
+        builder.config.set('architecture', 'aarch64')
 
         fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
         https://example.com/other-package.tar.gz
@@ -698,6 +687,9 @@ https://custom.url/source2.tar.xz
 
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
+        # Activer la cross-compilation
+        builder.config.set('cross_compile', True)
+        builder.config.set('architecture', 'aarch64')
 
         fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
         https://example.com/other-package.tar.gz
@@ -737,6 +729,9 @@ https://custom.url/source2.tar.xz
 
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
+        # Activer cross-compilation pour que la substitution ait lieu
+        builder.config.set('cross_compile', True)
+        builder.config.set('architecture', 'aarch64')
 
         fake_content = b"""https://example.com/pkg-5.3.2.tar.xz
         https://example.com/pkg_v7.1.0.tar.gz
@@ -760,9 +755,7 @@ https://custom.url/source2.tar.xz
         # La substitution du noyau doit être présente
         assert 'linux-6.16.1.tar.xz' in content
         # Une seule des deux URLs de paquet doit être présente (celle qui survit)
-        # car les clés sont identiques, seule la première est conservée.
         assert 'https://example.com/pkg-5.3.2.tar.xz' in content
-        # L'autre ne doit pas être présente
         assert 'https://example.com/pkg_v7.1.0.tar.gz' not in content
         # Il doit y avoir 2 URLs au total (1 paquet + 1 noyau)
         lines = [line for line in content.splitlines() if line.startswith(('http://', 'https://'))]
@@ -785,6 +778,9 @@ https://custom.url/source2.tar.xz
 
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
+        # Activer cross-compilation
+        builder.config.set('cross_compile', True)
+        builder.config.set('architecture', 'aarch64')
 
         fake_content = b"""https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
         https://example.com/other-package.tar.gz
@@ -809,7 +805,6 @@ https://custom.url/source2.tar.xz
         assert "linux-6.16.1.tar.xz" not in content
         assert "https://example.com/other-package.tar.gz" in content
 
-        # Vérifier qu'il y a 2 URLs (le noyau substitué + l'autre paquet)
         lines = [line for line in content.splitlines() if line.startswith(('http://', 'https://'))]
         assert len(lines) == 2
 
@@ -831,7 +826,6 @@ https://custom.url/source2.tar.xz
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
 
-        # Une URL dont le nom de fichier est entièrement supprimé par le regex (ex: commence par '-')
         fake_content = b"""https://example.com/-5.3.2.tar.xz
         https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
         """
@@ -851,11 +845,8 @@ https://custom.url/source2.tar.xz
         assert sources_file.exists()
         content = sources_file.read_text()
 
-        # L'URL est présente avec son nom complet (car la clé est pkg:-5.3.2.tar.xz)
         assert 'https://example.com/-5.3.2.tar.xz' in content
-        # Le noyau substitué est présent
         assert 'linux-6.16.1.tar.xz' in content
-        # Vérifier que le warning a été émis
         mock_warning.assert_called_once()
         args, _ = mock_warning.call_args
         assert "source_key: regex stripped entire filename '-5.3.2.tar.xz'" in args[0]

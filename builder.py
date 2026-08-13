@@ -1419,10 +1419,8 @@ class LFSBuilder:
         return True
 
     def download_sources(self) -> bool:
-        """Download all required sources"""
         self.logger.info("Downloading sources")
 
-        # Update sources.list from official repositories
         self._update_sources_list()
 
         sources_candidates = []
@@ -1472,7 +1470,46 @@ class LFSBuilder:
         if checksum_file.exists():
             self.downloader.verify_checksums(checksum_file)
 
+        # ---- Vérification du noyau pour cross-compilation ----
+        if self.is_cross_compile():
+            kernel_version = self.config.get('kernel.version', '6.16.1')
+            kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
+            if kernel_archive.exists():
+                import tarfile
+                try:
+                    with tarfile.open(kernel_archive, 'r:xz') as tar:
+                        arch_dir = f"linux-{kernel_version}/arch/{self.get_target_architecture()}"
+                        member = tar.getmember(f"{arch_dir}/Makefile")
+                        if member.isfile():
+                            self.logger.info(f"✅ Kernel tarball contains {arch_dir}/Makefile")
+                        else:
+                            self.logger.warning(f"⚠️ {arch_dir}/Makefile is not a regular file, forcing re-download")
+                            kernel_archive.unlink()
+                except KeyError:
+                    self.logger.warning(f"⚠️ Kernel tarball missing {arch_dir}/Makefile, forcing re-download")
+                    kernel_archive.unlink()
+                except tarfile.ReadError:
+                    self.logger.warning("⚠️ Kernel tarball is corrupt, forcing re-download")
+                    kernel_archive.unlink()
+            if not kernel_archive.exists():
+                self.logger.info(f"🔄 Re-downloading kernel for {self.get_target_architecture()}")
+                kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
+                self.downloader.download(kernel_url)
+
         return True
+
+    def _validate_kernel_archive(self, kernel_archive: Path, kernel_version: str) -> bool:
+        """Vérifie que l'archive du noyau contient le Makefile pour l'architecture cible."""
+        if not kernel_archive.exists():
+            return False
+        try:
+            import tarfile
+            with tarfile.open(kernel_archive, 'r:xz') as tar:
+                arch_dir = f"linux-{kernel_version}/arch/{self.get_target_architecture()}"
+                member = tar.getmember(f"{arch_dir}/Makefile")
+                return member.isfile()
+        except (KeyError, tarfile.ReadError, Exception):
+            return False
 
     def get_build_stages(self) -> List[Tuple[str, str]]:
         """Get ordered list of build stages with correct script paths"""
@@ -1611,8 +1648,8 @@ class LFSBuilder:
             except Exception as e:
                 self.logger.warning(f"Failed to fetch {repo_url}: {e}")
 
-        # 2. Substitution du noyau (seulement si on a des URLs officielles)
-        if urls_by_key:
+        # 2. Substitution du noyau (UNIQUEMENT en cross-compilation)
+        if self.is_cross_compile():
             kernel_type = self.config.get('kernel.type', 'linux')
             kernel_version = self.config.get('kernel.version', '6.16.1')
 
@@ -1627,12 +1664,27 @@ class LFSBuilder:
                 kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
 
             if kernel_url:
-                keys_to_remove = [k for k in urls_by_key if 'linux-' in k or k.startswith('pkg:linux')]
+                # Supprimer TOUTES les entrées existantes qui ressemblent à un noyau
+                keys_to_remove = [
+                    k for k, v in urls_by_key.items()
+                    if ('linux-' in v or 'linux-libre' in v or 'kernel.org' in v or
+                        'hurd-' in v or 'freebsd' in v)
+                ]
                 for k in keys_to_remove:
                     del urls_by_key[k]
-                new_key = f"pkg:{kernel_type}-{kernel_version}"
-                urls_by_key[new_key] = kernel_url
-                self.logger.info(f"Using {kernel_type} kernel {kernel_version}: {kernel_url}")
+
+                # Vérifier si l'archive existe déjà et est valide
+                kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
+                if self._validate_kernel_archive(kernel_archive, kernel_version):
+                    self.logger.info(f"✅ Kernel tarball {kernel_archive} already exists and is valid. Skipping download.")
+                    # Ne pas ajouter de nouvelle URL
+                else:
+                    # Archive absente ou invalide → on ajoute l'URL
+                    new_key = f"pkg:{kernel_type}-{kernel_version}"
+                    urls_by_key[new_key] = kernel_url
+                    self.logger.info(f"Using {kernel_type} kernel {kernel_version}: {kernel_url}")
+        else:
+            self.logger.info("Cross-compilation disabled – keeping original kernel entries from official lists.")
 
         # 3. Ajouter les sources personnalisées (prioritaires)
         if custom_file.exists():
