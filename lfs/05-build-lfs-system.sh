@@ -259,22 +259,20 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 # Copy sources into chroot
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
+PARENT_SOURCES="$(dirname "$LFS")/sources"
 
-# Si les sources sont déjà dans $SOURCES_DIR, on les utilise
+# 1. Vérifier si les sources sont déjà présentes dans $SOURCES_DIR
 if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
     log_info "Sources already present in $SOURCES_DIR"
+# 2. Sinon, tenter de copier depuis le répertoire parent
+elif [ -d "$PARENT_SOURCES" ] && [ "$(ls -A "$PARENT_SOURCES" 2>/dev/null)" ]; then
+    log_info "Copying sources from $PARENT_SOURCES to $SOURCES_DIR"
+    run_privileged mkdir -p "$SOURCES_DIR"
+    run_privileged cp -r "$PARENT_SOURCES"/. "$SOURCES_DIR"/
+    run_privileged chown -R lfs:lfs "$SOURCES_DIR"
 else
-    # Sinon, on tente de les copier depuis le répertoire parent (cas de certains layouts)
-    PARENT_SOURCES="$(dirname "$LFS")/sources"
-    if [ -d "$PARENT_SOURCES" ] && [ "$(ls -A "$PARENT_SOURCES" 2>/dev/null)" ]; then
-        log_info "Copying sources from $PARENT_SOURCES to $SOURCES_DIR"
-        run_privileged mkdir -p "$SOURCES_DIR"
-        run_privileged cp -r "$PARENT_SOURCES"/. "$SOURCES_DIR"/
-        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
-    else
-        log_error "No sources found in $SOURCES_DIR or $PARENT_SOURCES – cannot compile"
-        exit 1
-    fi
+    log_error "No sources found in $SOURCES_DIR or $PARENT_SOURCES – cannot compile"
+    exit 1
 fi
 
 ls -la "$SOURCES_DIR" | head -20
