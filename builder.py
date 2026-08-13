@@ -1886,6 +1886,9 @@ Examples:
     parser.add_argument('--download-retries', type=int,
                         help='Number of retries for failed downloads (default: from config or 3)')
 
+    parser.add_argument('--arch', choices=['x86_64', 'aarch64', 'armv7l', 'riscv64', 'mips64'],
+                    help='Target architecture (overrides profile default)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -1956,6 +1959,30 @@ def main():
         download_timeout=args.download_timeout,
         download_retries=args.download_retries
     )
+
+    # --- Override architecture via --arch ---
+    if args.arch:
+        is_cross = args.arch != 'x86_64'
+        builder.config.set('cross_compile', is_cross)
+        builder.config.set('architecture', args.arch)
+
+        triplet_map = {
+            'x86_64': 'x86_64-lfs-linux-gnu',
+            'aarch64': 'aarch64-lfs-linux-gnu',
+            'armv7l': 'armv7l-lfs-linux-gnueabihf',
+            'riscv64': 'riscv64-lfs-linux-gnu',
+            'mips64': 'mips64-lfs-linux-gnuabi64'
+        }
+        builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
+
+        # Ajuster le bootloader pour les architectures ARM si cross-compilation
+        if is_cross and args.arch in ('aarch64', 'armv7l'):
+            builder.config.set('bootloader.type', 'uboot')
+        else:
+            builder.config.set('bootloader.type', 'grub')
+
+        # Mettre à jour l'environnement et l'executor
+        builder.refresh_executor()
 
     if args.host_distro:
         builder.config.set('host.distro_override', args.host_distro)

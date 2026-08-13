@@ -153,6 +153,7 @@ jobs:
           CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
           echo "📦 Package cache status: $CACHE_STATUS"
 
+          # Choisir le bon profil en fonction de l'architecture
           if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
             PROFILE="arm64"
           else
@@ -162,6 +163,7 @@ jobs:
           sudo -u lfs python3 builder.py \
             --profile "$PROFILE" \
             --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
             --output ./build-release \
             --verbose \
             --download-timeout 600 \
@@ -187,8 +189,9 @@ jobs:
             /tmp/lfs-build/build-release/build_info.json
           if-no-files-found: error
 
+      # ---------- SMOKE TEST QEMU (uniquement pour x86_64) ----------
       - name: Boot ISO in QEMU (smoke test)
-        if: success()
+        if: success() && matrix.arch == 'x86_64'
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
