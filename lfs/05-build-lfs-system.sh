@@ -261,10 +261,10 @@ run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 SOURCES_DIR="$LFS/sources"
 PARENT_SOURCES="$(dirname "$LFS")/sources"
 
-# 1. Vérifier si les sources sont déjà présentes dans $SOURCES_DIR
+# 1. Si les sources sont déjà dans SOURCES_DIR, on les utilise
 if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
     log_info "Sources already present in $SOURCES_DIR"
-# 2. Sinon, tenter de copier depuis le répertoire parent
+# 2. Sinon, on tente de copier depuis le répertoire parent
 elif [ -d "$PARENT_SOURCES" ] && [ "$(ls -A "$PARENT_SOURCES" 2>/dev/null)" ]; then
     log_info "Copying sources from $PARENT_SOURCES to $SOURCES_DIR"
     run_privileged mkdir -p "$SOURCES_DIR"
