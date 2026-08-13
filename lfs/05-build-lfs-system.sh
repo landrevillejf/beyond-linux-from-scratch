@@ -7,6 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -255,38 +256,37 @@ run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # -----------------------------------------------------------------
-# FORCE COPY SOURCES INTO CHROOT
+# Ensure sources are available in chroot
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
-HOST_SOURCES=""
 
-# Locate host sources
-if [ -d "$(dirname "$LFS")/sources" ] && [ -n "$(ls -A "$(dirname "$LFS")/sources" 2>/dev/null)" ]; then
-    HOST_SOURCES="$(dirname "$LFS")/sources"
-elif [ -d "$PWD/sources" ] && [ -n "$(ls -A "$PWD/sources" 2>/dev/null)" ]; then
-    HOST_SOURCES="$PWD/sources"
-elif [ -d "/tmp/lfs-sources" ] && [ -n "$(ls -A "/tmp/lfs-sources" 2>/dev/null)" ]; then
-    HOST_SOURCES="/tmp/lfs-sources"
+# If sources directory is empty, copy from the host-side sources (where builder placed them)
+if [ ! -d "$SOURCES_DIR" ] || [ -z "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Sources not found in $SOURCES_DIR, copying from host..."
+    # The builder places sources in the same directory as LFS, but let's try to find them
+    # We assume they are in the parent directory of LFS under "sources" or in the current working directory
+    HOST_SOURCES=""
+    if [ -d "$(dirname "$LFS")/sources" ] && [ -n "$(ls -A "$(dirname "$LFS")/sources" 2>/dev/null)" ]; then
+        HOST_SOURCES="$(dirname "$LFS")/sources"
+    elif [ -d "$PWD/sources" ] && [ -n "$(ls -A "$PWD/sources" 2>/dev/null)" ]; then
+        HOST_SOURCES="$PWD/sources"
+    fi
+
+    if [ -n "$HOST_SOURCES" ]; then
+        log_info "Copying sources from $HOST_SOURCES to $SOURCES_DIR"
+        run_privileged mkdir -p "$SOURCES_DIR"
+        run_privileged cp -r "$HOST_SOURCES"/. "$SOURCES_DIR"/
+        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
+    else
+        log_error "No sources found anywhere – cannot compile"
+        exit 1
+    fi
+else
+    log_info "Sources already present in $SOURCES_DIR"
 fi
 
-if [ -z "$HOST_SOURCES" ]; then
-    log_error "No host sources found"
-    exit 1
-fi
-
-log_info "FORCING copy of sources from $HOST_SOURCES to $SOURCES_DIR (overwriting)"
-run_privileged rm -rf "$SOURCES_DIR"
-run_privileged mkdir -p "$SOURCES_DIR"
-run_privileged cp -r "$HOST_SOURCES"/. "$SOURCES_DIR"/
-run_privileged chown -R lfs:lfs "$SOURCES_DIR"
-
-# Verify gmp is present
-if ! run_privileged test -f "$SOURCES_DIR"/gmp-*.tar.*; then
-    log_error "❌ gmp not found in $SOURCES_DIR after copy"
-    run_privileged ls -la "$SOURCES_DIR" | head -20
-    exit 1
-fi
-log_success "✅ gmp found in $SOURCES_DIR"
+log_info "Sources in $SOURCES_DIR:"
+ls -la "$SOURCES_DIR" | head -20
 
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
@@ -301,15 +301,8 @@ export LD_LIBRARY_PATH=/tools/lib
 export SHELL=/tools/bin/bash
 export CONFIG_SHELL=/tools/bin/bash
 
+# Switch to sources directory
 cd /sources || { echo "ERROR: /sources not found"; exit 1; }
-
-# ---- Vérification ultime de gmp ----
-if ! ls gmp-*.tar.* 1>/dev/null 2>&1; then
-    echo "ERROR: gmp source not found in /sources"
-    echo "Contenu de /sources :"
-    ls -la
-    exit 1
-fi
 
 # ----- Helper: extract and cd -----
 extract() {
@@ -333,19 +326,24 @@ find_archive() {
     echo "$archive"
 }
 
-# ---- Install Linux API headers ----
+# ---- Install Linux API headers into /usr/include ----
 if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then
-    echo "Linux API headers already present"
+    echo "Linux API headers already present from toolchain stage, skipping reinstallation"
 else
     echo "Installing Linux API headers"
     LINUX_ARCHIVE=$(find_archive linux)
     if [ -z "$LINUX_ARCHIVE" ]; then
         echo "ERROR: linux source not found"
+        echo "Available source archives:"
         ls -la
         exit 1
     fi
     tar -xf "$LINUX_ARCHIVE"
     LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    if [ ! -d "$LINUX_DIR" ]; then
+        echo "ERROR: extracted directory $LINUX_DIR not found"
+        exit 1
+    fi
     cd "$LINUX_DIR"
     make mrproper
     make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers
@@ -357,7 +355,7 @@ else
     echo "Linux headers installed"
 fi
 
-# ---- Cross-compiler vars ----
+# ---- Set cross-compiler variables ----
 CC="${LFS_TGT}-gcc --sysroot=/"
 CXX="${LFS_TGT}-g++ --sysroot=/"
 LD="${LFS_TGT}-ld"
@@ -365,7 +363,7 @@ AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
 # ============================================================
-# 1. GLIBC
+# 1. BUILD GLIBC
 # ============================================================
 echo "=== Building glibc ==="
 GLIBC_ARCHIVE=$(find_archive glibc)
@@ -392,13 +390,14 @@ cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
 
+# Rebuild ldconfig cache
 mkdir -p /etc
 printf '/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib\n/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
 /sbin/ldconfig || true
 export LD_LIBRARY_PATH=/usr/lib:/tools/lib
 
 # ============================================================
-# 2. BINUTILS
+# 2. BUILD BINUTILS
 # ============================================================
 echo "=== Building binutils ==="
 BINUTILS_ARCHIVE=$(find_archive binutils)
@@ -429,7 +428,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-
 echo "binutils done"
 
 # ============================================================
-# 3. GCC
+# 3. BUILD GCC
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(find_archive gcc)
@@ -439,6 +438,7 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
+# Check and integrate GMP, MPFR, MPC
 for pkg in gmp mpfr mpc; do
     if [ -z "$(find_archive "$pkg")" ]; then
         echo "ERROR: $pkg source not found in /sources"
@@ -484,7 +484,7 @@ echo "gcc done"
 unset CC CXX
 
 # ============================================================
-# 4. BASE PACKAGES
+# 4. BUILD BASE PACKAGES
 # ============================================================
 unset CC CXX LD AS
 
@@ -509,6 +509,8 @@ build_simple() {
     fi
     if [ -f "configure" ]; then
         CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc
+    elif [ -f "Makefile" ]; then
+        true
     fi
     CFLAGS="$cflags" make -j$(nproc)
     CFLAGS="$cflags" make install
