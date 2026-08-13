@@ -36,7 +36,7 @@ jobs:
       matrix:
         profile: [ minimal, xfce ]
         init: [ sysvinit, systemd ]
-        arch: [ x86_64, aarch64 ]   # <-- AJOUT UNIQUE
+        arch: [ x86_64, aarch64 ]
     permissions:
       contents: write
     steps:
@@ -93,7 +93,7 @@ jobs:
           python-version: "3.13"
 
       - name: Check LFS compatibility of shell scripts
-        run: python3 lfs_check.py --shellcheck   # <-- COMME DANS L'ANCIEN
+        run: python3 lfs_check.py --shellcheck
 
       - name: Install dependencies
         run: |
@@ -119,6 +119,11 @@ jobs:
           sudo chmod 440 /etc/sudoers.d/lfs
           sudo -u lfs touch /home/lfs/.bashrc
 
+      # ---------- TESTS (exécutés AVANT de préparer le build) ----------
+      - name: Run tests
+        run: python3 -m pytest tests/ -q
+
+      # ---------- PREPARATION DU BUILD ----------
       - name: Prepare lfs build directory
         run: |
           sudo rm -rf /tmp/lfs-build
@@ -140,10 +145,6 @@ jobs:
         run: |
           echo "📂 Contenu de /tmp/lfs-build/build-release/sources :"
           ls -la /tmp/lfs-build/build-release/sources/ | head -20
-
-      # ------- RUN TESTS -------
-      - name: Run tests
-        run: python3 -m pytest tests/ -q   # <-- COMME DANS L'ANCIEN (pas de sudo -u lfs)
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
