@@ -1,9 +1,252 @@
+#name: Nightly Builds
+#
+#on:
+#  schedule:
+#    - cron: '0 3 * * *'
+#  workflow_dispatch:
+#
+#permissions:
+#  contents: read
+#
+#jobs:
+#  check_changes:
+#    runs-on: ubuntu-latest
+#    outputs:
+#      has_changes: ${{ steps.check.outputs.has_changes }}
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          fetch-depth: 0
+#      - name: Vérifier les commits des dernières 24 heures
+#        id: check
+#        run: |
+#          if [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
+#            echo "has_changes=true" >> $GITHUB_OUTPUT
+#          else
+#            echo "has_changes=false" >> $GITHUB_OUTPUT
+#          fi
+#
+#  build-profiles:
+#    needs: check_changes
+#    if: needs.check_changes.outputs.has_changes == 'true'
+#    runs-on: ubuntu-latest
+#    timeout-minutes: 480
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        profile: [ minimal, xfce ]
+#        init: [ sysvinit, systemd ]
+#        arch: [ x86_64, aarch64 ]
+#    permissions:
+#      contents: write
+#    steps:
+#      - uses: actions/checkout@v4
+#        with:
+#          ref: main
+#          clean: true
+#
+#      # ---------- RESTAURATION DU CACHE ----------
+#      - name: Restore package cache from release
+#        run: |
+#          mkdir -p /tmp/artifacts
+#          cd /tmp/artifacts
+#          gh release download packages-cache-latest \
+#            --repo ${{ github.repository }} \
+#            --pattern "lfs-packages-part-*.tar.gz" \
+#            --pattern "SHA256SUMS" \
+#            2>/dev/null || echo "⚠️ No cache release found"
+#          mkdir -p /tmp/lfs-sources
+#          if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
+#            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
+#            echo "✅ Cache restored successfully"
+#          else
+#            echo "⚠️ No cached packages found, will download during build"
+#          fi
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        continue-on-error: true
+#
+#      - name: Check cache status
+#        id: check_cache
+#        run: |
+#          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+#            echo "hit=true" >> $GITHUB_OUTPUT
+#            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+#          else
+#            echo "hit=false" >> $GITHUB_OUTPUT
+#            echo "❌ Cache MISS: Will download packages during build"
+#          fi
+#
+#      - name: Free disk space
+#        run: |
+#          df -h
+#          sudo rm -rf /usr/share/dotnet || true
+#          sudo rm -rf /opt/ghc || true
+#          sudo rm -rf /usr/local/lib/android || true
+#          sudo apt-get clean
+#          docker system prune -af || true
+#          df -h
+#
+#      - name: Set up Python
+#        uses: actions/setup-python@v5
+#        with:
+#          python-version: "3.13"
+#
+#      - name: Check LFS compatibility of shell scripts
+#        run: python3 lfs_check.py --shellcheck
+#
+#      - name: Install dependencies
+#        run: |
+#          sudo apt-get update
+#          sudo apt-get install -y --no-install-recommends \
+#            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+#            xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
+#            libssl-dev libelf-dev squashfs-tools ca-certificates \
+#            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+#
+#      - name: Install Python dependencies
+#        run: |
+#          python3 -m pip install --upgrade pip
+#          pip install -r tests/requirements-test.txt
+#
+#      - name: Generate sources.list
+#        run: python3 builder.py --generate-sources-list
+#
+#      - name: Create lfs user
+#        run: |
+#          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+#          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+#          sudo chmod 440 /etc/sudoers.d/lfs
+#          sudo -u lfs touch /home/lfs/.bashrc
+#
+#      - name: Prepare lfs build directory
+#        run: |
+#          sudo rm -rf /tmp/lfs-build
+#          sudo mkdir -p /tmp/lfs-build
+#          sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
+#          sudo chown -R lfs:lfs /tmp/lfs-build
+#
+#      - name: Link cached packages to build directory
+#        run: |
+#          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+#            sudo mkdir -p /tmp/lfs-build/build-release/sources
+#            sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+#            sudo chown -R lfs:lfs /tmp/lfs-build/build-release
+#            echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+#          fi
+#
+#      - name: Debug sources on host (avant build)
+#        run: |
+#          echo "📂 Contenu de /tmp/lfs-build/build-release/sources :"
+#          ls -la /tmp/lfs-build/build-release/sources/ | head -20
+#
+#      - name: Run tests
+#        run: python3 -m pytest tests/ -q
+#
+#      - name: Ensure build directory is fully owned by lfs user
+#        run: sudo chown -R lfs:lfs /tmp/lfs-build
+#
+#      # ---------- BUILD ----------
+#      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
+#        run: |
+#          cd /tmp/lfs-build
+#          CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
+#          echo "📦 Package cache status: $CACHE_STATUS"
+#
+#          # Choisir le bon profil en fonction de l'architecture
+#          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+#            PROFILE="arm64"
+#          else
+#            PROFILE="${{ matrix.profile }}"
+#          fi
+#
+#          sudo -u lfs python3 builder.py \
+#            --profile "$PROFILE" \
+#            --init ${{ matrix.init }} \
+#            --arch ${{ matrix.arch }} \
+#            --output ./build-release \
+#            --verbose \
+#            --download-timeout 600 \
+#            --download-retries 5
+#        env:
+#          LFS_BUILDER_NONINTERACTIVE: 1
+#
+#      - name: Verify kernel and ISO
+#        run: |
+#          ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
+#          test -s /tmp/lfs-build/build-release/lfs-installer.iso
+#          sha256sum /tmp/lfs-build/build-release/lfs-installer.iso > /tmp/lfs-build/build-release/SHA256SUMS
+#          sha256sum /tmp/lfs-build/build-release/image/boot/vmlinuz* >> /tmp/lfs-build/build-release/SHA256SUMS
+#
+#      - name: Upload release artifacts
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+#          path: |
+#            /tmp/lfs-build/build-release/lfs-installer.iso
+#            /tmp/lfs-build/build-release/image/boot/vmlinuz*
+#            /tmp/lfs-build/build-release/SHA256SUMS
+#            /tmp/lfs-build/build-release/build_info.json
+#          if-no-files-found: error
+#
+#      # ---------- SMOKE TEST QEMU (uniquement pour x86_64) ----------
+#      - name: Boot ISO in QEMU (smoke test)
+#        if: success() && matrix.arch == 'x86_64'
+#        run: |
+#          sudo apt-get update
+#          sudo apt-get install -y qemu-system-x86
+#          ISO_PATH="/tmp/lfs-build/build-release/lfs-installer.iso"
+#          echo "Booting $ISO_PATH in QEMU..."
+#          timeout 90s qemu-system-x86_64 \
+#            -cdrom "$ISO_PATH" \
+#            -nographic -no-reboot -m 2G -smp 2 \
+#            -append "console=ttyS0" | tee qemu.log || true
+#          if grep -qi "LFS\|init:\|login:" qemu.log; then
+#            echo "ISO booted successfully!"
+#          else
+#            echo "ISO boot failed – no expected output found"
+#            cat qemu.log
+#            exit 1
+#          fi
+#
+#      - name: Upload logs on failure
+#        if: failure()
+#        uses: actions/upload-artifact@v4
+#        with:
+#          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+#          path: /tmp/lfs-build/build-release/logs/
+#          if-no-files-found: ignore
+#
+#  # ---------- CRÉATION DE LA RELEASE (UNIQUE) ----------
+#  create-release:
+#    needs: build-profiles
+#    runs-on: ubuntu-latest
+#    if: always() && needs.build-profiles.result == 'success'
+#    permissions:
+#      contents: write
+#    steps:
+#      - name: Download all artifacts
+#        uses: actions/download-artifact@v4
+#        with:
+#          path: artifacts
+#
+#      - name: List downloaded artifacts
+#        run: |
+#          find artifacts -type f
+#
+#      - name: Create Release
+#        uses: softprops/action-gh-release@v2
+#        with:
+#          files: artifacts/**/*
+#          generate_release_notes: true
+
+
 name: Nightly Builds
 
 on:
   schedule:
-    - cron: '0 3 * * *'
-  workflow_dispatch:
+    - cron: '0 3 * * *'   # tous les jours à 3h UTC
+  workflow_dispatch:      # déclenchement manuel
 
 permissions:
   contents: read
@@ -16,7 +259,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0   # récupère tout l'historique
       - name: Vérifier les commits des dernières 24 heures
         id: check
         run: |
@@ -36,7 +279,6 @@ jobs:
       matrix:
         profile: [ minimal, xfce ]
         init: [ sysvinit, systemd ]
-        arch: [ x86_64, aarch64 ]
     permissions:
       contents: write
     steps:
@@ -45,16 +287,18 @@ jobs:
           ref: main
           clean: true
 
-      # ---------- RESTAURATION DU CACHE ----------
+      # ---------- RESTAURATION DU CACHE (UNE SEULE FOIS) ----------
       - name: Restore package cache from release
         run: |
           mkdir -p /tmp/artifacts
           cd /tmp/artifacts
+
           gh release download packages-cache-latest \
             --repo ${{ github.repository }} \
             --pattern "lfs-packages-part-*.tar.gz" \
             --pattern "SHA256SUMS" \
             2>/dev/null || echo "⚠️ No cache release found"
+
           mkdir -p /tmp/lfs-sources
           if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
             cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
@@ -93,7 +337,8 @@ jobs:
           python-version: "3.13"
 
       - name: Check LFS compatibility of shell scripts
-        run: python3 lfs_check.py --shellcheck
+        run: |
+          python3 lfs_check.py --shellcheck
 
       - name: Install dependencies
         run: |
@@ -135,35 +380,29 @@ jobs:
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
           fi
 
+      # ------- DEBUG (optionnel) -------
       - name: Debug sources on host (avant build)
         run: |
           echo "📂 Contenu de /tmp/lfs-build/build-release/sources :"
           ls -la /tmp/lfs-build/build-release/sources/ | head -20
 
+      # ------- RUN TESTS -------
       - name: Run tests
         run: python3 -m pytest tests/ -q
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
-      # ---------- BUILD ----------
-      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
+      # ------- BUILD -------
+      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }}
         run: |
           cd /tmp/lfs-build
           CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
           echo "📦 Package cache status: $CACHE_STATUS"
 
-          # Choisir le bon profil en fonction de l'architecture
-          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            PROFILE="arm64"
-          else
-            PROFILE="${{ matrix.profile }}"
-          fi
-
           sudo -u lfs python3 builder.py \
-            --profile "$PROFILE" \
+            --profile ${{ matrix.profile }} \
             --init ${{ matrix.init }} \
-            --arch ${{ matrix.arch }} \
             --output ./build-release \
             --verbose \
             --download-timeout 600 \
@@ -171,6 +410,7 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      # ------- VÉRIFICATIONS FINALES -------
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -181,7 +421,7 @@ jobs:
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}
           path: |
             /tmp/lfs-build/build-release/lfs-installer.iso
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
@@ -189,9 +429,9 @@ jobs:
             /tmp/lfs-build/build-release/build_info.json
           if-no-files-found: error
 
-      # ---------- SMOKE TEST QEMU (uniquement pour x86_64) ----------
+      # ------- SMOKE TEST QEMU -------
       - name: Boot ISO in QEMU (smoke test)
-        if: success() && matrix.arch == 'x86_64'
+        if: success()
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
@@ -209,33 +449,23 @@ jobs:
             exit 1
           fi
 
+      # ------- CRÉATION DE LA RELEASE (un seul job, mais exécuté pour chaque combinaison) -------
+      #   Attention : chaque combinaison va créer une Release indépendante.
+      #   Si vous voulez une seule Release, sortez cette étape de la matrice.
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            /tmp/lfs-build/build-release/lfs-installer.iso
+            /tmp/lfs-build/build-release/image/boot/vmlinuz*
+            /tmp/lfs-build/build-release/build_info.json
+            /tmp/lfs-build/build-release/SHA256SUMS
+          generate_release_notes: true
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}
           path: /tmp/lfs-build/build-release/logs/
           if-no-files-found: ignore
-
-  # ---------- CRÉATION DE LA RELEASE (UNIQUE) ----------
-  create-release:
-    needs: build-profiles
-    runs-on: ubuntu-latest
-    if: always() && needs.build-profiles.result == 'success'
-    permissions:
-      contents: write
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: List downloaded artifacts
-        run: |
-          find artifacts -type f
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*
-          generate_release_notes: true
