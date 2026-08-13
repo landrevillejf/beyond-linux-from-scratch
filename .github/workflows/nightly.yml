@@ -47,36 +47,36 @@ jobs:
           clean: true
 
       # ---------- RESTAURATION DU CACHE ----------
-#      - name: Restore package cache from release
-#        run: |
-#          mkdir -p /tmp/artifacts
-#          cd /tmp/artifacts
-#          gh release download packages-cache-latest \
-#            --repo ${{ github.repository }} \
-#            --pattern "lfs-packages-part-*.tar.gz" \
-#            --pattern "SHA256SUMS" \
-#            2>/dev/null || echo "⚠️ No cache release found"
-#          mkdir -p /tmp/lfs-sources
-#          if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
-#            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
-#            echo "✅ Cache restored successfully"
-#          else
-#            echo "⚠️ No cached packages found, will download during build"
-#          fi
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        continue-on-error: true
-#
-#      - name: Check cache status
-#        id: check_cache
-#        run: |
-#          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
-#            echo "hit=true" >> $GITHUB_OUTPUT
-#            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
-#          else
-#            echo "hit=false" >> $GITHUB_OUTPUT
-#            echo "❌ Cache MISS: Will download packages during build"
-#          fi
+      - name: Restore package cache from release
+        run: |
+          mkdir -p /tmp/artifacts
+          cd /tmp/artifacts
+          gh release download packages-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "lfs-packages-part-*.tar.gz" \
+            --pattern "SHA256SUMS" \
+            2>/dev/null || echo "⚠️ No cache release found"
+          mkdir -p /tmp/lfs-sources
+          if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
+            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
+            echo "✅ Cache restored successfully"
+          else
+            echo "⚠️ No cached packages found, will download during build"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Check cache status
+        id: check_cache
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "❌ Cache MISS: Will download packages during build"
+          fi
 
       - name: Free disk space
         run: |
