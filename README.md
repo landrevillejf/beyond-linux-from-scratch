@@ -252,25 +252,29 @@ View the [Desktop Branding Mockup](docs/branding-visual-mockup.html) for a visua
 
 Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 
-| Profile | Description | Desktop | Default init | Arch | Live | Size (GB) | Build time (h) |
-|---|---|---|---|---|---:|---:|---:|
-| `minimal` | Minimal command-line only system | none | sysvinit | x86_64 | No | 1 | 2 |
-| `gnu-free` | 100% free software system | none | sysvinit | x86_64 | No | 3 | 4 |
-| `gnu-free-full` | Full GNU stack | xfce | sysvinit | x86_64 | Yes | 10 | 8 |
-| `xfce` | XFCE desktop environment | xfce | systemd | x86_64 | Yes | 4 | 4 |
-| `gnome` | GNOME desktop environment | gnome | systemd | x86_64 | Yes | 8 | 8 |
-| `kde` | KDE Plasma desktop environment | kde | systemd | x86_64 | Yes | 10 | 12 |
-| `lxqt` | Lightweight LXQt desktop | lxqt | systemd | x86_64 | Yes | 2 | 3 |
-| `java-dev` | Java development stack on XFCE | xfce | systemd | x86_64 | Yes | 10 | 6 |
-| `server` | Server-oriented profile | none | sysvinit | x86_64 | No | 2 | 3 |
-| `secure` | Hardened profile with privacy tools | xfce | sysvinit | x86_64 | Yes | 6 | 5 |
-| `full` | Full feature profile | gnome | systemd | x86_64 | Yes | 20 | 12 |
-| `audio-cli` | Headless audio production | none | sysvinit | x86_64 | No | 2 | 3 |
-| `audio-studio` | Desktop audio production | xfce | systemd | x86_64 | Yes | 8 | 6 |
-| `arm64` | ARM64 server profile | none | sysvinit | aarch64 | No | 2 | 3 |
-| `pinebook` | Pinebook profile | xfce | sysvinit | aarch64 | No | 4 | 4 |
-| `brax3` | Brax3 smartphone profile | phosh | systemd | aarch64 | No | 4 | 5 |
-| `custom` | User-defined profile template | none | sysvinit | x86_64 | No | 5 | 5 |
+---
+
+| Profile | Description | Desktop | Live | Size (GB) | Build time (h) |
+|---|---|---|---:|---:|---:|
+| `minimal` | Minimal command-line only system | none | No | 1 | 2 |
+| `gnu-free` | 100% free software system | none | No | 3 | 4 |
+| `gnu-free-full` | Full GNU stack | xfce | Yes | 10 | 8 |
+| `xfce` | XFCE desktop environment | xfce | Yes | 4 | 4 |
+| `gnome` | GNOME desktop environment | gnome | Yes | 8 | 8 |
+| `kde` | KDE Plasma desktop environment | kde | Yes | 10 | 12 |
+| `lxqt` | Lightweight LXQt desktop | lxqt | Yes | 2 | 3 |
+| `java-dev` | Java development stack on XFCE | xfce | Yes | 10 | 6 |
+| `server` | Server-oriented profile | none | No | 2 | 3 |
+| `secure` | Hardened profile with privacy tools | xfce | Yes | 6 | 5 |
+| `full` | Full feature profile | gnome | Yes | 20 | 12 |
+| `audio-cli` | Headless audio production | none | No | 2 | 3 |
+| `audio-studio` | Desktop audio production | xfce | Yes | 8 | 6 |
+| `arm64` | ARM64 server profile | none | No | 2 | 3 |
+| `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
+| `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |
+| `custom` | User-defined profile template | none | No | 5 | 5 |
+
+---
 
 ## Configuration model
 
