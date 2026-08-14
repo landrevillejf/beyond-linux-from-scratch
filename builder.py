@@ -723,7 +723,7 @@ class SourceDownloader:
                 self.logger.warning(f"  {url}")
             return False
         else:
-            self.logger.info("All sources downloaded successfully")
+            self.logger.info(f"All sources downloaded successfully to: {self.sources_dir}")
             return True
 
     def verify_checksums(self, checksum_file: Path) -> bool:

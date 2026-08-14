@@ -7,6 +7,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -255,57 +256,30 @@ run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # -----------------------------------------------------------------
-# COPY SOURCES INTO CHROOT (with fallbacks)
+# Copy sources into chroot
 # -----------------------------------------------------------------
 SOURCES_DIR="$LFS/sources"
-HOST_SOURCES=""
 
-# Locate host sources - try multiple locations
-for candidate in \
-    "$(dirname "$LFS")/sources" \
-    "$PWD/sources" \
-    "/tmp/lfs-sources" \
-    "$(pwd)/../sources" \
-    "$(dirname "$LFS")/../sources"
-do
-    if [ -d "$candidate" ] && [ -n "$(ls -A "$candidate" 2>/dev/null | grep -v placeholder.txt)" ]; then
-        HOST_SOURCES="$candidate"
-        break
-    fi
-done
-
-if [ -z "$HOST_SOURCES" ]; then
-    # If no sources found, create a symlink from $LFS/sources to the actual builder sources
-    # The builder puts sources in $LFS/../sources or $PWD/sources
-    log_warning "No sources found in standard locations. Trying to link to builder sources..."
-    # In the real build, the builder places sources in $LFS/../sources
-    if [ -d "$(dirname "$LFS")/../sources" ] && [ -n "$(ls -A "$(dirname "$LFS")/../sources" 2>/dev/null | grep -v placeholder.txt)" ]; then
-        HOST_SOURCES="$(dirname "$LFS")/../sources"
-    elif [ -d "$(dirname "$LFS")/sources" ] && [ -n "$(ls -A "$(dirname "$LFS")/sources" 2>/dev/null | grep -v placeholder.txt)" ]; then
-        HOST_SOURCES="$(dirname "$LFS")/sources"
+# Si les sources sont déjà dans $SOURCES_DIR, on les utilise
+if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
+    log_info "Sources already present in $SOURCES_DIR"
+else
+    # Sinon, on tente de les copier depuis le répertoire parent (cas de certains layouts)
+    PARENT_SOURCES="$(dirname "$LFS")/sources"
+    if [ -d "$PARENT_SOURCES" ] && [ "$(ls -A "$PARENT_SOURCES" 2>/dev/null)" ]; then
+        log_info "Copying sources from $PARENT_SOURCES to $SOURCES_DIR"
+        run_privileged mkdir -p "$SOURCES_DIR"
+        run_privileged cp -r "$PARENT_SOURCES"/. "$SOURCES_DIR"/
+        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
     else
-        log_error "No sources found. Current directory: $PWD, LFS: $LFS"
-        ls -la "$(dirname "$LFS")" 2>/dev/null || true
+        log_error "No sources found in $SOURCES_DIR or $PARENT_SOURCES – cannot compile"
         exit 1
     fi
 fi
 
-log_info "Found sources at: $HOST_SOURCES"
-run_privileged rm -rf "$SOURCES_DIR"
-run_privileged mkdir -p "$SOURCES_DIR"
-run_privileged cp -r "$HOST_SOURCES"/. "$SOURCES_DIR"/
-run_privileged chown -R lfs:lfs "$SOURCES_DIR"
-
-# Verify gmp is present
-if ! run_privileged test -f "$SOURCES_DIR"/gmp-*.tar.*; then
-    log_error "❌ gmp not found in $SOURCES_DIR after copy"
-    run_privileged ls -la "$SOURCES_DIR" | head -30
-    exit 1
-fi
-log_success "✅ gmp found in $SOURCES_DIR"
-
+ls -la "$SOURCES_DIR" | head -20
 # -----------------------------------------------------------------
-# Internal compilation script
+# Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
 log_info "Creating internal compilation script"
 cat >"$LFS/build-lfs-system.sh" <<'INNEREOF'
@@ -314,17 +288,18 @@ set -e
 
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export LD_LIBRARY_PATH=/tools/lib
+# Use the cross-compiled toolchain bash so that make recipes survive the
+# moment glibc installs its new ld.so.  The bootstrapped /bin/bash is linked
+# against the HOST libc (/lib/x86_64-linux-gnu/libc.so.6) which lacks the
+# GLIBC_PRIVATE __nptl_change_stack_perm symbol required by glibc 2.34+
+# ld.so, causing an immediate symbol-lookup error.  /tools/bin/bash was
+# cross-compiled against the LFS toolchain glibc at /usr/lib/libc.so.6 and
+# is therefore compatible with both the pre-install toolchain glibc and the
+# newly installed system glibc.
 export SHELL=/tools/bin/bash
 export CONFIG_SHELL=/tools/bin/bash
 
-cd /sources || { echo "ERROR: /sources not found"; exit 1; }
-
-if ! ls gmp-*.tar.* 1>/dev/null 2>&1; then
-    echo "ERROR: gmp source not found in /sources"
-    echo "Contenu de /sources :"
-    ls -la
-    exit 1
-fi
+cd /sources
 
 # ----- Helper: extract and cd -----
 extract() {
@@ -335,7 +310,7 @@ extract() {
     cd "$dir"
 }
 
-# ----- Helper: find archive -----
+# ----- Helper: find archive (supports .tar.xz, .tar.gz, .tgz, etc.) -----
 find_archive() {
     local base=$1
     local archive=""
@@ -348,19 +323,31 @@ find_archive() {
     echo "$archive"
 }
 
-# ---- Install Linux API headers ----
+# ---- Install Linux API headers into /usr/include ----
+# The toolchain stage (04-build-toolchain.sh) installs Linux API headers to
+# $LFS/usr/include before entering the chroot.  Re-use them when already
+# present to avoid invoking make inside a chroot where the host gcc is not
+# accessible.  When the headers are absent (e.g. partial resume), fall back
+# to a full installation using the cross-compiler with --sysroot=/ so that
+# it can locate the C headers already present in the chroot under /usr/include.
 if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then
-    echo "Linux API headers already present"
+    echo "Linux API headers already present from toolchain stage, skipping reinstallation"
 else
     echo "Installing Linux API headers"
     LINUX_ARCHIVE=$(find_archive linux)
     if [ -z "$LINUX_ARCHIVE" ]; then
         echo "ERROR: linux source not found"
+        echo "Available source archives:"
         ls -la
         exit 1
     fi
+    echo "Extracting $LINUX_ARCHIVE"
     tar -xf "$LINUX_ARCHIVE"
     LINUX_DIR=$(echo "$LINUX_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    if [ ! -d "$LINUX_DIR" ]; then
+        echo "ERROR: extracted directory $LINUX_DIR not found"
+        exit 1
+    fi
     cd "$LINUX_DIR"
     make mrproper
     make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers
@@ -372,7 +359,13 @@ else
     echo "Linux headers installed"
 fi
 
-# ---- Cross-compiler vars ----
+# ---- Set cross-compiler variables ----
+# The cross-compiler was built with --with-sysroot=$LFS pointing at the
+# host-side LFS directory.  Inside the chroot that absolute path does not
+# exist (the chroot root IS that directory), so the linker cannot find
+# target libraries and configure reports "C compiler cannot create
+# executables".  Override the built-in sysroot with --sysroot=/ so that
+# headers and libraries are resolved relative to the chroot root.
 CC="${LFS_TGT}-gcc --sysroot=/"
 CXX="${LFS_TGT}-g++ --sysroot=/"
 LD="${LFS_TGT}-ld"
@@ -380,7 +373,7 @@ AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
 # ============================================================
-# 1. GLIBC
+# 1. BUILD GLIBC (official LFS)
 # ============================================================
 echo "=== Building glibc ==="
 GLIBC_ARCHIVE=$(find_archive glibc)
@@ -402,18 +395,42 @@ cd build
              --enable-cet \
              --enable-multi-arch
 make -j$(nproc)
+# Use /tools/bin/bash (cross-compiled toolchain bash) as SHELL so that make
+# recipes keep working after glibc installs its new ld.so.  The new ld.so
+# (glibc 2.34+) requires __nptl_change_stack_perm@GLIBC_PRIVATE from
+# libc.so.6; the toolchain bash links against /usr/lib/libc.so.6 which is
+# updated to glibc 2.42 early in the install sequence, while the bootstrapped
+# /bin/bash links against the HOST /lib/x86_64-linux-gnu/libc.so.6 which
+# does not carry that private symbol.
 make RM=/tools/bin/rm SHELL=/tools/bin/bash install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "glibc done"
 
+# After glibc installs its new runtime linker (/lib64/ld-linux-x86-64.so.2),
+# the new ld.so only searches /lib64 and /usr/lib by default.  The
+# bootstrapped /bin/bash (copied from the Ubuntu host) depends on libraries
+# such as libtinfo.so.6 and libreadline.so.8 that live under /lib, which is
+# NOT in the new ld.so's compiled-in search path.  Create /etc/ld.so.conf
+# and rebuild the dynamic linker cache so every subsequent shell invocation
+# (/bin/sh, ../configure, etc.) can find those bootstrap host libraries.
+# /usr/lib is listed first so that the newly-installed glibc 2.42 libc.so.6
+# takes precedence over the Ubuntu host libc copied to /lib/x86_64-linux-gnu.
 mkdir -p /etc
 printf '/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib\n/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
 /sbin/ldconfig || true
+echo "ldconfig cache rebuilt after glibc install"
+# The new glibc 2.42 ld.so (/lib64/ld-linux-x86-64.so.2) requires the
+# __nptl_change_stack_perm@GLIBC_PRIVATE symbol from a matching libc.so.6.
+# The old cross-toolchain libc at /tools/lib/libc.so.6 uses a different
+# GLIBC_PRIVATE ABI, causing a symbol-lookup failure when bootstrapped host
+# tools (tar, head, cut ...) are executed after glibc installs its new ld.so.
+# Prefer the newly-installed /usr/lib/libc.so.6 (glibc 2.42) so both the
+# Ubuntu-bootstrapped binaries and the toolchain binaries use a compatible libc.
 export LD_LIBRARY_PATH=/usr/lib:/tools/lib
 
 # ============================================================
-# 2. BINUTILS
+# 2. BUILD BINUTILS (official LFS)
 # ============================================================
 echo "=== Building binutils ==="
 BINUTILS_ARCHIVE=$(find_archive binutils)
@@ -444,7 +461,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-
 echo "binutils done"
 
 # ============================================================
-# 3. GCC
+# 3. BUILD GCC (official LFS) – compilation native avec GCC hôte
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(find_archive gcc)
@@ -454,31 +471,47 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
+# ---- Vérification que GMP, MPFR, MPC sont présents ----
 for pkg in gmp mpfr mpc; do
     if [ -z "$(find_archive "$pkg")" ]; then
-        echo "ERROR: $pkg source not found in /sources"
+        echo "ERROR: $pkg source not found in /sources – please check sources.list"
         exit 1
     fi
 done
 
+# Integrate GMP, MPFR, MPC into GCC source tree
 echo "Integrating GMP, MPFR, MPC into GCC source tree"
 GMP_ARCHIVE=$(find_archive gmp)
-tar -xf "$GMP_ARCHIVE"
-GMP_DIR=$(echo "$GMP_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
-mv -v "$GMP_DIR" gmp
+if [ -n "$GMP_ARCHIVE" ]; then
+    tar -xf "$GMP_ARCHIVE"
+    GMP_DIR=$(echo "$GMP_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$GMP_DIR" gmp
+else
+    echo "WARNING: GMP source not found – GCC may fail"
+fi
 
 MPFR_ARCHIVE=$(find_archive mpfr)
-tar -xf "$MPFR_ARCHIVE"
-MPFR_DIR=$(echo "$MPFR_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
-mv -v "$MPFR_DIR" mpfr
+if [ -n "$MPFR_ARCHIVE" ]; then
+    tar -xf "$MPFR_ARCHIVE"
+    MPFR_DIR=$(echo "$MPFR_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$MPFR_DIR" mpfr
+else
+    echo "WARNING: MPFR source not found – GCC may fail"
+fi
 
 MPC_ARCHIVE=$(find_archive mpc)
-tar -xf "$MPC_ARCHIVE"
-MPC_DIR=$(echo "$MPC_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
-mv -v "$MPC_DIR" mpc
+if [ -n "$MPC_ARCHIVE" ]; then
+    tar -xf "$MPC_ARCHIVE"
+    MPC_DIR=$(echo "$MPC_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    mv -v "$MPC_DIR" mpc
+else
+    echo "WARNING: MPC source not found – GCC may fail"
+fi
 
 mkdir -v build
 cd build
+# Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
+# On ajoute CXXFLAGS pour forcer le standard C++14
 ../configure --prefix=/usr \
              --enable-languages=c,c++ \
              --disable-multilib \
@@ -496,11 +529,13 @@ ln -sf g++ /usr/bin/c++
 cd /sources
 rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
+# Après installation, on réinitialise pour utiliser le nouveau GCC
 unset CC CXX
 
 # ============================================================
-# 4. BASE PACKAGES
+# 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
 # ============================================================
+# After gcc is installed, we switch to the native compiler
 unset CC CXX LD AS
 
 build_simple() {
@@ -524,6 +559,8 @@ build_simple() {
     fi
     if [ -f "configure" ]; then
         CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc
+    elif [ -f "Makefile" ]; then
+        true
     fi
     CFLAGS="$cflags" make -j$(nproc)
     CFLAGS="$cflags" make install
