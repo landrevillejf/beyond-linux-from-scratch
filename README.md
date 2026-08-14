@@ -112,35 +112,6 @@ flowchart TD
     L --> M["Optional USB write"]
 ```
 
-### Default stage order (xfce profile, live enabled)
-
-1. `host-check`
-2. `host-prepare`
-3. `disk-image`
-4. `toolchain`
-5. `lfs-basic`
-6. `lfs-system`
-7. `init-system`
-8. `service-abstraction`
-9. `configure-lfs`
-10. `blfs-base`
-11. `build-kernel`
-12. `desktop`
-13. `applications`
-14. `configure-desktop`
-15. `package-manager`
-16. `base-packages`
-17. `security`
-18. `branding`
-19. `first-boot`
-20. `system-updater`
-21. `package-updater`
-22. `lpm-advanced`
-23. `initramfs`
-24. `bootloader`
-25. `installer`
-26. `live-system` (when enabled)
-
 ## Repository structure
 
 ```text
