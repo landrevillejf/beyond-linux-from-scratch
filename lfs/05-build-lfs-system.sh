@@ -314,7 +314,7 @@ extract() {
 find_archive() {
     local base=$1
     local archive=""
-    for f in "${base}"*.tar.* "${base}"*.tgz; do
+    for f in "/sources/${base}"*.tar.* "/sources/${base}"*.tgz; do
         if [ -f "$f" ]; then
             archive="$f"
             break
