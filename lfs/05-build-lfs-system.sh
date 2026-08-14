@@ -366,8 +366,13 @@ fi
 # target libraries and configure reports "C compiler cannot create
 # executables".  Override the built-in sysroot with --sysroot=/ so that
 # headers and libraries are resolved relative to the chroot root.
-CC="${LFS_TGT}-gcc --sysroot=/"
-CXX="${LFS_TGT}-g++ --sysroot=/"
+if [ "${CROSS_COMPILE}" = "yes" ]; then
+    CC="${LFS_TGT}-gcc --sysroot=/"
+    CXX="${LFS_TGT}-g++ --sysroot=/"
+else
+    CC="${LFS_TGT}-gcc"
+    CXX="${LFS_TGT}-g++"
+fi
 LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
 export CC CXX LD AS
