@@ -493,7 +493,7 @@ fi
 MPFR_ARCHIVE=$(find_archive mpfr)
 if [ -n "$MPFR_ARCHIVE" ]; then
     tar -xf "$MPFR_ARCHIVE"
-    MPFR_DIR=$(echo "$MPFR_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    MPFR_DIR=$(basename "$MPFR_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
     mv -v "$MPFR_DIR" mpfr
 else
     echo "WARNING: MPFR source not found – GCC may fail"
@@ -502,7 +502,7 @@ fi
 MPC_ARCHIVE=$(find_archive mpc)
 if [ -n "$MPC_ARCHIVE" ]; then
     tar -xf "$MPC_ARCHIVE"
-    MPC_DIR=$(echo "$MPC_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    MPC_DIR=$(basename "$MPC_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
     mv -v "$MPC_DIR" mpc
 else
     echo "WARNING: MPC source not found – GCC may fail"
