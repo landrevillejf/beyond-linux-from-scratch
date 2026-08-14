@@ -201,7 +201,7 @@ build_toolchain() {
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     # Embed GMP, MPFR, MPC into GCC source tree
     for lib in gmp mpfr mpc; do
-        LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
+        LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
         if [ -n "$LIB_TAR" ]; then
             tar -xf "$LIB_TAR"
             LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
