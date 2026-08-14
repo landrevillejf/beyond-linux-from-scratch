@@ -484,7 +484,7 @@ echo "Integrating GMP, MPFR, MPC into GCC source tree"
 GMP_ARCHIVE=$(find_archive gmp)
 if [ -n "$GMP_ARCHIVE" ]; then
     tar -xf "$GMP_ARCHIVE"
-    GMP_DIR=$(echo "$GMP_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
+    GMP_DIR=$(basename "$GMP_ARCHIVE" | sed -E 's/\.tar\.[a-z0-9]+$//' | sed -E 's/\.tgz$//')
     mv -v "$GMP_DIR" gmp
 else
     echo "WARNING: GMP source not found – GCC may fail"
