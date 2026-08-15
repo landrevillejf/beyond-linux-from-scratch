@@ -388,6 +388,8 @@ fi
 extract "$GLIBC_ARCHIVE"
 mkdir -v build
 cd build
+# Add LDFLAGS to help linker find libgcc_s during glibc tests
+LDFLAGS="-L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
 ../configure --prefix=/usr \
              --host=$LFS_TGT \
              --build=$(uname -m)-linux-gnu \
