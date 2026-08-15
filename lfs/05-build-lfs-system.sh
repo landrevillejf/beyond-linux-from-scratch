@@ -373,9 +373,6 @@ LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
-# Add rpath-link to help libcody find dependencies
-export LDFLAGS="-L/tools/lib -Wl,-rpath-link,/tools/lib"
-
 # ============================================================
 # 1. BUILD GLIBC (official LFS)
 # ============================================================
@@ -512,6 +509,10 @@ else
     echo "WARNING: MPC source not found – GCC may fail"
 fi
 
+# ---- Ajout des flags pour libcody (déplacés ici) ----
+export LDFLAGS="-L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
+export LD_RUN_PATH=/tools/lib
+
 mkdir -v build
 cd build
 # Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
@@ -525,8 +526,7 @@ cd build
              --enable-default-ssp \
              --enable-cet=auto \
              --enable-linker-build-id \
-             CXXFLAGS="-std=gnu++14" \
-             LDFLAGS="-L/tools/lib"
+             CXXFLAGS="-std=gnu++14"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
