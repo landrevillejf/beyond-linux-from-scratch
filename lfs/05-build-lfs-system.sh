@@ -509,28 +509,34 @@ else
     echo "WARNING: MPC source not found – GCC may fail"
 fi
 
-# ---- Copie des bibliothèques C++ dans le sysroot (avec liens symboliques) ----
+# ---- Copie des bibliothèques C++ dans le sysroot (recherche dans /tools/lib et /tools/lib64) ----
 echo "Copying C++ runtime libraries to /usr/lib for GCC build..."
 mkdir -p /usr/lib
 
-# Copie avec préservation des liens symboliques et attributs
-cp -a /tools/lib/libstdc++.so* /usr/lib/
-cp -a /tools/lib/libgcc_s.so* /usr/lib/
-cp -a /tools/lib/libgomp.so* /usr/lib/
-cp -a /tools/lib/libatomic.so* /usr/lib/
+# Recherche les bibliothèques dans les deux répertoires possibles
+for libdir in /tools/lib /tools/lib64; do
+    if [ -d "$libdir" ]; then
+        echo "Looking for libraries in $libdir"
+        cp -a $libdir/libstdc++.so* /usr/lib/ 2>/dev/null || true
+        cp -a $libdir/libgcc_s.so* /usr/lib/ 2>/dev/null || true
+        cp -a $libdir/libgomp.so* /usr/lib/ 2>/dev/null || true
+        cp -a $libdir/libatomic.so* /usr/lib/ 2>/dev/null || true
+    fi
+done
 
 # Reconstruire le cache du linker avec les bons chemins
 echo "/usr/lib" > /etc/ld.so.conf
 echo "/tools/lib" >> /etc/ld.so.conf
+echo "/tools/lib64" >> /etc/ld.so.conf
 /sbin/ldconfig
 
 # Forcer le linker dynamique à utiliser ces chemins pour les tests
-export LD_LIBRARY_PATH=/tools/lib:/usr/lib
+export LD_LIBRARY_PATH=/tools/lib:/tools/lib64:/usr/lib
 
 # ---- Ajout des flags pour libcody (CXX et LDFLAGS) ----
-export CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
-export LDFLAGS="-L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
-export LD_RUN_PATH=/tools/lib
+export CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64 -Wl,-rpath,/tools/lib -Wl,-rpath,/tools/lib64"
+export LDFLAGS="-L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64 -Wl,-rpath,/tools/lib -Wl,-rpath,/tools/lib64"
+export LD_RUN_PATH=/tools/lib:/tools/lib64
 
 mkdir -v build
 cd build
