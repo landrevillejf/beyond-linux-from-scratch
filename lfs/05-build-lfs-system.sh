@@ -509,24 +509,34 @@ else
     echo "WARNING: MPC source not found – GCC may fail"
 fi
 
-# ---- Ajout des flags pour libcody (déplacés ici) ----
+# ---- Copie des bibliothèques C++ dans le sysroot ----
+echo "Copying C++ libraries to /usr/lib for GCC build..."
+mkdir -p /usr/lib
+cp -v /tools/lib/libstdc++.so* /usr/lib/ 2>/dev/null || true
+cp -v /tools/lib/libgcc_s.so* /usr/lib/ 2>/dev/null || true
+cp -v /tools/lib/libgomp.so* /usr/lib/ 2>/dev/null || true
+cp -v /tools/lib/libatomic.so* /usr/lib/ 2>/dev/null || true
+/sbin/ldconfig 2>/dev/null || true
+
+# ---- Ajout des flags pour libcody (CXX et LDFLAGS) ----
+export CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
 export LDFLAGS="-L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
 export LD_RUN_PATH=/tools/lib
 
 mkdir -v build
 cd build
-# Utiliser le compilateur croisé déjà défini (CC et CXX avec --sysroot=/)
-# On ajoute CXXFLAGS pour forcer le standard C++14
 ../configure --prefix=/usr \
              --enable-languages=c,c++ \
              --disable-multilib \
              --disable-bootstrap \
+             --disable-lto \
              --with-system-zlib \
              --enable-default-pie \
              --enable-default-ssp \
              --enable-cet=auto \
              --enable-linker-build-id \
-             CXXFLAGS="-std=gnu++14"
+             CXXFLAGS="-std=gnu++14" \
+             LDFLAGS="$LDFLAGS"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
@@ -534,7 +544,6 @@ ln -sf g++ /usr/bin/c++
 cd /sources
 rm -rf "$(basename "$GCC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
 echo "gcc done"
-# Après installation, on réinitialise pour utiliser le nouveau GCC
 unset CC CXX
 
 # ============================================================
