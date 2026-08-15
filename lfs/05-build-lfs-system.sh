@@ -288,6 +288,7 @@ set -e
 
 export PATH=/tools/bin:/bin:/usr/bin:/sbin
 export LD_LIBRARY_PATH=/tools/lib
+export LIBRARY_PATH=/tools/lib
 # Use the cross-compiled toolchain bash so that make recipes survive the
 # moment glibc installs its new ld.so.  The bootstrapped /bin/bash is linked
 # against the HOST libc (/lib/x86_64-linux-gnu/libc.so.6) which lacks the
