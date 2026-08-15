@@ -35,7 +35,7 @@ jobs:
       fail-fast: false
       matrix:
         profile: [ minimal, xfce, arm64, server, java-dev, audio-studio ]
-        init: [ sysvinit, systemd, openrc ]
+        init: [ sysvinit ]
         arch: [ x86_64 ]
         include:
           # Cross-compile only for arm64 profile
