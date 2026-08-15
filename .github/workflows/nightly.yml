@@ -37,7 +37,22 @@ jobs:
         profile: [ minimal, xfce ]
         init: [ sysvinit, systemd ]
         arch: [ x86_64 ]
-        #arch: [ x86_64, aarch64 ]
+#    strategy:
+#      fail-fast: false
+#      matrix:
+#        # Core nightly set (runs daily)
+#        profile: [ minimal, xfce, arm64, secure, server ]
+#        init: [ sysvinit, systemd, openrc ]
+#        arch: [ x86_64 ]
+#        include:
+#          # Cross-compile only for arm64 profile
+#          - profile: arm64
+#            arch: aarch64
+#            init: sysvinit
+#          # Additional architecture tests for xfce (optional)
+#          - profile: xfce
+#            arch: aarch64
+#            init: systemd
     permissions:
       contents: write
     steps:
