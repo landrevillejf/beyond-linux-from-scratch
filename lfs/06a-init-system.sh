@@ -61,6 +61,14 @@ EOF
     exit 0
 fi
 
+# ---- Vérification : seul sysvinit est supporté pour l'instant ----
+if [ "$INIT_SYSTEM" != "sysvinit" ]; then
+    log_error "This script currently supports only sysvinit."
+    log_error "For systemd, openrc, runit, or s6, please use a dedicated stage."
+    log_error "The selected init system is: $INIT_SYSTEM"
+    exit 1
+fi
+
 if [ ! -f "$LFS/bin/bash" ]; then
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
     exit 1
