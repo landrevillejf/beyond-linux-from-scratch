@@ -521,7 +521,8 @@ cd build
              --enable-default-ssp \
              --enable-cet=auto \
              --enable-linker-build-id \
-             CXXFLAGS="-std=gnu++14"
+             CXXFLAGS="-std=gnu++14" \
+             LDFLAGS="-L/tools/lib"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
