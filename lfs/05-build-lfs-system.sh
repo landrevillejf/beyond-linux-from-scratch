@@ -373,6 +373,9 @@ LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
+# Add rpath-link to help libcody find dependencies
+export LDFLAGS="-L/tools/lib -Wl,-rpath-link,/tools/lib"
+
 # ============================================================
 # 1. BUILD GLIBC (official LFS)
 # ============================================================
