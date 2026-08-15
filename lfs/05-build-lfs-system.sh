@@ -509,14 +509,23 @@ else
     echo "WARNING: MPC source not found – GCC may fail"
 fi
 
-# ---- Copie des bibliothèques C++ dans le sysroot ----
-echo "Copying C++ libraries to /usr/lib for GCC build..."
+# ---- Copie des bibliothèques C++ dans le sysroot (avec liens symboliques) ----
+echo "Copying C++ runtime libraries to /usr/lib for GCC build..."
 mkdir -p /usr/lib
-cp -v /tools/lib/libstdc++.so* /usr/lib/ 2>/dev/null || true
-cp -v /tools/lib/libgcc_s.so* /usr/lib/ 2>/dev/null || true
-cp -v /tools/lib/libgomp.so* /usr/lib/ 2>/dev/null || true
-cp -v /tools/lib/libatomic.so* /usr/lib/ 2>/dev/null || true
-/sbin/ldconfig 2>/dev/null || true
+
+# Copie avec préservation des liens symboliques et attributs
+cp -a /tools/lib/libstdc++.so* /usr/lib/
+cp -a /tools/lib/libgcc_s.so* /usr/lib/
+cp -a /tools/lib/libgomp.so* /usr/lib/
+cp -a /tools/lib/libatomic.so* /usr/lib/
+
+# Reconstruire le cache du linker avec les bons chemins
+echo "/usr/lib" > /etc/ld.so.conf
+echo "/tools/lib" >> /etc/ld.so.conf
+/sbin/ldconfig
+
+# Forcer le linker dynamique à utiliser ces chemins pour les tests
+export LD_LIBRARY_PATH=/tools/lib:/usr/lib
 
 # ---- Ajout des flags pour libcody (CXX et LDFLAGS) ----
 export CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -Wl,-rpath-link,/tools/lib -Wl,-rpath,/tools/lib"
