@@ -33,6 +33,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 - [Security and support](#security-and-support)
 - [Contributing](#contributing)
 - [License](#license)
+- [Preview XFCE desktop with branding](https://htmlpreview.github.io/?https://github.com/landrevillejf/beyond-linux-from-scratch/blob/main/docs/branding-visual-mockup-desktop.html)
 
 ## Documentation pages
 
