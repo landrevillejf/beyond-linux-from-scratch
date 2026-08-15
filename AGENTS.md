@@ -174,6 +174,152 @@ All workflows live in `.github/workflows/`. Key pipelines:
 6. **Respect the flattened env var contract** — stage scripts read `LFS_CONFIG_*` and `LFS_PROFILE_*`. Any new configuration key added to `build.conf` must be exported in `builder.py`'s environment propagation logic.
 7. **Document new profiles** — add new profiles to the profile table in `README.md` and `builder.py`'s `ProfileManager`.
 
+---
+
+## 1. Commit Convention
+
+Commit messages must follow this format:
+
+```
+<type>(<scope>): <short subject>
+
+[optional body explaining why and how]
+
+[optional footer with references]
+```
+
+**Allowed types:**
+
+| Type | Usage |
+|------|-------|
+| `feat` | New feature (profile, option, stage) |
+| `fix` | Bug fix (build, script, test) |
+| `docs` | Documentation changes (README, comments) |
+| `style` | Formatting, indentation, no functional change |
+| `refactor` | Code rewrite without behavior change |
+| `test` | Adding or modifying tests |
+| `chore` | Maintenance tasks (deps, CI, config) |
+| `perf` | Performance optimization |
+
+**Common scopes:**
+
+- `builder`: changes to `builder.py`
+- `lfs`: scripts in `lfs/`
+- `host`: scripts in `host/`
+- `blfs`: scripts in `blfs/`
+- `final`: scripts in `final/`
+- `config`: config files (`config/build.conf`)
+- `tests`: test files (`tests/`)
+- `docs`: documentation
+- `ci`: GitHub Actions workflows
+- `profile`: profile modifications (`ProfileManager`)
+- `branding`: branding system
+
+**Examples:**
+
+```
+feat(profile): add audio-studio profile
+fix(lfs): search C++ libs in /tools/lib and /tools/lib64
+test(builder): add test for cross-compile environment
+docs(readme): update stage order table
+chore(ci): update GitHub Actions runner version
+```
+
+**Rules:**
+
+- Subject must be in **imperative** mood (e.g., "add", "fix", "update").
+- Subject must not exceed **50 characters**.
+- Body (if present) must be separated from subject by a blank line, and limited to **72 characters per line**.
+- Issue references must be in the footer (e.g., `Fixes #123`).
+
+---
+
+## 2. Code Structure
+
+- **`builder.py`** is the single orchestrator. Any new logic must be integrated there via methods or classes.
+- **Stage scripts** (`host/*.sh`, `lfs/*.sh`, etc.) are pure Bash scripts that receive environment variables from `builder.py`. They must **not** call other Python scripts or modify the environment globally.
+- **Any new configuration** added in `config/build.conf` must be exported in `builder.py` via `_get_env()` as `LFS_CONFIG_*` and `LFS_PROFILE_*` variables.
+- **Profiles** are defined in `ProfileManager` and must be documented in the table in `README.md`.
+
+---
+
+## 3. Testing
+
+- **Coverage of `builder.py` must be 100%.** Any change to `builder.py` must be accompanied by corresponding tests.
+- **Use `pytest`** (unit tests, integration tests) and `pytest-bdd` for functional scenarios.
+- Tests must be run before every push:
+  ```bash
+  python3 -m pytest tests/ --cov=builder --cov-report=term-missing
+  ```
+- New BDD scenarios must be added in `tests/features/*.feature` with corresponding steps.
+
+---
+
+## 4. Documentation
+
+- **Any stage modification** (addition, removal, reordering) must be reflected in the `README.md` table (section "Default stage order").
+- **Any new CLI option** must be added to the "Command line reference" section of `README.md`.
+- **Any new profile** must appear in the profile table (`README.md` and `builder.py`).
+- **Comments in code** should explain *why* (not *what*).
+
+---
+
+## 5. Quality and Validation
+
+- **ShellCheck**: all Bash scripts must be validated with `shellcheck` before commit.
+  ```bash
+  shellcheck lfs/*.sh host/*.sh blfs/*.sh final/*.sh
+  ```
+- **JSON**: the config file `config/build.conf` must be valid.
+  ```bash
+  python3 -m json.tool config/build.conf > /dev/null
+  ```
+- **PEP8**: Python code must follow PEP8. Use `black` or `flake8` if available.
+
+---
+
+## 6. Development Process
+
+- **Do not commit directly to `main`** — use feature branches and open PRs.
+- **PRs must include**: a clear description, issue references, and test results.
+- **Before merging**: ensure all tests pass and coverage remains at 100%.
+- **Breaking changes** must be discussed in an issue before implementation.
+
+---
+
+## 7. GitHub Actions Workflows
+
+- **CI/CD workflows** are defined in `.github/workflows/`. Do not change their behavior without verifying that artifacts are still produced.
+- **Cache workflows** (`packages-cache`, `rootfs-cache`) must be tested separately.
+
+---
+
+## 8. General Best Practices
+
+- **Keep it simple**: avoid unnecessary complexity.
+- **Follow existing patterns**: if a stage uses a certain approach, the new stage should do the same.
+- **Do not introduce unnecessary external dependencies**.
+- **Test on multiple distributions** (Debian, Fedora, Arch) if possible.
+
+---
+
+## 9. Ideal Commit Example
+
+```
+fix(lfs): search C++ libs in both /tools/lib and /tools/lib64
+
+The toolchain installs C++ runtime libraries into /tools/lib64 on some
+systems. The previous cp command failed because it only looked in /tools/lib.
+
+Now the script searches both directories and copies from whichever exists.
+Also add -L/tools/lib64 and corresponding rpath flags to CXX and LDFLAGS
+to ensure the linker can find them.
+
+Fixes the "cannot stat" error during the lfs-system stage.
+```
+
+---
+
 ### What agents should avoid
 
 - **Do not modify stage execution order** without understanding downstream dependencies. Stages are tightly sequenced.
