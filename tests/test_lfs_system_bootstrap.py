@@ -3,6 +3,7 @@
 import os
 import subprocess
 from pathlib import Path
+import re
 
 
 def test_lfs_system_bootstraps_shell_and_env(temp_dir):
@@ -337,14 +338,17 @@ def test_lfs_system_cross_compiler_uses_sysroot_slash():
     target headers or libraries and configure reports
     'C compiler cannot create executables' for binutils (and later gcc).
     The inner build script must set CC and CXX to include --sysroot=/ so that
-    headers and libraries are resolved relative to the chroot root instead of
-    the non-existent host-side sysroot path."""
+    headers and libraries are resolved relative to the chroot root.
+    Additionally, -L/tools/lib is often added to CXX to help subcomponents
+    like libcody find the cross-compiled C++ runtime libraries."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
+    # CC must contain --sysroot=/
     assert 'CC="${LFS_TGT}-gcc --sysroot=/"' in content
-    assert 'CXX="${LFS_TGT}-g++ --sysroot=/"' in content
+    # CXX must contain --sysroot=/ (may have extra flags like -L/tools/lib)
+    assert 'CXX="${LFS_TGT}-g++ --sysroot=/' in content
     # Bare cross-compiler without sysroot must not be used as CC/CXX
     # Use a newline prefix to avoid matching HOSTCC= assignments
     assert '\nCC="${LFS_TGT}-gcc"\n' not in content
