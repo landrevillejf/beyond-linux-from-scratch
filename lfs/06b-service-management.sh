@@ -1,5 +1,5 @@
 #!/bin/bash
-# Service management abstraction layer - sysvinit/systemd compatibility
+# Service management abstraction layer - supports sysvinit, systemd, openrc, runit, s6
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 # 06b-service-management.sh
 set -e
@@ -44,11 +44,7 @@ log_info "========================================="
 log_info "Service Management Abstraction Layer"
 log_info "========================================="
 
-# Récupérer l'init système depuis la config
 INIT_SYSTEM=${INIT_SYSTEM:-sysvinit}
-if [ -f "$SCRIPT_DIR/../config/init.conf" ]; then
-    source "$SCRIPT_DIR/../config/init.conf"
-fi
 log_info "Detected init system: $INIT_SYSTEM"
 
 # Docker mode – minimal
@@ -85,25 +81,93 @@ run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 # Créer le répertoire profile.d dans le chroot
 run_privileged mkdir -p "$LFS/etc/profile.d"
 
-# Créer le fichier d'aliases dans le chroot
-log_info "Writing service aliases to $LFS/etc/profile.d/svc-aliases.sh"
+# Créer le fichier d'aliases dans le chroot (supporte tous les init)
+log_info "Writing service management aliases to $LFS/etc/profile.d/svc-aliases.sh"
 run_privileged tee "$LFS/etc/profile.d/svc-aliases.sh" <<'EOF'
-# Service management aliases
-if [ -d /etc/init.d ] && [ -x /etc/init.d/rc ]; then
-    # sysvinit style
-    alias start='sudo /etc/init.d/'
-    alias stop='sudo /etc/init.d/'
-    alias restart='sudo /etc/init.d/'
-    alias status='sudo /etc/init.d/'
-elif command -v systemctl >/dev/null 2>&1; then
-    # systemd style
-    alias start='sudo systemctl start'
-    alias stop='sudo systemctl stop'
-    alias restart='sudo systemctl restart'
-    alias status='sudo systemctl status'
-    alias enable='sudo systemctl enable'
-    alias disable='sudo systemctl disable'
-fi
+# Service management abstraction - works with sysvinit, systemd, openrc, runit, s6
+# This file is sourced by all interactive shells.
+
+_has_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+# Detect init system at runtime inside the chroot
+_detect_init() {
+    if _has_cmd systemctl && [ -d /usr/lib/systemd ]; then
+        echo "systemd"
+    elif _has_cmd rc-service && [ -d /etc/init.d ]; then
+        echo "openrc"
+    elif _has_cmd sv && [ -d /etc/sv ]; then
+        echo "runit"
+    elif _has_cmd s6-svscan && [ -d /etc/s6 ]; then
+        echo "s6"
+    elif [ -f /sbin/init ] && grep -q "sysvinit" /sbin/init 2>/dev/null; then
+        echo "sysvinit"
+    else
+        echo "sysvinit"   # fallback
+    fi
+}
+
+_INIT=$(_detect_init)
+
+case "$_INIT" in
+    sysvinit)
+        start() { sudo /etc/init.d/"$1" start; }
+        stop()  { sudo /etc/init.d/"$1" stop; }
+        restart() { sudo /etc/init.d/"$1" restart; }
+        status() { sudo /etc/init.d/"$1" status; }
+        enable() { echo "enable not supported for sysvinit"; }
+        disable() { echo "disable not supported for sysvinit"; }
+        ;;
+    openrc)
+        start() { sudo rc-service "$1" start; }
+        stop()  { sudo rc-service "$1" stop; }
+        restart() { sudo rc-service "$1" restart; }
+        status() { sudo rc-service "$1" status; }
+        enable() { sudo rc-update add "$1" default; }
+        disable() { sudo rc-update del "$1"; }
+        ;;
+    systemd)
+        start() { sudo systemctl start "$1"; }
+        stop()  { sudo systemctl stop "$1"; }
+        restart() { sudo systemctl restart "$1"; }
+        status() { sudo systemctl status "$1"; }
+        enable() { sudo systemctl enable "$1"; }
+        disable() { sudo systemctl disable "$1"; }
+        ;;
+    runit)
+        start() { sudo sv up "$1"; }
+        stop()  { sudo sv down "$1"; }
+        restart() { sudo sv restart "$1"; }
+        status() { sudo sv status "$1"; }
+        enable() { echo "enable: symlink /etc/sv/$1 to /var/service/"; }
+        disable() { echo "disable: remove symlink from /var/service/"; }
+        ;;
+    s6)
+        start() { sudo s6-svc -u /etc/s6/sv/"$1"; }
+        stop()  { sudo s6-svc -d /etc/s6/sv/"$1"; }
+        restart() { sudo s6-svc -r /etc/s6/sv/"$1"; }
+        status() { sudo s6-svstat /etc/s6/sv/"$1"; }
+        enable() { echo "enable: create a symlink in /etc/s6/current/"; }
+        disable() { echo "disable: remove symlink from /etc/s6/current/"; }
+        ;;
+esac
+
+# Create command aliases for convenience (but functions are safer)
+alias start='start'
+alias stop='stop'
+alias restart='restart'
+alias status='status'
+alias enable='enable'
+alias disable='disable'
+
+# Also define a generic service command that works on all inits
+service() {
+    case "$_INIT" in
+        sysvinit|openrc) sudo /etc/init.d/"$1" "$2" ;;
+        systemd) sudo systemctl "$2" "$1" ;;
+        runit) sudo sv "$2" "$1" ;;
+        s6) sudo s6-svc "$2" /etc/s6/sv/"$1" ;;
+    esac
+}
 EOF
 run_privileged chmod +x "$LFS/etc/profile.d/svc-aliases.sh"
 
@@ -111,6 +175,12 @@ run_privileged chmod +x "$LFS/etc/profile.d/svc-aliases.sh"
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     log_info "Creating legacy symlinks for systemd"
     run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true; ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true'
+fi
+
+# Si openrc, créer un lien symlink pour rc-service -> /sbin/rc-service si besoin
+if [ "$INIT_SYSTEM" = "openrc" ]; then
+    log_info "Creating openrc compatibility links"
+    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/rc-service /usr/bin/rc-service 2>/dev/null || true'
 fi
 
 # Nettoyer les montages
