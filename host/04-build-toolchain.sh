@@ -257,14 +257,40 @@ build_toolchain() {
     # ==============================================================
     # 3. LINUX API HEADERS
     # ==============================================================
+    # --- Linux API headers ---
     log_info "Installing Linux API headers"
+
+    # Définir ARCH à partir de LFS_TGT (ex: aarch64-lfs-linux-gnu -> aarch64)
+    ARCH=$(echo "$LFS_TGT" | cut -d- -f1)
+
     LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
     if [ -z "$LINUX_TAR" ]; then
         log_error "No kernel source found for type '$KERNEL_TYPE'"
         exit 1
     fi
-    tar -xf "$LINUX_TAR"
-    LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
+
+    # Fonction d'extraction avec vérification
+    extract_linux() {
+        tar -xf "$LINUX_TAR"
+        LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
+        # Vérifier la présence du Makefile spécifique à l'architecture
+        if [ -d "$LINUX_DIR" ] && [ -f "$LINUX_DIR/arch/$ARCH/Makefile" ]; then
+            return 0
+        else
+            return 1
+        fi
+    }
+
+    # Tentative d'extraction
+    if ! extract_linux; then
+        log_warning "Extraction failed or incomplete (missing arch/$ARCH/Makefile). Re-downloading kernel..."
+        rm -f "$LINUX_TAR"
+        # Ici, tu dois avoir une fonction de téléchargement pour le noyau.
+        # Si ce n'est pas le cas, on peut laisser l'erreur et arrêter.
+        log_error "Please download kernel manually or implement download function."
+        exit 1
+    fi
+
     cd "$LINUX_DIR"
     make mrproper
     make headers
