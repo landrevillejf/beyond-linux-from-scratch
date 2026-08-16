@@ -12,6 +12,12 @@ from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from builder import LFSBuilder, LFSConfig, ScriptExecutor, SourceDownloader, main
 
+import pytest
+import tarfile
+import tempfile
+
+from builder import LFSBuilder, SourceDownloader
+
 class TestLFSBuilder:
     """Test LFSBuilder class"""
 
@@ -215,12 +221,12 @@ class TestLFSBuilder:
             'key4': False
         }
         result = builder._flatten_config(test_dict)
-        
+
         assert result['KEY1'] == 'value1'
         assert result['KEY2'] == 'value2'
         assert result['KEY3'] == 'true'
         assert result['KEY4'] == 'false'
-    
+
     def test_flatten_config_nested_dict(self, builder):
         """Test flattening nested dictionary"""
         test_dict = {
@@ -230,29 +236,29 @@ class TestLFSBuilder:
             }
         }
         result = builder._flatten_config(test_dict)
-        
+
         assert result['OUTER_INNER'] == 'value'
         assert result['OUTER_NUMBER'] == '42'
-    
+
     def test_flatten_config_with_prefix(self, builder):
         """Test flattening with prefix"""
         test_dict = {'key': 'value'}
         result = builder._flatten_config(test_dict, 'TEST')
-        
+
         assert result['TEST_KEY'] == 'value'
-    
+
     def test_flatten_config_list_values(self, builder):
         """Test flattening with list values"""
         test_dict = {'items': ['a', 'b', 'c']}
         result = builder._flatten_config(test_dict)
-        
+
         assert result['ITEMS'] == 'a,b,c'
-    
+
     def test_flatten_config_none_values(self, builder):
         """Test flattening with None values"""
         test_dict = {'key': None}
         result = builder._flatten_config(test_dict)
-        
+
         assert result['KEY'] == ''
 
     def test_get_env_variables(self, builder):
@@ -266,24 +272,24 @@ class TestLFSBuilder:
         assert 'INIT_SYSTEM' in env
         assert 'SYSVINIT_STYLE' in env
         assert 'LIVE_SYSTEM' in env
-    
+
     def test_get_env_includes_config_vars(self, builder):
         """Test that _get_env includes all flattened config variables"""
         env = builder._get_env()
-        
+
         # Check that LFS_CONFIG_* variables are present
         config_vars = [k for k in env.keys() if k.startswith('LFS_CONFIG_')]
         assert len(config_vars) > 0
-        
+
         # Check specific important config vars
         assert any('ARCHITECTURE' in k for k in config_vars)
         assert any('BUILD_THREADS' in k for k in config_vars)
         assert any('BOOTLOADER' in k for k in config_vars)
-    
+
     def test_get_env_includes_profile_vars(self, builder):
         """Test that _get_env includes all flattened profile variables"""
         env = builder._get_env()
-        
+
         # Check that LFS_PROFILE_* variables are present
         profile_vars = [k for k in env.keys() if k.startswith('LFS_PROFILE_')]
         assert len(profile_vars) > 0
@@ -781,21 +787,21 @@ class TestVersionHandling:
         """Test _get_version returns 'dev' when VERSION file is missing (line 37)"""
         from pathlib import Path
         from unittest.mock import patch, MagicMock
-        
+
         # Test the actual _get_version function by mocking Path.exists() to return False
         def mock_get_version():
             """Replicate the actual _get_version logic with mocking"""
             version_file = MagicMock()
             version_file.exists.return_value = False
-            
+
             # This simulates the if condition failing, so we return "dev"
             if version_file.exists():
                 return version_file.read_text().strip()
             return "dev"
-        
+
         result = mock_get_version()
         assert result == "dev", f"Expected 'dev' when VERSION file doesn't exist, got '{result}'"
-        
+
         # Also test by directly importing and calling with path mock
         import builder
         with patch.object(Path, 'exists', return_value=False):
@@ -886,3 +892,60 @@ class TestLFSConfigSave:
                     with patch.object(builder.downloader, 'download') as mock_download:
                         builder.download_sources()
                         mock_download.assert_called_once_with(expected_url)
+
+    @pytest.fixture
+    def minimal_builder(tmp_path):
+        """Builder with default config (no repositories)."""
+        config_data = {
+            'repositories': [],
+            'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+            'kernel': {'version': '6.16.1', 'type': 'linux'},
+            'init_system': {'choice': 'sysvinit'},
+            'cross_compile': False,
+            'architecture': 'x86_64',
+            'target_triplet': 'x86_64-lfs-linux-gnu',
+            'build_threads': 4,
+            'logging': {'level': 'INFO'}
+        }
+        config_file = tmp_path / 'config.json'
+        config_file.write_text('{}')
+        with patch('builder.LFSConfig') as MockConfig:
+            mock_config = MockConfig.return_value
+            mock_config.get.side_effect = lambda key, default=None: config_data.get(key, default)
+            mock_config.data = config_data
+            builder = LFSBuilder(
+                profile='minimal',
+                output_dir=tmp_path / 'output',
+                config_file=config_file
+            )
+            builder.logger = Mock(spec=logging.Logger)
+            return builder
+
+    @pytest.fixture
+    def builder_with_repos(tmp_path):
+        """Builder with repositories configured."""
+        config_data = {
+            'repositories': ['https://example.com/wget-list'],
+            'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+            'kernel': {'version': '6.16.1', 'type': 'linux'},
+            'init_system': {'choice': 'sysvinit'},
+            'cross_compile': False,
+            'architecture': 'x86_64',
+            'target_triplet': 'x86_64-lfs-linux-gnu',
+            'build_threads': 4,
+            'logging': {'level': 'INFO'}
+        }
+        config_file = tmp_path / 'config.json'
+        config_file.write_text('{}')
+        with patch('builder.LFSConfig') as MockConfig:
+            mock_config = MockConfig.return_value
+            mock_config.get.side_effect = lambda key, default=None: config_data.get(key, default)
+            mock_config.data = config_data
+            builder = LFSBuilder(
+                profile='minimal',
+                output_dir=tmp_path / 'output',
+                config_file=config_file
+            )
+            builder.logger = Mock(spec=logging.Logger)
+            return builder
+

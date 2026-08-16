@@ -1442,10 +1442,15 @@ class LFSBuilder:
                     kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
 
                 if kernel_url:
-                    self.logger.info(f"🔄 Téléchargement d'un nouveau noyau pour {self.get_target_architecture()}")
+                    self.logger.info(f"Downloading new kernel for {self.get_target_architecture()}")
                     self.downloader.download(kernel_url)
+                    if not self._validate_kernel_archive(kernel_archive, kernel_version):
+                        self.logger.error(f"Kernel tarball still invalid after download: {kernel_archive}")
+                        # Optionnel : tenter un miroir secondaire ici
+                        # self._download_kernel_from_mirror(...)
+                        return False
             else:
-                self.logger.info(f"✅ L'archive du noyau est valide – aucun téléchargement supplémentaire nécessaire")
+                self.logger.info(f"Valid kernel archive already present: {kernel_archive}")
 
         self._update_sources_list()
 

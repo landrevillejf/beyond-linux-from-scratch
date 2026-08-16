@@ -228,7 +228,6 @@ build_toolchain() {
         --enable-default-pie \
         --enable-default-ssp \
         --disable-nls \
-        --disable-shared \
         --disable-multilib \
         --disable-threads \
         --disable-libatomic \
