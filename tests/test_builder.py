@@ -344,6 +344,10 @@ class TestLFSBuilder:
             assert result is False
             mock_logger.error.assert_called()
 
+    def test_get_kernel_arch_returns_arch(self, builder):
+        # builder est un fixture avec architecture par défaut x86_64
+        assert builder._get_kernel_arch() == 'x86_64'
+
     def test_usb_write_iso_with_mounted_partitions(self, mocker):
         from builder import USBWriter
         import platform
@@ -1080,3 +1084,73 @@ def test_download_sources_covers_missing_lines(tmp_path):
                 assert result is False
                 builder3.logger.error.assert_called()
                 assert "Sources list not found" in builder3.logger.error.call_args[0][0]
+
+
+def test_update_sources_list_kernel_valid_skips_download(tmp_path, monkeypatch):
+    import tarfile
+    import json
+    import urllib.request
+    from unittest.mock import MagicMock, patch
+
+    # Isoler le test
+    monkeypatch.chdir(tmp_path)
+
+    # Fichier de configuration
+    config_file = tmp_path / 'config.json'
+    config_data = {
+        'repositories': ['https://example.com/wget-list'],
+        'cross_compile': True,
+        'architecture': 'aarch64',
+        'kernel': {'version': '6.16.1', 'type': 'linux'},
+        'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+        'init_system': {'choice': 'sysvinit'},
+        'target_triplet': 'aarch64-lfs-linux-gnu',
+        'build_threads': 4,
+        'logging': {'level': 'INFO'}
+    }
+    config_file.write_text(json.dumps(config_data))
+
+    # Créer le builder
+    builder = LFSBuilder(profile='arm64', output_dir=tmp_path / 'output', config_file=config_file)
+    builder.logger = MagicMock()
+
+    # Créer une archive valide
+    sources_dir = builder.output_dir / 'sources'
+    sources_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = sources_dir / 'linux-6.16.1.tar.xz'
+    with tarfile.open(archive_path, 'w:xz') as tar:
+        info = tarfile.TarInfo(name='linux-6.16.1/arch/arm64/Makefile')
+        info.type = tarfile.REGTYPE
+        info.size = 0
+        tar.addfile(info)
+
+    # Créer custom-sources.list
+    packages_dir = tmp_path / 'packages'
+    packages_dir.mkdir()
+    (packages_dir / 'custom-sources.list').write_text('')
+
+    # Mock de urllib.request.urlopen pour éviter les requêtes réseau
+    mock_response = MagicMock()
+    mock_response.read.return_value = b"https://example.com/other-package.tar.gz\n"
+    mock_response.__enter__ = MagicMock(return_value=mock_response)
+    mock_response.__exit__ = MagicMock(return_value=False)
+
+    def mock_urlopen(url, timeout=None):
+        return mock_response
+
+    with patch('urllib.request.urlopen', mock_urlopen):
+        # Appeler _update_sources_list
+        result = builder._update_sources_list()
+        assert result is True
+
+        # Vérifier le log
+        builder.logger.info.assert_any_call(
+            f"Kernel tarball {archive_path} already exists and is valid. Skipping download."
+        )
+
+        # Vérifier que l'URL du noyau n'est pas dans la liste
+        sources_file = builder._generated_sources_list
+        assert sources_file is not None
+        assert sources_file.exists()
+        content = sources_file.read_text()
+        assert "kernel.org" not in content

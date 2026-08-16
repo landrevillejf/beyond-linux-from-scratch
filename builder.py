@@ -1130,6 +1130,12 @@ class LFSBuilder:
         """Get sysroot path for cross-compilation"""
         return self.config.get('sysroot', f"{self.output_dir}/sysroot/{self.get_target_architecture()}")
 
+    def _get_kernel_arch(self) -> str:
+        arch = self.get_target_architecture()
+        if arch == "aarch64":
+            return "arm64"
+        return arch
+
     def get_init_system(self) -> str:
         """Get init system choice from config"""
         init_choices = ['systemd', 'sysvinit', 'sysv', 'openrc', 'runit', 's6']
@@ -1504,13 +1510,12 @@ class LFSBuilder:
         return True
 
     def _validate_kernel_archive(self, kernel_archive: Path, kernel_version: str) -> bool:
-        """Vérifie que l'archive du noyau contient le Makefile pour l'architecture cible."""
         if not kernel_archive.exists():
             return False
         try:
             import tarfile
             with tarfile.open(kernel_archive, 'r:xz') as tar:
-                arch_dir = f"linux-{kernel_version}/arch/{self.get_target_architecture()}"
+                arch_dir = f"linux-{kernel_version}/arch/{self._get_kernel_arch()}"
                 member = tar.getmember(f"{arch_dir}/Makefile")
                 return member.isfile()
         except (KeyError, tarfile.ReadError, Exception):
@@ -1681,7 +1686,7 @@ class LFSBuilder:
                 # Vérifier si l'archive existe déjà et est valide
                 kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
                 if self._validate_kernel_archive(kernel_archive, kernel_version):
-                    self.logger.info(f"✅ Kernel tarball {kernel_archive} already exists and is valid. Skipping download.")
+                    self.logger.info(f"Kernel tarball {kernel_archive} already exists and is valid. Skipping download.")
                     # Ne pas ajouter de nouvelle URL
                 else:
                     # Archive absente ou invalide → on ajoute l'URL
