@@ -949,3 +949,134 @@ class TestLFSConfigSave:
             builder.logger = Mock(spec=logging.Logger)
             return builder
 
+
+# ============================================================================
+# Test pour couvrir les lignes 1447-1451, 1482-1487 et 1490
+# ============================================================================
+
+def test_download_sources_covers_missing_lines(tmp_path):
+    import logging
+    import os
+    from unittest.mock import Mock, patch
+    from builder import LFSBuilder, SourceDownloader
+
+    # ---- 1. Lignes 1447-1451 : cross-compilation, kernel invalide ----
+    config_data = {
+        'cross_compile': True,
+        'architecture': 'aarch64',
+        'kernel': {'version': '6.16.1', 'type': 'linux'},
+        'repositories': [],
+        'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+        'init_system': {'choice': 'sysvinit'},
+        'target_triplet': 'aarch64-lfs-linux-gnu',
+        'build_threads': 4,
+        'logging': {'level': 'INFO'}
+    }
+    config_file = tmp_path / 'config1.json'
+    config_file.write_text('{}')
+    with patch('builder.LFSConfig') as MockConfig:
+        mock_config = MockConfig.return_value
+        mock_config.get.side_effect = lambda key, default=None: config_data.get(key, default)
+        mock_config.data = config_data
+        builder = LFSBuilder(profile='arm64', output_dir=tmp_path / 'output1', config_file=config_file)
+        builder.logger = Mock(spec=logging.Logger)
+
+        kernel_archive = builder.output_dir / 'sources' / 'linux-6.16.1.tar.xz'
+        kernel_archive.parent.mkdir(parents=True, exist_ok=True)
+        kernel_archive.touch()
+
+        builder._validate_kernel_archive = Mock(return_value=False)
+        builder.downloader = Mock(spec=SourceDownloader)
+        builder.downloader.download.return_value = True
+
+        # Créer un sources.list factice pour éviter les autres branches
+        sources_file = builder.output_dir / 'packages' / 'sources.list'
+        sources_file.parent.mkdir(parents=True, exist_ok=True)
+        sources_file.write_text('# dummy\n')
+
+        with patch.object(builder, '_update_sources_list', return_value=False):
+            result = builder.download_sources()
+            assert result is False
+            builder.logger.error.assert_called()
+            assert "Kernel tarball still invalid after download" in builder.logger.error.call_args[0][0]
+
+    # ---- 2. Lignes 1482-1487 : sources.list absent, pas de repos ----
+    config_data_no_repos = {
+        'repositories': [],
+        'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+        'kernel': {'version': '6.16.1', 'type': 'linux'},
+        'init_system': {'choice': 'sysvinit'},
+        'cross_compile': False,
+        'architecture': 'x86_64',
+        'target_triplet': 'x86_64-lfs-linux-gnu',
+        'build_threads': 4,
+        'logging': {'level': 'INFO'}
+    }
+    config_file2 = tmp_path / 'config2.json'
+    config_file2.write_text('{}')
+    with patch('builder.LFSConfig') as MockConfig2:
+        mock_config2 = MockConfig2.return_value
+        mock_config2.get.side_effect = lambda key, default=None: config_data_no_repos.get(key, default)
+        mock_config2.data = config_data_no_repos
+        builder2 = LFSBuilder(profile='minimal', output_dir=tmp_path / 'output2', config_file=config_file2)
+        builder2.logger = Mock(spec=logging.Logger)
+        builder2._generated_sources_list = None
+
+        sources_file2 = builder2.output_dir / 'packages' / 'sources.list'
+        if sources_file2.exists():
+            sources_file2.unlink()
+        if Path('packages/sources.list').exists():
+            Path('packages/sources.list').unlink()
+
+        builder2.downloader = Mock(spec=SourceDownloader)
+        builder2.downloader.download_from_list.return_value = True
+
+        with patch.object(builder2, '_update_sources_list', return_value=False):
+            def exists_side_effect(*args, **kwargs):
+                return False  # on simule l'absence de tous les fichiers
+            with patch('pathlib.Path.exists', side_effect=exists_side_effect):
+                result = builder2.download_sources()
+                assert result is True
+                # Vérifier que le fichier a bien été créé physiquement
+                assert os.path.exists(sources_file2)
+                builder2.logger.warning.assert_called()
+                assert "created empty list" in builder2.logger.warning.call_args[0][0]
+
+    # ---- 3. Ligne 1490 : sources.list absent, repos présents ----
+    config_data_with_repos = {
+        'repositories': ['https://example.com/wget-list'],
+        'build_options': {'download_timeout': 300, 'retry_downloads': 3},
+        'kernel': {'version': '6.16.1', 'type': 'linux'},
+        'init_system': {'choice': 'sysvinit'},
+        'cross_compile': False,
+        'architecture': 'x86_64',
+        'target_triplet': 'x86_64-lfs-linux-gnu',
+        'build_threads': 4,
+        'logging': {'level': 'INFO'}
+    }
+    config_file3 = tmp_path / 'config3.json'
+    config_file3.write_text('{}')
+    with patch('builder.LFSConfig') as MockConfig3:
+        mock_config3 = MockConfig3.return_value
+        mock_config3.get.side_effect = lambda key, default=None: config_data_with_repos.get(key, default)
+        mock_config3.data = config_data_with_repos
+        builder3 = LFSBuilder(profile='minimal', output_dir=tmp_path / 'output3', config_file=config_file3)
+        builder3.logger = Mock(spec=logging.Logger)
+        builder3._generated_sources_list = None
+
+        sources_file3 = builder3.output_dir / 'packages' / 'sources.list'
+        if sources_file3.exists():
+            sources_file3.unlink()
+        if Path('packages/sources.list').exists():
+            Path('packages/sources.list').unlink()
+
+        builder3.downloader = Mock(spec=SourceDownloader)
+
+        with patch.object(builder3, '_update_sources_list', return_value=False):
+            def exists_side_effect3(*args, **kwargs):
+                return False
+            with patch('pathlib.Path.exists', side_effect=exists_side_effect3):
+                result = builder3.download_sources()
+                assert result is False
+                builder3.logger.error.assert_called()
+                assert "Sources list not found" in builder3.logger.error.call_args[0][0]
