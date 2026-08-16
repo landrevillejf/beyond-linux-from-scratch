@@ -224,21 +224,6 @@ build_toolchain() {
             ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
         fi
 
-        # ---- Build libgcc_s.so.1 separately ----
-        log_info "Building libgcc_s.so.1"
-        cd "$LFS/sources/$GCC_DIR/build"
-        make -C ${LFS_TGT}/libgcc libgcc_s.so || log_warning "libgcc_s.so build failed (may not be needed)"
-        if [ -f "${LFS_TGT}/libgcc/libgcc_s.so.1" ]; then
-            mkdir -p "$LFS/tools/lib"
-            cp -v "${LFS_TGT}/libgcc/libgcc_s.so.1" "$LFS/tools/lib/"
-            ln -sf libgcc_s.so.1 "$LFS/tools/lib/libgcc_s.so"
-            log_success "libgcc_s.so.1 built and installed"
-        else
-            log_warning "libgcc_s.so.1 not found, continuing..."
-        fi
-        cd "$LFS/sources"
-        # -----------------------------------------
-
         cd "$LFS/sources"
         rm -rf "$GCC_DIR"
         log_success "GCC (pass 1) done"
