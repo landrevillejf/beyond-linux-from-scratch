@@ -257,7 +257,6 @@ build_toolchain() {
     # ==============================================================
     # 3. LINUX API HEADERS
     # ==============================================================
-    # --- Linux API headers ---
     log_info "Installing Linux API headers"
 
     # Définir ARCH à partir de LFS_TGT (ex: aarch64-lfs-linux-gnu -> aarch64)
@@ -268,6 +267,20 @@ build_toolchain() {
         log_error "No kernel source found for type '$KERNEL_TYPE'"
         exit 1
     fi
+
+    # Fonction de téléchargement du noyau
+    download_kernel() {
+        local url="https://cdn.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
+        log_info "Downloading kernel from $url"
+        if command -v wget &>/dev/null; then
+            wget -O "$LINUX_TAR" "$url" || return 1
+        elif command -v curl &>/dev/null; then
+            curl -L -o "$LINUX_TAR" "$url" || return 1
+        else
+            log_error "No download tool (wget/curl) available"
+            return 1
+        fi
+    }
 
     # Fonction d'extraction avec vérification
     extract_linux() {
@@ -281,15 +294,28 @@ build_toolchain() {
         fi
     }
 
-    # Tentative d'extraction
-    if ! extract_linux; then
-        log_warning "Extraction failed or incomplete (missing arch/$ARCH/Makefile). Re-downloading kernel..."
-        rm -f "$LINUX_TAR"
-        # Ici, tu dois avoir une fonction de téléchargement pour le noyau.
-        # Si ce n'est pas le cas, on peut laisser l'erreur et arrêter.
-        log_error "Please download kernel manually or implement download function."
-        exit 1
-    fi
+    # Tentative d'extraction avec réessai automatique
+    MAX_RETRIES=2
+    for attempt in $(seq 1 $MAX_RETRIES); do
+        if extract_linux; then
+            break
+        else
+            log_warning "Extraction failed (attempt $attempt), removing corrupt tarball..."
+            rm -f "$LINUX_TAR"
+            if [ $attempt -lt $MAX_RETRIES ]; then
+                log_info "Re-downloading kernel..."
+                if download_kernel; then
+                    continue
+                else
+                    log_error "Download failed, cannot proceed"
+                    exit 1
+                fi
+            else
+                log_error "All extraction attempts failed"
+                exit 1
+            fi
+        fi
+    done
 
     cd "$LINUX_DIR"
     make mrproper
