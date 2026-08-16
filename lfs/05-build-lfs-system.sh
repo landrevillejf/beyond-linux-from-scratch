@@ -376,8 +376,28 @@ LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
+# ---- S'assurer que libgcc_s est disponible pour glibc ----
+echo "Ensuring libgcc_s is available for glibc..."
+LIBGCC_S_SRC=""
+for dir in /tools/lib /tools/lib64 /tools/lib/gcc/*/ /tools/lib64/gcc/*/; do
+    if [ -f "${dir}libgcc_s.so" ] || [ -f "${dir}libgcc_s.so.1" ]; then
+        LIBGCC_S_SRC="${dir}libgcc_s.so.1"
+        if [ -f "${dir}libgcc_s.so" ]; then
+            LIBGCC_S_SRC="${dir}libgcc_s.so"
+        fi
+        break
+    fi
+done
+if [ -n "$LIBGCC_S_SRC" ]; then
+    echo "Found libgcc_s at: $LIBGCC_S_SRC"
+    cp -v "$LIBGCC_S_SRC" /tools/lib/libgcc_s.so.1
+    ln -sf libgcc_s.so.1 /tools/lib/libgcc_s.so
+else
+    echo "WARNING: libgcc_s not found - glibc tests may fail"
+fi
+
 # ============================================================
-# 1. BUILD GLIBC (official LFS)
+# 1. BUILD GLIBC
 # ============================================================
 echo "=== Building glibc ==="
 GLIBC_ARCHIVE=$(find_archive glibc)
