@@ -8,7 +8,7 @@ import json
 import sys
 import os
 import logging
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import Mock, patch, MagicMock, call
 from pathlib import Path
 from builder import LFSBuilder, LFSConfig, ScriptExecutor, SourceDownloader, main
 
