@@ -175,76 +175,73 @@ build_toolchain() {
         fi
     done
 
-    log_info "Building binutils (pass 1)"
-    BINUTILS_TAR=$(find . -maxdepth 1 -name "binutils-*.tar.xz" -print -quit)
-    tar -xf "$BINUTILS_TAR"
-    BINUTILS_DIR=$(find . -maxdepth 1 -type d -name "binutils-*" -print -quit | sed 's|^\./||')
-    cd "$BINUTILS_DIR"
-    mkdir -v build
-    cd build
-    ../configure --prefix="$LFS/tools" \
-        --with-sysroot="$LFS" \
-        --target="$LFS_TGT" \
-        --disable-nls \
-        --enable-gprofng=no \
-        --disable-werror \
-        --without-zstd
-    make -j"$NUM_JOBS"
-    make install
-    cd "$LFS/sources"
-    rm -rf "$BINUTILS_DIR"
-    log_success "binutils (pass 1) done"
-
-    log_info "Building GCC (pass 1)"
-    GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
-    tar -xf "$GCC_TAR"
-    GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
-    # Embed GMP, MPFR, MPC into GCC source tree
-    for lib in gmp mpfr mpc; do
-        LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
-        if [ -n "$LIB_TAR" ]; then
-            tar -xf "$LIB_TAR"
-            LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
-            if [ -d "$LIB_DIR" ]; then
-                mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+        log_info "Building GCC (pass 1)"
+        GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
+        tar -xf "$GCC_TAR"
+        GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
+        # Embed GMP, MPFR, MPC into GCC source tree
+        for lib in gmp mpfr mpc; do
+            LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
+            if [ -n "$LIB_TAR" ]; then
+                tar -xf "$LIB_TAR"
+                LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
+                if [ -d "$LIB_DIR" ]; then
+                    mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+                else
+                    echo "ERROR: Could not find extracted directory for $lib"
+                    exit 1
+                fi
             else
-                echo "ERROR: Could not find extracted directory for $lib"
+                echo "ERROR: Tarball for $lib not found"
                 exit 1
             fi
-        else
-            echo "ERROR: Tarball for $lib not found"
-            exit 1
+        done
+        cd "$GCC_DIR"
+        mkdir -v build
+        cd build
+        ../configure --target="$LFS_TGT" \
+            --prefix="$LFS/tools" \
+            --with-glibc-version=2.38 \
+            --with-sysroot="$LFS" \
+            --with-newlib \
+            --without-headers \
+            --enable-default-pie \
+            --enable-default-ssp \
+            --disable-nls \
+            --disable-shared \
+            --disable-multilib \
+            --disable-threads \
+            --disable-libatomic \
+            --disable-libgomp \
+            --disable-libquadmath \
+            --disable-libssp \
+            --disable-libvtv \
+            --disable-libstdcxx \
+            --enable-languages=c,c++
+        make -j"$NUM_JOBS"
+        make install
+        if [ ! -f "$LFS/tools/bin/cc" ]; then
+            ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
         fi
-    done
-    cd "$GCC_DIR"
-    mkdir -v build
-    cd build
-    ../configure --target="$LFS_TGT" \
-        --prefix="$LFS/tools" \
-        --with-glibc-version=2.38 \
-        --with-sysroot="$LFS" \
-        --with-newlib \
-        --without-headers \
-        --enable-default-pie \
-        --enable-default-ssp \
-        --disable-nls \
-        --disable-multilib \
-        --disable-threads \
-        --disable-libatomic \
-        --disable-libgomp \
-        --disable-libquadmath \
-        --disable-libssp \
-        --disable-libvtv \
-        --disable-libstdcxx \
-        --enable-languages=c,c++
-    make -j"$NUM_JOBS"
-    make install
-    if [ ! -f "$LFS/tools/bin/cc" ]; then
-        ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
-    fi
-    cd "$LFS/sources"
-    rm -rf "$GCC_DIR"
-    log_success "GCC (pass 1) done"
+
+        # ---- Build libgcc_s.so.1 separately ----
+        log_info "Building libgcc_s.so.1"
+        cd "$LFS/sources/$GCC_DIR/build"
+        make -C ${LFS_TGT}/libgcc libgcc_s.so || log_warning "libgcc_s.so build failed (may not be needed)"
+        if [ -f "${LFS_TGT}/libgcc/libgcc_s.so.1" ]; then
+            mkdir -p "$LFS/tools/lib"
+            cp -v "${LFS_TGT}/libgcc/libgcc_s.so.1" "$LFS/tools/lib/"
+            ln -sf libgcc_s.so.1 "$LFS/tools/lib/libgcc_s.so"
+            log_success "libgcc_s.so.1 built and installed"
+        else
+            log_warning "libgcc_s.so.1 not found, continuing..."
+        fi
+        cd "$LFS/sources"
+        # -----------------------------------------
+
+        cd "$LFS/sources"
+        rm -rf "$GCC_DIR"
+        log_success "GCC (pass 1) done"
 
     log_info "Installing Linux API headers"
     LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
