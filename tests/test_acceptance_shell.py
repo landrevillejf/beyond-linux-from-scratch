@@ -220,8 +220,9 @@ exit 1
         assert 'patch' in content
 
         # libstdc++ must be built BEFORE the essential-tools loop (correct LFS order)
+        # Use CROSS_CACHE_TMPL as the marker for the cache section
         libstdc_pos = content.find('Building libstdc++')
-        cross_cache_pos = content.find('Cross-compile configure cache')
+        cross_cache_pos = content.find('CROSS_CACHE_TMPL')
         tools_loop_pos = content.find('Building essential tools for /tools')
         assert libstdc_pos < cross_cache_pos < tools_loop_pos, \
             "libstdc++ must be built before the cross-compile cache and tools loop"
