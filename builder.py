@@ -1417,6 +1417,36 @@ class LFSBuilder:
     def download_sources(self) -> bool:
         self.logger.info("Downloading sources")
 
+        # ---- Téléchargement conditionnel du noyau pour cross-compilation ----
+        if self.is_cross_compile():
+            kernel_version = self.config.get('kernel.version', '6.16.1')
+            kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
+
+            # On ne supprime et ne re-télécharge que si l'archive est invalide ou absente
+            if not self._validate_kernel_archive(kernel_archive, kernel_version):
+                # Supprime l'archive existante (si elle existe) pour forcer un téléchargement frais
+                if kernel_archive.exists():
+                    kernel_archive.unlink()
+                    self.logger.info(f"🗑️ Suppression de l'ancienne archive noyau (invalide ou corrompue)")
+
+                # Construire l'URL selon le type de noyau
+                kernel_url = None
+                kernel_type = self.config.get('kernel.type', 'linux')
+                if kernel_type == 'linux':
+                    kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
+                elif kernel_type == 'linux-libre':
+                    kernel_url = f"https://www.linux-libre.fsfla.org/pub/linux-libre/releases/{kernel_version}-gnu/linux-libre-{kernel_version}-gnu.tar.xz"
+                elif kernel_type == 'gnu-hurd':
+                    kernel_url = f"https://ftpmirror.gnu.org/hurd/hurd-{kernel_version}.tar.gz"
+                elif kernel_type == 'freebsd':
+                    kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
+
+                if kernel_url:
+                    self.logger.info(f"🔄 Téléchargement d'un nouveau noyau pour {self.get_target_architecture()}")
+                    self.downloader.download(kernel_url)
+            else:
+                self.logger.info(f"✅ L'archive du noyau est valide – aucun téléchargement supplémentaire nécessaire")
+
         self._update_sources_list()
 
         sources_candidates = []
@@ -1465,32 +1495,6 @@ class LFSBuilder:
 
         if checksum_file.exists():
             self.downloader.verify_checksums(checksum_file)
-
-        # ---- Vérification du noyau pour cross-compilation ----
-        if self.is_cross_compile():
-            kernel_version = self.config.get('kernel.version', '6.16.1')
-            kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
-            if kernel_archive.exists():
-                import tarfile
-                try:
-                    with tarfile.open(kernel_archive, 'r:xz') as tar:
-                        arch_dir = f"linux-{kernel_version}/arch/{self.get_target_architecture()}"
-                        member = tar.getmember(f"{arch_dir}/Makefile")
-                        if member.isfile():
-                            self.logger.info(f"✅ Kernel tarball contains {arch_dir}/Makefile")
-                        else:
-                            self.logger.warning(f"⚠️ {arch_dir}/Makefile is not a regular file, forcing re-download")
-                            kernel_archive.unlink()
-                except KeyError:
-                    self.logger.warning(f"⚠️ Kernel tarball missing {arch_dir}/Makefile, forcing re-download")
-                    kernel_archive.unlink()
-                except tarfile.ReadError:
-                    self.logger.warning("⚠️ Kernel tarball is corrupt, forcing re-download")
-                    kernel_archive.unlink()
-            if not kernel_archive.exists():
-                self.logger.info(f"🔄 Re-downloading kernel for {self.get_target_architecture()}")
-                kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
-                self.downloader.download(kernel_url)
 
         return True
 

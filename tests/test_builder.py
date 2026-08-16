@@ -854,3 +854,35 @@ class TestLFSConfigSave:
             assert builder.config.get("desktop.type") == "xfce"
         finally:
             mock_config_file.chmod(0o644)
+
+    @pytest.mark.parametrize("kernel_type, expected_url", [
+        ("linux-libre", "https://www.linux-libre.fsfla.org/pub/linux-libre/releases/6.16.1-gnu/linux-libre-6.16.1-gnu.tar.xz"),
+        ("gnu-hurd", "https://ftpmirror.gnu.org/hurd/hurd-6.16.1.tar.gz"),
+        ("freebsd", "https://download.freebsd.org/ftp/releases/amd64/6.16.1/src.txz"),
+    ])
+    def test_kernel_download_other_types(self, tmp_path, kernel_type, expected_url):
+        """Vérifie que les types de noyau non-linux génèrent l'URL correcte et déclenchent un téléchargement."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+        output_dir = tmp_path / "lfs-build"
+        builder = LFSBuilder(profile="minimal", output_dir=output_dir, config_file=config_file)
+
+        builder.config.set('cross_compile', True)
+        builder.config.set('architecture', 'aarch64')
+        builder.config.set('kernel.type', kernel_type)
+        builder.config.set('kernel.version', '6.16.1')
+
+        kernel_archive = builder.output_dir / 'sources' / f"linux-6.16.1.tar.xz"
+        if kernel_archive.exists():
+            kernel_archive.unlink()
+
+        # Mock _update_sources_list pour ne pas générer de liste
+        with patch.object(builder, '_update_sources_list', return_value=True):
+            # Mock _validate_kernel_archive pour qu'elle retourne False (archive invalide)
+            with patch.object(builder, '_validate_kernel_archive', return_value=False):
+                # Mock download_from_list pour ne rien faire (sinon il télécharge tout)
+                with patch.object(builder.downloader, 'download_from_list', return_value=True):
+                    # Mock download pour capturer l'appel
+                    with patch.object(builder.downloader, 'download') as mock_download:
+                        builder.download_sources()
+                        mock_download.assert_called_once_with(expected_url)
