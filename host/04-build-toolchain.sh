@@ -217,7 +217,9 @@ build_toolchain() {
             --disable-libssp \
             --disable-libvtv \
             --disable-libstdcxx \
-            --enable-languages=c,c++
+            --enable-languages=c,c++ \
+            --with-as="$LFS/tools/bin/$LFS_TGT-as" \
+            --with-ld="$LFS/tools/bin/$LFS_TGT-ld"
         make -j"$NUM_JOBS"
         make install
         if [ ! -f "$LFS/tools/bin/cc" ]; then
