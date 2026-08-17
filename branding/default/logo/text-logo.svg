@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80">
+    <!-- Icon -->
+    <rect width="70" height="70" x="5" y="5" rx="12" fill="#2E8B57"/>
+    <text x="40" y="48" font-family="Arial" font-size="22" fill="white" text-anchor="middle" font-weight="bold">LFS</text>
+    <!-- Text -->
+    <text x="95" y="38" font-family="Arial,Helvetica,sans-serif" font-size="24" fill="#f0f0f0" font-weight="bold">Beyond Linux</text>
+    <text x="95" y="62" font-family="Arial,Helvetica,sans-serif" font-size="24" fill="#f0f0f0" font-weight="bold">From Scratch</text>
+    <!-- Accent line -->
+    <rect x="95" y="68" width="120" height="3" rx="1" fill="#90EE90"/>
+</svg>

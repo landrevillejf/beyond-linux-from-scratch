@@ -51,6 +51,17 @@ class BrandingManager:
                 return default
         return value if value is not None else default
 
+    def _read_version(self) -> str:
+        """Read version from TOML config or fallback to VERSION file"""
+        version = self.get("brand.version")
+        if version:
+            return str(version)
+        # Fallback: read from VERSION file in project root
+        version_file = self.branding_dir.parent / "VERSION"
+        if version_file.exists():
+            return version_file.read_text().strip()
+        return "unknown"
+
     def export_for_shell(self, output_file: Path = None) -> bool:
         """Export config as shell variables"""
         if not output_file:
@@ -59,7 +70,7 @@ class BrandingManager:
         env_vars = {
             "BRANDING_NAME": self.get("brand.name"),
             "BRANDING_SHORT_NAME": self.get("brand.short_name"),
-            "BRANDING_VERSION": self.get("brand.version"),
+            "BRANDING_VERSION": self._read_version(),
             "BRANDING_WEBSITE": self.get("brand.website"),
             "PRIMARY_COLOR_HEX": self.get("colors.primary.hex"),
             "PRIMARY_COLOR_RGB": ",".join(map(str, self.get("colors.primary.rgb"))),
@@ -149,7 +160,7 @@ class BrandingManager:
         print("\n" + "=" * 60)
         print("BLFS BRANDING CONFIGURATION")
         print("=" * 60)
-        print(f"\nBrand: {brand.get('name')} v{brand.get('version')}")
+        print(f"\nBrand: {brand.get('name')} v{self._read_version()}")
         print(f"Organization: {brand.get('organization')}")
         print(f"Website: {brand.get('website')}\n")
 

@@ -1,23 +1,23 @@
-/* LFS GTK4 Dark Theme - gtk.css */
-/* Comprehensive dark theme matching GTK3 LFS-Dark */
+/* LFS GTK3 Light Theme - gtk.css */
+/* Professional light theme with green accent */
 
 * {
     -gtk-icon-style: regular;
 }
 
 /* Color definitions */
-@define-color bg_color #1a1a2e;
-@define-color fg_color #f0f0f0;
-@define-color base_color #252535;
-@define-color text_color #f0f0f0;
+@define-color bg_color #f5f5f5;
+@define-color fg_color #1a1a2e;
+@define-color base_color #ffffff;
+@define-color text_color #333333;
 @define-color selected_bg_color #2E8B57;
 @define-color selected_fg_color #ffffff;
-@define-color border_color #3a3a4a;
-@define-color insensitive_bg_color #3a3a4a;
-@define-color insensitive_fg_color #8a8a9a;
-@define-color link_color #3CB371;
-@define-color warning_color #F39C12;
-@define-color error_color #E74C3C;
+@define-color border_color #d0d0d0;
+@define-color insensitive_bg_color #e8e8e8;
+@define-color insensitive_fg_color #999999;
+@define-color link_color #236B43;
+@define-color warning_color #E67E22;
+@define-color error_color #C0392B;
 @define-color success_color #27AE60;
 
 /* Window and background */
@@ -36,7 +36,7 @@ button {
 }
 
 button:hover {
-    background-color: #353545;
+    background-color: #e8e8e8;
 }
 
 button:active,
@@ -71,7 +71,7 @@ entry {
 
 entry:focus {
     border-color: @selected_bg_color;
-    background-color: #2a2a3a;
+    box-shadow: 0 0 0 1px @selected_bg_color;
 }
 
 entry:disabled {
@@ -81,11 +81,6 @@ entry:disabled {
 
 /* Text view */
 textview {
-    background-color: @base_color;
-    color: @text_color;
-}
-
-textview text {
     background-color: @base_color;
     color: @text_color;
 }
@@ -104,44 +99,28 @@ label:disabled {
     color: @insensitive_fg_color;
 }
 
-label.title {
-    font-weight: bold;
-    font-size: 1.2em;
-}
-
 /* Header bar */
 headerbar {
-    background-color: #0a0a14;
+    background-color: #e0e0e0;
     color: @fg_color;
     border-bottom: 1px solid @border_color;
-    padding: 4px 8px;
-}
-
-headerbar .title {
-    font-weight: bold;
-}
-
-headerbar .subtitle {
-    font-size: 0.85em;
-    color: @text_color;
 }
 
 /* Menu and menu items */
-popover,
+menu,
 .menu {
-    background-color: @bg_color;
+    background-color: @base_color;
     color: @fg_color;
     border: 1px solid @border_color;
 }
 
-popover modelbutton:hover,
-menuitem:hover {
+menuitem {
     background-color: @base_color;
+    color: @fg_color;
 }
 
-menu separator,
-popover separator {
-    background-color: @border_color;
+menuitem:hover {
+    background-color: #e0e8e4;
 }
 
 /* Scrollbar */
@@ -150,7 +129,7 @@ scrollbar {
 }
 
 scrollbar slider {
-    background-color: @border_color;
+    background-color: #c0c0c0;
     border-radius: 4px;
     min-width: 8px;
     min-height: 8px;
@@ -166,13 +145,12 @@ notebook {
 }
 
 notebook tab {
-    background-color: @base_color;
+    background-color: #e0e0e0;
     color: @fg_color;
     border-radius: 3px 3px 0 0;
-    padding: 4px 12px;
 }
 
-notebook tab:checked {
+notebook tab:active {
     background-color: @bg_color;
     border-bottom: 3px solid @selected_bg_color;
 }
@@ -188,11 +166,6 @@ treeview row:selected {
     color: @selected_fg_color;
 }
 
-treeview header button {
-    background-color: #0a0a14;
-    border-bottom: 1px solid @border_color;
-}
-
 /* Separator */
 separator {
     background-color: @border_color;
@@ -200,7 +173,7 @@ separator {
 
 /* Progress bar */
 progressbar trough {
-    background-color: @base_color;
+    background-color: #e0e0e0;
     border-radius: 3px;
 }
 
@@ -211,7 +184,7 @@ progressbar progress {
 
 /* Scale / slider */
 scale trough {
-    background-color: @base_color;
+    background-color: #e0e0e0;
     border-radius: 3px;
     min-height: 4px;
 }
@@ -221,7 +194,7 @@ scale highlight {
 }
 
 scale slider {
-    background-color: @fg_color;
+    background-color: @base_color;
     border: 1px solid @border_color;
     border-radius: 50%;
     min-width: 14px;
@@ -243,13 +216,13 @@ radiobutton radio:checked {
 
 /* Toolbar */
 toolbar {
-    background-color: #0a0a14;
+    background-color: #e0e0e0;
     border-bottom: 1px solid @border_color;
 }
 
 /* Sidebar */
 .sidebar {
-    background-color: #0f0f1e;
+    background-color: #ebebeb;
 }
 
 .sidebar row:selected {
@@ -259,14 +232,9 @@ toolbar {
 
 /* Tooltip */
 tooltip {
-    background-color: #0a0a14;
-    color: @fg_color;
-    border: 1px solid @border_color;
-}
-
-/* Dialog */
-dialog.background {
-    background-color: @bg_color;
+    background-color: #333333;
+    color: #f0f0f0;
+    border: 1px solid #555555;
 }
 
 /* Link */
@@ -275,21 +243,12 @@ link {
 }
 
 link:visited {
-    color: @selected_bg_color;
-}
-
-/* Level bar */
-levelbar block.filled {
-    background-color: @selected_bg_color;
-}
-
-levelbar block.empty {
-    background-color: @base_color;
+    color: #1a5a3a;
 }
 
 /* Switch */
 switch {
-    background-color: @base_color;
+    background-color: #d0d0d0;
     border: 1px solid @border_color;
     border-radius: 10px;
     min-width: 40px;
@@ -302,17 +261,10 @@ switch:checked {
 }
 
 switch slider {
-    background-color: @fg_color;
+    background-color: @base_color;
     border-radius: 50%;
     min-width: 18px;
     min-height: 18px;
-}
-
-/* Combobox */
-combobox box {
-    background-color: @base_color;
-    border: 1px solid @border_color;
-    border-radius: 3px;
 }
 
 /* List */
@@ -320,12 +272,8 @@ list {
     background-color: @base_color;
 }
 
-list row {
-    padding: 4px 8px;
-}
-
 list row:hover {
-    background-color: #353545;
+    background-color: #e8e8e8;
 }
 
 list row:selected {
@@ -339,19 +287,19 @@ frame > border {
     border-radius: 3px;
 }
 
-/* Notification / infobar */
+/* Infobar */
 infobar.info {
-    background-color: #1a3a2e;
+    background-color: #e8f5e9;
 }
 
 infobar.warning {
-    background-color: #3a2e1a;
+    background-color: #fff3e0;
 }
 
 infobar.error {
-    background-color: #3a1a1a;
+    background-color: #fce4ec;
 }
 
 infobar.question {
-    background-color: #1a2e3a;
+    background-color: #e3f2fd;
 }

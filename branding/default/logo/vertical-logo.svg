@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 280">
+    <!-- Icon on top -->
+    <rect width="100" height="100" x="50" y="10" rx="16" fill="#2E8B57"/>
+    <text x="100" y="68" font-family="Arial" font-size="30" fill="white" text-anchor="middle" font-weight="bold">LFS</text>
+    <text x="100" y="90" font-family="Arial" font-size="10" fill="#90EE90" text-anchor="middle">Linux From Scratch</text>
+    <!-- Title text -->
+    <text x="100" y="145" font-family="Arial,Helvetica,sans-serif" font-size="20" fill="#f0f0f0" text-anchor="middle" font-weight="bold">Beyond Linux</text>
+    <text x="100" y="170" font-family="Arial,Helvetica,sans-serif" font-size="20" fill="#f0f0f0" text-anchor="middle" font-weight="bold">From Scratch</text>
+    <!-- Accent line -->
+    <rect x="50" y="182" width="100" height="3" rx="1" fill="#2E8B57"/>
+    <!-- Subtitle -->
+    <text x="100" y="210" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#90EE90" text-anchor="middle">A Professional Distribution</text>
+    <text x="100" y="228" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#90EE90" text-anchor="middle">Built From Source</text>
+</svg>

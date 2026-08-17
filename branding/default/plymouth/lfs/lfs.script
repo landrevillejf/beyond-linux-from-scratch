@@ -1,0 +1,74 @@
+# LFS Plymouth Boot Splash Script
+# Professional dark theme with green accent progress bar
+
+# ---- Configuration ----
+logo.file = Image("logo.png");
+logo.x = Window.GetWidth() / 2 - logo.file.GetWidth() / 2;
+logo.y = Window.GetHeight() / 3 - logo.file.GetHeight() / 2;
+logo.sprite = Sprite(logo.file);
+logo.sprite.SetOpacity(1);
+
+# Title text image
+title.file = Image("title.png");
+title.x = Window.GetWidth() / 2 - title.file.GetWidth() / 2;
+title.y = logo.y + logo.file.GetHeight() + 20;
+title.sprite = Sprite(title.file);
+title.sprite.SetOpacity(1);
+
+# ---- Background ----
+bg = Image("background.png");
+bg.x = 0;
+bg.y = 0;
+bg.sprite = Sprite(bg);
+bg.sprite.SetZOrder(-1000);
+
+# ---- Progress bar ----
+bar_bg_width = 400;
+bar_bg_height = 8;
+bar_bg_x = Window.GetWidth() / 2 - bar_bg_width / 2;
+bar_bg_y = Window.GetHeight() * 2 / 3;
+
+bar_bg.file = Image("progress_bg.png");
+bar_bg.sprite = Sprite(bar_bg.file);
+bar_bg.sprite.SetPosition(bar_bg_x, bar_bg_y);
+bar_bg.sprite.SetOpacity(0.6);
+
+bar_fill.file = Image("progress_fill.png");
+bar_fill.sprite = Sprite(bar_fill.file);
+bar_fill.sprite.SetPosition(bar_bg_x, bar_bg_y);
+bar_fill.sprite.SetOpacity(0);
+
+# ---- Message text ----
+message.font = Font("Sans 10");
+message.sprite = Sprite();
+message.sprite.SetPosition(bar_bg_x, bar_bg_y + 20);
+message.sprite.SetOpacity(0.7);
+
+# ---- Animation callbacks ----
+fun message_callback(text) {
+    message.image = message.font.Render(text);
+    message.sprite.SetImage(message.image);
+}
+
+Plymouth.SetMessageFunction(message_callback);
+
+# ---- Progress animation ----
+progress = 0;
+
+fun progress_callback(duration, progress_value) {
+    progress = progress_value;
+    fill_width = bar_bg_width * progress;
+    bar_fill.sprite.SetArea(0, 0, fill_width, bar_bg_height);
+    bar_fill.sprite.SetOpacity(1);
+}
+
+Plymouth.SetProgressFunction(progress_callback);
+
+# ---- Refresh callback ----
+fun refresh_callback() {
+    # Subtle pulsing effect on the logo
+    opacity = 0.8 + 0.2 * Math.Sin(Window.GetTime() * 2);
+    logo.sprite.SetOpacity(opacity);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);

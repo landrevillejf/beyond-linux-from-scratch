@@ -154,20 +154,39 @@ install_gtk_themes() {
     mkdir -p "$LFS/usr/share/themes/LFS-Light/gtk-3.0"
     mkdir -p "$LFS/usr/share/themes/LFS-Light/gtk-4.0"
 
+    # --- LFS-Dark: use the source dark CSS from gtk-3.20/ and gtk-4.0/ ---
     if [ -f "$BRANDING_DIR/themes/gtk-3.20/gtk.css" ]; then
         cp "$BRANDING_DIR/themes/gtk-3.20/gtk.css" "$LFS/usr/share/themes/LFS-Dark/gtk-3.0/gtk.css"
-        cp "$BRANDING_DIR/themes/gtk-3.20/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-3.0/gtk.css"
     else
-        fail_or_warn "Missing GTK3 CSS: $BRANDING_DIR/themes/gtk-3.20/gtk.css"
+        fail_or_warn "Missing GTK3 dark CSS: $BRANDING_DIR/themes/gtk-3.20/gtk.css"
     fi
 
     if [ -f "$BRANDING_DIR/themes/gtk-4.0/gtk.css" ]; then
         cp "$BRANDING_DIR/themes/gtk-4.0/gtk.css" "$LFS/usr/share/themes/LFS-Dark/gtk-4.0/gtk.css"
-        cp "$BRANDING_DIR/themes/gtk-4.0/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-4.0/gtk.css"
     else
-        fail_or_warn "Missing GTK4 CSS: $BRANDING_DIR/themes/gtk-4.0/gtk.css"
+        fail_or_warn "Missing GTK4 dark CSS: $BRANDING_DIR/themes/gtk-4.0/gtk.css"
     fi
 
+    # --- LFS-Light: use dedicated light CSS from LFS-Light/ subdirectories ---
+    if [ -f "$BRANDING_DIR/themes/LFS-Light/gtk-3.0/gtk.css" ]; then
+        cp "$BRANDING_DIR/themes/LFS-Light/gtk-3.0/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-3.0/gtk.css"
+    elif [ -f "$BRANDING_DIR/themes/gtk-3.20/gtk.css" ]; then
+        log_warning "No dedicated light GTK3 CSS found, falling back to dark theme"
+        cp "$BRANDING_DIR/themes/gtk-3.20/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-3.0/gtk.css"
+    else
+        fail_or_warn "Missing GTK3 light CSS"
+    fi
+
+    if [ -f "$BRANDING_DIR/themes/LFS-Light/gtk-4.0/gtk.css" ]; then
+        cp "$BRANDING_DIR/themes/LFS-Light/gtk-4.0/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-4.0/gtk.css"
+    elif [ -f "$BRANDING_DIR/themes/gtk-4.0/gtk.css" ]; then
+        log_warning "No dedicated light GTK4 CSS found, falling back to dark theme"
+        cp "$BRANDING_DIR/themes/gtk-4.0/gtk.css" "$LFS/usr/share/themes/LFS-Light/gtk-4.0/gtk.css"
+    else
+        fail_or_warn "Missing GTK4 light CSS"
+    fi
+
+    # --- Theme index files ---
     if [ -f "$BRANDING_DIR/themes/LFS-Dark/index.theme" ]; then
         cp "$BRANDING_DIR/themes/LFS-Dark/index.theme" "$LFS/usr/share/themes/LFS-Dark/index.theme"
     fi
@@ -175,7 +194,7 @@ install_gtk_themes() {
         cp "$BRANDING_DIR/themes/LFS-Light/index.theme" "$LFS/usr/share/themes/LFS-Light/index.theme"
     fi
 
-    log_success "GTK themes installed"
+    log_success "GTK themes installed (dark + light)"
 }
 
 install_wallpapers() {
@@ -311,11 +330,97 @@ EOF
 install_branding_assets() {
     log_info "Installing branding assets..."
     mkdir -p "$LFS/usr/share/pixmaps/lfs"
+    mkdir -p "$LFS/usr/share/icons/hicolor/scalable/apps"
     mkdir -p "$LFS/boot"
 
     if [ -d "$BRANDING_DIR/logo" ]; then
         cp "$BRANDING_DIR/logo"/* "$LFS/usr/share/pixmaps/lfs/" 2>/dev/null || true
+        # Install SVG icons into the standard icon theme path
+        for svg in "$BRANDING_DIR/logo"/*.svg; do
+            [ -f "$svg" ] || continue
+            cp "$svg" "$LFS/usr/share/icons/hicolor/scalable/apps/" 2>/dev/null || true
+        done
     fi
+}
+
+install_plymouth_theme() {
+    local plymouth_dir="$BRANDING_DIR/plymouth/lfs"
+    local target_dir="$LFS/usr/share/plymouth/themes/lfs"
+
+    if [ ! -d "$plymouth_dir" ]; then
+        log_info "No Plymouth theme found in $plymouth_dir, skipping"
+        return 0
+    fi
+
+    # Only install if Plymouth is present in the target system
+    if [ ! -d "$LFS/usr/share/plymouth" ] && [ ! -d "$LFS/usr/lib/plymouth" ]; then
+        log_info "Plymouth not installed in target system, skipping splash theme"
+        return 0
+    fi
+
+    log_info "Installing Plymouth boot splash theme..."
+    mkdir -p "$target_dir/images"
+
+    # Copy theme descriptor and script
+    if [ -f "$plymouth_dir/lfs.plymouth" ]; then
+        cp "$plymouth_dir/lfs.plymouth" "$target_dir/lfs.plymouth"
+    fi
+    if [ -f "$plymouth_dir/lfs.script" ]; then
+        cp "$plymouth_dir/lfs.script" "$target_dir/lfs.script"
+    fi
+
+    # Copy pre-rendered images if available
+    if [ -d "$plymouth_dir/images" ]; then
+        find "$plymouth_dir/images" -maxdepth 1 -type f \( -name '*.png' -o -name '*.jpg' \) \
+            -exec cp {} "$target_dir/images/" \;
+    fi
+
+    # Generate placeholder images from SVG logos if PNG assets are missing
+    if command -v rsvg-convert >/dev/null 2>&1; then
+        local logo_svg="$BRANDING_DIR/logo/logo.svg"
+        local text_svg="$BRANDING_DIR/logo/text-logo.svg"
+        if [ -f "$logo_svg" ] && [ ! -f "$target_dir/images/logo.png" ]; then
+            rsvg-convert -w 256 -h 256 "$logo_svg" -o "$target_dir/images/logo.png" 2>/dev/null || true
+        fi
+        if [ -f "$text_svg" ] && [ ! -f "$target_dir/images/title.png" ]; then
+            rsvg-convert -w 512 -h 80 "$text_svg" -o "$target_dir/images/title.png" 2>/dev/null || true
+        fi
+    fi
+
+    # Generate simple progress bar images if missing
+    if command -v python3 >/dev/null 2>&1; then
+        python3 -c "
+import struct, zlib, os
+def create_png(w, h, r, g, b, path):
+    raw = b''
+    for _ in range(h):
+        raw += b'\\x00' + bytes([r, g, b, 255]) * w
+    def chunk(ctype, data):
+        c = ctype + data
+        return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+    ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+    idat = zlib.compress(raw)
+    with open(path, 'wb') as f:
+        f.write(b'\\x89PNG\\r\\n\\x1a\\n')
+        f.write(chunk(b'IHDR', ihdr))
+        f.write(chunk(b'IDAT', idat))
+        f.write(chunk(b'IEND', b''))
+bg_path = '$target_dir/images/progress_bg.png'
+fill_path = '$target_dir/images/progress_fill.png'
+if not os.path.exists(bg_path):
+    create_png(400, 8, 58, 58, 74, bg_path)
+if not os.path.exists(fill_path):
+    create_png(400, 8, 46, 139, 87, fill_path)
+" 2>/dev/null || log_warning "Could not generate Plymouth progress bar images"
+    fi
+
+    # Register the theme if plymouth-set-default-theme is available
+    if [ -x "$LFS/usr/sbin/plymouth-set-default-theme" ]; then
+        chroot "$LFS" /usr/sbin/plymouth-set-default-theme lfs 2>/dev/null || true
+        log_info "Plymouth default theme set to 'lfs'"
+    fi
+
+    log_success "Plymouth boot splash theme installed"
 }
 
 generate_wallpapers_if_needed() {
@@ -418,6 +523,7 @@ configure_phosh_branding
 configure_display_manager
 configure_user_defaults
 install_branding_assets
+install_plymouth_theme
 write_builder_parameters_snapshot
 write_branding_manifest
 

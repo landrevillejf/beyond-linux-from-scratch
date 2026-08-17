@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Beyond Linux From Scratch
+Description=Professional boot splash with green accent theme
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/lfs
+ScriptFile=/usr/share/plymouth/themes/lfs/lfs.script

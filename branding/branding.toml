@@ -112,7 +112,7 @@ styles = [
 
 [logo]
 primary = "branding/default/logo/logo.svg"
-favicon = "branding/default/logo/favicon.ico"
+favicon = "branding/default/logo/favicon.svg"
 icon_sizes = [16, 32, 64, 128, 256, 512]
 text_logo = "branding/default/logo/text-logo.svg"
 horizontal_logo = "branding/default/logo/horizontal-logo.svg"
