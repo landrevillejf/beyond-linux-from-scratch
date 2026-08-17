@@ -76,7 +76,9 @@ echo "Configuring LFS system (Docker mode)..."
 if ! chroot . id lfsuser &>/dev/null; then
     chroot . groupadd -g 1000 lfsuser 2>/dev/null || true
     chroot . useradd -u 1000 -g 1000 -G wheel,audio,video,storage -m lfsuser 2>/dev/null || true
-    chroot . sh -c 'echo "lfsuser:password123" | chpasswd' 2>/dev/null || true
+    chroot . sh -c 'echo "lfsuser:$(head -c 32 /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 16)" | chpasswd' 2>/dev/null || true
+    # Write the temporary password to a file that first-boot.sh will delete
+    chroot . sh -c 'head -c 32 /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 16 > /etc/.initial-password' 2>/dev/null || true
 fi
 echo "lfsuser ALL=(ALL) ALL" >> ./etc/sudoers 2>/dev/null || true
 cat > ./etc/X11/xorg.conf.d/00-keyboard.conf << "XORG"
@@ -159,7 +161,11 @@ mkdir -pv /etc/X11/xorg.conf.d
 if ! grep -q lfsuser /etc/passwd; then
     echo "lfsuser:x:1000:1000::/home/lfsuser:/bin/bash" >> /etc/passwd
     echo "lfsuser:x:1000:" >> /etc/group
-    echo "lfsuser:password123" | chpasswd 2>/dev/null || echo "Warning: chpasswd failed"
+    TEMP_PASS="$(head -c 32 /dev/urandom | base64 | tr -dc A-Za-z0-9 | head -c 16)"
+    echo "lfsuser:$TEMP_PASS" | chpasswd 2>/dev/null || echo "Warning: chpasswd failed"
+    # Store the temporary password; first-boot.sh will expire it and clean up
+    echo "$TEMP_PASS" > "$LFS/etc/.initial-password"
+    chmod 600 "$LFS/etc/.initial-password" 2>/dev/null || true
     mkdir -pv /home/lfsuser
     chown -R lfsuser:lfsuser /home/lfsuser
 fi

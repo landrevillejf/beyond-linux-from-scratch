@@ -1,5 +1,5 @@
 #!/bin/bash
-# First-boot service
+# First-boot service – runs once on first boot to finalize system setup
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -43,20 +43,247 @@ log_info "========================================="
 log_info "Setting up first-boot service"
 log_info "========================================="
 
-if [ "$IN_DOCKER" = true ]; then
-    log_info "Docker mode – creating first-boot script inside $LFS"
-    run_privileged mkdir -pv "$LFS/usr/sbin"
-    run_privileged tee "$LFS/usr/sbin/first-boot.sh" <<'EOF' >/dev/null
+# -----------------------------------------------------------------------
+# The first-boot script that will run inside the built system on first boot.
+# Both Docker and native modes install the SAME inner script.
+# -----------------------------------------------------------------------
+read -r -d '' FIRST_BOOT_SCRIPT <<'INNEREOF' || true
 #!/bin/bash
-echo "First-boot script running (Docker mode)"
-touch /var/log/first-boot-done
-EOF
-    run_privileged chmod +x "$LFS/usr/sbin/first-boot.sh"
+# first-boot.sh – runs once on the very first boot of the built system
+# Regenerates unique system state, then disables itself.
+set -e
+
+LOG=/var/log/first-boot.log
+exec > >(tee -a "$LOG") 2>&1
+echo "=== LFS First-boot configuration started at $(date) ==="
+
+# ------------------------------------------------------------------
+# 1. Regenerate SSH host keys (unique per installation)
+# ------------------------------------------------------------------
+if [ -d /etc/ssh ]; then
+    echo "Regenerating SSH host keys..."
+    rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+    if command -v ssh-keygen >/dev/null 2>&1; then
+        ssh-keygen -t ed25519 -f /etc/ssh/ssh_host_ed25519_key -N "" -q
+        ssh-keygen -t rsa    -f /etc/ssh/ssh_host_rsa_key    -N "" -q -b 4096
+        echo "SSH host keys regenerated"
+    else
+        echo "ssh-keygen not found – skipping SSH key regeneration"
+    fi
+fi
+
+# ------------------------------------------------------------------
+# 2. Force password change on first interactive login
+#    Expire the lfsuser and root passwords so they MUST be changed.
+# ------------------------------------------------------------------
+if command -v chage >/dev/null 2>&1; then
+    if id lfsuser >/dev/null 2>&1; then
+        chage -d 0 lfsuser 2>/dev/null || true
+        echo "Password expiry set for lfsuser"
+    fi
+    chage -d 0 root 2>/dev/null || true
+    echo "Password expiry set for root"
+else
+    # Fallback: write a flag that PAM/login scripts can check
+    touch /etc/.first-boot-password-change-required
+    echo "chage not found – flag file created for password change"
+fi
+
+# ------------------------------------------------------------------
+# 3. Generate locale if locale-gen exists
+# ------------------------------------------------------------------
+if [ -f /etc/locale.conf ]; then
+    LANG=$(grep '^LANG=' /etc/locale.conf 2>/dev/null | cut -d= -f2 | tr -d '"' || echo "en_US.UTF-8")
+else
+    LANG="en_US.UTF-8"
+fi
+
+if command -v locale-gen >/dev/null 2>&1; then
+    echo "Generating locale: $LANG"
+    locale-gen "$LANG" 2>/dev/null || true
+elif command -v localedef >/dev/null 2>&1; then
+    echo "Generating locale with localedef: $LANG"
+    localedef -i "${LANG%%.*}" -c -f UTF-8 -A /usr/share/locale/locale.alias "$LANG" 2>/dev/null || true
+fi
+
+# ------------------------------------------------------------------
+# 4. Configure timezone
+# ------------------------------------------------------------------
+if [ -f /etc/timezone ]; then
+    TZ=$(cat /etc/timezone 2>/dev/null || echo "UTC")
+elif [ -f /etc/localtime ] && [ -L /etc/localtime ]; then
+    TZ=$(readlink /etc/localtime | sed 's|.*/zoneinfo/||')
+else
+    TZ="UTC"
+fi
+
+if [ -f "/usr/share/zoneinfo/$TZ" ]; then
+    ln -sf "/usr/share/zoneinfo/$TZ" /etc/localtime
+    echo "Timezone set to: $TZ"
+else
+    echo "Timezone zone file not found for: $TZ"
+fi
+
+# ------------------------------------------------------------------
+# 5. Update dynamic linker cache
+# ------------------------------------------------------------------
+if [ -x /sbin/ldconfig ]; then
+    echo "Running ldconfig..."
+    /sbin/ldconfig 2>/dev/null || true
+fi
+
+# ------------------------------------------------------------------
+# 6. Resize root partition for live USB (if running from overlay)
+# ------------------------------------------------------------------
+if [ -f /etc/lfs-live-usb ] && command -v growpart >/dev/null 2>&1; then
+    ROOT_DEV=$(findmnt -n -o SOURCE / 2>/dev/null || true)
+    if [ -n "$ROOT_DEV" ]; then
+        PARENT=$(echo "$ROOT_DEV" | sed 's/[0-9]*$//')
+        PARTNUM=$(echo "$ROOT_DEV" | grep -o '[0-9]*$')
+        if [ -n "$PARENT" ] && [ -n "$PARTNUM" ]; then
+            echo "Resizing live USB partition $ROOT_DEV..."
+            growpart "$PARENT" "$PARTNUM" 2>/dev/null || true
+            if command -v resize2fs >/dev/null 2>&1; then
+                resize2fs "$ROOT_DEV" 2>/dev/null || true
+            fi
+        fi
+    fi
+fi
+
+# ------------------------------------------------------------------
+# 7. Update machine-id (unique per installation)
+# ------------------------------------------------------------------
+if [ -f /etc/machine-id ] && [ "$(cat /etc/machine-id 2>/dev/null)" = "uninitialized" ]; then
+    if command -v systemd-machine-id-setup >/dev/null 2>&1; then
+        systemd-machine-id-setup 2>/dev/null || true
+    else
+        # Generate a random machine-id
+        head -c 16 /dev/urandom | od -A n -t x1 | tr -d ' \n' > /etc/machine-id
+    fi
+    echo "Machine ID regenerated"
+fi
+
+# ------------------------------------------------------------------
+# 8. Clean up temporary build artifacts
+# ------------------------------------------------------------------
+rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
+rm -f /etc/.first-boot-password-change-required 2>/dev/null || true
+rm -f /etc/.initial-password 2>/dev/null || true
+
+# ------------------------------------------------------------------
+# 9. Disable this service so it never runs again
+# ------------------------------------------------------------------
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable first-boot.service 2>/dev/null || true
+    echo "first-boot.service disabled"
+elif command -v update-rc.d >/dev/null 2>&1; then
+    update-rc.d -f first-boot remove 2>/dev/null || true
+    echo "first-boot init script removed"
+fi
+
+echo "=== LFS First-boot configuration completed at $(date) ==="
+INNEREOF
+
+# -----------------------------------------------------------------------
+# Install the first-boot script into the LFS tree
+# -----------------------------------------------------------------------
+install_first_boot_script() {
+    run_privileged mkdir -p "$LFS/usr/sbin"
+    run_privileged mkdir -p "$LFS/var/log"
+    printf '%s\n' "$FIRST_BOOT_SCRIPT" > "$LFS/usr/sbin/first-boot.sh"
+    run_privileged chmod 0755 "$LFS/usr/sbin/first-boot.sh"
+}
+
+install_service_unit() {
+    # systemd
+    if [ -d "$LFS/usr/lib/systemd/system" ] || [ -d "$LFS/lib/systemd/system" ]; then
+        run_privileged mkdir -p "$LFS/usr/lib/systemd/system"
+        cat > "$LFS/usr/lib/systemd/system/first-boot.service" <<'SERVICE'
+[Unit]
+Description=LFS First Boot Configuration
+Documentation=man:first-boot.sh(8)
+After=network.target local-fs.target
+ConditionPathExists=!/var/log/first-boot-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/first-boot.sh
+ExecStopPost=/bin/touch /var/log/first-boot-done
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+        run_privileged chmod 0644 "$LFS/usr/lib/systemd/system/first-boot.service"
+        log_info "systemd first-boot.service installed"
+        return 0
+    fi
+
+    # sysvinit / openrc / runit
+    if [ -d "$LFS/etc/init.d" ]; then
+        cat > "$LFS/etc/init.d/first-boot" <<'INIT'
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          first-boot
+# Required-Start:    $local_fs $network
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: LFS First Boot Configuration
+### END INIT INFO
+
+case "$1" in
+    start)
+        if [ ! -f /var/log/first-boot-done ]; then
+            /usr/sbin/first-boot.sh
+            touch /var/log/first-boot-done
+        fi
+        ;;
+    stop|status)
+        exit 0
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|status}"
+        exit 1
+        ;;
+esac
+INIT
+        run_privileged chmod 0755 "$LFS/etc/init.d/first-boot"
+        log_info "sysvinit first-boot script installed"
+        return 0
+    fi
+
+    # runit
+    if [ -d "$LFS/etc/sv" ] || [ -d "$LFS/service" ]; then
+        run_privileged mkdir -p "$LFS/etc/sv/first-boot"
+        cat > "$LFS/etc/sv/first-boot/run" <<'RUNIT'
+#!/bin/sh
+if [ ! -f /var/log/first-boot-done ]; then
+    /usr/sbin/first-boot.sh
+    touch /var/log/first-boot-done
+fi
+exec touch /var/log/first-boot-done
+RUNIT
+        run_privileged chmod 0755 "$LFS/etc/sv/first-boot/run"
+        log_info "runit first-boot service installed"
+        return 0
+    fi
+
+    log_warning "No supported init system found for first-boot service"
+    return 1
+}
+
+# -----------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------
+if [ "$IN_DOCKER" = true ]; then
+    log_info "Docker mode – installing first-boot script into $LFS"
+    install_first_boot_script
+    install_service_unit || true
     log_success "First-boot script created (Docker mode)"
     exit 0
 fi
 
-# Native mode
 log_info "Native mode – installing first-boot service"
 
 # Mount virtual filesystems
@@ -64,48 +291,13 @@ run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 
-# Create directory and script inside chroot
-run_privileged mkdir -pv "$LFS/usr/sbin"
+install_first_boot_script
+install_service_unit || true
 
-# Write the script
-run_privileged tee "$LFS/usr/sbin/first-boot.sh" <<'EOF' >/dev/null
-#!/bin/bash
-echo "Running first-boot configuration..."
-# Add first-boot tasks here
-touch /var/log/first-boot-done
-echo "First-boot done."
-EOF
-run_privileged chmod +x "$LFS/usr/sbin/first-boot.sh"
-
-# Create systemd service if systemd is the init, or an rc script for sysvinit
+# Enable the service inside the chroot
 if [ -d "$LFS/usr/lib/systemd/system" ]; then
-    run_privileged tee "$LFS/usr/lib/systemd/system/first-boot.service" <<'SERVICE' >/dev/null
-[Unit]
-Description=First Boot Configuration
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/sbin/first-boot.sh
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-SERVICE
     run_privileged chroot "$LFS" systemctl enable first-boot.service 2>/dev/null || true
 elif [ -d "$LFS/etc/init.d" ]; then
-    run_privileged tee "$LFS/etc/init.d/first-boot" <<'INIT' >/dev/null
-#!/bin/sh
-case "$1" in
-    start)
-        /usr/sbin/first-boot.sh
-        ;;
-    *)
-        exit 1
-        ;;
-esac
-INIT
-    run_privileged chmod +x "$LFS/etc/init.d/first-boot"
     run_privileged chroot "$LFS" update-rc.d first-boot defaults 2>/dev/null || true
 fi
 

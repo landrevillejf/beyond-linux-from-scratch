@@ -299,6 +299,86 @@ write_file /etc/audit/rules.d/hardening.rules 0640 <<'AUDIT'
 -e 2
 AUDIT
 
+# ---------------------------------------------------------------------------
+# 11. nftables firewall rules
+# ---------------------------------------------------------------------------
+write_file /etc/nftables.conf 0600 <<'NFTABLES'
+#!/usr/sbin/nft -f
+# LFS nftables firewall – secure by default
+# Managed by 15-security-hardening.sh; local edits will be overwritten.
+
+flush ruleset
+
+# ---- Variables (override via /etc/nftables/conf.d/*.nft) ----
+define ALLOW_SSH  = true
+define ALLOW_HTTP = false
+
+# ---- Tables ----
+table inet filter {
+    # --- Input chain (traffic destined to this host) ---
+    chain input {
+        type filter hook input priority 0; policy drop;
+
+        # Accept established/related connections
+        ct state established,related accept
+
+        # Drop invalid packets
+        ct state invalid drop
+
+        # Accept loopback
+        iifname "lo" accept
+
+        # ICMPv4: allow ping, destination-unreachable, time-exceeded
+        ip protocol icmp {
+            icmp type { echo-request, echo-reply, destination-unreachable,
+                        time-exceeded, parameter-problem } accept
+        }
+
+        # ICMPv6: essential ND + ping
+        ip6 nexthdr icmpv6 {
+            icmpv6 type { echo-request, echo-reply,
+                          nd-neighbor-solicit, nd-neighbor-advert,
+                          nd-router-solicit, nd-router-advert,
+                          packet-too-big, time-exceeded,
+                          destination-unreachable, parameter-problem } accept
+        }
+
+        # SSH (port 22) – rate-limited
+        tcp dport 22 ct state new limit rate 10/minute accept
+
+        # HTTP/HTTPS (optional)
+        tcp dport 80  accept
+        tcp dport 443 accept
+
+        # mDNS for local service discovery
+        udp dport 5353 accept
+
+        # Log and drop everything else
+        log prefix "nft-input-drop: " limit rate 5/minute
+        drop
+    }
+
+    # --- Forward chain (routing through this host) ---
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+
+        ct state established,related accept
+        ct state invalid drop
+
+        log prefix "nft-forward-drop: " limit rate 5/minute
+        drop
+    }
+
+    # --- Output chain (traffic from this host) ---
+    chain output {
+        type filter hook output priority 0; policy accept;
+    }
+}
+NFTABLES
+
+# Create override directory for custom rules
+run_privileged mkdir -p "$LFS/etc/nftables/conf.d"
+
 log_success "Security hardening applied:"
 log_success "  - sysctl kernel/network hardening      (/etc/sysctl.d/99-security.conf)"
 log_success "  - PAM faillock + pwquality + sha512    (/etc/security/*, /etc/pam.d/system-password)"
@@ -308,4 +388,5 @@ log_success "  - SSH daemon hardening                 (/etc/ssh/sshd_config.d/99
 log_success "  - login.defs password aging + banners  (/etc/login.defs, /etc/issue*)"
 log_success "  - cron/at restriction + file perms     (/etc/cron.allow, /etc/at.allow)"
 log_success "  - auditd base ruleset                  (/etc/audit/rules.d/hardening.rules)"
+log_success "  - nftables firewall (default deny)     (/etc/nftables.conf)"
 exit 0

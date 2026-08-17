@@ -387,32 +387,67 @@ install_plymouth_theme() {
         fi
     fi
 
-    # Generate simple progress bar images if missing
+    # Python fallback: generate placeholder images when rsvg-convert is unavailable
     if command -v python3 >/dev/null 2>&1; then
         python3 -c "
-import struct, zlib, os
+import struct, zlib, os, sys
+
 def create_png(w, h, r, g, b, path):
     raw = b''
     for _ in range(h):
-        raw += b'\\x00' + bytes([r, g, b, 255]) * w
+        raw += b'\x00' + bytes([r, g, b, 255]) * w
     def chunk(ctype, data):
         c = ctype + data
         return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
     ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
     idat = zlib.compress(raw)
     with open(path, 'wb') as f:
-        f.write(b'\\x89PNG\\r\\n\\x1a\\n')
+        f.write(b'\x89PNG\r\n\x1a\n')
         f.write(chunk(b'IHDR', ihdr))
         f.write(chunk(b'IDAT', idat))
         f.write(chunk(b'IEND', b''))
-bg_path = '$target_dir/images/progress_bg.png'
-fill_path = '$target_dir/images/progress_fill.png'
+
+def create_gradient_png(w, h, r1, g1, b1, r2, g2, b2, path):
+    raw = b''
+    for y in range(h):
+        t = y / max(h - 1, 1)
+        r = int(r1 + (r2 - r1) * t)
+        g = int(g1 + (g2 - g1) * t)
+        b = int(b1 + (b2 - b1) * t)
+        raw += b'\x00' + bytes([r, g, b, 255]) * w
+    def chunk(ctype, data):
+        c = ctype + data
+        return struct.pack('>I', len(data)) + c + struct.pack('>I', zlib.crc32(c) & 0xffffffff)
+    ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+    idat = zlib.compress(raw)
+    with open(path, 'wb') as f:
+        f.write(b'\x89PNG\r\n\x1a\n')
+        f.write(chunk(b'IHDR', ihdr))
+        f.write(chunk(b'IDAT', idat))
+        f.write(chunk(b'IEND', b''))
+
+img_dir = '$target_dir/images'
+
+# Logo placeholder (256x256, forest green gradient)
+logo_path = os.path.join(img_dir, 'logo.png')
+if not os.path.exists(logo_path):
+    create_gradient_png(256, 256, 34, 139, 34, 0, 100, 0, logo_path)
+
+# Title placeholder (512x80, dark text color on transparent-like bg)
+title_path = os.path.join(img_dir, 'title.png')
+if not os.path.exists(title_path):
+    create_gradient_png(512, 80, 46, 139, 87, 34, 139, 34, title_path)
+
+# Progress bar background (400x8, dark)
+bg_path = os.path.join(img_dir, 'progress_bg.png')
 if not os.path.exists(bg_path):
     create_png(400, 8, 58, 58, 74, bg_path)
+
+# Progress bar fill (400x8, green)
+fill_path = os.path.join(img_dir, 'progress_fill.png')
 if not os.path.exists(fill_path):
     create_png(400, 8, 46, 139, 87, fill_path)
-" 2>/dev/null || log_warning "Could not generate Plymouth progress bar images"
-    fi
+" 2>/dev/null || log_warning "Could not generate Plymouth placeholder images"
 
     # Register the theme if plymouth-set-default-theme is available
     if [ -x "$LFS/usr/sbin/plymouth-set-default-theme" ]; then

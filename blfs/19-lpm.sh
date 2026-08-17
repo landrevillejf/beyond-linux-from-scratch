@@ -1529,10 +1529,31 @@ install_lpm_stage() {
 
     $run_privileged install -Dm755 "$0" "$target/usr/bin/lpm"
     $run_privileged mkdir -p "$target/var/lib/lpm" "$target/var/log/lpm" \
-        "$target/usr/share/lpm/packages" "$target/etc/lpm"
+        "$target/usr/share/lpm/packages" "$target/etc/lpm" \
+        "$target/etc/lpm/repos.d"
     $run_privileged touch "$target/var/lib/lpm/packages.list" \
         "$target/var/lib/lpm/installed.list" "$target/var/lib/lpm/file_index"
+
+    # Install LPM configuration file
+    if [ -f "${SCRIPT_DIR:-.}/../config/lpm.conf" ]; then
+        $run_privileged cp "${SCRIPT_DIR:-.}/../config/lpm.conf" "$target/etc/lpm/lpm.conf"
+        $run_privileged chmod 0644 "$target/etc/lpm/lpm.conf"
+    fi
+
+    # Configure default remote repositories
+    cat > "$target/etc/lpm/repos.d/default.conf" <<'REPOS'
+# LPM default remote repositories
+# Format: name=url
+# The first matching repo is tried first; falls back to the next.
+
+lfs-stable=https://packages.linuxfromscratch.org/x86_64/stable
+lfs-updates=https://packages.linuxfromscratch.org/x86_64/updates
+REPOS
+    $run_privileged chmod 0644 "$target/etc/lpm/repos.d/default.conf"
+
     log_success "Installed LPM into $target/usr/bin/lpm"
+    log_success "LPM config: $target/etc/lpm/lpm.conf"
+    log_success "LPM repos:  $target/etc/lpm/repos.d/default.conf"
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "${LFS:-/}" != "/" ] && [ "$#" -eq 0 ]; then
