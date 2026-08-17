@@ -136,21 +136,268 @@ XFCE
     # XFCE default config in /etc/skel
     mkdir -p /etc/skel/.config/xfce4/panel
     mkdir -p /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml
-    # Default panel layout
+
+    # ------------------------------------------------------------------
+    # Panel 1 = thin top bar (menu, clock, systray) – semi-transparent
+    # Panel 2 = bottom dock (macOS-style) – translucent with blur
+    #
+    # The compositor (xfwm4 built-in) must be enabled for alpha/blur.
+    # Icon size on the dock is 40px; panel height 48px.
+    # ------------------------------------------------------------------
     cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml <<'XFCEPANEL'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
+  <!-- Two panels: top bar (1) and bottom dock (2) -->
   <property name="panels" type="array">
     <value type="int" value="1"/>
     <value type="int" value="2"/>
   </property>
-  <property name="plugins" type="empty">
-    <property name="plugin-1" type="string" value="whiskermenu"/>
-    <property name="plugin-2" type="string" value="tasklist"/>
-    <property name="plugin-3" type="string" value="systray"/>
+
+  <!-- ============== PANEL 1 – TOP BAR ============== -->
+  <property name="panel-1" type="empty">
+    <property name="position" type="string" value="p=8;x=960;y=14"/>
+    <property name="length" type="uint" value="100"/>
+    <property name="length-adjust" type="bool" value="true"/>
+    <property name="size" type="uint" value="28"/>
+    <property name="position-locked" type="bool" value="true"/>
+    <property name="mode" type="uint" value="0"/>
+    <property name="icon-size" type="uint" value="16"/>
+    <property name="background-style" type="uint" value="1"/>
+    <property name="background-rgba" type="array">
+      <value type="double" value="0.08"/>
+      <value type="double" value="0.08"/>
+      <value type="double" value="0.16"/>
+      <value type="double" value="0.55"/>
+    </property>
+    <property name="plugin-ids" type="array">
+      <value type="int" value="1"/>
+      <value type="int" value="2"/>
+      <value type="int" value="3"/>
+      <value type="int" value="4"/>
+    </property>
+  </property>
+
+  <!-- ============== PANEL 2 – BOTTOM DOCK ============== -->
+  <property name="panel-2" type="empty">
+    <!-- p=2 = bottom-center -->
+    <property name="position" type="string" value="p=2;x=960;y=1010"/>
+    <property name="length" type="uint" value="60"/>
+    <property name="length-adjust" type="bool" value="false"/>
+    <property name="size" type="uint" value="56"/>
+    <property name="position-locked" type="bool" value="true"/>
+    <property name="mode" type="uint" value="0"/>
+    <property name="icon-size" type="uint" value="40"/>
+    <property name="background-style" type="uint" value="1"/>
+    <property name="background-rgba" type="array">
+      <value type="double" value="0.10"/>
+      <value type="double" value="0.10"/>
+      <value type="double" value="0.18"/>
+      <value type="double" value="0.50"/>
+    </property>
+    <property name="enter-opacity" type="uint" value="100"/>
+    <property name="leave-opacity" type="uint" value="70"/>
+    <property name="plugin-ids" type="array">
+      <value type="int" value="10"/>
+      <value type="int" value="11"/>
+      <value type="int" value="12"/>
+      <value type="int" value="13"/>
+      <value type="int" value="14"/>
+      <value type="int" value="15"/>
+      <value type="int" value="16"/>
+      <value type="int" value="17"/>
+      <value type="int" value="18"/>
+      <value type="int" value="19"/>
+    </property>
+  </property>
+
+  <!-- ============== TOP BAR PLUGINS ============== -->
+  <property name="plugin-1" type="string" value="whiskermenu">
+    <property name="button-icon" type="string" value="start-here"/>
+    <property name="button-title" type="string" value="Applications"/>
+    <property name="show-button-title" type="bool" value="true"/>
+  </property>
+  <property name="plugin-2" type="string" value="clock">
+    <property name="digital-format" type="string" value="%a %d %b  %H:%M"/>
+    <property name="mode" type="uint" value="2"/>
+  </property>
+  <property name="plugin-3" type="string" value="separator">
+    <property name="expand" type="bool" value="true"/>
+  </property>
+  <property name="plugin-4" type="string" value="systray">
+    <property name="known-items" type="array">
+      <value type="string" value="nm-applet"/>
+      <value type="string" value="blueman"/>
+      <value type="string" value="xfce4-power-manager"/>
+    </property>
+  </property>
+
+  <!-- ============== DOCK PLUGINS ============== -->
+  <!-- Launcher: File Manager (Thunar) -->
+  <property name="plugin-10" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="thunar.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+    <property name="disable-tooltips" type="bool" value="false"/>
+  </property>
+  <!-- Launcher: Terminal -->
+  <property name="plugin-11" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="xfce4-terminal.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Launcher: Web Browser (Firefox) -->
+  <property name="plugin-12" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="firefox.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Launcher: Text Editor -->
+  <property name="plugin-13" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="mousepad.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Separator (visual spacer) -->
+  <property name="plugin-14" type="string" value="separator"/>
+  <!-- Launcher: Media Player -->
+  <property name="plugin-15" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="parole.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Launcher: Image Viewer -->
+  <property name="plugin-16" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="ristretto.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Launcher: Settings -->
+  <property name="plugin-17" type="string" value="launcher">
+    <property name="items" type="array">
+      <value type="string" value="xfce-settings-manager.desktop"/>
+    </property>
+    <property name="show-label" type="bool" value="false"/>
+  </property>
+  <!-- Separator before tasklist -->
+  <property name="plugin-18" type="string" value="separator"/>
+  <!-- Tasklist (running apps, like macOS active indicators) -->
+  <property name="plugin-19" type="string" value="tasklist">
+    <property name="show-labels" type="bool" value="false"/>
+    <property name="flat-buttons" type="bool" value="true"/>
+    <property name="show-handle" type="bool" value="false"/>
+    <property name="sort-order" type="uint" value="1"/>
+    <property name="window-scrolling" type="bool" value="false"/>
+    <property name="include-all-workspaces" type="bool" value="false"/>
+    <property name="middle-click" type="uint" value="1"/>
   </property>
 </channel>
 XFCEPANEL
+
+    # ------------------------------------------------------------------
+    # XFCE compositor settings
+    # Disable xfwm4 built-in compositor – picom provides blur/alpha
+    # ------------------------------------------------------------------
+    cat > /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfwm4.xml <<'XFWM4'
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfwm4" version="1.0">
+  <property name="general" type="empty">
+    <property name="theme" type="string" value="Default"/>
+    <property name="title_font" type="string" value="Sans Bold 9"/>
+    <property name="button_layout" type="string" value="O|SHMC"/>
+    <property name="easy_click" type="string" value="Alt"/>
+    <property name="raise_on_focus" type="bool" value="false"/>
+    <property name="click_to_focus" type="bool" value="true"/>
+    <!-- Compositor OFF – picom handles compositing with blur -->
+    <property name="use_compositing" type="bool" value="false"/>
+  </property>
+</channel>
+XFWM4
+
+    # ------------------------------------------------------------------
+    # Picom configuration – macOS-style blur behind transparent panels
+    # Uses dual_kawase blur for a smooth frosted-glass dock effect.
+    # ------------------------------------------------------------------
+    mkdir -p /etc/skel/.config/picom
+    cat > /etc/skel/.config/picom/picom.conf <<'PICOM'
+# Picom compositor – macOS-style frosted glass dock
+backend = "glx";
+vsync = true;
+
+# Blur settings – dual_kawase gives the best frosted-glass look
+blur:
+{
+    method = "dual_kawase";
+    strength = 8;
+    background = true;
+    background-frame = true;
+    background-fixed = true;
+};
+
+# Shadows
+shadow = true;
+shadow-radius = 12;
+shadow-opacity = 0.6;
+shadow-offset-x = 0;
+shadow-offset-y = 4;
+shadow-color = "#000000";
+no-dock-shadow = false;
+no-dnd-shadow = true;
+clear-shadow = true;
+
+# Window opacity rules
+opacity-rules = [
+    "95:class_g = 'Xfce4-panel'"
+];
+
+# Fading (smooth transitions)
+fading = true;
+fade-in-step = 0.04;
+fade-out-step = 0.04;
+fade-exclude = [];
+
+# Rounded corners for panels and dialogs
+corner-radius = 12;
+rounded-corners-exclude = [];
+
+# Exclude conditions
+blur-background-exclude = [
+    "window_type = 'dock'",
+    "window_type = 'desktop'",
+    "_GTK_FRAME_EXTENTS@:c"
+];
+
+# GLX specific settings
+glx-no-stencil = true;
+glx-copy-from-front = false;
+use-damage = true;
+PICOM
+
+    # ------------------------------------------------------------------
+    # Picom autostart – XDG autostart .desktop file
+    # ------------------------------------------------------------------
+    mkdir -p /etc/skel/.config/autostart
+    cat > /etc/skel/.config/autostart/picom.desktop <<'AUTOSTART'
+[Desktop Entry]
+Type=Application
+Name=Picom Compositor
+Comment=X11 compositor for blur, transparency and shadows
+Exec=picom --daemon
+X-GNOME-Autostart-enabled=true
+AUTOSTART
+
+    # Also install system-wide autostart so it works for all users
+    mkdir -p /etc/xdg/autostart
+    cp /etc/skel/.config/autostart/picom.desktop /etc/xdg/autostart/picom.desktop 2>/dev/null || true
+
+    # Copy picom.conf system-wide as well
+    mkdir -p /etc/xdg/picom
+    cp /etc/skel/.config/picom/picom.conf /etc/xdg/picom/picom.conf 2>/dev/null || true
     # Configure LightDM for XFCE
     if [ -f /etc/lightdm/lightdm.conf ]; then
         sed -i 's/^user-session=.*/user-session=xfce/' /etc/lightdm/lightdm.conf 2>/dev/null || true

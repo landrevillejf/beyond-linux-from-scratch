@@ -67,7 +67,61 @@ EOF
     run_privileged tee "$LFS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" >/dev/null <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-panel" version="1.0">
-  <property name="panels" type="array"><value type="int" value="1"/></property>
+  <property name="panels" type="array">
+    <value type="int" value="1"/>
+    <value type="int" value="2"/>
+  </property>
+  <property name="panel-1" type="empty">
+    <property name="position" type="string" value="p=8;x=960;y=14"/>
+    <property name="length" type="uint" value="100"/>
+    <property name="size" type="uint" value="28"/>
+    <property name="background-style" type="uint" value="1"/>
+    <property name="background-rgba" type="array">
+      <value type="double" value="0.08"/>
+      <value type="double" value="0.08"/>
+      <value type="double" value="0.16"/>
+      <value type="double" value="0.55"/>
+    </property>
+    <property name="plugin-ids" type="array">
+      <value type="int" value="1"/>
+      <value type="int" value="2"/>
+      <value type="int" value="3"/>
+      <value type="int" value="4"/>
+    </property>
+  </property>
+  <property name="panel-2" type="empty">
+    <property name="position" type="string" value="p=2;x=960;y=1010"/>
+    <property name="length" type="uint" value="60"/>
+    <property name="length-adjust" type="bool" value="false"/>
+    <property name="size" type="uint" value="56"/>
+    <property name="background-style" type="uint" value="1"/>
+    <property name="background-rgba" type="array">
+      <value type="double" value="0.10"/>
+      <value type="double" value="0.10"/>
+      <value type="double" value="0.18"/>
+      <value type="double" value="0.50"/>
+    </property>
+    <property name="enter-opacity" type="uint" value="100"/>
+    <property name="leave-opacity" type="uint" value="70"/>
+    <property name="plugin-ids" type="array">
+      <value type="int" value="10"/>
+      <value type="int" value="11"/>
+      <value type="int" value="12"/>
+      <value type="int" value="13"/>
+      <value type="int" value="14"/>
+      <value type="int" value="15"/>
+    </property>
+  </property>
+  <property name="plugin-1" type="string" value="whiskermenu"/>
+  <property name="plugin-2" type="string" value="clock"/>
+  <property name="plugin-3" type="string" value="separator"><property name="expand" type="bool" value="true"/></property>
+  <property name="plugin-4" type="string" value="systray"/>
+  <property name="plugin-10" type="string" value="launcher"><property name="items" type="array"><value type="string" value="thunar.desktop"/></property></property>
+  <property name="plugin-11" type="string" value="launcher"><property name="items" type="array"><value type="string" value="xfce4-terminal.desktop"/></property></property>
+  <property name="plugin-12" type="string" value="launcher"><property name="items" type="array"><value type="string" value="firefox.desktop"/></property></property>
+  <property name="plugin-13" type="string" value="separator"/>
+  <property name="plugin-14" type="string" value="launcher"><property name="items" type="array"><value type="string" value="xfce-settings-manager.desktop"/></property></property>
+  <property name="plugin-15" type="string" value="tasklist"><property name="show-labels" type="bool" value="false"/><property name="flat-buttons" type="bool" value="true"/></property>
 </channel>
 EOF
     run_privileged tee "$LFS/var/lib/lfs-builder/desktop/xfce-packages.list" >/dev/null <<'EOF'
@@ -90,6 +144,7 @@ xfce4-appfinder
 xfce4-terminal
 xfce4-notifyd
 xfce4-power-manager
+picom
 EOF
     log_success "XFCE Docker configuration installed"
 }
@@ -162,6 +217,7 @@ is_installed() {
         xfce4-terminal) [ -x /usr/bin/xfce4-terminal ] ;;
         xfce4-notifyd) [ -x /usr/lib/xfce4/notifyd/xfce4-notifyd ] || [ -x /usr/libexec/xfce4-notifyd ] ;;
         xfce4-power-manager) [ -x /usr/bin/xfce4-power-manager ] ;;
+        picom) [ -x /usr/bin/picom ] ;;
         *) return 1 ;;
     esac
 }
@@ -219,7 +275,7 @@ EOF
 }
 verify_prerequisites
 log_info "Building XFCE 4.20 core in dependency order"
-for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
+for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager picom; do
     build_xfce_pkg "$pkg"
 done
 install_session_files

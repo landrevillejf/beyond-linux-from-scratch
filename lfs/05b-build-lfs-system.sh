@@ -191,21 +191,97 @@ AS="${LFS_TGT}-as"
 export CC CXX LD AS
 
 # ---- S'assurer que libgcc_s est disponible pour glibc ----
+# glibc's configure must be able to link a test program.  The cross-compiler
+# always needs libgcc_s for linking; without it even "int main(){}" fails
+# and configure reports "cannot compute suffix of object files".
+# The toolchain GCC (pass 1) is built with --disable-shared which may skip
+# producing libgcc_s.so.  Detect what's available and build it if missing.
 echo "Ensuring libgcc_s is available for glibc..."
-LIBGCC_S=$(find /tools -name "libgcc_s.so.1" 2>/dev/null | head -1)
+echo "Contents of /tools/lib before libgcc_s check:"
+ls -la /tools/lib/ 2>/dev/null || echo "  /tools/lib does not exist"
+echo "Contents of /tools/lib64 before libgcc_s check:"
+ls -la /tools/lib64/ 2>/dev/null || echo "  /tools/lib64 does not exist"
+
+# Search for any libgcc_s variant (soname, real file, or unversioned symlink)
+LIBGCC_S=""
+for candidate in $(find /tools -name "libgcc_s.so*" 2>/dev/null); do
+    if [ -z "$LIBGCC_S" ]; then
+        LIBGCC_S="$candidate"
+    fi
+done
+
 if [ -n "$LIBGCC_S" ]; then
     echo "Found libgcc_s at: $LIBGCC_S"
-    cp -v "$LIBGCC_S" /tools/lib/libgcc_s.so.1
+    # Ensure both the soname and unversioned symlink exist in /tools/lib
+    if [ "$LIBGCC_S" != "/tools/lib/libgcc_s.so.1" ] && [ -f "$LIBGCC_S" ]; then
+        cp -v "$LIBGCC_S" /tools/lib/libgcc_s.so.1
+    fi
     ln -sf libgcc_s.so.1 /tools/lib/libgcc_s.so
-    echo "libgcc_s copied successfully"
+    echo "libgcc_s ready in /tools/lib"
 else
-    echo "libgcc_s.so.1 not found - continuing"
+    echo "libgcc_s.so not found in /tools – building from GCC source"
+    # The cross-compiler was built with --disable-shared so libgcc_s.so was
+    # never produced.  Build just the target shared libgcc inside the chroot
+    # using the cross-compiler and install it to /tools/lib.
+    GCC_SRC=$(find_archive gcc)
+    if [ -z "$GCC_SRC" ]; then
+        echo "ERROR: GCC source not found – cannot build libgcc_s"
+        exit 1
+    fi
+    echo "Extracting $GCC_SRC for libgcc build"
+    tar -xf "/sources/$GCC_SRC"
+    GCC_SRC_DIR=$(tar -tf "/sources/$GCC_SRC" | head -1 | cut -d/ -f1)
+    cd "/sources/$GCC_SRC_DIR"
+    mkdir -v build-libgcc
+    cd build-libgcc
+    # Build only the target shared library (libgcc_s.so)
+    "${LFS_TGT}-gcc" -v || true   # diagnostic: confirm compiler works
+    make -j"$(nproc)" \
+        CC="${LFS_TGT}-gcc" \
+        CFLAGS="-O2 -g" \
+        libgcc_s.so || {
+        # Fallback: use the gcc-internal Makefile target
+        echo "Direct make failed, trying via libgcc Makefile..."
+        ../libgcc/configure --host="$LFS_TGT" --prefix=/tools
+        make -j"$(nproc)"
+        make install
+    }
+    # Install libgcc_s.so into /tools/lib if the build placed it elsewhere
+    find . -name "libgcc_s.so*" -exec cp -v {} /tools/lib/ \;
+    ln -sf libgcc_s.so.1 /tools/lib/libgcc_s.so 2>/dev/null || true
+    cd /sources
+    rm -rf "/sources/$GCC_SRC_DIR"
+    echo "libgcc_s built and installed"
+    if [ ! -f /tools/lib/libgcc_s.so ] && [ ! -f /tools/lib/libgcc_s.so.1 ]; then
+        echo "ERROR: libgcc_s build failed – no .so produced"
+        exit 1
+    fi
 fi
+echo "libgcc_s available: $(ls -la /tools/lib/libgcc_s.so* 2>/dev/null)"
 
 # ============================================================
 # 1. BUILD GLIBC
 # ============================================================
 echo "=== Building glibc ==="
+
+# Sanity check: verify the cross-compiler can compile and link a test program
+# with the same flags used by glibc's configure.  If this fails we get a clear
+# error instead of the cryptic "cannot compute suffix of object files".
+echo "Verifying cross-compiler can link with libgcc_s..."
+echo 'int main(void){return 0;}' > /tmp/conftest.c
+if $CC -v /tmp/conftest.c -o /tmp/conftest 2>&1; then
+    echo "Cross-compiler sanity check: PASSED"
+else
+    echo "ERROR: Cross-compiler cannot create executables"
+    echo "CC=$CC"
+    echo "LDFLAGS=$LDFLAGS"
+    echo "libgcc_s status:"
+    ls -la /tools/lib/libgcc_s* 2>/dev/null || echo "  no libgcc_s in /tools/lib"
+    rm -f /tmp/conftest.c /tmp/conftest
+    exit 1
+fi
+rm -f /tmp/conftest.c /tmp/conftest
+
 GLIBC_ARCHIVE=$(find_archive glibc)
 if [ -z "$GLIBC_ARCHIVE" ]; then
     echo "ERROR: glibc source not found"

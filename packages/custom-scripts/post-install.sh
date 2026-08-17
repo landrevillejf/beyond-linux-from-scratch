@@ -174,6 +174,26 @@ xfconf-query -c xfce4-desktop -p /backdrop/screen0/monitor0/image-path -s /usr/s
 xfconf-query -c xfwm4 -p /general/theme -s Adwaita 2>/dev/null || true
 xfconf-query -c xsettings -p /Net/ThemeName -s Adwaita 2>/dev/null || true
 xfconf-query -c xsettings -p /Net/IconThemeName -s Papirus 2>/dev/null || true
+
+# ---- macOS-style dock panel (panel-2) ----
+# Disable xfwm4 compositor – picom handles blur/alpha
+xfconf-query -c xfwm4 -p /general/use_compositing -s false 2>/dev/null || true
+
+# Start picom compositor for frosted-glass blur effect
+if command -v picom >/dev/null 2>&1; then
+    picom --daemon 2>/dev/null || true
+fi
+
+# Panel 2: bottom dock – translucent dark background
+xfconf-query -c xfce4-panel -p /panels/panel-2/background-style -t int -s 1 2>/dev/null || true
+xfconf-query -c xfce4-panel -p /panels/panel-2/background-rgba -t array -n 2>/dev/null || true
+xfconf-query -c xfce4-panel -p /panels/panel-2/enter-opacity -t int -s 100 2>/dev/null || true
+xfconf-query -c xfce4-panel -p /panels/panel-2/leave-opacity -t int -s 70 2>/dev/null || true
+
+# Panel 1: top bar – semi-transparent
+xfconf-query -c xfce4-panel -p /panels/panel-1/background-style -t int -s 1 2>/dev/null || true
+xfconf-query -c xfce4-panel -p /panels/panel-1/enter-opacity -t int -s 100 2>/dev/null || true
+xfconf-query -c xfce4-panel -p /panels/panel-1/leave-opacity -t int -s 80 2>/dev/null || true
 SETTINGS
     chmod +x /usr/local/bin/lfs-desktop-settings.sh
 }
