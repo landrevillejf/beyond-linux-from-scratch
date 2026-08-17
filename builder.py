@@ -1675,11 +1675,28 @@ class LFSBuilder:
 
             if kernel_url:
                 # Supprimer TOUTES les entrées existantes qui ressemblent à un noyau
-                keys_to_remove = [
-                    k for k, v in urls_by_key.items()
-                    if ('linux-' in v or 'linux-libre' in v or 'kernel.org' in v or
-                        'hurd-' in v or 'freebsd' in v)
-                ]
+                # Valider d'abord le domaine pour éviter les attaques par substring
+                allowed_kernel_domains = {
+                    'kernel.org',
+                    'www.kernel.org',
+                    'linux-libre.fsfla.org',
+                    'ftpmirror.gnu.org',
+                    'download.freebsd.org'
+                }
+                keys_to_remove = []
+                for k, v in urls_by_key.items():
+                    try:
+                        parsed = urlparse(v)
+                        # Sécurité: valider que le hostname est autorisé avant de vérifier le path
+                        if parsed.hostname and parsed.hostname in allowed_kernel_domains:
+                            # Ensuite vérifier les patterns dans le chemin pour identifier les kernels
+                            path = parsed.path.lower()
+                            if ('linux-' in path or 'linux-libre' in path or
+                                'hurd-' in path or 'freebsd' in path):
+                                keys_to_remove.append(k)
+                    except Exception:
+                        # Si l'URL ne peut pas être parsée, on la garde
+                        pass
                 for k in keys_to_remove:
                     del urls_by_key[k]
 
