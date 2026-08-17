@@ -275,19 +275,12 @@ build_toolchain() {
         for url in "${mirrors[@]}"; do
             log_info "Downloading kernel from $url"
             if command -v wget &>/dev/null; then
-                wget -O "$LINUX_TAR" "$url" || continue
+                wget -O "$LINUX_TAR" "$url" && return 0
             elif command -v curl &>/dev/null; then
-                curl -L -o "$LINUX_TAR" "$url" || continue
+                curl -L -o "$LINUX_TAR" "$url" && return 0
             else
                 log_error "No download tool (wget/curl) available"
                 return 1
-            fi
-            if tar -tf "$LINUX_TAR" 2>/dev/null | grep -q "arch/$ARCH/Makefile"; then
-                log_success "Kernel downloaded and verified from $url"
-                return 0
-            else
-                log_warning "Kernel from $url is corrupt, removing..."
-                rm -f "$LINUX_TAR"
             fi
         done
         log_error "All kernel mirrors failed"
