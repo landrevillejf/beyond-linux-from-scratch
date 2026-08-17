@@ -287,7 +287,25 @@ build_toolchain() {
         return 1
     }
 
+    validate_tarball() {
+        local tarball="$1"
+        # Check if file exists and has non-zero size
+        if [ ! -f "$tarball" ] || [ ! -s "$tarball" ]; then
+            log_error "Tarball missing or empty: $tarball"
+            return 1
+        fi
+        # Validate tarball integrity without extracting
+        if ! tar -tzf "$tarball" >/dev/null 2>&1; then
+            log_error "Tarball integrity check failed: $tarball"
+            return 1
+        fi
+        return 0
+    }
+
     extract_linux() {
+        if ! validate_tarball "$LINUX_TAR"; then
+            return 1
+        fi
         tar -xf "$LINUX_TAR"
         LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
         if [ -d "$LINUX_DIR" ] && [ -f "$LINUX_DIR/arch/$ARCH/Makefile" ]; then
@@ -297,7 +315,7 @@ build_toolchain() {
         fi
     }
 
-    MAX_RETRIES=2
+    MAX_RETRIES=3
     for attempt in $(seq 1 $MAX_RETRIES); do
         if extract_linux; then
             break
