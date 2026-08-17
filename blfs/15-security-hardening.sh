@@ -379,6 +379,135 @@ NFTABLES
 # Create override directory for custom rules
 run_privileged mkdir -p "$LFS/etc/nftables/conf.d"
 
+# ---------------------------------------------------------------------------
+# 12. SELinux targeted policy (if SELinux userspace is installed)
+# ---------------------------------------------------------------------------
+if [ -x "$LFS/usr/sbin/selinuxenabled" ] || [ -x "$LFS/usr/sbin/getenforce" ]; then
+    log_info "SELinux userspace detected – configuring targeted policy"
+
+    write_file /etc/selinux/config 0644 <<'SELINUX'
+# SELinux configuration – targeted policy
+# Managed by 15-security-hardening.sh
+SELINUX=permissive
+SELINUXTYPE=targeted
+SELINUX_CONFIG_DIR=/etc/selinux/targeted
+SELINUX_CONFIG_DIR.active=/etc/selinux/targeted/active
+SELINUX_CONFIG_DIR.modules=/var/lib/selinux/targeted/active
+SELINUX_CONFIG_DIR.log=/var/log/audit
+SELINUX_CONFIG_DIR.booleans=/etc/selinux/targeted/booleans
+SELINUX_CONFIG_DIR.seusers=/etc/selinux/targeted/seusers
+SELINUX_CONFIG_DIR.contexts=/etc/selinux/targeted/contexts
+SELINUX_CONFIG_DIR.modules=/var/lib/selinux/targeted/active/modules
+SELINUX_CONFIG_DIR.disable=false
+SELINUX
+
+    # Create SELinux directory structure
+    run_privileged mkdir -p \
+        "$LFS/etc/selinux/targeted/active" \
+        "$LFS/etc/selinux/targeted/contexts" \
+        "$LFS/etc/selinux/targeted/booleans" \
+        "$LFS/etc/selinux/targeted/seusers" \
+        "$LFS/var/lib/selinux/targeted/active/modules" \
+        "$LFS/var/log/audit"
+
+    # Targeted policy: only specific daemons are confined
+    write_file /etc/selinux/targeted/contexts/default_contexts 0644 <<'CONTEXTS'
+# Default security contexts for targeted policy
+system_r:unconfined_t:s0    system_r:unconfined_t:s0
+system_r:init_t:s0          system_r:unconfined_t:s0
+system_r:local_login_t:s0   system_r:unconfined_t:s0 system_r:sysadm_t:s0
+system_r:remote_login_t:s0  system_r:unconfined_t:s0 system_r:sysadm_t:s0
+system_r:sshd_t:s0          system_r:unconfined_t:s0 system_r:sysadm_t:s0
+system_r:crond_t:s0         system_r:unconfined_t:s0 system_r:sysadm_t:s0
+system_r:xdm_t:s0           system_r:unconfined_t:s0 system_r:sysadm_t:s0
+CONTEXTS
+
+    # Set booleans for common desktop use
+    write_file /etc/selinux/targeted/booleans/locals 0644 <<'BOOLEANS'
+# Local SELinux boolean overrides
+allow_execstack=on
+allow_execmod=on
+httpd_can_network_connect=on
+BOOLEANS
+
+    log_success "SELinux targeted policy configured (/etc/selinux/config)"
+else
+    log_info "SELinux userspace not found – skipping SELinux configuration"
+    log_info "  Install selinux-policy and selinux-tools to enable MAC"
+fi
+
+# ---------------------------------------------------------------------------
+# 13. AppArmor targeted profiles (if AppArmor userspace is installed)
+# ---------------------------------------------------------------------------
+if [ -x "$LFS/usr/sbin/apparmor_status" ] || [ -d "$LFS/etc/apparmor.d" ]; then
+    log_info "AppArmor userspace detected – configuring targeted profiles"
+
+    run_privileged mkdir -p "$LFS/etc/apparmor.d/force-complain" \
+        "$LFS/etc/apparmor.d/disable" \
+        "$LFS/etc/apparmor.d/local" \
+        "$LFS/var/lib/apparmor" \
+        "$LFS/var/log/audit"
+
+    # AppArmor configuration
+    write_file /etc/apparmor/parser.conf 0644 <<'AAPARSER'
+# AppArmor parser configuration
+# Managed by 15-security-hardening.sh
+--cache-loc=/var/lib/apparmor
+AAPARSER
+
+    # Profile for the SSH daemon (confined)
+    write_file /etc/apparmor.d/usr.sbin.sshd 0644 <<'SSHD_AA'
+# AppArmor profile for OpenSSH daemon
+# Managed by 15-security-hardening.sh
+#include <tunables/global>
+
+profile sshd /usr/sbin/sshd flags=(enforce) {
+    #include <abstractions/base>
+    #include <abstractions/authentication>
+
+    /usr/sbin/sshd mr,
+    /etc/ssh/sshd_config r,
+    /etc/ssh/ssh_host_*_key r,
+    /etc/ssh/ssh_host_*_key.pub r,
+    /var/run/sshd.pid rw,
+    /var/log/auth.log rw,
+
+    network inet stream,
+    network inet6 stream,
+
+    capability setuid,
+    capability setgid,
+    capability sys_chroot,
+    capability dac_override,
+}
+SSHD_AA
+
+    # Profile for cron (confined)
+    write_file /etc/apparmor.d/usr.sbin.cron 0644 <<'CRON_AA'
+# AppArmor profile for cron daemon
+#include <tunables/global>
+
+profile crond /usr/sbin/cron flags=(enforce) {
+    #include <abstractions/base>
+
+    /usr/sbin/cron mr,
+    /etc/crontab r,
+    /etc/cron.d/* r,
+    /var/spool/cron/** rw,
+
+    capability setuid,
+    capability setgid,
+    capability dac_override,
+}
+CRON_AA
+
+    log_success "AppArmor targeted profiles configured (/etc/apparmor.d/)"
+    log_success "  Confined: sshd, crond"
+else
+    log_info "AppArmor userspace not found – skipping AppArmor configuration"
+    log_info "  Install apparmor-utils and apparmor-profiles to enable MAC"
+fi
+
 log_success "Security hardening applied:"
 log_success "  - sysctl kernel/network hardening      (/etc/sysctl.d/99-security.conf)"
 log_success "  - PAM faillock + pwquality + sha512    (/etc/security/*, /etc/pam.d/system-password)"
@@ -389,4 +518,6 @@ log_success "  - login.defs password aging + banners  (/etc/login.defs, /etc/iss
 log_success "  - cron/at restriction + file perms     (/etc/cron.allow, /etc/at.allow)"
 log_success "  - auditd base ruleset                  (/etc/audit/rules.d/hardening.rules)"
 log_success "  - nftables firewall (default deny)     (/etc/nftables.conf)"
+log_success "  - SELinux targeted policy              (/etc/selinux/config) [if userspace present]"
+log_success "  - AppArmor targeted profiles            (/etc/apparmor.d/) [if userspace present]"
 exit 0

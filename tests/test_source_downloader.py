@@ -149,15 +149,15 @@ https://git.savannah.gnu.org/git/guix.git
 
     def test_verify_checksums_valid(self, sources_dir, mock_logger, sample_md5sums):
         """Test checksum verification with valid files"""
-        # Create test file with matching MD5
+        # Create test file with matching SHA256
         test_file = sources_dir / "linux-6.16.1.tar.xz"
         test_content = b"test content"
         test_file.write_bytes(test_content)
-        expected_md5 = hashlib.md5(test_content).hexdigest()
+        expected_sha256 = hashlib.sha256(test_content).hexdigest()
 
-        # Update md5sums with correct hash
+        # Update checksums with correct hash
         md5_file = sources_dir.parent / "md5sums"
-        md5_file.write_text(f"{expected_md5} linux-6.16.1.tar.xz\n")
+        md5_file.write_text(f"{expected_sha256} linux-6.16.1.tar.xz\n")
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         result = downloader.verify_checksums(md5_file)

@@ -65,43 +65,113 @@ cat >"$INITRAMFS_DIR/init" <<'EOF'
 /bin/busybox mount -t sysfs sysfs /sys
 /bin/busybox mount -t devtmpfs devtmpfs /dev
 
-# Auto-detect root device: try common names, then UUID from kernel cmdline
+# ---------------------------------------------------------------------------
+# Root device detection with A/B partition support
+#
+# Kernel cmdline parameters:
+#   root=/dev/sdXn     – single root partition (classic mode)
+#   root=UUID=...       – root by UUID
+#   root_ab=a           – A/B mode: prefer slot A
+#   root_ab=b           – A/B mode: prefer slot B
+#   root_a=/dev/sdXn    – A/B slot A device
+#   root_b=/dev/sdXn    – A/B slot B device
+# ---------------------------------------------------------------------------
 ROOT_DEV=""
 ROOT_UUID=""
+ROOT_AB=""
+ROOT_A_DEV=""
+ROOT_B_DEV=""
 
-# Parse kernel command line for root= parameter
 for param in $(cat /proc/cmdline); do
     case "$param" in
-        root=UUID=*) ROOT_UUID="${param#root=UUID=}" ;;
-        root=/dev/*) ROOT_DEV="${param#root=}" ;;
+        root=UUID=*)  ROOT_UUID="${param#root=UUID=}" ;;
+        root=/dev/*)  ROOT_DEV="${param#root=}" ;;
+        root_ab=*)    ROOT_AB="${param#root_ab=}" ;;
+        root_a=*)     ROOT_A_DEV="${param#root_a=}" ;;
+        root_b=*)     ROOT_B_DEV="${param#root_b=}" ;;
     esac
 done
 
-# If UUID specified, find the device
+# Resolve UUID to device
 if [ -n "$ROOT_UUID" ]; then
     ROOT_DEV=$(findfs "UUID=$ROOT_UUID" 2>/dev/null || true)
 fi
 
-# Fallback: try common root device names
-if [ -z "$ROOT_DEV" ] || [ ! -b "$ROOT_DEV" ]; then
-    for candidate in /dev/sda2 /dev/vda2 /dev/nvme0n1p2 /dev/xvda2 /dev/sda1 /dev/vda1; do
-        if [ -b "$candidate" ]; then
-            ROOT_DEV="$candidate"
-            break
-        fi
+# try_mount <device> – attempt to mount with auto-detection + known fstypes
+try_mount() {
+    local dev="$1"
+    [ -b "$dev" ] || return 1
+    /bin/busybox mount "$dev" /mnt 2>/dev/null && return 0
+    for fstype in ext4 xfs btrfs f2fs; do
+        /bin/busybox mount -t "$fstype" "$dev" /mnt 2>/dev/null && return 0
     done
-fi
+    return 1
+}
 
-if [ -n "$ROOT_DEV" ] && [ -b "$ROOT_DEV" ]; then
-    echo "Mounting root: $ROOT_DEV"
-    /bin/busybox mount -t ext4 "$ROOT_DEV" /mnt 2>/dev/null || \
-    /bin/busybox mount "$ROOT_DEV" /mnt 2>/dev/null || {
-        echo "Failed to mount $ROOT_DEV. Dropping to shell."
+# Check if a mounted root has a working init binary
+root_is_valid() {
+    [ -x /mnt/sbin/init ] || [ -x /mnt/usr/lib/systemd/systemd ] || [ -x /mnt/usr/sbin/init ]
+}
+
+# ---------------------------------------------------------------------------
+# A/B root partition logic
+# ---------------------------------------------------------------------------
+if [ -n "$ROOT_A_DEV" ] && [ -n "$ROOT_B_DEV" ]; then
+    echo "A/B root mode detected (prefer slot ${ROOT_AB:-a})"
+
+    # Determine preferred and fallback slots
+    if [ "$ROOT_AB" = "b" ]; then
+        PRIMARY="$ROOT_B_DEV"
+        FALLBACK="$ROOT_A_DEV"
+    else
+        PRIMARY="$ROOT_A_DEV"
+        FALLBACK="$ROOT_B_DEV"
+    fi
+
+    # Check last-boot marker to implement round-robin on failure
+    MARKER_FILE="/dev/.ab-boot-marker"
+    LAST_BOOT=""
+    if [ -f "$MARKER_FILE" ]; then
+        LAST_BOOT=$(cat "$MARKER_FILE")
+    fi
+
+    # Try primary slot
+    echo "Trying primary root: $PRIMARY"
+    if try_mount "$PRIMARY" && root_is_valid; then
+        echo "$PRIMARY" > /mnt/etc/.ab-active-slot
+        echo "Mounted root A/B slot: $PRIMARY"
+    elif try_mount "$FALLBACK" && root_is_valid; then
+        echo "$FALLBACK" > /mnt/etc/.ab-active-slot
+        echo "Primary failed, fell back to: $FALLBACK"
+    else
+        echo "Both A/B root slots failed. Dropping to shell."
         /bin/busybox sh
-    }
+    fi
+
+# ---------------------------------------------------------------------------
+# Classic single-root mode
+# ---------------------------------------------------------------------------
 else
-    echo "Root device not found. Dropping to shell."
-    /bin/busybox sh
+    # Fallback: try common root device names
+    if [ -z "$ROOT_DEV" ] || [ ! -b "$ROOT_DEV" ]; then
+        for candidate in /dev/sda2 /dev/vda2 /dev/nvme0n1p2 /dev/xvda2 /dev/sda1 /dev/vda1; do
+            if [ -b "$candidate" ]; then
+                ROOT_DEV="$candidate"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$ROOT_DEV" ] && [ -b "$ROOT_DEV" ]; then
+        echo "Mounting root: $ROOT_DEV"
+        if ! try_mount "$ROOT_DEV"; then
+            echo "Failed to mount $ROOT_DEV. Dropping to shell."
+            /bin/busybox sh
+        fi
+    else
+        echo "Root device not found. Dropping to shell."
+        /bin/busybox sh
+    fi
 fi
 
 /bin/busybox umount /proc
@@ -113,10 +183,16 @@ EOF
 chmod 755 "$INITRAMFS_DIR/init"
 
 # --------------------------------------------------------------------------
-# Create compressed cpio archive
+# Create compressed cpio archive (prefer zstd, fallback to gzip)
 # --------------------------------------------------------------------------
 cd "$INITRAMFS_DIR"
-find . | cpio -o -H newc | gzip -9 >"$INITRAMFS_OUTPUT"
+if command -v zstd >/dev/null 2>&1; then
+    echo "[INFO] Compressing initramfs with zstd..."
+    find . | cpio -o -H newc 2>/dev/null | zstd -19 -q > "$INITRAMFS_OUTPUT"
+else
+    echo "[INFO] Compressing initramfs with gzip..."
+    find . | cpio -o -H newc 2>/dev/null | gzip -9 >"$INITRAMFS_OUTPUT"
+fi
 cd - >/dev/null
 
 rm -rf "$INITRAMFS_DIR"

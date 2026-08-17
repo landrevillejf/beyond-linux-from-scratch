@@ -904,11 +904,32 @@ update_db() {
         tmp_db=$(mktemp)
         for url in "${REPO_REMOTE_URLS[@]}"; do
             log_info "Syncing package list from $url"
-            if curl -fsSL --connect-timeout 15 "$url/packages.list" >>"$tmp_db" 2>/dev/null; then
-                merged=true
+            local tmp_index tmp_sig
+            tmp_index=$(mktemp)
+            tmp_sig=$(mktemp)
+            if curl -fsSL --connect-timeout 15 -o "$tmp_index" "$url/packages.list" 2>/dev/null; then
+                # Verify signed index if signature verification is enabled
+                if $VERIFY_SIGNATURES; then
+                    if curl -fsSL --connect-timeout 15 -o "$tmp_sig" "$url/packages.list.sig" 2>/dev/null; then
+                        if gpg --no-default-keyring --keyring "$GPG_KEYRING" \
+                               --verify "$tmp_sig" "$tmp_index" >/dev/null 2>&1; then
+                            log_info "Repository index signature verified for $url"
+                            cat "$tmp_index" >> "$tmp_db"
+                            merged=true
+                        else
+                            log_error "Signature verification FAILED for $url/packages.list – skipping"
+                        fi
+                    else
+                        log_warn "No signature for $url/packages.list – skipping (VERIFY_SIGNATURES=true)"
+                    fi
+                else
+                    cat "$tmp_index" >> "$tmp_db"
+                    merged=true
+                fi
             else
                 log_warn "Failed to sync from $url"
             fi
+            rm -f "$tmp_index" "$tmp_sig"
         done
         if $merged; then
             # Deduplicate by package name (first occurrence wins = repo priority order)
@@ -1453,6 +1474,137 @@ rebuild_kernel_deps() {
 }
 
 # =======================================================================
+# Repository index generation with GPG signing
+# =======================================================================
+repo_add() {
+    local repo_dir="${1:-$REPO_LOCAL_PATH}"
+    local index_file="$repo_dir/packages.list"
+    local sig_file="$repo_dir/packages.list.sig"
+
+    if [ ! -d "$repo_dir" ]; then
+        die "Repository directory not found: $repo_dir"
+    fi
+
+    log_info "Generating repository index from $repo_dir"
+
+    # Scan for package archives and build index
+    local count=0
+    local tmp_index
+    tmp_index=$(mktemp)
+
+    for archive in "$repo_dir"/*.tar.xz; do
+        [ -f "$archive" ] || continue
+        local basename
+        basename=$(basename "$archive" .tar.xz)
+
+        # Extract name-version from filename (name-version.tar.xz)
+        local pkg_name pkg_version
+        if [[ $basename =~ ^([a-zA-Z0-9._+-]+)-([0-9].*)$ ]]; then
+            pkg_name="${BASH_REMATCH[1]}"
+            pkg_version="${BASH_REMATCH[2]}"
+        else
+            log_warn "Skipping unrecognized archive: $basename"
+            continue
+        fi
+
+        # Compute SHA256 checksum
+        local checksum
+        checksum=$(sha256_of "$archive")
+
+        # Extract description from package if it has a .info file
+        local desc=""
+        if [ -f "$repo_dir/$basename.info" ]; then
+            desc=$(grep -m1 '^desc=' "$repo_dir/$basename.info" 2>/dev/null | cut -d= -f2-)
+        fi
+        [ -z "$desc" ] && desc="Package $pkg_name"
+
+        # Extract dependencies if available
+        local deps=""
+        if [ -f "$repo_dir/$basename.info" ]; then
+            deps=$(grep -m1 '^deps=' "$repo_dir/$basename.info" 2>/dev/null | cut -d= -f2-)
+        fi
+
+        # Write pipe-separated entry: name|version|description|deps|checksum
+        echo "${pkg_name}|${pkg_version}|${desc}|${deps}|${checksum}" >> "$tmp_index"
+        count=$((count + 1))
+    done
+
+    if [ "$count" -eq 0 ]; then
+        rm -f "$tmp_index"
+        die "No package archives found in $repo_dir"
+    fi
+
+    # Sort by package name and write final index
+    sort -t'|' -k1,1 "$tmp_index" > "$index_file"
+    rm -f "$tmp_index"
+
+    log_success "Repository index created: $index_file ($count packages)"
+
+    # Sign the index if GPG is available
+    if command -v gpg >/dev/null 2>&1; then
+        log_info "Signing repository index..."
+        if gpg --batch --yes --armor --detach-sign \
+               --output "$sig_file" "$index_file" 2>/dev/null; then
+            log_success "Repository index signed: $sig_file"
+            log_info "Distribute both packages.list and packages.list.sig"
+        else
+            log_warn "Failed to sign index (no GPG key configured?)"
+            log_info "Index is still usable without signature verification"
+        fi
+    else
+        log_warn "GPG not found – index not signed"
+        log_info "Install GPG and configure a signing key for repository authentication"
+    fi
+
+    # Generate a human-readable summary
+    local summary_file="$repo_dir/packages.summary"
+    {
+        echo "# Repository Index Summary"
+        echo "# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "# Packages:  $count"
+        echo "#"
+        printf '# %-30s %-15s %s\n' "Package" "Version" "Description"
+        printf '# %-30s %-15s %s\n' "-------" "-------" "-----------"
+        while IFS='|' read -r name ver desc deps checksum; do
+            printf '# %-30s %-15s %s\n' "$name" "$ver" "$desc"
+        done < "$index_file"
+    } > "$summary_file"
+    log_info "Summary written to $summary_file"
+}
+
+# =======================================================================
+# Verify signed repository index
+# =======================================================================
+verify_repo_index() {
+    local index_file="$1"
+    local sig_file="${index_file}.sig"
+
+    if [ ! -f "$sig_file" ]; then
+        log_warn "No signature file for $index_file"
+        return 1
+    fi
+
+    if [ ! -f "$GPG_KEYRING" ]; then
+        log_warn "Trusted keyring not found: $GPG_KEYRING"
+        return 1
+    fi
+
+    if ! command -v gpg >/dev/null 2>&1; then
+        log_warn "GPG not found – cannot verify repository signature"
+        return 1
+    fi
+
+    if gpg --no-default-keyring --keyring "$GPG_KEYRING" \
+           --verify "$sig_file" "$index_file" >/dev/null 2>&1; then
+        log_info "Repository index signature verified"
+        return 0
+    else
+        log_error "Repository index signature VERIFICATION FAILED"
+        return 1
+    fi
+}
+
+# =======================================================================
 # Help
 # =======================================================================
 show_help() {
@@ -1475,6 +1627,7 @@ Commands:
   kernel-deps [--all]   List packages that depend on the kernel (--all includes up-to-date)
   rebuild-kernel        Rebuild all stale kernel-dependent packages
   update-db             Synchronize package database
+  repo-add [dir]        Generate signed repository index from package archives
   clean                 Remove downloaded package files (cache)
   help                  Show this help
   version               Display version information
@@ -1730,6 +1883,9 @@ main() {
         ;;
     update-db)
         update_db
+        ;;
+    repo-add)
+        repo_add "${1:-}"
         ;;
     clean)
         clean_cache

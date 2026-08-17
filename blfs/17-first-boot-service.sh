@@ -73,21 +73,149 @@ if [ -d /etc/ssh ]; then
 fi
 
 # ------------------------------------------------------------------
-# 2. Force password change on first interactive login
-#    Expire the lfsuser and root passwords so they MUST be changed.
+# 2. MANDATORY: Set root password and create user account
+#    If not already configured by the installer, prompt interactively.
 # ------------------------------------------------------------------
-if command -v chage >/dev/null 2>&1; then
-    if id lfsuser >/dev/null 2>&1; then
-        chage -d 0 lfsuser 2>/dev/null || true
-        echo "Password expiry set for lfsuser"
+echo ""
+echo "========================================"
+echo "  LFS First-Boot Account Setup"
+echo "========================================"
+echo ""
+
+# 2a. Root password – MUST be set
+ROOT_LOCKED=false
+if [ -f /etc/shadow ]; then
+    root_entry=$(grep '^root:' /etc/shadow 2>/dev/null || true)
+    # Check if root password is locked (! or * or empty)
+    if echo "$root_entry" | grep -qE 'root:[!*]:' || echo "$root_entry" | grep -qE 'root::'; then
+        ROOT_LOCKED=true
     fi
-    chage -d 0 root 2>/dev/null || true
-    echo "Password expiry set for root"
-else
-    # Fallback: write a flag that PAM/login scripts can check
-    touch /etc/.first-boot-password-change-required
-    echo "chage not found – flag file created for password change"
 fi
+
+if $ROOT_LOCKED || ! grep -q '^root:' /etc/shadow 2>/dev/null; then
+    echo "Root account has no password set. You MUST set one now."
+    echo ""
+    while true; do
+        read -rsp "Enter new root password: " ROOT_PASS
+        echo ""
+        if [ -z "$ROOT_PASS" ]; then
+            echo "ERROR: Password cannot be empty. Try again."
+            continue
+        fi
+        if [ ${#ROOT_PASS} -lt 8 ]; then
+            echo "ERROR: Password must be at least 8 characters. Try again."
+            continue
+        fi
+        read -rsp "Confirm root password: " ROOT_PASS2
+        echo ""
+        if [ "$ROOT_PASS" != "$ROOT_PASS2" ]; then
+            echo "ERROR: Passwords do not match. Try again."
+            continue
+        fi
+        break
+    done
+    echo "root:$ROOT_PASS" | chpasswd 2>/dev/null || \
+        passwd root <<< "$ROOT_PASS" 2>/dev/null || true
+    unset ROOT_PASS ROOT_PASS2
+    # Set password expiry policy for root
+    if command -v chage >/dev/null 2>&1; then
+        chage -M 90 -W 14 root 2>/dev/null || true
+    fi
+    echo "Root password set successfully."
+else
+    echo "Root password is already configured."
+fi
+echo ""
+
+# 2b. User account – MUST exist with a password
+# Check if any regular user (UID >= 1000) exists with a valid password
+REGULAR_USER_EXISTS=false
+if [ -f /etc/passwd ] && [ -f /etc/shadow ]; then
+    while IFS=: read -r uname _ uid _ _ _ _; do
+        if [ "$uid" -ge 1000 ] && [ "$uid" -lt 65000 ] && [ "$uname" != "nobody" ]; then
+            # Check if this user has a valid (non-locked) password
+            shadow_entry=$(grep "^${uname}:" /etc/shadow 2>/dev/null || true)
+            if [ -n "$shadow_entry" ]; then
+                pass_field=$(echo "$shadow_entry" | cut -d: -f2)
+                if [ -n "$pass_field" ] && [ "$pass_field" != "!" ] && [ "$pass_field" != "*" ] && [ "$pass_field" != "!!" ]; then
+                    REGULAR_USER_EXISTS=true
+                    echo "Regular user '$uname' exists with a valid password."
+                    break
+                fi
+            fi
+        fi
+    done < /etc/passwd
+fi
+
+if ! $REGULAR_USER_EXISTS; then
+    echo "No regular user account found. You MUST create one now."
+    echo ""
+    while true; do
+        read -rp "Enter username for new account: " NEW_USER
+        if [ -z "$NEW_USER" ]; then
+            echo "ERROR: Username cannot be empty."
+            continue
+        fi
+        if ! echo "$NEW_USER" | grep -qE '^[a-z_][a-z0-9_-]*$'; then
+            echo "ERROR: Invalid username. Use lowercase letters, digits, hyphens, underscores."
+            continue
+        fi
+        if id "$NEW_USER" >/dev/null 2>&1; then
+            echo "ERROR: User '$NEW_USER' already exists. Choose another name."
+            continue
+        fi
+        break
+    done
+
+    while true; do
+        read -rsp "Enter password for $NEW_USER: " USER_PASS
+        echo ""
+        if [ -z "$USER_PASS" ]; then
+            echo "ERROR: Password cannot be empty."
+            continue
+        fi
+        if [ ${#USER_PASS} -lt 8 ]; then
+            echo "ERROR: Password must be at least 8 characters."
+            continue
+        fi
+        read -rsp "Confirm password for $NEW_USER: " USER_PASS2
+        echo ""
+        if [ "$USER_PASS" != "$USER_PASS2" ]; then
+            echo "ERROR: Passwords do not match."
+            continue
+        fi
+        break
+    done
+
+    # Create the user
+    groupadd "$NEW_USER" 2>/dev/null || true
+    useradd -m -g "$NEW_USER" -G wheel,audio,video,storage -s /bin/bash "$NEW_USER" 2>/dev/null || true
+    echo "$NEW_USER:$USER_PASS" | chpasswd 2>/dev/null || \
+        passwd "$NEW_USER" <<< "$USER_PASS" 2>/dev/null || true
+    unset USER_PASS USER_PASS2
+
+    # Add to sudoers
+    echo "$NEW_USER ALL=(ALL) ALL" >> /etc/sudoers 2>/dev/null || true
+
+    # Set password expiry policy for new user
+    if command -v chage >/dev/null 2>&1; then
+        chage -M 90 -W 14 "$NEW_USER" 2>/dev/null || true
+    fi
+
+    # Create home directory if not already done
+    if [ ! -d "/home/$NEW_USER" ]; then
+        mkdir -p "/home/$NEW_USER"
+        chown "$NEW_USER:$NEW_USER" "/home/$NEW_USER"
+    fi
+
+    echo "User '$NEW_USER' created successfully."
+else
+    echo "Regular user account is already configured."
+fi
+echo ""
+echo "Account setup complete."
+echo "========================================"
+echo ""
 
 # ------------------------------------------------------------------
 # 3. Generate locale if locale-gen exists
@@ -168,7 +296,6 @@ fi
 # ------------------------------------------------------------------
 rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
 rm -f /etc/.first-boot-password-change-required 2>/dev/null || true
-rm -f /etc/.initial-password 2>/dev/null || true
 
 # ------------------------------------------------------------------
 # 9. Disable this service so it never runs again

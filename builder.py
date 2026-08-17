@@ -25,7 +25,7 @@ import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
@@ -82,13 +82,16 @@ BUILD_STAGES = [
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
     ('branding', 'blfs/20-branding.sh'),
+    ('calamares', 'blfs/22-calamares-installer.sh'),
     ('first-boot', 'blfs/17-first-boot-service.sh'),
     ('system-updater', 'blfs/18-system-updater.sh'),
     ('lpm', 'blfs/19-lpm.sh'),
+    ('luks-encryption', 'blfs/21-luks-encryption.sh'),
     ('initramfs', 'final/12-create-initramfs.sh'),
     ('bootloader', 'final/13-create-bootloader.sh'),
     ('installer', 'final/14-create-installer.sh'),
     ('live-system', 'final/15-create-live-system.sh'),
+    ('validate', 'final/16-validate-build.sh'),
 ]
 
 # ============================================================================
@@ -800,7 +803,7 @@ class SourceDownloader:
                 if len(parts) != 2:
                     continue
 
-                expected_md5, filename = parts
+                expected_sha256, filename = parts
                 filepath = self.sources_dir / filename
 
                 if not filepath.exists():
@@ -808,8 +811,8 @@ class SourceDownloader:
                     all_valid = False
                     continue
 
-                actual_md5 = hashlib.md5(filepath.read_bytes()).hexdigest()
-                if actual_md5 != expected_md5:
+                actual_sha256 = hashlib.sha256(filepath.read_bytes()).hexdigest()
+                if actual_sha256 != expected_sha256:
                     self.logger.error(f"Checksum mismatch: {filename}")
                     all_valid = False
 
@@ -1649,6 +1652,12 @@ class LFSBuilder:
         # Branding
         stages.append(('branding', 'blfs/20-branding.sh'))
 
+        # Calamares installer (for desktop profiles with live system)
+        calamares_live = self.profile_config.get('live_system', True)
+        calamares_desktop = _desktop and _desktop != 'none'
+        if calamares_desktop and calamares_live:
+            stages.append(('calamares', 'blfs/22-calamares-installer.sh'))
+
         # First boot service
         stages.append(('first-boot', 'blfs/17-first-boot-service.sh'))
 
@@ -1658,6 +1667,11 @@ class LFSBuilder:
             stages.append(('lpm', 'blfs/19-lpm.sh'))
 
         # FINAL STAGES (un seul initramfs ici)
+        # LUKS encryption support must run BEFORE initramfs (initramfs needs dm-crypt modules)
+        encryption_enabled = self.config.get('security.encryption.enabled', False)
+        if self.profile_config.get('security_hardening', False) or encryption_enabled:
+            stages.append(('luks-encryption', 'blfs/21-luks-encryption.sh'))
+
         stages.append(('initramfs', 'final/12-create-initramfs.sh'))
         stages.append(('bootloader', 'final/13-create-bootloader.sh'))
         stages.append(('installer', 'final/14-create-installer.sh'))
@@ -1667,6 +1681,9 @@ class LFSBuilder:
         live_from_config = self.config.get('live_system.enabled', live_from_profile)
         if live_from_profile and live_from_config:
             stages.append(('live-system', 'final/15-create-live-system.sh'))
+
+        # Post-build validation (always runs last)
+        stages.append(('validate', 'final/16-validate-build.sh'))
 
         return stages
 
@@ -1882,8 +1899,130 @@ class LFSBuilder:
             size_gb = size_mb / 1024
             self.logger.info(f"Installer ISO: {iso_path} ({size_gb:.1f} GB / {size_mb:.0f} MB)")
             sha256 = hashlib.sha256(iso_path.read_bytes()).hexdigest()
-            self.logger.info(f"SHA256: {sha256[:32]}...")
+            self.logger.info(f"SHA256: {sha256}")
 
+            # Write SHA256SUMS file
+            sums_file = self.output_dir / 'SHA256SUMS'
+            with open(sums_file, 'w') as f:
+                f.write(f"{sha256}  lfs-installer.iso\n")
+            self.logger.info(f"SHA256SUMS written to {sums_file}")
+
+        return True
+
+    def sign_iso(self, gpg_key: Optional[str] = None) -> bool:
+        """Sign the ISO with GPG to produce a detached signature.
+
+        Args:
+            gpg_key: GPG key ID or email to sign with. If None, uses the default key.
+
+        Returns:
+            True if signing succeeded or GPG is unavailable (non-fatal).
+        """
+        iso_path = self.output_dir / 'lfs-installer.iso'
+        if not iso_path.exists():
+            self.logger.error("ISO not found – cannot sign")
+            return False
+
+        if not shutil.which('gpg'):
+            self.logger.warning("GPG not found – skipping ISO signing")
+            return True
+
+        sig_file = iso_path.with_suffix('.iso.sig')
+        self.logger.info("Signing ISO with GPG...")
+
+        cmd = ['gpg', '--batch', '--yes', '--armor', '--detach-sign',
+               '--output', str(sig_file)]
+        if gpg_key:
+            cmd.extend(['--local-user', gpg_key])
+        cmd.append(str(iso_path))
+
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            self.logger.info(f"ISO signature written to {sig_file}")
+            self.logger.info("Verify with: gpg --verify lfs-installer.iso.sig lfs-installer.iso")
+            return True
+        except subprocess.CalledProcessError as e:
+            self.logger.error(f"GPG signing failed: {e.stderr}")
+            return False
+
+    def generate_sbom(self) -> bool:
+        """Generate an SPDX 2.3 Software Bill of Materials for the build."""
+        iso_path = self.output_dir / 'lfs-installer.iso'
+        sbom_file = self.output_dir / 'sbom.spdx.json'
+        build_info_file = self.output_dir / 'build_info.json'
+
+        self.logger.info("Generating SBOM (SPDX 2.3)...")
+
+        # Load build info
+        build_info = {}
+        if build_info_file.exists():
+            with open(build_info_file) as f:
+                build_info = json.load(f)
+
+        # Scan installed packages from LPM database
+        installed_list = self.output_dir / 'image' / 'var' / 'lib' / 'lpm' / 'installed.list'
+        packages = []
+        if installed_list.exists():
+            with open(installed_list) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) >= 2:
+                        packages.append({'name': parts[0], 'version': parts[1]})
+
+        # Build SPDX document
+        now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        doc_uuid = f"SPDXRef-DOCUMENT-{hashlib.sha256(str(now).encode()).hexdigest()[:20]}"
+
+        sbom = {
+            "spdxVersion": "SPDX-2.3",
+            "dataLicense": "CC0-1.0",
+            "SPDXID": "SPDXRef-DOCUMENT",
+            "name": f"Way-Beyond-LFS-{self.profile}",
+            "documentNamespace": f"https://github.com/landrevillejf/beyond-linux-from-scratch/spdx/{self.profile}/{now}",
+            "creationInfo": {
+                "created": now,
+                "creators": [
+                    f"Tool: LFS-Builder-{__version__}",
+                    "Organization: Beyond Linux From Scratch"
+                ],
+                "licenseListVersion": "3.19"
+            },
+            "packages": [
+                {
+                    "SPDXID": "SPDXRef-Package-" + re.sub(r'[^a-zA-Z0-9.-]', '-', pkg['name']),
+                    "name": pkg['name'],
+                    "versionInfo": pkg['version'],
+                    "downloadLocation": "NOASSERTION",
+                    "filesAnalyzed": False,
+                    "licenseConcluded": "NOASSERTION",
+                    "licenseDeclared": "NOASSERTION",
+                    "copyrightText": "NOASSERTION"
+                }
+                for pkg in packages
+            ],
+            "relationships": [
+                {
+                    "spdxElementId": "SPDXRef-DOCUMENT",
+                    "relatedSpdxElement": "SPDXRef-Package-" + re.sub(r'[^a-zA-Z0-9.-]', '-', pkg['name']),
+                    "relationshipType": "DESCRIBES"
+                }
+                for pkg in packages
+            ]
+        }
+
+        # Add build metadata as an external document reference
+        if build_info:
+            sbom["externalDocumentRefs"] = [{
+                "externalDocumentId": "DocumentRef-build-info",
+                "spdxDocument": f"https://github.com/landrevillejf/beyond-linux-from-scratch/build/{build_info.get('build_date', now)}",
+                "checksum": {"algorithm": "SHA256", "checksumValue": hashlib.sha256(
+                    json.dumps(build_info, sort_keys=True).encode()).hexdigest()}
+            }]
+
+        with open(sbom_file, 'w') as f:
+            json.dump(sbom, f, indent=2)
+
+        self.logger.info(f"SBOM written to {sbom_file} ({len(packages)} packages)")
         return True
 
     def create_writable_media(self, device: Optional[str] = None) -> bool:
@@ -2033,6 +2172,12 @@ Examples:
 
     parser.add_argument('--arch', choices=['x86_64', 'aarch64'],
                     help='Target architecture (overrides profile default)')
+
+    parser.add_argument('--sign-iso', metavar='GPG_KEY',
+                        help='Sign the ISO with GPG (optional key ID or email)')
+
+    parser.add_argument('--sbom', action='store_true',
+                        help='Generate SPDX SBOM after build')
 
     return parser
 
@@ -2210,6 +2355,15 @@ def main():
     if not builder.build(resume_from=args.resume_from, use_cache=args.use_cache, cache_only=args.cache_only):
         sys.exit(1)
 
+    # Post-build: generate SBOM if requested
+    if args.sbom:
+        builder.generate_sbom()
+
+    # Post-build: sign ISO if requested
+    if args.sign_iso is not None:
+        gpg_key = args.sign_iso if args.sign_iso else None
+        builder.sign_iso(gpg_key)
+
     if args.write_usb:
         builder.create_writable_media(args.write_usb)
 
@@ -2223,12 +2377,13 @@ def main():
     print("  2. Boot from USB")
     print("  3. Select 'Try LFS Linux' to test live mode")
     print("  4. Or select 'Install LFS Linux' for permanent installation")
+    print("     (You will be required to set root password and create a user account)")
 
     if builder.is_cross_compile():
         print(f"\nFor ARM64 target ({builder.get_target_architecture()}):")
         print(f"   - Flash to SD card: dd if={builder.output_dir}/lfs-installer.img of=/dev/sdb bs=4M")
         print(f"   - Boot on your ARM device (Raspberry Pi, Orange Pi, etc.)")
-        print(f"   - Default login: lfsuser / lfsuser123")
+        print(f"   - You will be required to set root password and create a user")
 
     print("\nAfter installation:")
     print("  - Check for updates:   lfs-update check")
