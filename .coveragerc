@@ -1,0 +1,18 @@
+[run]
+source = .
+omit =
+    */tests/*
+    */venv/*
+    */.venv/*
+    */node_modules/*
+    */__pycache__/*
+    */htmlcov/*
+    wblfs-wallpaper-generator.py
+    lfs_check.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.
+    raise NotImplementedError
+    pass

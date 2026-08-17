@@ -2173,7 +2173,8 @@ Examples:
     parser.add_argument('--arch', choices=['x86_64', 'aarch64'],
                     help='Target architecture (overrides profile default)')
 
-    parser.add_argument('--sign-iso', metavar='GPG_KEY',
+    parser.add_argument('--sign-iso', metavar='GPG_KEY', nargs='?',
+                        const='', default=None,
                         help='Sign the ISO with GPG (optional key ID or email)')
 
     parser.add_argument('--sbom', action='store_true',
