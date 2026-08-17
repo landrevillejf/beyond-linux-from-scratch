@@ -295,7 +295,15 @@ build_toolchain() {
             return 1
         fi
         # Validate tarball integrity without extracting
-        if ! tar -tzf "$tarball" >/dev/null 2>&1; then
+        # Use appropriate decompression flag based on extension
+        local tar_cmd="tar -tf"
+        case "$tarball" in
+            *.tar.gz|*.tgz) tar_cmd="tar -tzf" ;;
+            *.tar.xz|*.txz) tar_cmd="tar -tJf" ;;
+            *.tar.bz2|*.tbz) tar_cmd="tar -tjf" ;;
+            *) tar_cmd="tar -tf" ;;
+        esac
+        if ! $tar_cmd "$tarball" >/dev/null 2>&1; then
             log_error "Tarball integrity check failed: $tarball"
             return 1
         fi
