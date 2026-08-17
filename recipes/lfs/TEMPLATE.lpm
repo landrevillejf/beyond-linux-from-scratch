@@ -6,6 +6,10 @@ version="1.0.0"                      # upstream version
 source="https://example.org/example-1.0.0.tar.xz"  # tarball URL (or local path)
 desc="One-line description"          # human-readable description
 deps=""                              # comma/space separated runtime deps, e.g. "glibc,ncurses>=6.5"
+# kernel_dep=""                       # optional: "modules" | "headers" | "runtime"
+                                       # modules  – installs kernel modules (e.g. kmod, nvidia)
+                                       # headers  – compiled against kernel headers (e.g. virtualbox)
+                                       # runtime  – needs compatible kernel (e.g. glibc --enable-kernel)
 
 # build() runs with the current directory set to the extracted source tree.
 # The engine exports:

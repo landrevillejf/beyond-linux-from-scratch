@@ -4,6 +4,7 @@ version="2.12"
 source="https://ftp.gnu.org/gnu/grub/grub-2.12.tar.xz"
 desc="GRand Unified Bootloader (BIOS target)"
 deps="glibc"
+kernel_dep="runtime"
 
 build() {
     unset "${!GRUB_@}"

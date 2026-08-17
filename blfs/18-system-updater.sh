@@ -96,11 +96,36 @@ apply_updates() {
     cp -a /boot "$BACKUP_DIR/$backup_name/" 2>/dev/null || true
     log_info "Backup saved to $BACKUP_DIR/$backup_name"
 
+    # Record kernel version before update
+    local old_kernel=""
+    if [ -f /boot/vmlinuz ]; then
+        old_kernel=$(readlink -f /boot/vmlinuz 2>/dev/null | sed 's/.*vmlinuz-//' || uname -r 2>/dev/null || true)
+    fi
+
     # Use LPM to update packages if available
     if command -v lpm >/dev/null 2>&1; then
         log_info "Updating packages via LPM..."
         lpm update-db
         lpm upgrade
+
+        # Check if kernel was updated and rebuild kernel-dependent packages
+        local new_kernel=""
+        if [ -f /boot/vmlinuz ]; then
+            new_kernel=$(readlink -f /boot/vmlinuz 2>/dev/null | sed 's/.*vmlinuz-//' || uname -r 2>/dev/null || true)
+        fi
+
+        if [ -n "$old_kernel" ] && [ -n "$new_kernel" ] && [ "$old_kernel" != "$new_kernel" ]; then
+            log_warn "Kernel changed: $old_kernel -> $new_kernel"
+            log_info "Checking for kernel-dependent packages that need rebuilding..."
+            lpm kernel-deps
+            log_info "Rebuilding kernel-dependent packages..."
+            lpm rebuild-kernel || log_warn "Some kernel-dependent packages failed to rebuild"
+            # Update bootloader config
+            if command -v grub-mkconfig >/dev/null 2>&1; then
+                log_info "Updating bootloader configuration..."
+                grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null || log_warn "Failed to update GRUB config"
+            fi
+        fi
     else
         log_warn "LPM not found; skipping package updates"
     fi

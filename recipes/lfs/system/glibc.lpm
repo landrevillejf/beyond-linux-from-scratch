@@ -7,6 +7,7 @@ version="2.42"
 source="https://ftp.gnu.org/gnu/glibc/glibc-2.42.tar.xz"
 desc="GNU C Library"
 deps=""
+kernel_dep="runtime"
 
 build() {
     source "$(dirname "${BASH_SOURCE[0]}")/../lib.sh"

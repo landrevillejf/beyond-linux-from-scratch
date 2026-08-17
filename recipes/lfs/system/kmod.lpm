@@ -4,6 +4,7 @@ version="34.2"
 source="https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.2.tar.xz"
 desc="Linux kernel module handling utilities"
 deps="zstd openssl"
+kernel_dep="modules"
 
 build() {
     mkdir -p build

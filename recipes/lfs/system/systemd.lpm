@@ -7,6 +7,7 @@ version="257.8"
 source="https://github.com/systemd/systemd/archive/v257.8/systemd-257.8.tar.gz"
 desc="System and service manager (with udev)"
 deps="kmod libcap util-linux"
+kernel_dep="modules"
 
 build() {
     sed -e 's/GROUP="render"/GROUP="video"/' \

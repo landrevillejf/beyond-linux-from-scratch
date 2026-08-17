@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # LPM – Linux Package Manager
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# Version: 2.5.0
+# Version: 2.6.0
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.5.0"
+LPM_VERSION="2.6.0"
 LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
 LPM_ETC="${LPM_ETC:-/etc/lpm}"
 LPM_DB="${LPM_DB:-/var/lib/lpm}"
@@ -184,6 +184,7 @@ refresh_runtime_paths() {
     db_file="$LPM_DB/packages.list"
     installed_file="$LPM_DB/installed.list"
     file_index="$LPM_DB/file_index"
+    kernel_deps_file="$LPM_DB/kernel_deps.list"
 }
 
 root_path() {
@@ -221,7 +222,7 @@ load_config() {
 # Ensure directories exist
 init_dirs() {
     mkdir -p "$LPM_DB" "$LPM_LOGS" "$LPM_ETC" "$LPM_PACKAGES_DIR" "$(dirname "$LOCK_FILE")"
-    touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index"
+    touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index" "$LPM_DB/kernel_deps.list"
     mkdir -p "$LPM_BUILD_DIR"/{sources,src,pkg}
     # Rotate old logs and detect jq availability
     rotate_logs
@@ -676,6 +677,8 @@ remove_package() {
 
     escaped_name=$(escape_regex "$pkg_name")
     sed_inplace "/^${escaped_name} /d" "$installed_file"
+    # Also remove from kernel dependency registry
+    unregister_kernel_dep "$pkg_name"
     echo "$(timestamp) - Removed $pkg_name-$installed_ver" >>"$LPM_LOGS/remove.log"
     log_success "Package '$pkg_name' removed"
 }
@@ -775,6 +778,25 @@ show_info() {
     echo -e "$(_apply_color "${C_BLUE}")Dependencies:$(_apply_color "${C_NC}") ${deps:-none}"
     if is_installed "$pkg"; then
         echo -e "$(_apply_color "${C_BLUE}")Status:$(_apply_color "${C_NC}") installed ($(installed_version "$pkg"))"
+        # Show kernel dependency info if registered
+        if [ -s "$kernel_deps_file" ]; then
+            local kdep_line
+            kdep_line=$(awk -F'|' -v p="$pkg" '$1 == p { print; exit }' "$kernel_deps_file" 2>/dev/null || true)
+            if [ -n "$kdep_line" ]; then
+                local kver ktype
+                kver=$(echo "$kdep_line" | cut -d'|' -f2)
+                ktype=$(echo "$kdep_line" | cut -d'|' -f3)
+                local cur_kernel
+                cur_kernel=$(get_installed_kernel_version)
+                local kstatus
+                if [ "$kver" = "$cur_kernel" ]; then
+                    kstatus="matched"
+                else
+                    kstatus="STALE (needs rebuild)"
+                fi
+                echo -e "$(_apply_color "${C_BLUE}")Kernel dep:$(_apply_color "${C_NC}") $ktype (built for $kver, $kstatus)"
+            fi
+        fi
     else
         echo -e "$(_apply_color "${C_BLUE}")Status:$(_apply_color "${C_NC}") not installed"
     fi
@@ -1102,6 +1124,7 @@ build_package() {
     local install_after_build=true
     local description=""
     local dependencies=""
+    local kernel_dep=""
 
     # Parse build-specific options
     while [[ $# -gt 0 ]]; do
@@ -1150,6 +1173,7 @@ build_package() {
         # description and dependencies from recipe if not overridden
         description="${description:-${desc:-}}"
         dependencies="${dependencies:-${deps:-}}"
+        kernel_dep="${kernel_dep:-}"
     fi
 
     # If recipe not yet set, try to infer name/version from src filename
@@ -1214,6 +1238,14 @@ build_package() {
     dependencies="${dependencies:-}"
     register_package "$pkg_name" "$pkg_version" "$description" "$dependencies" "$pkg_archive"
 
+    # Register kernel dependency if declared in recipe
+    if [ -n "$kernel_dep" ]; then
+        local kernel_ver
+        kernel_ver=$(get_installed_kernel_version)
+        register_kernel_dep "$pkg_name" "${kernel_ver:-unknown}" "$kernel_dep"
+        log_info "Registered kernel dependency: $pkg_name (kernel=${kernel_ver:-unknown}, type=$kernel_dep)"
+    fi
+
     # Optionally install
     if $install_after_build; then
         log_info "Installing newly built package: $pkg_name-$pkg_version"
@@ -1228,9 +1260,201 @@ build_package() {
     fi
 }
 
-# ======================================================================
+# =======================================================================
+# Kernel dependency tracking
+# =======================================================================
+# Kernel deps registry format: pkg_name|kernel_version|dep_type
+# dep_type: modules | headers | runtime
+#
+# Recipes can declare kernel dependency with:
+#   kernel_dep="modules"   # installs kernel modules (e.g. kmod, nvidia)
+#   kernel_dep="headers"   # compiled against kernel headers (e.g. virtualbox)
+#   kernel_dep="runtime"   # needs compatible kernel (e.g. glibc --enable-kernel)
+#
+# When the kernel is upgraded, `lpm rebuild-kernel` detects which installed
+# packages were built against the old kernel and rebuilds them.
+# =======================================================================
+
+# Register a package's kernel dependency
+register_kernel_dep() {
+    local pkg_name="$1" kernel_ver="$2" dep_type="$3"
+    [ -z "$pkg_name" ] || [ -z "$dep_type" ] && return 1
+    # Remove existing entry for this package
+    sed_inplace "/^${pkg_name}|/d" "$kernel_deps_file"
+    echo "${pkg_name}|${kernel_ver}|${dep_type}" >> "$kernel_deps_file"
+    log_verbose "Registered kernel dependency: $pkg_name (kernel=$kernel_ver, type=$dep_type)"
+}
+
+# Remove a package from the kernel deps registry
+unregister_kernel_dep() {
+    local pkg_name="$1"
+    [ -z "$pkg_name" ] && return
+    sed_inplace "/^${pkg_name}|/d" "$kernel_deps_file"
+}
+
+# Get the running/installed kernel version
+get_installed_kernel_version() {
+    # Try uname -r first (running kernel), then fall back to /boot/vmlinuz symlink
+    if command -v uname >/dev/null 2>&1; then
+        uname -r 2>/dev/null && return
+    fi
+    # Fallback: parse vmlinuz symlink in /boot
+    local vmlinuz
+    vmlinuz=$(readlink -f "${LPM_ROOT%/}/boot/vmlinuz" 2>/dev/null || true)
+    if [ -n "$vmlinuz" ]; then
+        basename "$vmlinuz" | sed 's/^vmlinuz-//'
+        return
+    fi
+    # Fallback: config file
+    if [ -f "${LPM_ROOT%/}/etc/lfs-builder-params.env" ]; then
+        grep -oP 'KERNEL_VERSION=\K[^\s]+' "${LPM_ROOT%/}/etc/lfs-builder-params.env" 2>/dev/null || true
+    fi
+}
+
+# List all installed packages that depend on the kernel
+list_kernel_deps() {
+    local kernel_ver
+    kernel_ver=$(get_installed_kernel_version)
+    local show_all=false
+    [ "${1:-}" = "--all" ] && show_all=true
+
+    if [ ! -s "$kernel_deps_file" ]; then
+        log_info "No kernel-dependent packages registered."
+        log_info "Tip: recipes can declare kernel_dep=\"modules|headers|runtime\""
+        return 0
+    fi
+
+    echo -e "$(_apply_color "${C_BLUE}")Kernel-dependent packages (kernel: ${kernel_ver:-unknown}):$(_apply_color "${C_NC}")"
+    echo -e "$(_apply_color "${C_BLUE}")$(printf '  %-20s %-15s %-10s %s' 'PACKAGE' 'BUILT FOR' 'TYPE' 'STATUS')$(_apply_color "${C_NC}")"
+
+    local stale_count=0
+    while IFS='|' read -r pkg_name pkg_kernel_ver dep_type; do
+        [ -z "$pkg_name" ] && continue
+        local status marker
+        if [ "$pkg_kernel_ver" = "$kernel_ver" ]; then
+            status="up to date"
+            marker="${C_GREEN}"
+        else
+            status="STALE (needs rebuild)"
+            marker="${C_RED}"
+            stale_count=$((stale_count + 1))
+        fi
+        if $show_all || [ "$pkg_kernel_ver" != "$kernel_ver" ]; then
+            local installed_ver
+            installed_ver=$(installed_version "$pkg_name")
+            printf "  %-20s %-15s %-10s " "$pkg_name${installed_ver:+-$installed_ver}" "$pkg_kernel_ver" "$dep_type"
+            echo -e "$(_apply_color "${marker}")${status}$(_apply_color "${C_NC}")"
+        fi
+    done < "$kernel_deps_file"
+
+    if [ "$stale_count" -gt 0 ]; then
+        echo ""
+        log_warn "$stale_count package(s) built for a different kernel version."
+        log_info "Run: lpm rebuild-kernel"
+    fi
+}
+
+# Rebuild all kernel-dependent packages that are stale
+rebuild_kernel_deps() {
+    local kernel_ver
+    kernel_ver=$(get_installed_kernel_version)
+
+    if [ -z "$kernel_ver" ]; then
+        die "Cannot determine installed kernel version. Is the kernel installed?"
+    fi
+
+    if [ ! -s "$kernel_deps_file" ]; then
+        log_info "No kernel-dependent packages to rebuild."
+        return 0
+    fi
+
+    # Collect stale packages
+    local -a stale_pkgs=()
+    while IFS='|' read -r pkg_name pkg_kernel_ver dep_type; do
+        [ -z "$pkg_name" ] && continue
+        if [ "$pkg_kernel_ver" != "$kernel_ver" ]; then
+            stale_pkgs+=("$pkg_name")
+        fi
+    done < "$kernel_deps_file"
+
+    if [ ${#stale_pkgs[@]} -eq 0 ]; then
+        log_success "All kernel-dependent packages are up to date (kernel $kernel_ver)."
+        return 0
+    fi
+
+    log_info "Kernel version: $kernel_ver"
+    log_info "${#stale_pkgs[@]} package(s) need rebuilding for the new kernel:"
+    for pkg in "${stale_pkgs[@]}"; do
+        local old_ver
+        old_ver=$(awk -F'|' -v p="$pkg" '$1 == p { print $2; exit }' "$kernel_deps_file")
+        echo "  $pkg (built for kernel $old_ver)"
+    done
+
+    if $DRY_RUN; then
+        log_info "Dry run — no packages rebuilt."
+        return 0
+    fi
+
+    # Sort stale_pkgs so that 'modules' type comes before 'headers' and 'runtime'
+    # (modules like kmod should be rebuilt first since others may depend on it)
+    local -a ordered=()
+    for pkg in "${stale_pkgs[@]}"; do
+        local dtype
+        dtype=$(awk -F'|' -v p="$pkg" '$1 == p { print $3; exit }' "$kernel_deps_file")
+        if [ "$dtype" = "modules" ]; then
+            ordered=("$pkg" "${ordered[@]}")
+        else
+            ordered+=("$pkg")
+        fi
+    done
+
+    local rebuilt=0 failed=0
+    for pkg in "${ordered[@]}"; do
+        log_info "Rebuilding $pkg for kernel $kernel_ver..."
+        # Find the recipe for this package
+        local recipe=""
+        local candidate
+        for candidate in \
+            "$LPM_PACKAGES_DIR/$pkg.lpm" \
+            "/usr/share/lpm/recipes/$pkg.lpm" \
+            "/usr/share/lpm/recipes/$(basename "$pkg").lpm"; do
+            if [ -f "$candidate" ]; then
+                recipe="$candidate"
+                break
+            fi
+        done
+
+        if [ -n "$recipe" ]; then
+            if build_package "$recipe" --force; then
+                # Update kernel dep registry with new kernel version
+                local dep_type
+                dep_type=$(awk -F'|' -v p="$pkg" '$1 == p { print $3; exit }' "$kernel_deps_file")
+                register_kernel_dep "$pkg" "$kernel_ver" "${dep_type:-runtime}"
+                rebuilt=$((rebuilt + 1))
+            else
+                log_error "Failed to rebuild $pkg"
+                failed=$((failed + 1))
+            fi
+        else
+            log_warn "No recipe found for $pkg — skipping (rebuild manually with: lpm build <source>)"
+            # Still update the registry to avoid repeated warnings
+            local dep_type
+            dep_type=$(awk -F'|' -v p="$pkg" '$1 == p { print $3; exit }' "$kernel_deps_file")
+            register_kernel_dep "$pkg" "$kernel_ver" "${dep_type:-runtime}"
+            rebuilt=$((rebuilt + 1))
+        fi
+    done
+
+    echo ""
+    log_success "Kernel rebuild complete: $rebuilt rebuilt, $failed failed."
+    if [ "$failed" -gt 0 ]; then
+        return 1
+    fi
+}
+
+# =======================================================================
 # Help
-# ======================================================================
+# =======================================================================
 show_help() {
     cat <<'HELP'
 LPM - Linux Package Manager for LFS
@@ -1248,6 +1472,8 @@ Commands:
   search <pattern>      Search for packages in database
   info <pkg>            Show detailed package information
   verify [pkg]          Verify integrity of installed files (all if no pkg)
+  kernel-deps [--all]   List packages that depend on the kernel (--all includes up-to-date)
+  rebuild-kernel        Rebuild all stale kernel-dependent packages
   update-db             Synchronize package database
   clean                 Remove downloaded package files (cache)
   help                  Show this help
@@ -1273,6 +1499,7 @@ Recipe format (.lpm file):
   source="https://example.com/myapp-1.0.tar.xz"
   desc="My application"
   deps="glibc>=2.37,openssl"
+  kernel_dep="modules"   # optional: modules | headers | runtime
   build() {
       # Available: PKG (staging dir), SRC (source dir), JOBS (parallel jobs)
       ./configure --prefix=/usr
@@ -1301,6 +1528,10 @@ Examples:
   lpm list-profiles
   lpm verify
   lpm verify bash
+  lpm kernel-deps
+  lpm kernel-deps --all
+  lpm rebuild-kernel
+  lpm rebuild-kernel --dry-run
   lpm --sysroot /mnt/lfs install coreutils
 HELP
 }
@@ -1490,6 +1721,12 @@ main() {
         ;;
     verify | check)
         verify_package "${1:-}"
+        ;;
+    kernel-deps)
+        list_kernel_deps "${1:-}"
+        ;;
+    rebuild-kernel)
+        rebuild_kernel_deps
         ;;
     update-db)
         update_db
