@@ -259,7 +259,6 @@ build_toolchain() {
     # ==============================================================
     log_info "Installing Linux API headers"
 
-    # Définir ARCH à partir de LFS_TGT (ex: aarch64-lfs-linux-gnu -> aarch64)
     ARCH=$(echo "$LFS_TGT" | cut -d- -f1)
 
     LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
@@ -268,25 +267,37 @@ build_toolchain() {
         exit 1
     fi
 
-    # Fonction de téléchargement du noyau
     download_kernel() {
-        local url="https://cdn.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
-        log_info "Downloading kernel from $url"
-        if command -v wget &>/dev/null; then
-            wget -O "$LINUX_TAR" "$url" || return 1
-        elif command -v curl &>/dev/null; then
-            curl -L -o "$LINUX_TAR" "$url" || return 1
-        else
-            log_error "No download tool (wget/curl) available"
-            return 1
-        fi
+        local mirrors=(
+            "https://cdn.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
+            "https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
+            "https://ftp.suse.com/pub/mirrors/kernel.org/linux/kernel/v6.x/${LINUX_TAR}"
+        )
+        for url in "${mirrors[@]}"; do
+            log_info "Downloading kernel from $url"
+            if command -v wget &>/dev/null; then
+                wget -O "$LINUX_TAR" "$url" || continue
+            elif command -v curl &>/dev/null; then
+                curl -L -o "$LINUX_TAR" "$url" || continue
+            else
+                log_error "No download tool (wget/curl) available"
+                return 1
+            fi
+            if tar -tf "$LINUX_TAR" 2>/dev/null | grep -q "arch/$ARCH/Makefile"; then
+                log_success "Kernel downloaded and verified from $url"
+                return 0
+            else
+                log_warning "Kernel from $url is corrupt, removing..."
+                rm -f "$LINUX_TAR"
+            fi
+        done
+        log_error "All kernel mirrors failed"
+        return 1
     }
 
-    # Fonction d'extraction avec vérification
     extract_linux() {
         tar -xf "$LINUX_TAR"
         LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
-        # Vérifier la présence du Makefile spécifique à l'architecture
         if [ -d "$LINUX_DIR" ] && [ -f "$LINUX_DIR/arch/$ARCH/Makefile" ]; then
             return 0
         else
@@ -294,7 +305,6 @@ build_toolchain() {
         fi
     }
 
-    # Tentative d'extraction avec réessai automatique
     MAX_RETRIES=2
     for attempt in $(seq 1 $MAX_RETRIES); do
         if extract_linux; then
