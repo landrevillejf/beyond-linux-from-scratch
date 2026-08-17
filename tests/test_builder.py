@@ -157,7 +157,7 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'host-check' in stage_names
         assert 'host-prepare' in stage_names
-        #assert 'lfs-basic' in stage_names
+        assert 'lfs-basic' in stage_names
         assert 'lfs-system' in stage_names
         assert 'init-system' in stage_names
         assert 'service-abstraction' in stage_names

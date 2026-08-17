@@ -128,7 +128,8 @@ exit 1
     def test_lfs_init_script_validation(self, temp_dir, test_env):
         """Validation de la syntaxe des scripts LFS"""
         lfs_scripts = [
-            'lfs/05-build-lfs-system.sh',
+            'lfs/05a-build-lfs-basic.sh',
+            'lfs/05b-build-lfs-system.sh',
             'lfs/06a-init-system.sh',
             'lfs/06b-service-management.sh',
         ]

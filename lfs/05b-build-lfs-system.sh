@@ -1,7 +1,8 @@
 #!/bin/bash
 # Build LFS system – official LFS compilation with cross-toolchain
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# 05-build-lfs-system.sh – Build the LFS system using the cross-compiled toolchain.
+# 05b-build-lfs-system.sh – Compile glibc, binutils, gcc, and Chapter 8
+#                            packages inside the chroot prepared by 05a.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,14 +19,12 @@ fi
 
 KERNEL_TYPE="${KERNEL_TYPE:-linux}"
 export KERNEL_TYPE
-log_info "Kernel type: $KERNEL_TYPE"
 
 LFS_TGT="${LFS_TGT:-$(uname -m)-lfs-linux-gnu}"
 
 IN_DOCKER=false
 if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
     IN_DOCKER=true
-    log_info "Running in Docker container"
 fi
 
 if [ "$IN_DOCKER" = true ]; then
@@ -40,7 +39,6 @@ if [ -z "$LFS" ]; then
 fi
 
 if [ -d "$LFS/image/tools" ] && [ -d "$LFS/image/usr" ] && [ ! -d "$LFS/tools" ]; then
-    log_warning "Detected image-root layout at $LFS/image, switching LFS root"
     LFS="$LFS/image"
 fi
 
@@ -50,29 +48,6 @@ run_privileged() {
     else
         sudo "$@"
     fi
-}
-
-ensure_bootstrap_chroot_shell() {
-    local tool
-    local required_tools=(
-        bash bison m4 xz bzip2 expr grep sed awk find xargs cut head tail wc
-        tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod
-    )
-
-    for tool in "${required_tools[@]}"; do
-        if [ ! -x "$LFS/tools/bin/$tool" ]; then
-            log_error "Missing bootstrap tool: $LFS/tools/bin/$tool"
-            log_error "The toolchain stage must build it; host binaries are never copied into LFS."
-            exit 1
-        fi
-    done
-
-    # /tools is the self-contained temporary userspace. Only expose its shell
-    # through conventional paths required by chroot; the inner build uses
-    # PATH=/tools/bin and never imports host programs or libraries.
-    run_privileged mkdir -p "$LFS/bin"
-    run_privileged ln -sfn /tools/bin/bash "$LFS/bin/bash"
-    run_privileged ln -sfn bash "$LFS/bin/sh"
 }
 
 log_info "========================================="
@@ -87,31 +62,20 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-ensure_bootstrap_chroot_shell
-
-if [ ! -x "$LFS/tools/bin/bash" ]; then
-    log_error "/tools/bin/bash not found – run toolchain first"
+# -----------------------------------------------------------------
+# Verify chroot is functional (05a should have set this up)
+# -----------------------------------------------------------------
+if [ ! -L "$LFS/bin/bash" ] && [ ! -x "$LFS/bin/bash" ]; then
+    log_error "/bin/bash not found in chroot – run lfs-basic (05a) first"
     exit 1
 fi
-if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot not working – run lfs-basic first"
+if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>&1; then
+    log_error "chroot test failed – run lfs-basic (05a) first"
     exit 1
-fi
-
-# Check for temporary toolchain
-if [ ! -x "$LFS/tools/bin/${LFS_TGT}-gcc" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-ld" ] || [ ! -x "$LFS/tools/bin/${LFS_TGT}-as" ]; then
-    log_error "Missing temporary toolchain in $LFS/tools/bin (${LFS_TGT}-gcc/${LFS_TGT}-ld/${LFS_TGT}-as)"
-    log_error "Cannot proceed – run lfs-basic first"
-    exit 1
-fi
-
-if [ ! -x "$LFS/bin/sh" ]; then
-    log_info "Creating /bin/sh symlink"
-    run_privileged ln -sf bash "$LFS/bin/sh"
 fi
 
 # -----------------------------------------------------------------
-# Mount filesystems
+# Mount filesystems (idempotent – safe if 05a already mounted them)
 # -----------------------------------------------------------------
 cleanup_mounts() {
     run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
@@ -128,29 +92,6 @@ run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
-# -----------------------------------------------------------------
-# Copy sources into chroot
-# -----------------------------------------------------------------
-SOURCES_DIR="$LFS/sources"
-
-# Si les sources sont déjà dans $SOURCES_DIR, on les utilise
-if [ -d "$SOURCES_DIR" ] && [ "$(ls -A "$SOURCES_DIR" 2>/dev/null)" ]; then
-    log_info "Sources already present in $SOURCES_DIR"
-else
-    # Sinon, on tente de les copier depuis le répertoire parent (cas de certains layouts)
-    PARENT_SOURCES="$(dirname "$LFS")/sources"
-    if [ -d "$PARENT_SOURCES" ] && [ "$(ls -A "$PARENT_SOURCES" 2>/dev/null)" ]; then
-        log_info "Copying sources from $PARENT_SOURCES to $SOURCES_DIR"
-        run_privileged mkdir -p "$SOURCES_DIR"
-        run_privileged cp -r "$PARENT_SOURCES"/. "$SOURCES_DIR"/
-        run_privileged chown -R lfs:lfs "$SOURCES_DIR"
-    else
-        log_error "No sources found in $SOURCES_DIR or $PARENT_SOURCES – cannot compile"
-        exit 1
-    fi
-fi
-
-ls -la "$SOURCES_DIR" | head -20
 # -----------------------------------------------------------------
 # Internal compilation script (official LFS steps with cross-toolchain)
 # -----------------------------------------------------------------
@@ -562,6 +503,9 @@ run_privileged chmod +x "$LFS/build-lfs-system.sh"
 log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
+# -----------------------------------------------------------------
+# Post-build: re-link /bin/bash to the newly built system bash
+# -----------------------------------------------------------------
 if [ -x "$LFS/usr/bin/bash" ]; then
     run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
     run_privileged ln -sfn bash "$LFS/bin/sh"
