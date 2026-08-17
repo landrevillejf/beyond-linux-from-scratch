@@ -8,8 +8,8 @@
 <span class=normal> 8</span>
 <span class=normal> 9</span>
 <span class=normal>10</span></pre></div></td><td class=code><div><pre><span></span><code>docker<span class=w> </span>run<span class=w> </span>--rm<span class=w> </span>-it<span class=w> </span><span class=se>\</span>
--v<span class=w> </span><span class=s2>&quot;</span><span class=k>$(</span><span class=nb>pwd</span><span class=k>)</span><span class=s2>:/lfs-builder&quot;</span><span class=w> </span><span class=se>\</span>
--v<span class=w> </span><span class=s2>&quot;</span><span class=k>$(</span><span class=nb>pwd</span><span class=k>)</span><span class=s2>/lfs-output:/output&quot;</span><span class=w> </span><span class=se>\</span>
+-v<span class=w> </span><span class=s2>"</span><span class=k>$(</span><span class=nb>pwd</span><span class=k>)</span><span class=s2>:/lfs-builder"</span><span class=w> </span><span class=se>\</span>
+-v<span class=w> </span><span class=s2>"</span><span class=k>$(</span><span class=nb>pwd</span><span class=k>)</span><span class=s2>/lfs-output:/output"</span><span class=w> </span><span class=se>\</span>
 -w<span class=w> </span>/lfs-builder<span class=w> </span><span class=se>\</span>
 lfs-builder-mac:latest<span class=w> </span><span class=se>\</span>
 python3<span class=w> </span>builder.py<span class=w> </span><span class=se>\</span>

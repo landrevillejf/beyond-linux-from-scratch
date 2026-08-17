@@ -27,7 +27,7 @@ lpm<span class=w> </span>--mode<span class=w> </span>text
 <span class=normal>8</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Search for Firefox</span>
 lpm<span class=w> </span>search<span class=w> </span>firefox
 
-<span class=c1># Search for packages containing &quot;python&quot;</span>
+<span class=c1># Search for packages containing "python"</span>
 lpm<span class=w> </span>search<span class=w> </span>python
 
 <span class=c1># Search case-insensitive</span>
@@ -88,7 +88,7 @@ lpm<span class=w> </span>upgrade
 lpm<span class=w> </span>list-outdated
 </code></pre></div></td></tr></table></div> <h4 id=create-packages>Create Packages<a class=headerlink href=#create-packages title="Permanent link">&para;</a></h4> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
 <span class=normal>2</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Create new package</span>
-lpm<span class=w> </span>create<span class=w> </span>myapp<span class=w> </span><span class=m>1</span>.0.0<span class=w> </span>--description<span class=w> </span><span class=s2>&quot;My application&quot;</span><span class=w> </span>--license<span class=w> </span><span class=s2>&quot;GPL-3.0&quot;</span>
+lpm<span class=w> </span>create<span class=w> </span>myapp<span class=w> </span><span class=m>1</span>.0.0<span class=w> </span>--description<span class=w> </span><span class=s2>"My application"</span><span class=w> </span>--license<span class=w> </span><span class=s2>"GPL-3.0"</span>
 </code></pre></div></td></tr></table></div> <h3 id=advanced-usage>Advanced Usage<a class=headerlink href=#advanced-usage title="Permanent link">&para;</a></h3> <h4 id=dependency-management>Dependency Management<a class=headerlink href=#dependency-management title="Permanent link">&para;</a></h4> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
 <span class=normal>2</span>
 <span class=normal>3</span>
@@ -122,7 +122,7 @@ lpm<span class=w> </span>info<span class=w> </span>firefox
 <span class=normal>3</span>
 <span class=normal>4</span>
 <span class=normal>5</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Find all packages matching pattern</span>
-lpm<span class=w> </span>search<span class=w> </span><span class=s2>&quot;mozilla&quot;</span>
+lpm<span class=w> </span>search<span class=w> </span><span class=s2>"mozilla"</span>
 
 <span class=c1># Upgrade all packages at once</span>
 lpm<span class=w> </span>upgrade
@@ -163,18 +163,18 @@ lpm<span class=w> </span>upgrade
 <span class=normal>12</span>
 <span class=normal>13</span>
 <span class=normal>14</span></pre></div></td><td class=code><div><pre><span></span><code><span class=p>{</span>
-<span class=w>  </span><span class=nt>&quot;name&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;firefox&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;version&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;128.0&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;arch&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;x86_64&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;maintainer&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;Mozilla&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;description&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;Web browser&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;homepage&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;https://www.mozilla.org&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;license&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;MPL-2.0&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;size_mb&quot;</span><span class=p>:</span><span class=w> </span><span class=mf>150.5</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;dependencies&quot;</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>&quot;glibc&quot;</span><span class=p>,</span><span class=w> </span><span class=s2>&quot;openssl&quot;</span><span class=p>],</span>
-<span class=w>  </span><span class=nt>&quot;checksum&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;abc123...&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;url&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;https://archive.mozilla.org/pub/firefox/releases/128.0/&quot;</span><span class=p>,</span>
-<span class=w>  </span><span class=nt>&quot;install_date&quot;</span><span class=p>:</span><span class=w> </span><span class=s2>&quot;2026-05-15T10:30:00&quot;</span>
+<span class=w>  </span><span class=nt>"name"</span><span class=p>:</span><span class=w> </span><span class=s2>"firefox"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"version"</span><span class=p>:</span><span class=w> </span><span class=s2>"128.0"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"arch"</span><span class=p>:</span><span class=w> </span><span class=s2>"x86_64"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"maintainer"</span><span class=p>:</span><span class=w> </span><span class=s2>"Mozilla"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"description"</span><span class=p>:</span><span class=w> </span><span class=s2>"Web browser"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"homepage"</span><span class=p>:</span><span class=w> </span><span class=s2>"https://www.mozilla.org"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"license"</span><span class=p>:</span><span class=w> </span><span class=s2>"MPL-2.0"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"size_mb"</span><span class=p>:</span><span class=w> </span><span class=mf>150.5</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"dependencies"</span><span class=p>:</span><span class=w> </span><span class=p>[</span><span class=s2>"glibc"</span><span class=p>,</span><span class=w> </span><span class=s2>"openssl"</span><span class=p>],</span>
+<span class=w>  </span><span class=nt>"checksum"</span><span class=p>:</span><span class=w> </span><span class=s2>"abc123..."</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"url"</span><span class=p>:</span><span class=w> </span><span class=s2>"https://archive.mozilla.org/pub/firefox/releases/128.0/"</span><span class=p>,</span>
+<span class=w>  </span><span class=nt>"install_date"</span><span class=p>:</span><span class=w> </span><span class=s2>"2026-05-15T10:30:00"</span>
 <span class=p>}</span>
 </code></pre></div></td></tr></table></div> <h3 id=package-file-format-lpm>Package File Format (.lpm)<a class=headerlink href=#package-file-format-lpm title="Permanent link">&para;</a></h3> <p>LPM packages are tar archives containing:</p> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
 <span class=normal>2</span>
@@ -284,7 +284,7 @@ Installation/Removal
     ↓
 Check if X is already installed
     ↓
-Load X&#39;s dependencies from database
+Load X's dependencies from database
     ↓
 For each dependency:
     - Check if installed
@@ -316,7 +316,7 @@ lpm<span class=w> </span>search<span class=w> </span>firefox
 <span class=normal>6</span>
 <span class=normal>7</span>
 <span class=normal>8</span>
-<span class=normal>9</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Check what&#39;s installed</span>
+<span class=normal>9</span></pre></div></td><td class=code><div><pre><span></span><code><span class=c1># Check what's installed</span>
 lpm<span class=w> </span>list-installed
 
 <span class=c1># Check package dependencies</span>
@@ -368,7 +368,7 @@ pytest<span class=w> </span>tests/test_lpm.py<span class=w> </span>-v
 
 <span class=c1># Use custom package handler</span>
 <span class=n>lpm</span> <span class=o>=</span> <span class=n>LPM</span><span class=p>()</span>
-<span class=n>pkg</span> <span class=o>=</span> <span class=n>CustomPackage</span><span class=p>(</span><span class=n>name</span><span class=o>=</span><span class=s2>&quot;custom&quot;</span><span class=p>,</span> <span class=n>version</span><span class=o>=</span><span class=s2>&quot;1.0&quot;</span><span class=p>)</span>
+<span class=n>pkg</span> <span class=o>=</span> <span class=n>CustomPackage</span><span class=p>(</span><span class=n>name</span><span class=o>=</span><span class=s2>"custom"</span><span class=p>,</span> <span class=n>version</span><span class=o>=</span><span class=s2>"1.0"</span><span class=p>)</span>
 </code></pre></div></td></tr></table></div> <h2 id=performance-optimization>Performance Optimization<a class=headerlink href=#performance-optimization title="Permanent link">&para;</a></h2> <p>For large installations:</p> <div class=highlight><table class=highlighttable><tr><td class=linenos><div class=linenodiv><pre><span></span><span class=normal>1</span>
 <span class=normal>2</span>
 <span class=normal>3</span>
@@ -412,24 +412,24 @@ lpm<span class=w> </span>search<span class=w> </span>package3
 <span class=n>lpm</span> <span class=o>=</span> <span class=n>LPM</span><span class=p>()</span>
 
 <span class=c1># Search</span>
-<span class=n>results</span> <span class=o>=</span> <span class=n>lpm</span><span class=o>.</span><span class=n>search</span><span class=p>(</span><span class=s2>&quot;keyword&quot;</span><span class=p>)</span>
+<span class=n>results</span> <span class=o>=</span> <span class=n>lpm</span><span class=o>.</span><span class=n>search</span><span class=p>(</span><span class=s2>"keyword"</span><span class=p>)</span>
 
 <span class=c1># List</span>
 <span class=n>packages</span> <span class=o>=</span> <span class=n>lpm</span><span class=o>.</span><span class=n>list_packages</span><span class=p>()</span>
 <span class=n>installed</span> <span class=o>=</span> <span class=n>lpm</span><span class=o>.</span><span class=n>list_installed</span><span class=p>()</span>
 
 <span class=c1># Install</span>
-<span class=n>lpm</span><span class=o>.</span><span class=n>install</span><span class=p>(</span><span class=s2>&quot;package-name&quot;</span><span class=p>)</span>
+<span class=n>lpm</span><span class=o>.</span><span class=n>install</span><span class=p>(</span><span class=s2>"package-name"</span><span class=p>)</span>
 
 <span class=c1># Remove</span>
-<span class=n>lpm</span><span class=o>.</span><span class=n>remove</span><span class=p>(</span><span class=s2>&quot;package-name&quot;</span><span class=p>,</span> <span class=n>purge</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
+<span class=n>lpm</span><span class=o>.</span><span class=n>remove</span><span class=p>(</span><span class=s2>"package-name"</span><span class=p>,</span> <span class=n>purge</span><span class=o>=</span><span class=kc>False</span><span class=p>)</span>
 
 <span class=c1># Upgrade</span>
-<span class=n>lpm</span><span class=o>.</span><span class=n>upgrade</span><span class=p>(</span><span class=s2>&quot;package-name&quot;</span><span class=p>)</span>  <span class=c1># Or None for all</span>
+<span class=n>lpm</span><span class=o>.</span><span class=n>upgrade</span><span class=p>(</span><span class=s2>"package-name"</span><span class=p>)</span>  <span class=c1># Or None for all</span>
 <span class=n>lpm</span><span class=o>.</span><span class=n>list_outdated</span><span class=p>()</span>
 
 <span class=c1># Create</span>
-<span class=n>lpm</span><span class=o>.</span><span class=n>create_package</span><span class=p>(</span><span class=s2>&quot;name&quot;</span><span class=p>,</span> <span class=s2>&quot;version&quot;</span><span class=p>,</span> <span class=s2>&quot;description&quot;</span><span class=p>)</span>
+<span class=n>lpm</span><span class=o>.</span><span class=n>create_package</span><span class=p>(</span><span class=s2>"name"</span><span class=p>,</span> <span class=s2>"version"</span><span class=p>,</span> <span class=s2>"description"</span><span class=p>)</span>
 
 <span class=c1># Update</span>
 <span class=n>lpm</span><span class=o>.</span><span class=n>update</span><span class=p>()</span>
@@ -451,13 +451,13 @@ lpm<span class=w> </span>search<span class=w> </span>package3
 <span class=normal>16</span></pre></div></td><td class=code><div><pre><span></span><code><span class=kn>from</span><span class=w> </span><span class=nn>lpm</span><span class=w> </span><span class=kn>import</span> <span class=n>Package</span>
 
 <span class=n>pkg</span> <span class=o>=</span> <span class=n>Package</span><span class=p>(</span>
-    <span class=n>name</span><span class=o>=</span><span class=s2>&quot;firefox&quot;</span><span class=p>,</span>
-    <span class=n>version</span><span class=o>=</span><span class=s2>&quot;128.0&quot;</span><span class=p>,</span>
-    <span class=n>description</span><span class=o>=</span><span class=s2>&quot;Web browser&quot;</span><span class=p>,</span>
-    <span class=n>license</span><span class=o>=</span><span class=s2>&quot;MPL-2.0&quot;</span><span class=p>,</span>
-    <span class=n>dependencies</span><span class=o>=</span><span class=p>[</span><span class=s2>&quot;glibc&quot;</span><span class=p>],</span>
-    <span class=n>checksum</span><span class=o>=</span><span class=s2>&quot;abc123...&quot;</span><span class=p>,</span>
-    <span class=n>url</span><span class=o>=</span><span class=s2>&quot;https://example.com/firefox.tar.gz&quot;</span><span class=p>,</span>
+    <span class=n>name</span><span class=o>=</span><span class=s2>"firefox"</span><span class=p>,</span>
+    <span class=n>version</span><span class=o>=</span><span class=s2>"128.0"</span><span class=p>,</span>
+    <span class=n>description</span><span class=o>=</span><span class=s2>"Web browser"</span><span class=p>,</span>
+    <span class=n>license</span><span class=o>=</span><span class=s2>"MPL-2.0"</span><span class=p>,</span>
+    <span class=n>dependencies</span><span class=o>=</span><span class=p>[</span><span class=s2>"glibc"</span><span class=p>],</span>
+    <span class=n>checksum</span><span class=o>=</span><span class=s2>"abc123..."</span><span class=p>,</span>
+    <span class=n>url</span><span class=o>=</span><span class=s2>"https://example.com/firefox.tar.gz"</span><span class=p>,</span>
     <span class=n>size_mb</span><span class=o>=</span><span class=mf>150.5</span>
 <span class=p>)</span>
 
