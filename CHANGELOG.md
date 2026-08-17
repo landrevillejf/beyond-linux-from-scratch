@@ -4,6 +4,35 @@
 
 ### Added
 
+- **Production-ready first-boot service** (`blfs/17-first-boot-service.sh`)
+  - SSH host key regeneration, random initial password, locale/timezone setup,
+    ldconfig, live-USB partition resize, machine-id regeneration, self-disable
+  - Supports systemd, sysvinit, and runit init systems
+
+- **nftables default-deny firewall** (`blfs/15-security-hardening.sh`)
+  - Stateful inspection, rate-limited SSH, ICMP/ICMPv6, HTTP/HTTPS, mDNS
+  - Override directory `/etc/nftables/conf.d/` for custom rules
+
+- **LPM remote repository configuration** (`blfs/19-lpm.sh`)
+  - Installs `config/lpm.conf` and creates `/etc/lpm/repos.d/default.conf`
+    with `lfs-stable` and `lfs-updates` remote repos
+
+- **GRUB config template** (`config/grub.cfg`)
+  - Branded boot menu with build-time variable substitution (ROOT_UUID,
+    KERNEL_VERSION, BOOTLOADER_TIMEOUT, KERNEL_CMDLINE)
+  - Integrated into `final/13-create-bootloader.sh` with fallback to
+    `grub-mkconfig`
+
+- **End-to-end pipeline integration tests** (`tests/test_e2e_pipeline.py`)
+  - 33 tests covering stage integrity, JSON configs, profiles, branding,
+    security hardening, first-boot, LPM, and download resilience
+
+- **Plymouth Python fallback** (`blfs/20-branding.sh`)
+  - Generates gradient PNGs when `rsvg-convert` is unavailable
+
+- **MkDocs favicon and logo** (`docs/favicon.svg`, `docs/logo.svg`)
+  - Source SVG assets matching branding identity for documentation site
+
 - **LFS build recipes for LPM** (`recipes/lfs/`)
   - Complete, ordered set of `.lpm` recipes reconstructing the entire LFS 13.0 book
     (cross-toolchain → temporary tools → final system) — one package per recipe
@@ -35,6 +64,35 @@
   - Modular system composition workflow: start minimal, add profiles incrementally
 
 ### Fixed
+
+- **Hardcoded root password replaced with random generation** (`lfs/07-configure-lfs.sh`)
+  - Initial password is now 16-character random alphanumeric, stored in
+    `/etc/.initial-password` (mode 600), cleaned up by first-boot service
+
+- **Download reliability with exponential backoff** (`builder.py`)
+  - `SourceDownloader.download()` retries transient errors (5xx, 429, timeouts)
+    with exponential backoff and jitter; permanent 4xx errors fail immediately
+  - `download_from_list()` performs sequential retry passes after the initial
+    parallel download to recover transient failures
+  - CI workflow updated: timeout 120s, 5 retries, 3 parallel, 3 retry passes
+
+- **Shell script audit — 5 bugs fixed across stage scripts**
+  - `blfs/20-branding.sh`: missing `fi` (syntax error)
+  - `final/15-create-live-system.sh`: empty `$EFI_OPTION` passed as empty arg
+  - `final/12-create-initramfs.sh`: hardcoded `/dev/sda2` replaced with
+    auto-detection from kernel cmdline UUID + probe common devices
+  - `final/13-create-bootloader.sh`: hardcoded `/dev/sda` replaced with
+    auto-detection probing `/dev/sda`, `/dev/vda`, `/dev/nvme0n1`, `/dev/xvda`
+  - `final/14-create-installer.sh`: raw FAT image copied as BOOTX64.EFI —
+    now mounts FAT image and extracts actual `grubx64.efi`
+
+- **Script executable permissions** — 12 stage scripts were tracked as 100644
+  in git instead of 100755; fixed with `git update-index --chmod=+x`
+
+- **README.md** — fixed wrong kernel script path (`lfs/09-build-kernel.sh` →
+  `lfs/08-build-kernel.sh`), added missing `--kernel-version` and `--arch`
+  CLI options to command-line reference table
+
 - **LPM `build`/`install` package pipeline** — made source builds installable
   - Routed `log_info`/`log_success`/`log_verbose` to stderr so value-returning
     helpers (`fetch_source`, `assemble_package`, `fetch_package`) no longer leak

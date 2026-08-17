@@ -219,6 +219,8 @@ python3 builder.py --profile arm64 --config config/build-cross.conf
 | `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
 | `--generate-sources-list` | Generate `packages/sources.list` and exit |
+| `--kernel-version` | Kernel version override (e.g. `6.16.1`, `6.12.20`) |
+| `--arch` | Target architecture (`x86_64`, `aarch64`) |
 
 ## Professional Branding System
 
@@ -437,7 +439,7 @@ python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 
 ### Kernel missing in output
 
-- Inspect `lfs/09-build-kernel.sh` stage log.
+- Inspect `lfs/08-build-kernel.sh` stage log.
 - Confirm `kernel.type` in config and source availability.
 
 ### Resume after failure
