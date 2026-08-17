@@ -3,10 +3,10 @@
 Integration tests for complete workflow
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import patch, MagicMock
+
 from builder import LFSBuilder, ProfileManager
 
 

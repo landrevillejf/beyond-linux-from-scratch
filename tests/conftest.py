@@ -3,20 +3,21 @@
 Pytest configuration and shared fixtures
 """
 
-import pytest
-import tempfile
 import json
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 from typing import Dict, Any
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from builder import LFSConfig, ProfileManager, SourceDownloader, ScriptExecutor, USBWriter, LFSBuilder
+from builder import LFSConfig, SourceDownloader, LFSBuilder
 
 
 @pytest.fixture

@@ -4,13 +4,14 @@ Tests d'acceptance avec scripts shell réels
 Exécute les vrais scripts LFS/BLFS dans un environnement contrôlé
 """
 
-import pytest
+import os
+import shutil
 import subprocess
 import tempfile
-import os
-from pathlib import Path
-import shutil
 import time
+from pathlib import Path
+
+import pytest
 
 
 class TestRealShellScripts:

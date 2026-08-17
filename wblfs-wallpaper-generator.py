@@ -4,12 +4,13 @@ Générateur de fonds d'écran LFS – 15 variantes uniques, paramétrable et pr
 Utilise des coordonnées relatives pour s'adapter à n'importe quelle résolution.
 """
 
-import os
-import sys
-import json
-import random
 import argparse
+import json
 import logging
+import os
+import random
+import sys
+
 from PIL import Image, ImageDraw, ImageFont
 
 # ====================== COULEURS DE BASE ======================

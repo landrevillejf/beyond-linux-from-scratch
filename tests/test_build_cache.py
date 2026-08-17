@@ -1,14 +1,14 @@
-import pytest
-import json
-import tempfile
-from unittest.mock import patch, MagicMock, mock_open
-from pathlib import Path
 import hashlib
-import tarfile
+import json
 import shutil
 import sys
+import tarfile
+import tempfile
+from pathlib import Path
+from unittest.mock import patch, MagicMock, mock_open
 
-from builder import BuildCache, LFSBuilder, SourceDownloader, __version__
+import pytest
+from builder import BuildCache, LFSBuilder, __version__
 
 
 class TestBuildCache:

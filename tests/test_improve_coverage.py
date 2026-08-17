@@ -3,17 +3,16 @@
 Tests pour améliorer la couverture de code à 80%+
 """
 
-import pytest
-import tempfile
+import os
 import subprocess
+import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open
-import sys
-import os
 
 from builder import (
-    LFSConfig, ProfileManager, SourceDownloader,
-    ScriptExecutor, USBWriter, LFSBuilder
+    ProfileManager, SourceDownloader,
+    ScriptExecutor, USBWriter
 )
 
 
@@ -406,7 +405,6 @@ class TestCLICoverage:
                 mock_instance.config.set.assert_called_with('kernel.type', 'linux-libre')
 
 
-import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 from builder import LFSBuilder, LFSConfig

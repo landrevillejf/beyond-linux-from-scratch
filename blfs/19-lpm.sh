@@ -186,12 +186,34 @@ refresh_runtime_paths() {
     file_index="$LPM_DB/file_index"
 }
 
+root_path() {
+    local path="$1"
+    if [ "$LPM_ROOT" = "/" ] || [ "\${path#"$LPM_ROOT"}" != "$path" ]; then
+        printf '%s\n' "$path"
+    else
+        printf '%s%s\n' "\${LPM_ROOT%/}" "$path"
+    fi
+}
+
+apply_sysroot_paths() {
+    LPM_CONF=$(root_path "$LPM_CONF")
+    LPM_ETC=$(root_path "$LPM_ETC")
+    LPM_DB=$(root_path "$LPM_DB")
+    LPM_LOGS=$(root_path "$LPM_LOGS")
+    LPM_PACKAGES_DIR=$(root_path "$LPM_PACKAGES_DIR")
+    LPM_BUILD_DIR=$(root_path "$LPM_BUILD_DIR")
+    LOCK_FILE=$(root_path "$LOCK_FILE")
+    REPO_LOCAL_PATH=$(root_path "$REPO_LOCAL_PATH")
+    GPG_KEYRING=$(root_path "$GPG_KEYRING")
+}
+
 # Read configuration file (sourced)
 load_config() {
     if [ -f "$LPM_CONF" ]; then
         # shellcheck disable=SC1090
         source "$LPM_CONF"
     fi
+    apply_sysroot_paths
     refresh_runtime_paths
     log_verbose "Configuration loaded from $LPM_CONF"
 }
@@ -1417,6 +1439,7 @@ main() {
     local cmd="${1:-help}"
     shift || true
 
+    apply_sysroot_paths
     load_config
     init_dirs
 
@@ -1497,6 +1520,23 @@ main() {
     esac
 }
 
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+install_lpm_stage() {
+    local target="${LFS:?LFS must be set for the LPM build stage}"
+    local run_privileged=""
+    if [ "$(id -u)" -ne 0 ]; then
+        run_privileged="sudo"
+    fi
+
+    $run_privileged install -Dm755 "$0" "$target/usr/bin/lpm"
+    $run_privileged mkdir -p "$target/var/lib/lpm" "$target/var/log/lpm" \
+        "$target/usr/share/lpm/packages" "$target/etc/lpm"
+    $run_privileged touch "$target/var/lib/lpm/packages.list" \
+        "$target/var/lib/lpm/installed.list" "$target/var/lib/lpm/file_index"
+    log_success "Installed LPM into $target/usr/bin/lpm"
+}
+
+if [ "${BASH_SOURCE[0]}" = "$0" ] && [ "${LFS:-/}" != "/" ] && [ "$#" -eq 0 ]; then
+    install_lpm_stage
+elif [ "${BASH_SOURCE[0]}" = "$0" ]; then
     main "$@"
 fi

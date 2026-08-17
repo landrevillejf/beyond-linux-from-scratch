@@ -3,20 +3,19 @@
 Tests for LFSBuilder class
 """
 
-import pytest
 import json
-import sys
-import os
 import logging
-from unittest.mock import Mock, patch, MagicMock, call
-from pathlib import Path
-from builder import LFSBuilder, LFSConfig, ScriptExecutor, SourceDownloader, main
-
-import pytest
+import os
+import sys
 import tarfile
 import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch, MagicMock, call
 
-from builder import LFSBuilder, SourceDownloader
+import pytest
+from builder import LFSBuilder
+from builder import LFSConfig, ScriptExecutor, main
+
 
 class TestLFSBuilder:
     """Test LFSBuilder class"""
@@ -436,7 +435,6 @@ class TestLFSBuilder:
     def test_update_sources_list_all_fetch_fail_no_file(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)   # ← isolate
         from builder import LFSBuilder, LFSConfig
-        import urllib.request
 
         output_dir = tmp_path / 'lfs-build'
         output_dir.mkdir()
@@ -460,7 +458,6 @@ class TestLFSBuilder:
     def test_update_sources_list_with_custom_only(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)   # ← isolate
         from builder import LFSBuilder, LFSConfig
-        import urllib.request
 
         output_dir = tmp_path / 'lfs-build'
         output_dir.mkdir()
@@ -649,7 +646,7 @@ class TestLFSBuilder:
 
     def test_main_kernel_version_override(self, monkeypatch, caplog):
         """Vérifie que l'option --kernel-version modifie la config et log le message."""
-        from builder import main, LFSBuilder
+        from builder import main
         import sys
 
         # Sauvegarder l'argv original
@@ -1089,7 +1086,6 @@ def test_download_sources_covers_missing_lines(tmp_path):
 def test_update_sources_list_kernel_valid_skips_download(tmp_path, monkeypatch):
     import tarfile
     import json
-    import urllib.request
     from unittest.mock import MagicMock, patch
 
     # Isoler le test

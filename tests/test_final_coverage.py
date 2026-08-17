@@ -11,10 +11,9 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock, mock_open, call
 
 import pytest
-
 from builder import (
-    LFSBuilder, ProfileManager, SourceDownloader, ScriptExecutor,
-    USBWriter, clean_build_directory, create_parser, main
+    LFSBuilder, ProfileManager, ScriptExecutor,
+    USBWriter, main
 )
 
 

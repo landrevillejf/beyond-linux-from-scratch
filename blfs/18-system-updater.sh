@@ -100,10 +100,7 @@ apply_updates() {
     if command -v lpm >/dev/null 2>&1; then
         log_info "Updating packages via LPM..."
         lpm update-db
-        lpm list | while read pkg; do
-            log_info "Updating package: $pkg"
-            lpm update "$pkg" || log_warn "Failed to update $pkg"
-        done
+        lpm upgrade
     else
         log_warn "LPM not found; skipping package updates"
     fi

@@ -4,11 +4,11 @@ LFS Script Compatibility Checker
 Analyzes shell scripts for LFS compatibility issues.
 """
 
+import argparse
 import os
 import re
-import sys
-import argparse
 import subprocess
+import sys
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 

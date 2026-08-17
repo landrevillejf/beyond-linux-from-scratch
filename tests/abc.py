@@ -3,15 +3,12 @@
 Tests spécifiques pour couvrir les lignes 1490, 1447‑1451 et 1482‑1487 de builder.py.
 """
 
-import pytest
 import logging
 import tarfile
 from pathlib import Path
-
 from unittest.mock import Mock, patch, MagicMock, call
 
 from builder import LFSBuilder, SourceDownloader
-
 
 
 # ============================================================================

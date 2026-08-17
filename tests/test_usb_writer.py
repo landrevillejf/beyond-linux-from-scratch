@@ -5,7 +5,6 @@
 Tests for USBWriter - Additional coverage
 """
 
-import pytest
 import logging
 import subprocess
 from pathlib import Path

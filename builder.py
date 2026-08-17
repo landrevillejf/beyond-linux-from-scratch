@@ -5,27 +5,28 @@ Works on Linux, macOS, and Windows (WSL2)
 Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026
 """
 
-import os
-import re
-import sys
-import json
 import argparse
-import subprocess
-import platform
-import shutil
 import hashlib
-import socket
-from pathlib import Path
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+import json
 import logging
+import os
+import platform
+import pwd
+import re
+import shutil
+import socket
+import subprocess
+import sys
 import tarfile
 import tempfile
-import pwd
-import urllib.request
 import urllib.error
-from urllib.parse import urlparse
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import urlparse
+
 
 # ============================================================================
 # VERSION INFO - Read from VERSION file

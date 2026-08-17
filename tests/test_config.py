@@ -4,8 +4,8 @@ Tests for LFSConfig class
 """
 
 import json
-import pytest
 from pathlib import Path
+
 from builder import LFSConfig
 
 

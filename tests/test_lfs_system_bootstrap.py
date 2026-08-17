@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 
 import os
+import re
 import subprocess
 from pathlib import Path
-import re
-
 
 BOOTSTRAP_TOOLS = (
     "bash", "bison", "m4", "xz", "bzip2", "expr", "grep", "sed", "awk",

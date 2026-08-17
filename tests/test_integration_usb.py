@@ -5,15 +5,15 @@ Tests USBWriter avec matériel réel
 Exécuter uniquement avec: pytest -m usb --usb-device=/dev/sdX
 """
 
-import pytest
+import platform
 import subprocess
 import tempfile
 from pathlib import Path
-import platform
 # tests/test_integration_usb.py - Ajouter l'import en haut du fichier
 from unittest.mock import patch, MagicMock
-from builder import USBWriter
 
+import pytest
+from builder import USBWriter
 
 # Marqueur pour les tests USB réels (nécessite confirmation)
 pytestmark = pytest.mark.usb

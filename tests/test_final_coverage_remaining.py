@@ -3,16 +3,15 @@
 Tests for achieving 100% code coverage - remaining 10 lines
 """
 
-import pytest
-import tempfile
 import json
+import sys
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
-import sys
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from builder import LFSBuilder, SourceDownloader, BuildCache
+from builder import SourceDownloader, BuildCache
 
 
 class TestRemainingCoverageLines:

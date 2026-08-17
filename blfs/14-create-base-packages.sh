@@ -42,21 +42,20 @@ log_info "========================================="
 
 # ---------------------------------------------------------------------------
 # LPM database layout (see blfs/19-lpm.sh):
-#   /var/lib/lpm/db.list      -> installed packages metadata (pipe-separated)
-#   /var/lib/lpm/files/<pkg>  -> file manifest per package
+#   /var/lib/lpm/packages.list -> available package metadata (pipe-separated)
+#   /var/lib/lpm/installed.list -> installed packages managed by LPM
 #   /usr/share/lpm/base-packages.list -> canonical list of base packages
 # Format v2.1.0 (pipe-separated):
 #   name|version|description|deps|checksum
 # ---------------------------------------------------------------------------
 
 run_privileged mkdir -p "$LFS/var/cache/lpm"
-run_privileged mkdir -p "$LFS/var/lib/lpm/files"
+run_privileged mkdir -p "$LFS/var/lib/lpm"
 run_privileged mkdir -p "$LFS/usr/share/lpm"
 run_privileged mkdir -p "$LFS/etc/lpm"
 
 BASE_LIST="$LFS/usr/share/lpm/base-packages.list"
-DB_FILE="$LFS/var/lib/lpm/db.list"
-FILES_DIR="$LFS/var/lib/lpm/files"
+DB_FILE="$LFS/var/lib/lpm/packages.list"
 
 # ---------------------------------------------------------------------------
 # Canonical base package set (LFS 12.4 + minimal BLFS runtime)
@@ -150,9 +149,6 @@ echo "$BASE_PACKAGES" | while IFS= read -r line; do
     if ! grep -F -q "^$name|" "$TMP_DB" 2>/dev/null; then
         printf '%s|%s|%s|%s|%s\n' "$name" "$version" "$description" "$deps" "$checksum" >>"$TMP_DB"
     fi
-    # Empty file manifest for base packages (they are installed outside LPM)
-    manifest="$FILES_DIR/$name"
-    [ -f "$manifest" ] || : >"$manifest"
 done
 
 run_privileged install -m 0644 "$TMP_DB" "$DB_FILE"
@@ -167,14 +163,13 @@ if [ ! -f "$LFS/etc/lpm/lpm.conf" ]; then
 # LFS Package Manager configuration
 # See /usr/share/doc/lpm/README for details
 
-# Package cache directory
-CACHE_DIR=/var/cache/lpm
+# LPM runtime paths
+LPM_DB=/var/lib/lpm
+LPM_LOGS=/var/log/lpm
+LPM_PACKAGES_DIR=/usr/share/lpm/packages
 
-# Database location
-DB_DIR=/var/lib/lpm
-
-# Remote repository (override with `lpm --repo <url>`)
-REPO_URL=https://packages.beyond-lfs.org/stable
+# Remote repositories. Leave empty until a signed repository is published.
+REPO_REMOTE_URLS=()
 
 # Number of parallel jobs for compilation
 JOBS=0   # 0 = auto (nproc)
