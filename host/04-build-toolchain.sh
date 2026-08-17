@@ -271,7 +271,6 @@ build_toolchain() {
         local mirrors=(
             "https://cdn.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
             "https://mirrors.edge.kernel.org/pub/linux/kernel/v6.x/${LINUX_TAR}"
-            "https://ftp.suse.com/pub/mirrors/kernel.org/linux/kernel/v6.x/${LINUX_TAR}"
         )
         for url in "${mirrors[@]}"; do
             log_info "Downloading kernel from $url"
