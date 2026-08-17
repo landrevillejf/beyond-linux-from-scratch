@@ -260,6 +260,12 @@ build_toolchain() {
     log_info "Installing Linux API headers"
 
     ARCH=$(echo "$LFS_TGT" | cut -d- -f1)
+    # The Linux kernel uses different arch directory names than the toolchain triplet
+    case "$ARCH" in
+        aarch64) ARCH=arm64 ;;
+        armv7l|armhf) ARCH=arm ;;
+        riscv64) ARCH=riscv ;;
+    esac
 
     LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
     if [ -z "$LINUX_TAR" ]; then
@@ -347,7 +353,7 @@ build_toolchain() {
 
     cd "$LINUX_DIR"
     make mrproper
-    make headers
+    make ARCH="$ARCH" headers
     find usr/include -name '.*' -delete
     rm -f usr/include/Makefile
     mkdir -p "$LFS/usr"

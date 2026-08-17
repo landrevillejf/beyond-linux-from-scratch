@@ -94,9 +94,9 @@ ensure_bootstrap_chroot_shell() {
     local bash_binary="$LFS/tools/bin/bash"
     local expected_interpreter=""
     if command -v readelf >/dev/null 2>&1; then
-        expected_interpreter=$(readelf -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)
+        expected_interpreter=$(readelf -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/[][[:space:]].*//' | head -1)
     elif [ -x "$LFS/tools/bin/readelf" ]; then
-        expected_interpreter=$("$LFS/tools/bin/readelf" -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)
+        expected_interpreter=$("$LFS/tools/bin/readelf" -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/[][[:space:]].*//' | head -1)
     fi
 
     if [ -n "$expected_interpreter" ]; then
@@ -230,7 +230,7 @@ if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>&1; then
     log_error "Diagnostics:"
     log_error "  /bin/bash -> $(readlink -f "$LFS/bin/bash" 2>/dev/null || echo 'broken symlink')"
     if command -v readelf >/dev/null 2>&1; then
-        log_error "  Expected interpreter: $(readelf -l "$LFS/tools/bin/bash" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)"
+        log_error "  Expected interpreter: $(readelf -l "$LFS/tools/bin/bash" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/[][[:space:]].*//' | head -1)"
     fi
     log_error "  /tools/lib contents: $(find "$LFS/tools/lib/" -maxdepth 1 -name 'ld-linux*' 2>/dev/null || echo 'no ld-linux found')"
     log_error "  /lib64 contents: $(find "$LFS/lib64/" -maxdepth 1 -name 'ld-linux*' 2>/dev/null || echo 'no ld-linux found')"
