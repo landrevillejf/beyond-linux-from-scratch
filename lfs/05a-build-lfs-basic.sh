@@ -101,12 +101,40 @@ ensure_bootstrap_chroot_shell() {
 
         if [ -n "$actual_linker" ]; then
             log_info "Dynamic linker found at $actual_linker"
-            log_info "Creating symlink /tools/lib/ -> $(dirname "$actual_linker") for ld-linux-x86-64.so.2"
+            # Strip the $LFS prefix to get the chroot-relative path.
+            # The symlink target MUST be relative to the chroot root,
+            # NOT the host-absolute path (which doesn't exist inside chroot).
+            local linker_in_chroot="${actual_linker#"$LFS"}"
+            log_info "Creating symlink /tools/lib/ld-linux-x86-64.so.2 -> $linker_in_chroot"
             run_privileged mkdir -p "$LFS/tools/lib"
-            run_privileged ln -sf "$(dirname "$actual_linker")/ld-linux-x86-64.so.2" "$expected_linker"
+            run_privileged ln -sf "$linker_in_chroot" "$expected_linker"
         else
             log_warning "Dynamic linker ld-linux-x86-64.so.2 not found in /lib64, /usr/lib, or /lib"
             log_warning "Chroot may fail – check that glibc was installed correctly"
+        fi
+    fi
+
+    # ------------------------------------------------------------------
+    # Also ensure libc.so.6 is reachable at /tools/lib/ inside the chroot.
+    # Cross-compiled /tools/bin/bash needs both the dynamic linker AND libc.
+    # ------------------------------------------------------------------
+    local expected_libc="$LFS/tools/lib/libc.so.6"
+    if [ ! -e "$expected_libc" ]; then
+        local actual_libc=""
+        for candidate in "$LFS/lib64/libc.so.6" \
+                         "$LFS/usr/lib/libc.so.6" \
+                         "$LFS/lib/libc.so.6"; do
+            if [ -f "$candidate" ]; then
+                actual_libc="$candidate"
+                break
+            fi
+        done
+
+        if [ -n "$actual_libc" ]; then
+            local libc_in_chroot="${actual_libc#"$LFS"}"
+            log_info "libc.so.6 found at $actual_libc, linking $libc_in_chroot"
+            run_privileged mkdir -p "$LFS/tools/lib"
+            run_privileged ln -sf "$libc_in_chroot" "$expected_libc"
         fi
     fi
 }

@@ -300,7 +300,7 @@ https://xorg.freedesktop.org/archive/individual/xcb/xcb-util-renderutil-0.3.10.t
 https://xorg.freedesktop.org/archive/individual/xcb/xcb-util-wm-0.4.2.tar.xz
 
 # xcb-util-cursor
-https://xorg.freedesktop.org/archive/individual/xcb/xcb-util-cursor-0.1.11.tar.xz
+https://xcb.freedesktop.org/dist/xcb-util-cursor-0.1.6.tar.xz
 
 # xkeyboard-config
 https://xorg.freedesktop.org/archive/individual/data/xkeyboard-config/xkeyboard-config-2.44.tar.xz
@@ -360,8 +360,8 @@ https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.44/downloa
 # wayland
 https://gitlab.freedesktop.org/wayland/wayland/-/releases/1.23/downloads/wayland-1.23.1.tar.xz
 
-# libxkbcommon
-https://xkbcommon.org/download/libxkbcommon-1.9.2.tar.xz
+# libxkbcommon (see also newer version below)
+https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.11.0.tar.gz
 
 # weston
 https://gitlab.freedesktop.org/wayland/weston/-/releases/14.0.2/downloads/weston-14.0.2.tar.xz
@@ -377,7 +377,7 @@ https://gitlab.freedesktop.org/polkit/polkit/-/archive/125/polkit-125.tar.xz
 https://www.freedesktop.org/software/accountsservice/accountsservice-23.13.92.tar.xz
 
 # lightdm
-https://github.com/canonical/lightdm/releases/download/2.1.4/lightdm-2.1.4.tar.xz
+https://github.com/canonical/lightdm/releases/download/1.32.0/lightdm-1.32.0.tar.xz
 
 # lightdm-gtk-greeter
 https://github.com/Xubuntu/lightdm-gtk-greeter/releases/download/lightdm-gtk-greeter-2.0.9/lightdm-gtk-greeter-2.0.9.tar.gz
@@ -394,7 +394,7 @@ https://github.com/seccomp/libseccomp/releases/download/v2.6.0/libseccomp-2.6.0.
 https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.tar.xz
 
 # OpenRC
-https://github.com/OpenRC/openrc/releases/download/0.55.1/openrc-0.55.1.tar.gz
+https://github.com/OpenRC/openrc/archive/refs/tags/0.55.1.tar.gz
 
 # runit
 http://smarden.org/runit/runit-2.2.0.tar.gz
@@ -426,10 +426,10 @@ https://download.gimp.org/pub/gegl/0.4.50/gegl-0.4.50.tar.xz
 https://taglib.org/releases/taglib-2.0.2.tar.gz
 
 # libebml (VLC Extensible Binary Meta Language)
-https://github.com/Matroska-Org/libebml/releases/download/release-1.4.5/libebml-1.4.5.tar.xz
+https://dl.matroska.org/downloads/libebml/libebml-1.4.5.tar.xz
 
 # libmatroska (VLC Matroska container)
-https://github.com/Matroska-Org/libmatroska/releases/download/release-1.7.1/libmatroska-1.7.1.tar.xz
+https://dl.matroska.org/downloads/libmatroska/libmatroska-1.7.1.tar.xz
 
 # icu (Firefox International Components for Unicode)
 https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz
