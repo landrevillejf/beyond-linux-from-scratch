@@ -338,6 +338,81 @@ class TestUSBWriterEdgeCases:
                 assert isinstance(devices, list)
 
 
+class TestSetupLoggingEdgeCases:
+    """Tests for setup_logging non-string level and exception fallback"""
+
+    def test_setup_logging_non_string_level(self, tmp_path):
+        """Test setup_logging handles non-string logging level (line 523)"""
+        config_file = tmp_path / "test.conf"
+        config_file.write_text("{}")
+
+        b = LFSBuilder("minimal", tmp_path, config_file)
+        # Make config.get return an integer for logging.level
+        b.config.get = lambda key, default=None: 42 if key == 'logging.level' else default
+        logger = b.setup_logging()
+        assert logger is not None
+        assert logger.name == 'builder'
+
+    def test_setup_logging_exception_fallback(self, tmp_path):
+        """Test setup_logging falls back to INFO on exception (lines 525-526)"""
+        config_file = tmp_path / "test.conf"
+        config_file.write_text("{}")
+
+        b = LFSBuilder("minimal", tmp_path, config_file)
+        # Make config.get raise TypeError
+        def raise_type_error(*args, **kwargs):
+            raise TypeError("mock error")
+        b.config.get = raise_type_error
+        logger = b.setup_logging()
+        assert logger is not None
+        assert logger.name == 'builder'
+
+
+class TestUpdateSourcesListUrlparseException:
+    """Test for urlparse exception during kernel URL filtering"""
+
+    def test_update_sources_list_urlparse_exception(self, tmp_path, monkeypatch):
+        """Test _update_sources_list handles urlparse exception (lines 1007-1008)"""
+        from builder import LFSConfig
+        from urllib.parse import urlparse as real_urlparse
+        monkeypatch.chdir(tmp_path)
+        output_dir = tmp_path / "lfs-build"
+        output_dir.mkdir()
+        config_file = tmp_path / "config.json"
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/wget-list'])
+        config.set('cross_compile', True)
+        config.set('architecture', 'aarch64')
+        config.set('kernel.type', 'linux')
+        config.set('kernel.version', '6.16.1')
+
+        b = LFSBuilder(profile='arm64', output_dir=output_dir, config_file=config_file)
+        b.config = config
+
+        packages_dir = tmp_path / "packages"
+        packages_dir.mkdir()
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = b"https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz\n"
+        mock_response.__enter__.return_value = mock_response
+
+        # Smart mock: let source_key calls succeed (first urlparse per URL),
+        # but raise on subsequent calls (kernel filtering loop)
+        call_count = [0]
+        seen_urls = set()
+
+        def smart_urlparse(url):
+            if url not in seen_urls:
+                seen_urls.add(url)
+                return real_urlparse(url)
+            raise Exception("mock urlparse error")
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            with patch('builder.builder.urlparse', side_effect=smart_urlparse):
+                result = b._update_sources_list()
+                assert result is True
+
+
 class TestProfileManagerAllProfiles:
     """Test all profiles can be instantiated"""
 
