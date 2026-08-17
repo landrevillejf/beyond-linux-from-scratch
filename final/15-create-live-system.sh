@@ -93,16 +93,28 @@ fi
 
 # Construction de l'ISO
 echo "[INFO] Building ISO..."
-xorriso -as mkisofs \
-    -iso-level 4 \
-    -r -V "LFS_LIVE" \
-    -J -joliet-long \
-    -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
-    -b isolinux/isolinux.bin \
-    -c isolinux/boot.cat \
-    -boot-load-size 4 -boot-info-table -no-emul-boot \
-    "$EFI_OPTION" \
-    -o "$ISO_OUT" "$ISO_DIR"
+if [ -n "$EFI_OPTION" ]; then
+    xorriso -as mkisofs \
+        -iso-level 4 \
+        -r -V "LFS_LIVE" \
+        -J -joliet-long \
+        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -boot-load-size 4 -boot-info-table -no-emul-boot \
+        $EFI_OPTION \
+        -o "$ISO_OUT" "$ISO_DIR"
+else
+    xorriso -as mkisofs \
+        -iso-level 4 \
+        -r -V "LFS_LIVE" \
+        -J -joliet-long \
+        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -boot-load-size 4 -boot-info-table -no-emul-boot \
+        -o "$ISO_OUT" "$ISO_DIR"
+fi
 
 # Nettoyage
 rm -rf "$ISO_DIR" "$SQUASHFS"

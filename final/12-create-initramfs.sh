@@ -65,11 +65,42 @@ cat >"$INITRAMFS_DIR/init" <<'EOF'
 /bin/busybox mount -t sysfs sysfs /sys
 /bin/busybox mount -t devtmpfs devtmpfs /dev
 
-ROOT_DEV="/dev/sda2"
-if [ -b "$ROOT_DEV" ]; then
-    /bin/busybox mount -t ext4 "$ROOT_DEV" /mnt
+# Auto-detect root device: try common names, then UUID from kernel cmdline
+ROOT_DEV=""
+ROOT_UUID=""
+
+# Parse kernel command line for root= parameter
+for param in $(cat /proc/cmdline); do
+    case "$param" in
+        root=UUID=*) ROOT_UUID="${param#root=UUID=}" ;;
+        root=/dev/*) ROOT_DEV="${param#root=}" ;;
+    esac
+done
+
+# If UUID specified, find the device
+if [ -n "$ROOT_UUID" ]; then
+    ROOT_DEV=$(findfs "UUID=$ROOT_UUID" 2>/dev/null || true)
+fi
+
+# Fallback: try common root device names
+if [ -z "$ROOT_DEV" ] || [ ! -b "$ROOT_DEV" ]; then
+    for candidate in /dev/sda2 /dev/vda2 /dev/nvme0n1p2 /dev/xvda2 /dev/sda1 /dev/vda1; do
+        if [ -b "$candidate" ]; then
+            ROOT_DEV="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -n "$ROOT_DEV" ] && [ -b "$ROOT_DEV" ]; then
+    echo "Mounting root: $ROOT_DEV"
+    /bin/busybox mount -t ext4 "$ROOT_DEV" /mnt 2>/dev/null || \
+    /bin/busybox mount "$ROOT_DEV" /mnt 2>/dev/null || {
+        echo "Failed to mount $ROOT_DEV. Dropping to shell."
+        /bin/busybox sh
+    }
 else
-    echo "Root device $ROOT_DEV not found. Dropping to shell."
+    echo "Root device not found. Dropping to shell."
     /bin/busybox sh
 fi
 

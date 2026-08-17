@@ -22,7 +22,22 @@ case "$BOOTLOADER" in
 grub)
     echo "[INFO] Installing GRUB bootloader..."
     if [ -f "$LFS/usr/sbin/grub-install" ]; then
-        chroot "$LFS" grub-install --target=i386-pc /dev/sda || echo "GRUB BIOS install skipped"
+        # Auto-detect target disk device
+        GRUB_TARGET="${LFS_CONFIG_BOOTLOADER_TARGET:-}"
+        if [ -z "$GRUB_TARGET" ]; then
+            # Try to find the disk that holds the LFS partition
+            for candidate in /dev/sda /dev/vda /dev/nvme0n1 /dev/xvda; do
+                if [ -b "$candidate" ]; then
+                    GRUB_TARGET="$candidate"
+                    break
+                fi
+            done
+        fi
+        if [ -n "$GRUB_TARGET" ]; then
+            chroot "$LFS" grub-install --target=i386-pc "$GRUB_TARGET" || echo "GRUB BIOS install skipped"
+        else
+            echo "[WARNING] No target disk found for GRUB BIOS install – skipping"
+        fi
         chroot "$LFS" grub-mkconfig -o /boot/grub/grub.cfg
     else
         echo "[WARNING] GRUB not installed in LFS"

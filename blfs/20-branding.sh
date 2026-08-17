@@ -448,6 +448,7 @@ fill_path = os.path.join(img_dir, 'progress_fill.png')
 if not os.path.exists(fill_path):
     create_png(400, 8, 46, 139, 87, fill_path)
 " 2>/dev/null || log_warning "Could not generate Plymouth placeholder images"
+    fi
 
     # Register the theme if plymouth-set-default-theme is available
     if [ -x "$LFS/usr/sbin/plymouth-set-default-theme" ]; then

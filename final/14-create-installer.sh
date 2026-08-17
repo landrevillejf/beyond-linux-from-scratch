@@ -221,7 +221,20 @@ $SUDO umount "$EFI_MOUNT"
 rmdir "$EFI_MOUNT"
 
 # Copier l'image EFI dans l'ISO (comme fichier)
-cp "$EFI_IMG" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+# Extract the actual EFI binary from the FAT image
+mkdir -p "${OUTPUT_DIR}/efi-extract"
+$SUDO mount -o loop "$EFI_IMG" "${OUTPUT_DIR}/efi-extract"
+EFI_BINARY=$(find "${OUTPUT_DIR}/efi-extract" -name "grubx64.efi" -o -name "BOOTX64.EFI" 2>/dev/null | head -1)
+if [ -n "$EFI_BINARY" ]; then
+    cp "$EFI_BINARY" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+    echo "[INFO] EFI binary extracted from FAT image"
+else
+    # Fallback: copy the whole FAT image (not ideal but works for some firmware)
+    cp "$EFI_IMG" "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+    echo "[WARNING] No EFI binary found in FAT image – using raw image as fallback"
+fi
+$SUDO umount "${OUTPUT_DIR}/efi-extract"
+rmdir "${OUTPUT_DIR}/efi-extract"
 
 # --- PRÉPARER ISOLINUX POUR LE BOOT BIOS ---
 cp /usr/lib/ISOLINUX/isolinux.bin "$ISO_ROOT/isolinux/"
