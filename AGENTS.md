@@ -173,7 +173,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 5. **Validate JSON configuration** — all changes to `config/build.conf` must be valid JSON. Use `python3 -m json.tool config/build.conf` to verify.
 6. **Respect the flattened env var contract** — stage scripts read `LFS_CONFIG_*` and `LFS_PROFILE_*`. Any new configuration key added to `build.conf` must be exported in `builder.py`'s environment propagation logic.
 7. **Document new profiles** — add new profiles to the profile table in `README.md` and `builder.py`'s `ProfileManager`.
-
+9. **No Emoji** -- No emoji in code.
 ---
 
 ## 1. Commit Convention
