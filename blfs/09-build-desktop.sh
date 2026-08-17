@@ -1,6 +1,6 @@
 #!/bin/bash
 # 09-build-desktop.sh
-# Desktop environment installation – adapts to DESKTOP_TYPE from builder
+# Desktop environment dispatcher – routes to per-desktop build scripts.
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -euo pipefail
 
@@ -15,238 +15,41 @@ else
     log_success() { echo "[SUCCESS] $*"; }
 fi
 
-IN_DOCKER=false
-if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
-    IN_DOCKER=true
-    log_info "Running in Docker container"
-fi
-
-if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || {
-    log_error "LFS variable not set"
-    exit 1
-}
-
-run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
-
 DESKTOP_TYPE="${LFS_CONFIG_DESKTOP_TYPE:-xfce}"
-log_info "Desktop type requested: $DESKTOP_TYPE"
 
-unsupported_desktop() {
-    case "$1" in
-    gnome) log_error "gnome desktop is not yet implemented; requires Mutter, GNOME Shell, GDM, gsettings-desktop-schemas, gtk4, libadwaita, tracker, evolution-data-server" ;;
-    kde) log_error "kde desktop is not yet implemented; requires Qt6, KDE Frameworks, Plasma Workspace, KWin, SDDM, extra-cmake-modules" ;;
-    lxqt) log_error "lxqt desktop is not yet implemented; requires Qt6, libqtxdg, liblxqt, lxqt-panel, pcmanfm-qt, openbox or kwin" ;;
-    *) log_error "Unknown desktop type '$1'" ;;
-    esac
-}
+log_info "========================================="
+log_info "Desktop Environment Build"
+log_info "Desktop type: $DESKTOP_TYPE"
+log_info "========================================="
 
-install_xfce_docker_config() {
-    log_info "Docker mode – installing launchable XFCE configuration in $LFS"
-    run_privileged mkdir -pv "$LFS"/etc/X11/xorg.conf.d "$LFS"/etc/xdg/xfce4/xfconf/xfce-perchannel-xml "$LFS"/etc/xdg/autostart "$LFS"/usr/share/applications "$LFS"/usr/share/xsessions "$LFS"/usr/share/xfce4 "$LFS"/usr/bin "$LFS"/var/lib/lfs-builder/desktop
-    run_privileged tee "$LFS/usr/share/xsessions/xfce.desktop" >/dev/null <<'EOF'
-[Desktop Entry]
-Name=Xfce Session
-Comment=Use this session to run Xfce as your desktop environment
-Exec=startxfce4
-Icon=xfce4
-Type=Application
-DesktopNames=XFCE
-EOF
-    run_privileged tee "$LFS/usr/bin/startxfce4" >/dev/null <<'EOF'
-#!/bin/sh
-if command -v dbus-launch >/dev/null 2>&1; then
-    exec dbus-launch --exit-with-session xfce4-session
-fi
-exec xfce4-session
-EOF
-    run_privileged chmod 0755 "$LFS/usr/bin/startxfce4"
-    run_privileged tee "$LFS/etc/X11/xinitrc" >/dev/null <<'EOF'
-#!/bin/sh
-exec startxfce4
-EOF
-    run_privileged chmod 0755 "$LFS/etc/X11/xinitrc"
-    run_privileged tee "$LFS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml" >/dev/null <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-session" version="1.0">
-  <property name="general" type="empty">
-    <property name="SaveOnExit" type="bool" value="false"/>
-    <property name="SessionName" type="string" value="Default"/>
-  </property>
-</channel>
-EOF
-    run_privileged tee "$LFS/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml" >/dev/null <<'EOF'
-<?xml version="1.0" encoding="UTF-8"?>
-<channel name="xfce4-panel" version="1.0">
-  <property name="panels" type="array"><value type="int" value="1"/></property>
-</channel>
-EOF
-    run_privileged tee "$LFS/var/lib/lfs-builder/desktop/xfce-packages.list" >/dev/null <<'EOF'
-xfce4-dev-tools
-libxfce4util
-xfconf
-libxfce4ui
-libxfce4windowing
-garcon
-exo
-tumbler
-xfce4-panel
-thunar
-thunar-volman
-xfwm4
-xfce4-session
-xfdesktop
-xfce4-settings
-xfce4-appfinder
-xfce4-terminal
-xfce4-notifyd
-xfce4-power-manager
-EOF
-    log_success "XFCE Docker configuration installed"
-}
-
-if [ "$IN_DOCKER" = true ]; then
-    [ "$DESKTOP_TYPE" = "xfce" ] || {
-        unsupported_desktop "$DESKTOP_TYPE"
+case "$DESKTOP_TYPE" in
+    xfce)
+        log_info "Dispatching to XFCE build script"
+        source "$SCRIPT_DIR/09a-build-xfce.sh"
+        ;;
+    gnome)
+        log_info "Dispatching to GNOME build script"
+        source "$SCRIPT_DIR/09b-build-gnome.sh"
+        ;;
+    kde)
+        log_info "Dispatching to KDE Plasma build script"
+        source "$SCRIPT_DIR/09c-build-kde.sh"
+        ;;
+    lxqt)
+        log_info "Dispatching to LXQt build script"
+        source "$SCRIPT_DIR/09d-build-lxqt.sh"
+        ;;
+    none)
+        log_info "No desktop requested; skipping desktop build"
+        ;;
+    phosh)
+        log_info "Phosh mobile desktop requested; skipping full desktop build"
+        log_warning "Phosh desktop not yet fully implemented; creating minimal session"
+        mkdir -p "$LFS/usr/share/wayland-sessions" 2>/dev/null || true
+        ;;
+    *)
+        log_error "Unknown desktop type: $DESKTOP_TYPE"
+        log_error "Supported types: xfce, gnome, kde, lxqt, none"
         exit 1
-    }
-    install_xfce_docker_config
-    exit 0
-fi
-
-[ "$DESKTOP_TYPE" = "xfce" ] || {
-    unsupported_desktop "$DESKTOP_TYPE"
-    exit 1
-}
-[ -x "$LFS/bin/bash" ] || {
-    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
-    exit 1
-}
-
-mount_chroot_fs() {
-    run_privileged mkdir -p "$LFS"/{dev,dev/pts,proc,sys,run,sources}
-    run_privileged mountpoint -q "$LFS/dev" || run_privileged mount --bind /dev "$LFS/dev"
-    run_privileged mountpoint -q "$LFS/dev/pts" || run_privileged mount -t devpts devpts "$LFS/dev/pts"
-    run_privileged mountpoint -q "$LFS/proc" || run_privileged mount -t proc proc "$LFS/proc"
-    run_privileged mountpoint -q "$LFS/sys" || run_privileged mount -t sysfs sysfs "$LFS/sys"
-    run_privileged mountpoint -q "$LFS/run" || run_privileged mount -t tmpfs tmpfs "$LFS/run"
-}
-cleanup() {
-    if run_privileged mountpoint -q "$LFS/dev/pts" && ! run_privileged umount "$LFS/dev/pts" 2>/dev/null; then log_warning "Could not unmount $LFS/dev/pts"; fi
-    if run_privileged mountpoint -q "$LFS/dev" && ! run_privileged umount "$LFS/dev" 2>/dev/null; then log_warning "Could not unmount $LFS/dev"; fi
-    if run_privileged mountpoint -q "$LFS/proc" && ! run_privileged umount "$LFS/proc" 2>/dev/null; then log_warning "Could not unmount $LFS/proc"; fi
-    if run_privileged mountpoint -q "$LFS/sys" && ! run_privileged umount "$LFS/sys" 2>/dev/null; then log_warning "Could not unmount $LFS/sys"; fi
-    if run_privileged mountpoint -q "$LFS/run" && ! run_privileged umount "$LFS/run" 2>/dev/null; then log_warning "Could not unmount $LFS/run"; fi
-}
-trap cleanup EXIT
-mount_chroot_fs
-
-SOURCES_HOST="$(dirname "$LFS")/sources"
-if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
-    log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
-    run_privileged mkdir -p "$LFS/sources"
-    run_privileged cp -rv "$SOURCES_HOST"/* "$LFS/sources/"
-    if ! run_privileged chown -R lfs:lfs "$LFS/sources" 2>/dev/null; then log_warning "Could not chown $LFS/sources to lfs:lfs"; fi
-fi
-
-cat <<'INNEREOF' | run_privileged tee "$LFS/build-xfce.sh" >/dev/null
-#!/bin/bash
-set -euo pipefail
-log_info() { echo "[INFO] $*"; }
-log_error() { echo "[ERROR] $*" >&2; }
-log_warning() { echo "[WARNING] $*"; }
-log_success() { echo "[SUCCESS] $*"; }
-cd /sources
-mkdir -p /var/lib/lfs-builder/desktop /usr/share/xsessions /etc/X11 /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
-jobs() { nproc 2>/dev/null || echo 1; }
-marker_for() { echo "/var/lib/lfs-builder/desktop/$1.done"; }
-find_archive() { compgen -G "${1}-*.tar.*" | sort -V | tail -n 1; }
-extract_archive() { local archive="$1" dir; dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"; rm -rf "$dir"; tar -xf "$archive"; printf '%s\n' "$dir"; }
-is_installed() {
-    local pkg="$1"; [ -f "$(marker_for "$pkg")" ] && return 0
-    case "$pkg" in
-        xfce4-dev-tools) [ -x /usr/bin/xdt-autogen ] ;;
-        libxfce4util) pkg-config --exists libxfce4util-1.0 2>/dev/null ;;
-        xfconf) [ -x /usr/bin/xfconf-query ] ;;
-        libxfce4ui) pkg-config --exists libxfce4ui-2 2>/dev/null ;;
-        libxfce4windowing) pkg-config --exists libxfce4windowing-0 2>/dev/null ;;
-        garcon) pkg-config --exists garcon-1 2>/dev/null ;;
-        exo) pkg-config --exists exo-2 2>/dev/null ;;
-        tumbler) [ -x /usr/libexec/tumblerd ] || [ -x /usr/lib/tumbler-1/tumblerd ] ;;
-        xfce4-panel) [ -x /usr/bin/xfce4-panel ] ;;
-        thunar) [ -x /usr/bin/thunar ] || [ -x /usr/bin/Thunar ] ;;
-        thunar-volman) [ -x /usr/bin/thunar-volman ] ;;
-        xfwm4) [ -x /usr/bin/xfwm4 ] ;;
-        xfce4-session) [ -x /usr/bin/xfce4-session ] ;;
-        xfdesktop) [ -x /usr/bin/xfdesktop ] ;;
-        xfce4-settings) [ -x /usr/bin/xfce4-settings-manager ] ;;
-        xfce4-appfinder) [ -x /usr/bin/xfce4-appfinder ] ;;
-        xfce4-terminal) [ -x /usr/bin/xfce4-terminal ] ;;
-        xfce4-notifyd) [ -x /usr/lib/xfce4/notifyd/xfce4-notifyd ] || [ -x /usr/libexec/xfce4-notifyd ] ;;
-        xfce4-power-manager) [ -x /usr/bin/xfce4-power-manager ] ;;
-        *) return 1 ;;
-    esac
-}
-verify_prerequisites() {
-    local missing=() pc
-    for pc in glib-2.0 gtk+-3.0 cairo pango atk gdk-pixbuf-2.0 dbus-1 dbus-glib-1; do pkg-config --exists "$pc" 2>/dev/null || missing+=("$pc"); done
-    if [ "${#missing[@]}" -ne 0 ]; then
-        log_error "Missing XFCE prerequisites: ${missing[*]}"
-        log_error "Build glib-2, gtk+3, cairo, pango, atk, gdk-pixbuf, dbus, dbus-glib before this stage."
-        exit 1
-    fi
-}
-build_xfce_pkg() {
-    local pkg="$1" archive dir version docdir
-    archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
-    log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"; version="${dir#${pkg}-}"; docdir="/usr/share/doc/${pkg}-${version}"
-    pushd "$dir" >/dev/null
-    if [ -f meson.build ]; then
-        rm -rf build; meson setup build --prefix=/usr --buildtype=release --sysconfdir=/etc; ninja -C build; ninja -C build install
-    elif [ -x ./configure ] || [ -f configure ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc --docdir="$docdir"; make -j"$(jobs)"; make install
-    elif [ -x ./autogen.sh ]; then
-        ./autogen.sh --prefix=/usr --sysconfdir=/etc --docdir="$docdir"; make -j"$(jobs)"; make install
-    else
-        log_error "$pkg has neither meson.build nor configure/autogen.sh"; exit 1
-    fi
-    popd >/dev/null; rm -rf "$dir"; touch "$(marker_for "$pkg")"; log_success "$pkg installed"
-}
-install_session_files() {
-    cat > /usr/share/xsessions/xfce.desktop <<'EOF'
-[Desktop Entry]
-Name=Xfce Session
-Comment=Use this session to run Xfce as your desktop environment
-Exec=startxfce4
-Icon=xfce4
-Type=Application
-DesktopNames=XFCE
-EOF
-    cat > /etc/X11/xinitrc <<'EOF'
-#!/bin/sh
-exec startxfce4
-EOF
-    chmod 0755 /etc/X11/xinitrc
-    if [ ! -x /usr/bin/startxfce4 ]; then
-        cat > /usr/bin/startxfce4 <<'EOF'
-#!/bin/sh
-if command -v dbus-launch >/dev/null 2>&1; then exec dbus-launch --exit-with-session xfce4-session; fi
-exec xfce4-session
-EOF
-        chmod 0755 /usr/bin/startxfce4
-    fi
-}
-verify_prerequisites
-log_info "Building XFCE 4.20 core in dependency order"
-for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
-    build_xfce_pkg "$pkg"
-done
-install_session_files
-log_success "XFCE desktop installation complete"
-INNEREOF
-run_privileged chmod +x "$LFS/build-xfce.sh"
-run_privileged chroot "$LFS" /bin/bash /build-xfce.sh
-log_success "XFCE desktop environment installed successfully"
+        ;;
+esac

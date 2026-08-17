@@ -6,6 +6,7 @@ Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026
 """
 
 import argparse
+import copy
 import hashlib
 import json
 import logging
@@ -66,6 +67,10 @@ BUILD_STAGES = [
     ('service-mgmt', 'lfs/06b-service-management.sh'),
     ('configure-lfs', 'lfs/07-configure-lfs.sh'),
     ('blfs-base', 'blfs/08-build-blfs-base.sh'),
+    ('blfs-libs', 'blfs/08a-build-blfs-libs.sh'),
+    ('xorg', 'blfs/08b-build-xorg.sh'),
+    ('wayland', 'blfs/08c-build-wayland.sh'),
+    ('display-manager', 'blfs/08d-build-display-manager.sh'),
     ('desktop', 'blfs/09-build-desktop.sh'),
     ('applications', 'blfs/10-build-applications.sh'),
     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
@@ -315,7 +320,7 @@ class ProfileManager:
     """Manage build profiles with flexible desktop, init system, and audio options"""
 
     # Available choices for configuration
-    AVAILABLE_DESKTOPS = ['none', 'xfce', 'gnome', 'kde', 'lxqt']
+    AVAILABLE_DESKTOPS = ['none', 'xfce', 'gnome', 'kde', 'lxqt', 'phosh']
     AVAILABLE_INIT_SYSTEMS = ['sysvinit', 'systemd', 'openrc', 'runit', 's6']
     AVAILABLE_AUDIO = ['none', 'cli', 'studio']
 
@@ -579,10 +584,10 @@ class ProfileManager:
 
     @classmethod
     def get_profile(cls, name: str) -> Dict:
-        """Get profile configuration"""
+        """Get profile configuration (returns a deep copy to prevent mutation)"""
         if name not in cls.PROFILES:
             raise ValueError(f"Unknown profile: {name}. Available: {list(cls.PROFILES.keys())}")
-        return cls.PROFILES[name]
+        return copy.deepcopy(cls.PROFILES[name])
 
     @classmethod
     def list_profiles(cls) -> List[str]:
@@ -1555,11 +1560,19 @@ class LFSBuilder:
         # BLFS base
         stages.append(('blfs-base', 'blfs/08-build-blfs-base.sh'))
 
+        # BLFS core libraries and display stack (only when a desktop is requested)
+        _desktop = self.profile_config.get('desktop')
+        if _desktop and _desktop != 'none':
+            stages.append(('blfs-libs', 'blfs/08a-build-blfs-libs.sh'))
+            stages.append(('xorg', 'blfs/08b-build-xorg.sh'))
+            stages.append(('wayland', 'blfs/08c-build-wayland.sh'))
+            stages.append(('display-manager', 'blfs/08d-build-display-manager.sh'))
+
         # Build kernel
         stages.append(('build-kernel', 'lfs/08-build-kernel.sh'))
 
         # Desktop (if enabled)
-        if self.profile_config.get('desktop'):
+        if _desktop and _desktop != 'none':
             stages.append(('desktop', 'blfs/09-build-desktop.sh'))
             stages.append(('applications', 'blfs/10-build-applications.sh'))
             stages.append(('configure-desktop', 'blfs/11-configure-desktop.sh'))

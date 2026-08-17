@@ -61,13 +61,22 @@ EOF
     exit 0
 fi
 
-# ---- Vérification : seul sysvinit est supporté pour l'instant ----
-if [ "$INIT_SYSTEM" != "sysvinit" ]; then
-    log_error "This script currently supports only sysvinit."
-    log_error "For systemd, openrc, runit, or s6, please use a dedicated stage."
-    log_error "The selected init system is: $INIT_SYSTEM"
-    exit 1
+# ---- Dispatch to dedicated scripts for openrc, runit, or s6 ----
+if [ "$INIT_SYSTEM" = "openrc" ]; then
+    log_info "Dispatching to OpenRC build script"
+    source "$SCRIPT_DIR/06c-init-openrc.sh"
+    exit 0
+elif [ "$INIT_SYSTEM" = "runit" ]; then
+    log_info "Dispatching to runit build script"
+    source "$SCRIPT_DIR/06d-init-runit.sh"
+    exit 0
+elif [ "$INIT_SYSTEM" = "s6" ]; then
+    log_info "Dispatching to s6 build script"
+    source "$SCRIPT_DIR/06e-init-s6.sh"
+    exit 0
 fi
+
+# Only sysvinit and systemd are handled directly by this script.
 
 if [ ! -f "$LFS/bin/bash" ]; then
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
@@ -194,54 +203,239 @@ if [ -n "$NPROC_BIN" ]; then
     JOBS="$("$NPROC_BIN" 2>/dev/null || echo 1)"
 fi
 
-compile_package() {
-    local archive=$1
-    if [ ! -f "$archive" ]; then
-        echo "WARNING: No source found for $archive"
-        return 1
-    fi
-    local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-    echo "=== Building $dir ==="
-    tar -xf "$archive"
-    cd "$dir"
-    if [ -f "configure" ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc
-    elif [ -f "Makefile" ]; then
-        true
-    fi
-    "$MAKE_BIN" -j"$JOBS"
-    "$MAKE_BIN" install
-    cd /sources
-    rm -rf "$dir"
-    echo "=== $dir done ==="
+mkdir -p /var/lib/lfs-builder/init-system
+
+marker_for() { echo "/var/lib/lfs-builder/init-system/$1.done"; }
+
+find_archive() {
+    local pkg="$1"
+    compgen -G "${pkg}-*.tar.*" 2>/dev/null | sort -V | tail -n 1
 }
 
+extract_archive() {
+    local archive="$1" dir
+    dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"
+    rm -rf "$dir"
+    tar -xf "$archive"
+    printf '%s\n' "$dir"
+}
+
+have_pc() { pkg-config --exists "$1" 2>/dev/null; }
+have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+is_installed() {
+    local pkg="$1"
+    [ -f "$(marker_for "$pkg")" ] && return 0
+    case "$pkg" in
+        sysvinit)        [ -x /sbin/init ] && ! readlink /sbin/init 2>/dev/null | grep -q systemd ;;
+        libgpg-error)    have_pc gpg-error ;;
+        libgcrypt)      have_pc libgcrypt ;;
+        libseccomp)     have_pc libseccomp ;;
+        kmod)           have_cmd kmod || have_cmd lsmod ;;
+        systemd)         have_pc libsystemd || [ -x /usr/lib/systemd/systemd ] ;;
+        *) return 1 ;;
+    esac
+}
+
+build_pkg() {
+    local pkg="$1" archive dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then echo "[INFO] $pkg already installed; skipping"; return 0; fi
+    archive="$(find_archive "$pkg")"
+    if [ -z "$archive" ]; then echo "[WARNING] Source archive missing for $pkg; skipping"; return 0; fi
+    echo "=== Building $pkg from $archive ==="
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    if [ -f meson.build ]; then
+        rm -rf builddir
+        # shellcheck disable=SC2086
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts
+        ninja -C builddir
+        ninja -C builddir install
+    elif [ -x ./configure ] || [ -f configure ]; then
+        # shellcheck disable=SC2086
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
+        make -j"$JOBS"
+        make install
+    elif [ -f Makefile ]; then
+        make -j"$JOBS"
+        make install
+    else
+        echo "[ERROR] $pkg has no recognised build system"; popd >/dev/null; return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    echo "=== $pkg done ==="
+}
+
+# -----------------------------------------------------------------------
+# sysvinit
+# -----------------------------------------------------------------------
 if [ "$INIT_SYSTEM" = "sysvinit" ]; then
     echo "Building sysvinit..."
-    found=0
-    for archive in sysvinit-*.tar.*; do
-        if [ -f "$archive" ]; then
-            compile_package "$archive"
-            found=1
-            break
-        fi
-    done
-    if [ $found -eq 0 ]; then
-        echo "WARNING: No source found for sysvinit"
-    fi
+    build_pkg sysvinit || echo "WARNING: sysvinit build failed"
+
+    # Create /etc/inittab
+    cat > /etc/inittab <<'INITTAB'
+id:3:initdefault:
+si::sysinit:/etc/init.d/rcS
+l1:1:wait:/etc/init.d/rc 1
+l2:2:wait:/etc/init.d/rc 2
+l3:3:wait:/etc/init.d/rc 3
+l4:4:wait:/etc/init.d/rc 4
+l5:5:wait:/etc/init.d/rc 5
+l6:6:wait:/etc/init.d/rc 6
+ca:12345:ctrlaltdel:/sbin/shutdown -t1 -a -r now
+1:2345:respawn:/sbin/agetty --noclear tty1 9600 linux
+2:2345:respawn:/sbin/agetty --noclear tty2 9600 linux
+3:2345:respawn:/sbin/agetty --noclear tty3 9600 linux
+4:2345:respawn:/sbin/agetty --noclear tty4 9600 linux
+5:2345:respawn:/sbin/agetty --noclear tty5 9600 linux
+6:2345:respawn:/sbin/agetty --noclear tty6 9600 linux
+INITTAB
+
+# -----------------------------------------------------------------------
+# systemd
+# -----------------------------------------------------------------------
 elif [ "$INIT_SYSTEM" = "systemd" ]; then
+    echo "Building systemd dependencies..."
+
+    # Build systemd dependencies if not already in the LFS base
+    build_pkg libgpg-error  || echo "WARNING: libgpg-error build failed"
+    build_pkg libgcrypt     || echo "WARNING: libgcrypt build failed"
+    build_pkg libseccomp    || echo "WARNING: libseccomp build failed"
+    build_pkg kmod          || echo "WARNING: kmod build failed (may already be in LFS)"
+
     echo "Building systemd..."
-    found=0
-    for archive in systemd-*.tar.*; do
-        if [ -f "$archive" ]; then
-            compile_package "$archive"
-            found=1
-            break
+    if ! is_installed systemd; then
+        archive="$(find_archive systemd)"
+        if [ -n "$archive" ]; then
+            dir="$(extract_archive "systemd")"
+            pushd "$dir" >/dev/null
+            rm -rf builddir
+            meson setup builddir \
+                --prefix=/usr \
+                --buildtype=release \
+                --sysconfdir=/etc \
+                --localstatedir=/var \
+                -Ddefault-hierarchy=unified \
+                -Dcgroup-controller=systemd \
+                -Db_lto=false \
+                -Dsysvinit-path= \
+                -Dsysvrcnd-path= \
+                -Dadmin-group=wheel \
+                -Dwheel-group=wheel \
+                -Dbacklight=true \
+                -Dbinfmt=true \
+                -Dcoredump=true \
+                -Dfirstboot=true \
+                -Dhostnamed=true \
+                -Dhwdb=true \
+                -Dlocaled=true \
+                -Dlogind=true \
+                -Dmachined=true \
+                -Dnetworkd=true \
+                -Dportabled=false \
+                -Dresolve=true \
+                -Dtimedated=true \
+                -Dtimesyncd=true \
+                -Dtmpfiles=true \
+                -Duserdb=true \
+                -Dhomed=false \
+                -Dpolkit=true \
+                -Dman=true \
+                -Dhtml=disabled \
+                -Dlz4=enabled \
+                -Dzstd=enabled
+            ninja -C builddir
+            ninja -C builddir install
+            popd >/dev/null
+            rm -rf "$dir"
+            touch "$(marker_for systemd)"
+            echo "=== systemd done ==="
+        else
+            echo "WARNING: No source found for systemd"
         fi
-    done
-    if [ $found -eq 0 ]; then
-        echo "WARNING: No source found for systemd"
+    else
+        echo "[INFO] systemd already installed; skipping"
     fi
+
+    # ---- Post-install configuration ----
+    echo "Configuring systemd..."
+
+    # Create /etc/machine-id
+    if [ ! -f /etc/machine-id ] || [ ! -s /etc/machine-id ]; then
+        if have_cmd systemd-machine-id-setup; then
+            systemd-machine-id-setup
+        else
+            head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
+        fi
+    fi
+
+    # Create /etc/os-release if not present
+    if [ ! -f /etc/os-release ]; then
+        cat > /etc/os-release <<'OSREL'
+NAME="LFS"
+VERSION="13.0"
+ID=lfs
+PRETTY_NAME="Linux From Scratch 13.0"
+OSREL
+    fi
+
+    # Link systemd as /sbin/init
+    ln -sf /usr/lib/systemd/systemd /sbin/init
+    ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true
+
+    # Set default target
+    if have_cmd systemctl; then
+        systemctl set-default multi-user.target 2>/dev/null || true
+    else
+        mkdir -p /etc/systemd/system
+        ln -sf /usr/lib/systemd/system/multi-user.target /etc/systemd/system/default.target
+    fi
+
+    # Enable essential services
+    systemctl enable getty@tty1.service 2>/dev/null || true
+    systemctl enable getty@tty2.service 2>/dev/null || true
+    systemctl enable systemd-networkd.service 2>/dev/null || true
+    systemctl enable systemd-resolved.service 2>/dev/null || true
+    systemctl enable systemd-timesyncd.service 2>/dev/null || true
+
+    # Basic network configuration
+    mkdir -p /etc/systemd/network
+    cat > /etc/systemd/network/20-wired.network <<'NETCONF'
+[Match]
+Name=en* eth*
+
+[Network]
+DHCP=yes
+NETCONF
+
+    # Journald configuration
+    mkdir -p /etc/systemd/journald.conf.d
+    cat > /etc/systemd/journald.conf.d/lfs-defaults.conf <<'JCONF'
+[Journal]
+Storage=persistent
+Compress=yes
+RateLimitIntervalSec=30s
+RateLimitBurst=1000
+JCONF
+
+    # Logind configuration
+    mkdir -p /etc/systemd/logind.conf.d
+    cat > /etc/systemd/logind.conf.d/lfs-defaults.conf <<'LCONF'
+[Login]
+KillUserProcesses=no
+LCONF
+
+    # Resolved configuration
+    mkdir -p /etc/systemd/resolved.conf.d
+    ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf 2>/dev/null || true
+
+    echo "systemd configuration complete."
+
 else
     echo "ERROR: Unknown init system $INIT_SYSTEM"
     exit 1

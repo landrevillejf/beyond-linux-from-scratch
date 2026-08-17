@@ -14,9 +14,9 @@ class TestProfileManager:
         """Test listing all profiles"""
         profiles = ProfileManager.list_profiles()
         expected_profiles = [
-            'minimal', 'xfce', 'gnome', 'java-dev',
+            'minimal', 'gnu-free', 'gnu-free-full', 'xfce', 'gnome', 'java-dev',
             'secure', 'full', 'arm64', 'audio-cli', 'audio-studio',
-            'kde', 'lxqt', 'server', 'custom'
+            'pinebook', 'kde', 'lxqt', 'server', 'brax3', 'custom'
         ]
         for profile in expected_profiles:
             assert profile in profiles
@@ -132,6 +132,56 @@ class TestProfileManager:
         assert profile['size_gb'] == 5
         assert profile['security_hardening'] is False
         assert profile['live_system'] is False
+
+    def test_get_profile_brax3(self):
+        """Test getting brax3 mobile profile"""
+        profile = ProfileManager.get_profile('brax3')
+        assert profile['desktop'] == 'phosh'
+        assert profile['init_system'] == 'systemd'
+        assert profile['cross_compile'] is True
+        assert profile['architecture'] == 'aarch64'
+        assert profile['bootloader'] == 'aboot'
+        assert profile['live_system'] is False
+
+    def test_get_profile_pinebook(self):
+        """Test getting pinebook ARM64 profile"""
+        profile = ProfileManager.get_profile('pinebook')
+        assert profile['desktop'] == 'xfce'
+        assert profile['init_system'] == 'sysvinit'
+        assert profile['cross_compile'] is True
+        assert profile['architecture'] == 'aarch64'
+        assert profile['bootloader'] == 'uboot'
+
+    def test_get_profile_gnu_free(self):
+        """Test getting GNU-free FSF-compliant profile"""
+        profile = ProfileManager.get_profile('gnu-free')
+        assert profile.get('gnu_free') is True
+        assert profile['kernel'] == 'linux-libre'
+        assert profile['init_system'] == 'sysvinit'
+        assert profile['security_hardening'] is True
+        assert profile['privacy_tools'] is True
+        assert profile['system_updater'] is True
+
+    def test_get_profile_gnu_free_full(self):
+        """Test getting full GNU system with desktop"""
+        profile = ProfileManager.get_profile('gnu-free-full')
+        assert profile.get('gnu_free') is True
+        assert profile['kernel'] == 'linux-libre'
+        assert profile['desktop'] == 'xfce'
+        assert profile['live_system'] is True
+        assert profile['system_updater'] is True
+
+    def test_list_profiles_includes_all(self):
+        """Test that list_profiles includes all expected profiles"""
+        profiles = ProfileManager.list_profiles()
+        expected = [
+            'minimal', 'gnu-free', 'gnu-free-full', 'xfce', 'gnome',
+            'java-dev', 'secure', 'full', 'arm64', 'audio-cli',
+            'pinebook', 'audio-studio', 'kde', 'lxqt', 'server',
+            'brax3', 'custom'
+        ]
+        for name in expected:
+            assert name in profiles, f"Profile '{name}' missing from list_profiles()"
 
     def test_get_profile_not_exists(self):
         """Test getting non-existent profile raises error"""

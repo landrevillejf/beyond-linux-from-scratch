@@ -68,15 +68,20 @@ log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
 cleanup_mounts() {
+    run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
     run_privileged umount "$LFS"/dev 2>/dev/null || true
     run_privileged umount "$LFS"/proc 2>/dev/null || true
     run_privileged umount "$LFS"/sys 2>/dev/null || true
+    run_privileged umount "$LFS"/run 2>/dev/null || true
 }
 trap cleanup_mounts EXIT
 
+run_privileged mkdir -p "$LFS"/dev/pts "$LFS"/run
 run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
+run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
 run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
 # Créer le répertoire profile.d dans le chroot
 run_privileged mkdir -p "$LFS/etc/profile.d"
@@ -138,16 +143,16 @@ case "$_INIT" in
         stop()  { sudo sv down "$1"; }
         restart() { sudo sv restart "$1"; }
         status() { sudo sv status "$1"; }
-        enable() { echo "enable: symlink /etc/sv/$1 to /var/service/"; }
-        disable() { echo "disable: remove symlink from /var/service/"; }
+        enable() { sudo ln -sfn /etc/sv/"$1" /var/service/"$1"; echo "Enabled $1 (runit)"; }
+        disable() { sudo rm -f /var/service/"$1"; echo "Disabled $1 (runit)"; }
         ;;
     s6)
         start() { sudo s6-svc -u /etc/s6/sv/"$1"; }
         stop()  { sudo s6-svc -d /etc/s6/sv/"$1"; }
         restart() { sudo s6-svc -r /etc/s6/sv/"$1"; }
         status() { sudo s6-svstat /etc/s6/sv/"$1"; }
-        enable() { echo "enable: create a symlink in /etc/s6/current/"; }
-        disable() { echo "disable: remove symlink from /etc/s6/current/"; }
+        enable() { sudo ln -sfn /etc/s6/sv/"$1" /etc/s6/current/"$1"; echo "Enabled $1 (s6)"; }
+        disable() { sudo rm -f /etc/s6/current/"$1"; echo "Disabled $1 (s6)"; }
         ;;
 esac
 
@@ -183,9 +188,23 @@ if [ "$INIT_SYSTEM" = "openrc" ]; then
     run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/rc-service /usr/bin/rc-service 2>/dev/null || true'
 fi
 
+# Si runit, créer les liens de compatibilité
+if [ "$INIT_SYSTEM" = "runit" ]; then
+    log_info "Creating runit compatibility links"
+    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/runit /sbin/runit-init 2>/dev/null || true; ln -sf /sbin/runit /sbin/runit-init 2>/dev/null || true'
+fi
+
+# Si s6, créer les liens de compatibilité
+if [ "$INIT_SYSTEM" = "s6" ]; then
+    log_info "Creating s6 compatibility links"
+    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/s6-init /sbin/init 2>/dev/null || true; ln -sf /sbin/s6-shutdown /sbin/shutdown 2>/dev/null || true'
+fi
+
 # Nettoyer les montages
+run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
 run_privileged umount "$LFS"/dev 2>/dev/null || true
 run_privileged umount "$LFS"/proc 2>/dev/null || true
 run_privileged umount "$LFS"/sys 2>/dev/null || true
+run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "Service management abstraction layer installed"

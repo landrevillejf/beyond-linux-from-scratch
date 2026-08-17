@@ -168,9 +168,107 @@ class TestLFSBuilder:
         stages = builder.get_build_stages()
 
         stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' in stage_names
+        assert 'display-manager' in stage_names
         assert 'desktop' in stage_names
         assert 'applications' in stage_names
         assert 'configure-desktop' in stage_names
+
+    def test_get_build_stages_with_none_desktop_excludes_blfs(self, builder):
+        """Desktop 'none' must not add BLFS library, Xorg, Wayland, or desktop stages"""
+        builder.profile_config['desktop'] = 'none'
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' not in stage_names
+        assert 'xorg' not in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+        assert 'desktop' not in stage_names
+        assert 'applications' not in stage_names
+        assert 'configure-desktop' not in stage_names
+
+    def test_get_build_stages_with_null_desktop_excludes_blfs(self, builder):
+        """Desktop None must not add BLFS library, Xorg, Wayland, or desktop stages"""
+        builder.profile_config['desktop'] = None
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' not in stage_names
+        assert 'xorg' not in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+
+    @pytest.mark.parametrize('desktop', ['xfce', 'gnome', 'kde', 'lxqt', 'phosh'])
+    def test_get_build_stages_all_desktops_include_blfs(self, builder, desktop):
+        """Every supported desktop type must include the BLFS display stack stages"""
+        builder.profile_config['desktop'] = desktop
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' in stage_names
+        assert 'display-manager' in stage_names
+        assert 'desktop' in stage_names
+
+    def test_available_desktops_includes_phosh(self):
+        """AVAILABLE_DESKTOPS must include 'phosh' for the brax3 mobile profile"""
+        from builder import ProfileManager
+        assert 'phosh' in ProfileManager.AVAILABLE_DESKTOPS
+
+    def test_available_init_systems_includes_all(self):
+        """AVAILABLE_INIT_SYSTEMS must include openrc, runit, and s6"""
+        from builder import ProfileManager
+        for init in ('sysvinit', 'systemd', 'openrc', 'runit', 's6'):
+            assert init in ProfileManager.AVAILABLE_INIT_SYSTEMS
+
+    @pytest.mark.parametrize('init_system', ['systemd', 'openrc', 'runit', 's6'])
+    def test_get_init_system_all_choices(self, builder, init_system):
+        """get_init_system must return each supported init system unchanged"""
+        builder.config.set('init_system.choice', init_system)
+        assert builder.get_init_system() == init_system
+
+    @pytest.mark.parametrize('init_system', ['systemd', 'openrc', 'runit', 's6'])
+    def test_get_env_exports_init_system(self, builder, init_system):
+        """_get_env must export the correct INIT_SYSTEM value"""
+        builder.config.set('init_system.choice', init_system)
+        env = builder._get_env()
+        assert env['INIT_SYSTEM'] == init_system
+
+    def test_get_profile_brax3_has_phosh_desktop(self):
+        """brax3 profile must declare phosh desktop and systemd init"""
+        from builder import ProfileManager
+        profile = ProfileManager.get_profile('brax3')
+        assert profile['desktop'] == 'phosh'
+        assert profile['init_system'] == 'systemd'
+        assert profile['cross_compile'] is True
+        assert profile['architecture'] == 'aarch64'
+
+    def test_get_profile_pinebook_has_xfce_desktop(self):
+        """pinebook profile must declare xfce desktop and sysvinit init"""
+        from builder import ProfileManager
+        profile = ProfileManager.get_profile('pinebook')
+        assert profile['desktop'] == 'xfce'
+        assert profile['init_system'] == 'sysvinit'
+        assert profile['cross_compile'] is True
+        assert profile['architecture'] == 'aarch64'
+
+    def test_get_profile_gnu_free(self):
+        """gnu-free profile must use linux-libre kernel"""
+        from builder import ProfileManager
+        profile = ProfileManager.get_profile('gnu-free')
+        assert profile.get('gnu_free') is True
+        assert profile['kernel'] == 'linux-libre'
+        assert profile['init_system'] == 'sysvinit'
+
+    def test_get_profile_gnu_free_full(self):
+        """gnu-free-full profile must have xfce desktop and linux-libre kernel"""
+        from builder import ProfileManager
+        profile = ProfileManager.get_profile('gnu-free-full')
+        assert profile.get('gnu_free') is True
+        assert profile['kernel'] == 'linux-libre'
+        assert profile['desktop'] == 'xfce'
+        assert profile['live_system'] is True
 
     def test_get_build_stages_with_java_dev(self, builder):
         """Test build stages with Java development enabled"""
