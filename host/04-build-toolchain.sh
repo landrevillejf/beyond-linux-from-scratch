@@ -316,7 +316,7 @@ build_toolchain() {
         fi
         tar -xf "$LINUX_TAR"
         LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)
-        if [ -d "$LINUX_DIR" ] && [ -f "$LINUX_DIR/arch/$ARCH/Makefile" ]; then
+        if [ -d "$LINUX_DIR" ] && [ -f "$LINUX_DIR/Makefile" ]; then
             return 0
         else
             return 1
