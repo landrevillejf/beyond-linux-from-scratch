@@ -562,7 +562,7 @@ cd build
              --disable-multilib \
              --disable-bootstrap \
              --disable-lto \
-             --disable-libcc1
+             --disable-libcc1 \
              --with-system-zlib \
              --enable-default-pie \
              --enable-default-ssp \
