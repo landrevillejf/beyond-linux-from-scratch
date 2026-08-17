@@ -165,11 +165,31 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      - name: Resolve ISO name
+        id: iso_name
+        run: |
+          ISO_NAME=$(python3 -c "
+          import sys; sys.path.insert(0, '/tmp/lfs-build')
+          from builder import LFSBuilder
+          from pathlib import Path
+          b = LFSBuilder.__new__(LFSBuilder)
+          b.profile = 'xfce'
+          b.output_dir = Path('/tmp/lfs-build/build-release')
+          b.milestone = None
+          from builder import LFSConfig
+          b.config = LFSConfig.__new__(LFSConfig)
+          b.config.data = {'architecture': 'x86_64', 'init_system': {'choice': 'sysvinit'}}
+          b.profile_config = {}
+          print(b.get_iso_name())
+          ")
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+          echo "📀 ISO name: $ISO_NAME"
+
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
-          test -s /tmp/lfs-build/build-release/lfs-installer.iso
-          sha256sum /tmp/lfs-build/build-release/lfs-installer.iso > /tmp/lfs-build/build-release/SHA256SUMS
+          test -s /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+          sha256sum /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }} > /tmp/lfs-build/build-release/SHA256SUMS
           sha256sum /tmp/lfs-build/build-release/image/boot/vmlinuz* >> /tmp/lfs-build/build-release/SHA256SUMS
 
       - name: Upload release artifacts
@@ -177,7 +197,7 @@ jobs:
         with:
           name: release-artifacts
           path: |
-            /tmp/lfs-build/build-release/lfs-installer.iso
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/build_info.json
@@ -188,7 +208,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
-          ISO_PATH="/tmp/lfs-build/build-release/lfs-installer.iso"
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           echo "Booting $ISO_PATH in QEMU..."
           timeout 90s qemu-system-x86_64 \
             -cdrom "$ISO_PATH" \
@@ -206,7 +226,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            /tmp/lfs-build/build-release/lfs-installer.iso
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/SHA256SUMS

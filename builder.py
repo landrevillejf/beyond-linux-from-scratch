@@ -1102,12 +1102,17 @@ class BuildCache:
 class LFSBuilder:
     """Main orchestrator for LFS/BLFS build process"""
 
+    # Backward-compatible symlink name (always points to the actual ISO)
+    ISO_COMPAT_NAME = 'lfs-installer.iso'
+
     def __init__(self, profile: str, output_dir: Path, config_file: Path,
                  cache_url: Optional[str] = None,
                  download_timeout: Optional[int] = None,
-                 download_retries: Optional[int] = None):
+                 download_retries: Optional[int] = None,
+                 milestone: Optional[str] = None):
         self.profile = profile
         self.output_dir = Path(output_dir).resolve()
+        self.milestone = milestone
         if isinstance(config_file, str):
             config_file = Path(config_file)
         self.config = LFSConfig(config_file)   # <- UN SEUL ARGUMENT
@@ -1211,6 +1216,31 @@ class LFSBuilder:
 
         return init
 
+    def get_iso_name(self, dated: bool = False) -> str:
+        """Generate the versioned ISO filename.
+
+        Format: lfs-{version}-{profile}-{arch}-{init}[-{milestone}][-{date}].iso
+
+        Args:
+            dated: If True, append today's date (for nightly builds).
+
+        Returns:
+            ISO filename string (e.g. 'lfs-0.52.40-xfce-x86_64-sysvinit.iso')
+        """
+        version = __version__
+        arch = self.get_target_architecture()
+        init = self.get_init_system()
+
+        parts = [f"lfs-{version}", self.profile, arch, init]
+
+        if self.milestone:
+            parts.append(self.milestone)
+
+        if dated:
+            parts.append(datetime.now().strftime("%Y%m%d"))
+
+        return "-".join(parts) + ".iso"
+
     def _flatten_config(self, obj: Any, prefix: str = '') -> Dict[str, str]:
         """Recursively flatten nested config dictionaries to env variables"""
         env_vars = {}
@@ -1250,6 +1280,7 @@ class LFSBuilder:
             'KERNEL_VERSION': str(self.config.get('kernel.version', '6.16.1')),
             'SYSTEM_UPDATER': str(self.profile_config.get('system_updater', True)).lower(),
             'LFS_VERSION': __version__,
+            'ISO_NAME': self.get_iso_name(),
             'LC_ALL': 'POSIX'
         }
 
@@ -1893,7 +1924,10 @@ class LFSBuilder:
         self.logger.info("BUILD COMPLETED SUCCESSFULLY!")
         self.logger.info("=" * 70)
 
-        iso_path = self.output_dir / 'lfs-installer.iso'
+        iso_name = self.get_iso_name()
+        iso_path = self.output_dir / iso_name
+        compat_path = self.output_dir / self.ISO_COMPAT_NAME
+
         if iso_path.exists():
             size_mb = iso_path.stat().st_size / (1024 * 1024)
             size_gb = size_mb / 1024
@@ -1904,8 +1938,16 @@ class LFSBuilder:
             # Write SHA256SUMS file
             sums_file = self.output_dir / 'SHA256SUMS'
             with open(sums_file, 'w') as f:
-                f.write(f"{sha256}  lfs-installer.iso\n")
+                f.write(f"{sha256}  {iso_name}\n")
             self.logger.info(f"SHA256SUMS written to {sums_file}")
+
+            # Create backward-compatible symlink
+            if compat_path != iso_path and not compat_path.exists():
+                try:
+                    compat_path.symlink_to(iso_name)
+                    self.logger.info(f"Compat symlink: {self.ISO_COMPAT_NAME} -> {iso_name}")
+                except OSError:
+                    pass  # Non-fatal: symlink may fail on some filesystems
 
         return True
 
@@ -1918,9 +1960,10 @@ class LFSBuilder:
         Returns:
             True if signing succeeded or GPG is unavailable (non-fatal).
         """
-        iso_path = self.output_dir / 'lfs-installer.iso'
+        iso_name = self.get_iso_name()
+        iso_path = self.output_dir / iso_name
         if not iso_path.exists():
-            self.logger.error("ISO not found – cannot sign")
+            self.logger.error(f"ISO not found ({iso_name}) – cannot sign")
             return False
 
         if not shutil.which('gpg'):
@@ -1928,7 +1971,7 @@ class LFSBuilder:
             return True
 
         sig_file = iso_path.with_suffix('.iso.sig')
-        self.logger.info("Signing ISO with GPG...")
+        self.logger.info(f"Signing ISO with GPG: {iso_name}")
 
         cmd = ['gpg', '--batch', '--yes', '--armor', '--detach-sign',
                '--output', str(sig_file)]
@@ -1939,7 +1982,7 @@ class LFSBuilder:
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
             self.logger.info(f"ISO signature written to {sig_file}")
-            self.logger.info("Verify with: gpg --verify lfs-installer.iso.sig lfs-installer.iso")
+            self.logger.info(f"Verify with: gpg --verify {iso_name}.sig {iso_name}")
             return True
         except subprocess.CalledProcessError as e:
             self.logger.error(f"GPG signing failed: {e.stderr}")
@@ -1947,7 +1990,8 @@ class LFSBuilder:
 
     def generate_sbom(self) -> bool:
         """Generate an SPDX 2.3 Software Bill of Materials for the build."""
-        iso_path = self.output_dir / 'lfs-installer.iso'
+        iso_name = self.get_iso_name()
+        iso_path = self.output_dir / iso_name
         sbom_file = self.output_dir / 'sbom.spdx.json'
         build_info_file = self.output_dir / 'build_info.json'
 
@@ -2027,11 +2071,18 @@ class LFSBuilder:
 
     def create_writable_media(self, device: Optional[str] = None) -> bool:
         """Create bootable USB media from installer ISO"""
-        installer = self.output_dir / 'lfs-installer.iso'
+        iso_name = self.get_iso_name()
+        installer = self.output_dir / iso_name
 
         if not installer.exists():
-            self.logger.error("Installer ISO not found. Run build first.")
-            return False
+            # Fall back to compat symlink for users who built before versioned naming
+            compat = self.output_dir / self.ISO_COMPAT_NAME
+            if compat.exists():
+                installer = compat
+                iso_name = self.ISO_COMPAT_NAME
+            else:
+                self.logger.error("Installer ISO not found. Run build first.")
+                return False
 
         if device:
             return USBWriter.write_iso(installer, device, self.logger)
@@ -2045,7 +2096,7 @@ class LFSBuilder:
             self.logger.info("\nTo write to USB, run:")
             self.logger.info(f"  python3 builder.py --write-usb /dev/sdX")
             self.logger.info("\nOr use:")
-            self.logger.info("  sudo dd if=lfs-installer.iso of=/dev/sdX bs=4M status=progress")
+            self.logger.info(f"  sudo dd if={iso_name} of=/dev/sdX bs=4M status=progress")
             return True
 
 
@@ -2180,6 +2231,9 @@ Examples:
     parser.add_argument('--sbom', action='store_true',
                         help='Generate SPDX SBOM after build')
 
+    parser.add_argument('--milestone',
+                        help='Milestone tag for ISO naming (e.g. alpha1, beta1, rc1)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -2248,7 +2302,8 @@ def main():
         config_file=args.config,
         cache_url=args.cache_url,
         download_timeout=args.download_timeout,
-        download_retries=args.download_retries
+        download_retries=args.download_retries,
+        milestone=args.milestone
     )
 
     # --- Override architecture via --arch ---
@@ -2371,7 +2426,7 @@ def main():
     print("\n" + "=" * 70)
     print("BUILD COMPLETED SUCCESSFULLY!")
     print("=" * 70)
-    print(f"ISO location: {builder.output_dir}/lfs-installer.iso")
+    print(f"ISO location: {builder.output_dir}/{builder.get_iso_name()}")
     print("\nNext steps:")
     print("  1. Write ISO to USB:")
     print(f"     python3 builder.py --write-usb /dev/sdX")
@@ -2382,7 +2437,7 @@ def main():
 
     if builder.is_cross_compile():
         print(f"\nFor ARM64 target ({builder.get_target_architecture()}):")
-        print(f"   - Flash to SD card: dd if={builder.output_dir}/lfs-installer.img of=/dev/sdb bs=4M")
+        print(f"   - Flash to SD card: dd if={builder.output_dir}/{builder.get_iso_name()} of=/dev/sdb bs=4M")
         print(f"   - Boot on your ARM device (Raspberry Pi, Orange Pi, etc.)")
         print(f"   - You will be required to set root password and create a user")
 

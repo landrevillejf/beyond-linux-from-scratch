@@ -34,8 +34,8 @@ class TestSignISO:
     def test_sign_iso_gpg_not_found(self, tmp_path):
         """sign_iso returns True (non-fatal) when GPG is missing (line 1926-1928)"""
         builder = self._make_builder(tmp_path)
-        # Create the ISO file
-        iso_file = tmp_path / 'lfs-installer.iso'
+        # Create the ISO file with the dynamic name
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_bytes(b'fake iso content')
 
         with patch('shutil.which', return_value=None):
@@ -45,7 +45,7 @@ class TestSignISO:
     def test_sign_iso_success(self, tmp_path):
         """sign_iso succeeds and creates .sig file (lines 1930-1943)"""
         builder = self._make_builder(tmp_path)
-        iso_file = tmp_path / 'lfs-installer.iso'
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_bytes(b'fake iso content')
 
         with patch('shutil.which', return_value='/usr/bin/gpg'):
@@ -61,7 +61,7 @@ class TestSignISO:
     def test_sign_iso_success_with_gpg_key(self, tmp_path):
         """sign_iso passes --local-user when gpg_key is provided (lines 1935-1936)"""
         builder = self._make_builder(tmp_path)
-        iso_file = tmp_path / 'lfs-installer.iso'
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_bytes(b'fake iso content')
 
         with patch('shutil.which', return_value='/usr/bin/gpg'):
@@ -77,7 +77,7 @@ class TestSignISO:
         """sign_iso returns False when GPG signing fails (lines 1944-1946)"""
         import subprocess
         builder = self._make_builder(tmp_path)
-        iso_file = tmp_path / 'lfs-installer.iso'
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_bytes(b'fake iso content')
 
         with patch('shutil.which', return_value='/usr/bin/gpg'):
@@ -277,3 +277,88 @@ class TestMainSBOMAndSignISO:
                                 with patch.object(LFSBuilder, 'create_writable_media', return_value=True):
                                     main()
                                     mock_sign.assert_called_once_with('ABCD1234')
+
+
+class TestISONameGeneration:
+    """Test get_iso_name() method for versioned ISO naming"""
+
+    def _make_builder(self, tmp_path, profile='minimal', milestone=None):
+        config_file = tmp_path / "test.conf"
+        config_file.write_text("{}")
+        return LFSBuilder(profile, tmp_path, config_file, milestone=milestone)
+
+    def test_get_iso_name_default(self, tmp_path):
+        """ISO name includes version, profile, arch, init"""
+        builder = self._make_builder(tmp_path)
+        name = builder.get_iso_name()
+        assert name.startswith('lfs-')
+        assert 'minimal' in name
+        assert 'x86_64' in name
+        assert 'sysvinit' in name
+        assert name.endswith('.iso')
+
+    def test_get_iso_name_with_milestone(self, tmp_path):
+        """ISO name includes milestone tag when set (line 1237)"""
+        builder = self._make_builder(tmp_path, milestone='rc1')
+        name = builder.get_iso_name()
+        assert 'rc1' in name
+        # Format: lfs-VERSION-minimal-x86_64-sysvinit-rc1.iso
+        parts = name.replace('.iso', '').split('-')
+        assert parts[-1] == 'rc1'
+
+    def test_get_iso_name_with_date(self, tmp_path):
+        """ISO name includes date when dated=True (line 1240)"""
+        builder = self._make_builder(tmp_path)
+        name = builder.get_iso_name(dated=True)
+        today = datetime.now().strftime("%Y%m%d")
+        assert today in name
+
+    def test_get_iso_name_with_milestone_and_date(self, tmp_path):
+        """ISO name includes both milestone and date"""
+        builder = self._make_builder(tmp_path, milestone='beta1')
+        name = builder.get_iso_name(dated=True)
+        today = datetime.now().strftime("%Y%m%d")
+        assert 'beta1' in name
+        assert today in name
+
+    def test_build_creates_compat_symlink(self, tmp_path):
+        """build() creates backward-compatible lfs-installer.iso symlink (line 1948)"""
+        builder = self._make_builder(tmp_path)
+        iso_name = builder.get_iso_name()
+        iso_path = tmp_path / iso_name
+        iso_path.write_bytes(b"X" * 1024)
+
+        with patch.object(builder.executor, 'run_script', return_value=True):
+            result = builder.build()
+            assert result is True
+
+        compat = tmp_path / 'lfs-installer.iso'
+        assert compat.exists()
+        assert compat.is_symlink()
+
+    def test_build_symlink_creation_failure_nonfatal(self, tmp_path):
+        """build() handles OSError when symlink creation fails (line 1949)"""
+        builder = self._make_builder(tmp_path)
+        iso_name = builder.get_iso_name()
+        iso_path = tmp_path / iso_name
+        iso_path.write_bytes(b"X" * 1024)
+
+        with patch.object(builder.executor, 'run_script', return_value=True):
+            with patch('pathlib.Path.symlink_to', side_effect=OSError("readonly fs")):
+                result = builder.build()
+                assert result is True  # Non-fatal
+
+    def test_create_writable_media_fallback_to_compat(self, tmp_path):
+        """create_writable_media falls back to compat symlink (lines 2081-2082)"""
+        builder = self._make_builder(tmp_path)
+        # Create only the compat symlink, not the versioned ISO
+        compat = tmp_path / 'lfs-installer.iso'
+        compat.write_bytes(b"fake iso")
+
+        with patch('builder.USBWriter.write_iso', return_value=True) as mock_write:
+            result = builder.create_writable_media('/dev/sdb')
+            assert result is True
+            mock_write.assert_called_once()
+            # Should have used the compat path
+            call_args = mock_write.call_args
+            assert 'lfs-installer.iso' in str(call_args)

@@ -184,11 +184,27 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      - name: Resolve ISO name
+        id: iso_name
+        run: |
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+            ARCH="aarch64"
+          else
+            PROFILE="${{ matrix.profile }}"
+            ARCH="${{ matrix.arch }}"
+          fi
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          DATE=$(date +%Y%m%d)
+          ISO_NAME="lfs-${BUILDER_VERSION}-${PROFILE}-${ARCH}-${{ matrix.init }}-${DATE}.iso"
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+          echo "📀 ISO name: $ISO_NAME"
+
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
-          test -s /tmp/lfs-build/build-release/lfs-installer.iso
-          sha256sum /tmp/lfs-build/build-release/lfs-installer.iso > /tmp/lfs-build/build-release/SHA256SUMS
+          test -s /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+          sha256sum /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }} > /tmp/lfs-build/build-release/SHA256SUMS
           sha256sum /tmp/lfs-build/build-release/image/boot/vmlinuz* >> /tmp/lfs-build/build-release/SHA256SUMS
 
       - name: Upload release artifacts
@@ -196,7 +212,7 @@ jobs:
         with:
           name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
           path: |
-            /tmp/lfs-build/build-release/lfs-installer.iso
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/build_info.json
@@ -207,7 +223,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
-          ISO_PATH="/tmp/lfs-build/build-release/lfs-installer.iso"
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           echo "Booting $ISO_PATH in QEMU..."
           timeout 90s qemu-system-x86_64 \
             -cdrom "$ISO_PATH" \

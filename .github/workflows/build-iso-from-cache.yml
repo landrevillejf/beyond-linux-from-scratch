@@ -90,29 +90,31 @@ jobs:
           sudo chmod +x /tmp/lfs-builder/final/*.sh
           sudo chown -R lfs:lfs /tmp/lfs-builder
 
+      - name: Resolve ISO name
+        id: release_info
+        run: |
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          TAG="v${BUILDER_VERSION}-iso-from-cache-$(date +%Y%m%d-%H%M%S)"
+          ISO_NAME="lfs-${BUILDER_VERSION}-xfce-x86_64-sysvinit-$(date +%Y%m%d).iso"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "name=LFS ISO from cache v${BUILDER_VERSION} $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+
       - name: Run final stages for ISO generation
         id: build_iso
         run: |
           LFS_PATH="/tmp/lfs-build/image"
           cd /tmp/lfs-builder
-          sudo LFS="$LFS_PATH" ./final/12-create-initramfs.sh
-          sudo LFS="$LFS_PATH" ./final/13-create-bootloader.sh
-          sudo LFS="$LFS_PATH" ./final/14-create-installer.sh
-          sudo LFS="$LFS_PATH" ./final/15-create-live-system.sh
-
-      - name: Generate dynamic release tag and name
-        id: release_info
-        run: |
-          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
-          TAG="v${BUILDER_VERSION}-iso-from-cache-$(date +%Y%m%d-%H%M%S)"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "name=LFS ISO from cache v${BUILDER_VERSION} $(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/12-create-initramfs.sh
+          sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/13-create-bootloader.sh
+          sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/14-create-installer.sh
+          sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/15-create-live-system.sh
 
       - name: Verify kernel and ISO
         run: |
           ls /tmp/lfs-build/image/boot/vmlinuz*
-          test -s /tmp/lfs-build/lfs-installer.iso
-          sha256sum /tmp/lfs-build/lfs-installer.iso > /tmp/lfs-build/SHA256SUMS
+          test -s /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
+          sha256sum /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }} > /tmp/lfs-build/SHA256SUMS
           sha256sum /tmp/lfs-build/image/boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
 
       - name: Upload ISO artifact
@@ -120,7 +122,7 @@ jobs:
         with:
           name: iso-from-cache
           path: |
-            /tmp/lfs-build/lfs-installer.iso
+            /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
           if-no-files-found: error
@@ -132,7 +134,7 @@ jobs:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
           files: |
-            /tmp/lfs-build/lfs-installer.iso
+            /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
           generate_release_notes: true
@@ -142,7 +144,7 @@ jobs:
       - name: Verify ISO presence
         if: always()
         run: |
-          if [ -f /tmp/lfs-build/lfs-installer.iso ]; then
+          if [ -f "/tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}" ]; then
             echo "ISO built successfully"
           else
             echo "ISO not found"

@@ -730,7 +730,8 @@ class TestLFSBuilder:
                 config_file=str(config_file),
                 cache_url='https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json',
                 download_timeout=None,
-                download_retries=None
+                download_retries=None,
+                milestone=None
             )
 
     @patch('builder.LFSBuilder._update_sources_list')

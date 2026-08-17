@@ -285,7 +285,7 @@ class TestLFSBuilderCoverage:
 
     def test_create_writable_media_with_device(self, builder, temp_dir):
         """Test écriture USB avec périphérique spécifié"""
-        iso_path = builder.output_dir / 'lfs-installer.iso'
+        iso_path = builder.output_dir / builder.get_iso_name()
         iso_path.write_text("dummy")
 
         with patch('builder.USBWriter.write_iso', return_value=True) as mock_write:

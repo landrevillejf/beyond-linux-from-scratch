@@ -27,8 +27,8 @@ class TestRemainingCoverageLines:
 
         builder = LFSBuilder("minimal", tmp_path, config_file)
 
-        # Create fake ISO
-        iso_file = tmp_path / 'lfs-installer.iso'
+        # Create fake ISO with dynamic name
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_bytes(b"X" * (1024 * 1024 * 100))  # 100 MB
 
         with patch.object(builder.executor, 'run_script', return_value=True):

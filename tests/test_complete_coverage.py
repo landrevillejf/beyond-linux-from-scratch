@@ -202,8 +202,8 @@ class TestLFSBuilderCoverage:
 
         builder = LFSBuilder("minimal", tmp_path, config_file)
 
-        # Create fake ISO
-        iso_file = tmp_path / 'lfs-installer.iso'
+        # Create fake ISO with dynamic name
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_text("fake iso")
 
         with patch.object(USBWriter, 'list_devices', return_value=[]):
@@ -299,7 +299,8 @@ class TestMainCLI:
         """Test main with --write-usb flag"""
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
-        iso_file = tmp_path / 'lfs-installer.iso'
+        builder = LFSBuilder("minimal", tmp_path, config_file)
+        iso_file = tmp_path / builder.get_iso_name()
         iso_file.write_text("fake")
 
         with patch('sys.argv', ['builder.py', '--profile', 'minimal', '--output', str(tmp_path),
@@ -597,5 +598,6 @@ class TestLFSBuilderMissingISO:
                     config_file='config/build.conf',
                     cache_url='https://my-custom/metadata.json',
                     download_timeout=None,
-                    download_retries=None
+                    download_retries=None,
+                    milestone=None
                 )

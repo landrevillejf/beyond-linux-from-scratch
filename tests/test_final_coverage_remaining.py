@@ -161,8 +161,8 @@ class TestRemainingCoverageLines:
         """Test line 1424: logging device info when no ISO provided"""
         from builder import USBWriter
         
-        # Create the ISO first
-        iso_path = builder.output_dir / 'lfs-installer.iso'
+        # Create the ISO with dynamic name
+        iso_path = builder.output_dir / builder.get_iso_name()
         iso_path.parent.mkdir(parents=True, exist_ok=True)
         iso_path.write_text("fake iso content")
         

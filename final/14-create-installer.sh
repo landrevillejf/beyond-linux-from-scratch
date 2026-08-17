@@ -17,7 +17,7 @@ if [ -z "$LFS" ] || [ ! -d "$LFS" ]; then
 fi
 
 OUTPUT_DIR="$(dirname "$LFS")"
-INSTALLER_ISO="${OUTPUT_DIR}/lfs-installer.iso"
+INSTALLER_ISO="${OUTPUT_DIR}/${ISO_NAME:-lfs-installer.iso}"
 ISO_ROOT="${OUTPUT_DIR}/iso-root"
 EFI_IMG="${OUTPUT_DIR}/efi.img"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

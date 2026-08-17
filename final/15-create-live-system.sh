@@ -7,7 +7,7 @@ set -e
 LFS="${LFS:-/output/image}"
 OUTPUT_DIR="$(dirname "$LFS")"
 SQUASHFS="${OUTPUT_DIR}/live.squashfs"
-ISO_OUT="${OUTPUT_DIR}/lfs-installer.iso"
+ISO_OUT="${OUTPUT_DIR}/${ISO_NAME:-lfs-installer.iso}"
 
 # Paramètres du builder
 COMPRESSION="${LFS_CONFIG_LIVE_SYSTEM_SQUASHFS_COMPRESSION:-xz}"
