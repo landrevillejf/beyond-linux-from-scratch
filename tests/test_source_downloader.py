@@ -215,3 +215,79 @@ https://git.savannah.gnu.org/git/guix.git
         )
         logger.warning.assert_any_call("Failed to download 1 sources:")
         logger.warning.assert_any_call("  https://example.com/package.tar.gz")
+
+    @patch('builder.time.sleep')
+    def test_download_http_503_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+        """Test that 5xx HTTP errors are retried with exponential backoff."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+
+        mock_urlretrieve = patch('urllib.request.urlretrieve')
+        with mock_urlretrieve as mock_retrieve:
+            mock_retrieve.side_effect = [
+                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=503,
+                                       msg='Service Unavailable', hdrs=None, fp=None),
+                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=503,
+                                       msg='Service Unavailable', hdrs=None, fp=None),
+                MagicMock(),  # success on third attempt
+            ]
+            result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=3)
+
+        assert result is True
+        assert mock_retrieve.call_count == 3
+        assert mock_sleep.call_count == 2  # slept between attempts
+
+    @patch('builder.time.sleep')
+    def test_download_http_429_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+        """Test that HTTP 429 (rate limit) is retried."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            mock_retrieve.side_effect = [
+                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=429,
+                                       msg='Too Many Requests', hdrs=None, fp=None),
+                MagicMock(),
+            ]
+            result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=2)
+
+        assert result is True
+        assert mock_sleep.call_count == 1
+
+    def test_download_from_list_retry_pass_recovers(self, tmp_path):
+        """Test that download_from_list retry pass recovers failed downloads."""
+        list_file = tmp_path / "sources.list"
+        list_file.write_text("https://example.com/package.tar.gz\n")
+
+        logger = MagicMock()
+        downloader = SourceDownloader(sources_dir=tmp_path, logger=logger, retries=1)
+
+        call_count = [0]
+        original_download = downloader.download
+
+        def mock_download(url, filename=None, retries=None):
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return False  # first call (parallel pass) fails
+            return True  # retry pass succeeds
+
+        with patch.object(downloader, 'download', side_effect=mock_download):
+            result = downloader.download_from_list(list_file, parallel=1, retry_passes=2)
+
+        assert result is True
+        logger.info.assert_any_call("  Recovered on retry pass 1: package.tar.gz")
+
+    def test_download_from_list_retry_pass_skips_existing(self, tmp_path):
+        """Test that retry pass skips files that already exist."""
+        list_file = tmp_path / "sources.list"
+        list_file.write_text("https://example.com/package.tar.gz\n")
+
+        # Pre-create the file so the retry pass sees it exists
+        (tmp_path / "package.tar.gz").write_text("content")
+
+        logger = MagicMock()
+        downloader = SourceDownloader(sources_dir=tmp_path, logger=logger, retries=1)
+
+        with patch.object(downloader, 'download', return_value=False):
+            result = downloader.download_from_list(list_file, parallel=1, retry_passes=1)
+
+        # The file exists so the retry pass skips it → all good
+        assert result is True

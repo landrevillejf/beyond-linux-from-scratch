@@ -47,21 +47,21 @@ jobs:
           downloader = SourceDownloader(
               sources_dir=sources_dir,
               logger=logger,
-              timeout=60,
-              retries=3
+              timeout=120,
+              retries=5
           )
           
-          # Download from main sources list
+          # Download from main sources list (3 parallel to avoid rate-limiting)
           sources_list = Path("packages/sources.list")
           if sources_list.exists():
               logger.info(f"Downloading from {sources_list}")
-              downloader.download_from_list(sources_list, parallel=6)
+              downloader.download_from_list(sources_list, parallel=3, retry_passes=3)
           
           # Download from custom sources
           custom_sources = Path("packages/custom-sources.list")
           if custom_sources.exists():
               logger.info(f"Downloading from {custom_sources}")
-              downloader.download_from_list(custom_sources, parallel=4)
+              downloader.download_from_list(custom_sources, parallel=3, retry_passes=3)
           
           PYTHON_SCRIPT
 

@@ -13,6 +13,7 @@ import logging
 import os
 import platform
 import pwd
+import random
 import re
 import shutil
 import socket
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -657,7 +659,12 @@ class SourceDownloader:
         return opener
 
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
-        """Download a file with retry"""
+        """Download a file with exponential-backoff retry.
+
+        Transient errors (timeouts, connection resets, 5xx, 429) are retried
+        with increasing delays.  Permanent client errors (4xx except 429) fail
+        immediately to avoid wasting time.
+        """
         if filename is None:
             filename = url.split('/')[-1]
 
@@ -679,22 +686,40 @@ class SourceDownloader:
                     socket.setdefaulttimeout(previous_timeout)
                 return True
             except urllib.error.HTTPError as e:
-                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if dest.exists():
                     dest.unlink()
+                # Permanent client errors – do not retry
+                if 400 <= e.code < 500 and e.code != 429:
+                    self.logger.error(f"Permanent error downloading {url}: {e}")
+                    return False
+                # Retryable server errors and rate limits
+                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+                if attempt < retries - 1:
+                    delay = min(2 ** attempt + random.uniform(0, 1), 30)
+                    self.logger.info(f"Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
                 self.logger.error(f"Failed to download {url}: {e}")
                 return False
             except Exception as e:
-                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if dest.exists():
                     dest.unlink()
+                self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < retries - 1:
+                    delay = min(2 ** attempt + random.uniform(0, 1), 30)
+                    self.logger.info(f"Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
-                return False  # at top
+                return False
 
-    def download_from_list(self, list_file: Path, parallel: int = 4) -> bool:
-        """Download multiple sources in parallel"""
+    def download_from_list(self, list_file: Path, parallel: int = 4,
+                           retry_passes: int = 2) -> bool:
+        """Download multiple sources in parallel with retry passes.
+
+        After the initial parallel download, any failures are retried in
+        sequential passes to handle transient network issues common in CI.
+        """
         if not list_file.exists():
             self.logger.error(f"Sources list not found: {list_file}")
             return False
@@ -711,6 +736,7 @@ class SourceDownloader:
 
         self.logger.info(f"Downloading {len(urls)} sources with {parallel} threads")
 
+        # --- First pass: parallel download ---
         failed_urls = []
         with ThreadPoolExecutor(max_workers=parallel) as executor:
             future_to_url = {executor.submit(self.download, url): url for url in urls}
@@ -723,6 +749,30 @@ class SourceDownloader:
                 except Exception as e:
                     self.logger.error(f"Unexpected error downloading {url}: {e}")
                     failed_urls.append(url)
+
+        # --- Retry passes: sequential, with increasing per-file retries ---
+        for pass_num in range(1, retry_passes + 1):
+            if not failed_urls:
+                break
+            self.logger.warning(
+                f"Retry pass {pass_num}/{retry_passes}: "
+                f"{len(failed_urls)} sources still missing"
+            )
+            still_failed = []
+            for url in failed_urls:
+                filename = url.split('/')[-1]
+                dest = self.sources_dir / filename
+                if dest.exists():
+                    continue  # downloaded by a concurrent thread
+                extra_retries = 2 + pass_num  # progressively more patient
+                try:
+                    if self.download(url, retries=extra_retries):
+                        self.logger.info(f"  Recovered on retry pass {pass_num}: {filename}")
+                        continue
+                except Exception as e:
+                    self.logger.warning(f"Retry pass {pass_num} error for {url}: {e}")
+                still_failed.append(url)
+            failed_urls = still_failed
 
         if failed_urls:
             self.logger.warning(f"Failed to download {len(failed_urls)} sources:")
