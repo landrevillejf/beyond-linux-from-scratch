@@ -190,7 +190,8 @@ def test_lfs_system_diffutils_pathmax_workaround_present():
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    assert 'if [ "$pkg" = "diffutils" ]; then' in content
+    # The PATH_MAX workaround is now in a case statement within build_simple()
+    assert 'diffutils)' in content
     assert 'grep -q "PATH_MAX" lib/stackvma.c' in content
     assert '! grep -q "#include <limits.h>" lib/stackvma.c' in content
     assert "sed -i '1s/^/#include <limits.h>\\n/' lib/stackvma.c" in content

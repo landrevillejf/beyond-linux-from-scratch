@@ -580,14 +580,13 @@ echo "gcc done"
 unset CC CXX
 
 # ============================================================
-# 4. BUILD BASE PACKAGES (coreutils, bash, etc.) – now using native compiler
+# 4. BUILD COMPLETE LFS SYSTEM (Chapter 8 packages)
 # ============================================================
-# After gcc is installed, we switch to the native compiler
-unset CC CXX LD AS
-
+# Following LFS 13.0 Chapter 8 order for complete system
 build_simple() {
     local pkg=$1
     local cflags=""
+    local configure_args=""
     local archive=$(find_archive "$pkg")
     if [ -z "$archive" ]; then
         echo "WARNING: $pkg source not found, skipping"
@@ -597,15 +596,26 @@ build_simple() {
     echo "=== Building $dir ==="
     tar -xf "$archive"
     cd "$dir"
-    if [ "$pkg" = "diffutils" ]; then
-        if grep -q "PATH_MAX" lib/stackvma.c 2>/dev/null &&
-           ! grep -q "#include <limits.h>" lib/stackvma.c 2>/dev/null; then
-            sed -i '1s/^/#include <limits.h>\n/' lib/stackvma.c
-        fi
-        cflags="-D_GNU_SOURCE -DPATH_MAX=4096"
-    fi
+    
+    # Package-specific patches and flags
+    case "$pkg" in
+        diffutils)
+            if grep -q "PATH_MAX" lib/stackvma.c 2>/dev/null &&
+               ! grep -q "#include <limits.h>" lib/stackvma.c 2>/dev/null; then
+                sed -i '1s/^/#include <limits.h>\n/' lib/stackvma.c
+            fi
+            cflags="-D_GNU_SOURCE -DPATH_MAX=4096"
+            ;;
+        coreutils|grep|sed|findutils|m4)
+            cflags="-D_GNU_SOURCE -DPATH_MAX=4096"
+            ;;
+        file)
+            cflags="-D_GNU_SOURCE"
+            ;;
+    esac
+    
     if [ -f "configure" ]; then
-        CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc
+        CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc $configure_args
     elif [ -f "Makefile" ]; then
         true
     fi
@@ -616,11 +626,62 @@ build_simple() {
     echo "=== $dir done ==="
 }
 
-for pkg in coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
+# LFS 13.0 Chapter 8 package order (excluding already built: glibc, binutils, gcc)
+for pkg in man-pages iana-etc zlib bzip2 xz lz4 zstd file readline pcre2 bc \
+           flex tcl expect dejagnu pkgconf gmp mpfr mpc attr acl libcap libxcrypt \
+           shadow ncurses psmisc gettext bison libtool gdbm gperf expat inetutils \
+           less perl intltool autoconf automake openssl libelf libffi sqlite python \
+           ninja meson kmod groff iproute2 kbd libpipeline texinfo vim man-db procps-ng util-linux e2fsprogs; do
     build_simple "$pkg"
 done
 
-echo "=== Base system compilation complete ==="
+# Special packages with custom build steps
+# Perl XML::Parser
+PERL_ARCHIVE=$(find_archive perl)
+if [ -n "$PERL_ARCHIVE" ]; then
+    echo "=== Building XML::Parser ==="
+    XML_PARSER_ARCHIVE=$(find_archive "XML-Parser")
+    if [ -n "$XML_PARSER_ARCHIVE" ]; then
+        dir=$(tar -tf "$XML_PARSER_ARCHIVE" | head -1 | cut -d/ -f1)
+        tar -xf "$XML_PARSER_ARCHIVE"
+        cd "$dir"
+        perl Makefile.PL
+        make -j$(nproc)
+        make install
+        cd /sources
+        rm -rf "$dir"
+    fi
+fi
+
+# Python packages (Flit-Core, Packaging, Wheel, Setuptools)
+for pkg in flit-core packaging wheel setuptools; do
+    archive=$(find_archive "$pkg")
+    if [ -n "$archive" ]; then
+        dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+        echo "=== Building $dir ==="
+        tar -xf "$archive"
+        cd "$dir"
+        pip3 install .
+        cd /sources
+        rm -rf "$dir"
+    fi
+done
+
+# MarkupSafe and Jinja2 (Python dependencies)
+for pkg in markupsafe jinja2; do
+    archive=$(find_archive "$pkg")
+    if [ -n "$archive" ]; then
+        dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+        echo "=== Building $dir ==="
+        tar -xf "$archive"
+        cd "$dir"
+        pip3 install .
+        cd /sources
+        rm -rf "$dir"
+    fi
+done
+
+echo "=== Complete LFS system compilation complete ==="
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-lfs-system.sh"
