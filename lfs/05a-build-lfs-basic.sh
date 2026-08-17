@@ -79,38 +79,103 @@ ensure_bootstrap_chroot_shell() {
     # Ensure the dynamic linker is reachable at the path the cross-compiled
     # /tools/bin/bash expects.
     #
-    # The toolchain gcc was built with --with-sysroot=$LFS and embeds the
-    # interpreter path /tools/lib/ld-linux-*.so* in every ELF binary it
-    # produces.  However, glibc's "make install" (configured with
-    # --prefix=/usr, libc_cv_slibdir=/usr/lib) places the actual dynamic
-    # linker under /lib64 (the default rtlddir on x86_64) or /usr/lib,
-    # NOT under /tools/lib.  Without a symlink the kernel cannot find the
-    # interpreter and the chroot execve() fails with ENOENT.
+    # The toolchain gcc was built with --with-sysroot=$LFS and embeds an
+    # interpreter path (e.g. /tools/lib/ld-linux-x86-64.so.2 or
+    # /lib64/ld-linux-x86-64.so.2) in every ELF binary it produces.
+    # However, glibc's "make install" places the actual dynamic linker
+    # under /lib64 (the default rtlddir on x86_64) or /usr/lib, NOT
+    # necessarily at the path the binary expects.  Without a symlink at
+    # the expected path the kernel cannot find the interpreter and the
+    # chroot execve() fails with ENOENT.
+    #
+    # We detect the expected interpreter path from /tools/bin/bash using
+    # readelf and create a symlink there if needed.
     # ------------------------------------------------------------------
-    local expected_linker="$LFS/tools/lib/ld-linux-x86-64.so.2"
-    if [ ! -e "$expected_linker" ]; then
-        local actual_linker=""
-        for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
-                         "$LFS/usr/lib/ld-linux-x86-64.so.2" \
-                         "$LFS/lib/ld-linux-x86-64.so.2"; do
-            if [ -f "$candidate" ]; then
-                actual_linker="$candidate"
-                break
-            fi
-        done
+    local bash_binary="$LFS/tools/bin/bash"
+    local expected_interpreter=""
+    if command -v readelf >/dev/null 2>&1; then
+        expected_interpreter=$(readelf -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)
+    elif [ -x "$LFS/tools/bin/readelf" ]; then
+        expected_interpreter=$("$LFS/tools/bin/readelf" -l "$bash_binary" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)
+    fi
 
-        if [ -n "$actual_linker" ]; then
-            log_info "Dynamic linker found at $actual_linker"
-            # Strip the $LFS prefix to get the chroot-relative path.
-            # The symlink target MUST be relative to the chroot root,
-            # NOT the host-absolute path (which doesn't exist inside chroot).
-            local linker_in_chroot="${actual_linker#"$LFS"}"
-            log_info "Creating symlink /tools/lib/ld-linux-x86-64.so.2 -> $linker_in_chroot"
-            run_privileged mkdir -p "$LFS/tools/lib"
-            run_privileged ln -sf "$linker_in_chroot" "$expected_linker"
+    if [ -n "$expected_interpreter" ]; then
+        log_info "Bash expects dynamic linker at: $expected_interpreter"
+        local expected_linker_host="$LFS$expected_interpreter"
+        local expected_linker_dir
+        expected_linker_dir=$(dirname "$expected_linker_host")
+
+        # If the expected path doesn't exist or is a broken symlink, fix it
+        if [ ! -e "$expected_linker_host" ]; then
+            local actual_linker=""
+            for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
+                             "$LFS/usr/lib/ld-linux-x86-64.so.2" \
+                             "$LFS/lib/ld-linux-x86-64.so.2" \
+                             "$LFS/tools/lib/ld-linux-x86-64.so.2"; do
+                if [ -f "$candidate" ]; then
+                    actual_linker="$candidate"
+                    break
+                fi
+            done
+
+            if [ -n "$actual_linker" ]; then
+                log_info "Dynamic linker found at $actual_linker"
+                local linker_in_chroot="${actual_linker#"$LFS"}"
+                log_info "Creating symlink $expected_interpreter -> $linker_in_chroot"
+                run_privileged mkdir -p "$expected_linker_dir"
+                run_privileged ln -sf "$linker_in_chroot" "$expected_linker_host"
+            else
+                log_warning "Dynamic linker ld-linux-x86-64.so.2 not found anywhere"
+                log_warning "Chroot may fail – check that glibc was installed correctly"
+            fi
         else
-            log_warning "Dynamic linker ld-linux-x86-64.so.2 not found in /lib64, /usr/lib, or /lib"
-            log_warning "Chroot may fail – check that glibc was installed correctly"
+            log_info "Dynamic linker already accessible at $expected_interpreter"
+        fi
+
+        # Also ensure /tools/lib/ has a symlink as a fallback
+        local fallback_linker="$LFS/tools/lib/ld-linux-x86-64.so.2"
+        if [ ! -e "$fallback_linker" ] && [ "$expected_interpreter" != "/tools/lib/ld-linux-x86-64.so.2" ]; then
+            local actual_linker=""
+            for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
+                             "$LFS/usr/lib/ld-linux-x86-64.so.2" \
+                             "$LFS/lib/ld-linux-x86-64.so.2"; do
+                if [ -f "$candidate" ]; then
+                    actual_linker="$candidate"
+                    break
+                fi
+            done
+            if [ -n "$actual_linker" ]; then
+                local linker_in_chroot="${actual_linker#"$LFS"}"
+                run_privileged mkdir -p "$LFS/tools/lib"
+                run_privileged ln -sf "$linker_in_chroot" "$fallback_linker"
+                log_info "Also created fallback symlink /tools/lib/ld-linux-x86-64.so.2 -> $linker_in_chroot"
+            fi
+        fi
+    else
+        log_warning "Could not detect interpreter path from /tools/bin/bash"
+        log_warning "Falling back to creating symlink at /tools/lib/ld-linux-x86-64.so.2"
+        local expected_linker="$LFS/tools/lib/ld-linux-x86-64.so.2"
+        if [ ! -e "$expected_linker" ]; then
+            local actual_linker=""
+            for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
+                             "$LFS/usr/lib/ld-linux-x86-64.so.2" \
+                             "$LFS/lib/ld-linux-x86-64.so.2"; do
+                if [ -f "$candidate" ]; then
+                    actual_linker="$candidate"
+                    break
+                fi
+            done
+
+            if [ -n "$actual_linker" ]; then
+                log_info "Dynamic linker found at $actual_linker"
+                local linker_in_chroot="${actual_linker#"$LFS"}"
+                log_info "Creating symlink /tools/lib/ld-linux-x86-64.so.2 -> $linker_in_chroot"
+                run_privileged mkdir -p "$LFS/tools/lib"
+                run_privileged ln -sf "$linker_in_chroot" "$expected_linker"
+            else
+                log_warning "Dynamic linker ld-linux-x86-64.so.2 not found in /lib64, /usr/lib, or /lib"
+                log_warning "Chroot may fail – check that glibc was installed correctly"
+            fi
         fi
     fi
 
@@ -162,7 +227,14 @@ if [ ! -x "$LFS/tools/bin/bash" ]; then
 fi
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>&1; then
     log_error "chroot test failed – the cross-compiled /tools/bin/bash cannot run inside the chroot"
-    log_error "Check that the dynamic linker (/tools/lib/ld-linux-x86-64.so.2) and libc.so.6 are accessible"
+    log_error "Diagnostics:"
+    log_error "  /bin/bash -> $(readlink -f "$LFS/bin/bash" 2>/dev/null || echo 'broken symlink')"
+    if command -v readelf >/dev/null 2>&1; then
+        log_error "  Expected interpreter: $(readelf -l "$LFS/tools/bin/bash" 2>/dev/null | grep 'interpreter:' | sed 's/.*interpreter: //' | sed 's/ .*//' | head -1)"
+    fi
+    log_error "  /tools/lib contents: $(find "$LFS/tools/lib/" -maxdepth 1 -name 'ld-linux*' 2>/dev/null || echo 'no ld-linux found')"
+    log_error "  /lib64 contents: $(find "$LFS/lib64/" -maxdepth 1 -name 'ld-linux*' 2>/dev/null || echo 'no ld-linux found')"
+    log_error "Check that the dynamic linker and libc.so.6 are accessible at the expected paths"
     exit 1
 fi
 log_success "Bootstrap chroot shell is working"
