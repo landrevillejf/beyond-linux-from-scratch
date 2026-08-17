@@ -250,32 +250,6 @@ build_toolchain() {
     if [ ! -f "$LFS/tools/bin/cc" ]; then
         ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
     fi
-
-    # --disable-shared above only affects target libraries (libstdc++, etc.).
-    # libgcc_s.so is part of the compiler itself and should always be built.
-    # However, with --with-newlib and --without-headers some toolchains skip
-    # the shared libgcc.  Verify it exists; if not, build it explicitly so
-    # that the glibc configure in the next stage can link test programs.
-    if ! find "$LFS/tools" -name "libgcc_s.so*" 2>/dev/null | grep -q .; then
-        log_warning "libgcc_s.so not produced by GCC pass 1 – building explicitly"
-        make -j"$NUM_JOBS" all-target-libgcc
-        make install-target-libgcc
-    fi
-    # Ensure libgcc_s.so is in a well-known location (/tools/lib/) where the
-    # cross-compiler can find it with --sysroot=/ in the chroot.
-    LIBGCC_S_INSTALLED=$(find "$LFS/tools" -name "libgcc_s.so*" 2>/dev/null | head -1)
-    if [ -n "$LIBGCC_S_INSTALLED" ]; then
-        log_info "libgcc_s found at: $LIBGCC_S_INSTALLED"
-        mkdir -p "$LFS/tools/lib"
-        if [ "$LIBGCC_S_INSTALLED" != "$LFS/tools/lib/libgcc_s.so.1" ]; then
-            cp -v "$LIBGCC_S_INSTALLED" "$LFS/tools/lib/libgcc_s.so.1"
-        fi
-        ln -sf libgcc_s.so.1 "$LFS/tools/lib/libgcc_s.so"
-    else
-        log_error "libgcc_s.so not found after GCC build – glibc configure will fail"
-        exit 1
-    fi
-
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
     log_success "GCC (pass 1) done"
