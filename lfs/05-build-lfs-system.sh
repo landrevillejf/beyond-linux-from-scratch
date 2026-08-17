@@ -52,154 +52,27 @@ run_privileged() {
     fi
 }
 
-copy_tool_with_libs() {
-    local source_path="$1"
-    local dest_path="$2"
-
-    if [ ! -x "$source_path" ]; then
-        return 1
-    fi
-
-    run_privileged mkdir -p "$(dirname "$dest_path")"
-    run_privileged cp -Lv "$source_path" "$dest_path"
-    run_privileged chmod +x "$dest_path"
-
-    ldd "$source_path" 2>/dev/null | awk '/=> \// {print $3} $1 ~ /^\/lib/ {print $1}' | while read -r lib; do
-        [ -z "$lib" ] && continue
-        run_privileged mkdir -p "$LFS$(dirname "$lib")"
-        if [ ! -e "$LFS$lib" ]; then
-            run_privileged cp -Lv "$lib" "$LFS$lib"
-        fi
-    done
-}
-
 ensure_bootstrap_chroot_shell() {
-    if [ ! -x "$LFS/bin/bash" ]; then
-        log_info "Bootstrapping /bin/bash into chroot"
-        if [ -x "$LFS/usr/bin/bash" ]; then
-            run_privileged mkdir -p "$LFS/bin"
-            run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
-        else
-            local host_bash
-            host_bash="$(command -v bash 2>/dev/null || true)"
-            if [ -z "$host_bash" ] || [ ! -x "$host_bash" ]; then
-                log_error "Unable to locate a host bash binary for chroot bootstrap"
-                exit 1
-            fi
-            copy_tool_with_libs "$host_bash" "$LFS/bin/bash"
-        fi
-    fi
+    local tool
+    local required_tools=(
+        bash bison m4 xz bzip2 expr grep sed awk find xargs cut head tail wc
+        tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod
+    )
 
-    if [ ! -e "$LFS/bin/sh" ]; then
-        run_privileged ln -sfn bash "$LFS/bin/sh"
-    fi
-
-    for tool in env xz bzip2 expr grep sed awk find xargs cut head tail wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4 wget; do
-        if [ ! -x "$LFS/usr/bin/$tool" ]; then
-            log_info "Bootstrapping /usr/bin/$tool into chroot"
-            local host_tool
-            host_tool="$(command -v "$tool" 2>/dev/null || true)"
-            if [ -n "$host_tool" ] && [ -x "$host_tool" ]; then
-                copy_tool_with_libs "$host_tool" "$LFS/usr/bin/$tool"
-            else
-                log_warning "Host tool '$tool' not found, chroot may fail"
-            fi
+    for tool in "${required_tools[@]}"; do
+        if [ ! -x "$LFS/tools/bin/$tool" ]; then
+            log_error "Missing bootstrap tool: $LFS/tools/bin/$tool"
+            log_error "The toolchain stage must build it; host binaries are never copied into LFS."
+            exit 1
         fi
     done
 
-    # glibc's gettext build invokes bison, which needs its m4 templates from
-    # bison's datadir (typically /usr/share/bison). Ensure they are available
-    # when bison is bootstrapped from the host.
-    if [ -x "$LFS/usr/bin/bison" ] && [ ! -f "$LFS/usr/share/bison/m4sugar/m4sugar.m4" ]; then
-        local host_bison_datadir
-        host_bison_datadir="$(bison --print-datadir 2>/dev/null || true)"
-        if [ -n "$host_bison_datadir" ] && [ -d "$host_bison_datadir" ]; then
-            log_info "Copying bison data directory into chroot at $host_bison_datadir"
-            run_privileged mkdir -p "$LFS$host_bison_datadir"
-            run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/
-        else
-            log_warning "Unable to locate host bison data directory, glibc build may fail"
-        fi
-    fi
-
-    # Bootstrap python3 and create python symlink for glibc configure
-    if command -v python3 &>/dev/null && [ ! -x "$LFS/usr/bin/python3" ]; then
-        log_info "Bootstrapping /usr/bin/python3 into chroot"
-        copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"
-        # Copy Python standard library so glibc build scripts work inside the chroot.
-        # glibc 2.39+ uses Python scripts (e.g. gen-as-const.py) during compilation;
-        # without the stdlib the build fails with "No module named 'encodings'".
-        PYTHON_STDLIB=$(python3 -c "import sysconfig; print(sysconfig.get_path('stdlib'))" 2>/dev/null || true)
-        if [ -n "$PYTHON_STDLIB" ] && [ -d "$PYTHON_STDLIB" ]; then
-            log_info "Copying Python stdlib into chroot at $PYTHON_STDLIB"
-            run_privileged mkdir -p "$LFS$PYTHON_STDLIB"
-            run_privileged cp -r "$PYTHON_STDLIB"/. "$LFS$PYTHON_STDLIB"/
-        fi
-    fi
-    if [ ! -e "$LFS/usr/bin/python" ] && [ -x "$LFS/usr/bin/python3" ]; then
-        run_privileged ln -sfn python3 "$LFS/usr/bin/python"
-    fi
-
-    # Ensure /bin/awk exists
-    if [ ! -x "$LFS/bin/awk" ]; then
-        if [ -x "$LFS/usr/bin/awk" ]; then
-            run_privileged cp -v "$LFS/usr/bin/awk" "$LFS/bin/awk"
-            run_privileged chmod +x "$LFS/bin/awk"
-        else
-            log_warning "/usr/bin/awk not found in chroot, awk may be missing"
-        fi
-    fi
-
-    # Copy libtinfo.so.6 to /lib so the LFS glibc ld.so can find it after glibc
-    # install replaces the dynamic linker.  On Ubuntu 24.04 (UsrMerge) ldd may
-    # report the canonical path under /usr/lib rather than /lib, so search both
-    # locations inside the chroot and fall back to the host if neither is present.
-    if [ ! -e "$LFS/lib/libtinfo.so.6" ]; then
-        _libtinfo_src=""
-        for _dir in \
-            "$LFS/lib/x86_64-linux-gnu" \
-            "$LFS/usr/lib/x86_64-linux-gnu" \
-            "$LFS/lib" \
-            "$LFS/usr/lib"; do
-            if [ -f "$_dir/libtinfo.so.6" ]; then
-                _libtinfo_src="$_dir/libtinfo.so.6"
-                break
-            fi
-        done
-        if [ -z "$_libtinfo_src" ]; then
-            _libtinfo_host=$(find /lib /usr/lib -name "libtinfo.so.6" 2>/dev/null | head -1)
-            if [ -n "$_libtinfo_host" ]; then
-                run_privileged mkdir -p "$LFS/lib"
-                run_privileged cp -Lv "$_libtinfo_host" "$LFS/lib/libtinfo.so.6"
-                log_info "Copied libtinfo.so.6 from host to chroot /lib"
-            else
-                log_warning "libtinfo.so.6 not found – chroot bash may fail after glibc install"
-            fi
-        else
-            run_privileged cp -Lv "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"
-        fi
-    fi
-    # Also mirror libtinfo.so.6 to /usr/lib, which is one of the new glibc
-    # ld.so's compiled-in default search directories.  This acts as a
-    # belt-and-suspenders safeguard: the inner script runs ldconfig after glibc
-    # installs to rebuild the cache, but having the file in /usr/lib ensures
-    # /bin/bash keeps working even if ldconfig is unavailable or misconfigured.
-    if [ -e "$LFS/lib/libtinfo.so.6" ]; then
-        run_privileged mkdir -p "$LFS/usr/lib"
-        if [ ! -e "$LFS/usr/lib/libtinfo.so.6" ]; then
-            run_privileged cp -Lv "$LFS/lib/libtinfo.so.6" "$LFS/usr/lib/libtinfo.so.6"
-            log_info "Mirrored libtinfo.so.6 to chroot /usr/lib for new glibc ld.so"
-        fi
-    fi
-
-    # If the toolchain built a newer liblzma (e.g. xz-5.6+), prefer it over the
-    # host version.  The host liblzma may be an older rollback package that does
-    # not export the XZ_5.6.0 version symbol required by the cross-compiled xz
-    # binary placed in /tools/bin by the toolchain stage.
-    if [ -f "$LFS/tools/lib/liblzma.so.5" ] && [ -f "$LFS/lib/x86_64-linux-gnu/liblzma.so.5" ]; then
-        run_privileged cp -Lv "$LFS/tools/lib/liblzma.so.5" "$LFS/lib/x86_64-linux-gnu/liblzma.so.5"
-        log_info "Updated /lib/x86_64-linux-gnu/liblzma.so.5 from toolchain"
-    fi
+    # /tools is the self-contained temporary userspace. Only expose its shell
+    # through conventional paths required by chroot; the inner build uses
+    # PATH=/tools/bin and never imports host programs or libraries.
+    run_privileged mkdir -p "$LFS/bin"
+    run_privileged ln -sfn /tools/bin/bash "$LFS/bin/bash"
+    run_privileged ln -sfn bash "$LFS/bin/sh"
 }
 
 log_info "========================================="
@@ -216,8 +89,8 @@ fi
 
 ensure_bootstrap_chroot_shell
 
-if [ ! -f "$LFS/bin/bash" ]; then
-    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+if [ ! -x "$LFS/tools/bin/bash" ]; then
+    log_error "/tools/bin/bash not found – run toolchain first"
     exit 1
 fi
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then

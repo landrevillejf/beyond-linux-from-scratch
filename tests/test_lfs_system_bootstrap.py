@@ -6,6 +6,29 @@ from pathlib import Path
 import re
 
 
+BOOTSTRAP_TOOLS = (
+    "bash", "bison", "m4", "xz", "bzip2", "expr", "grep", "sed", "awk",
+    "find", "xargs", "cut", "head", "tail", "wc", "tr", "sort", "uniq",
+    "dirname", "basename", "tar", "uname", "make", "rm", "mkdir", "cp",
+    "mv", "ln", "rmdir", "chmod",
+)
+
+
+def create_bootstrap_tools(lfs_dir, lfs_tgt):
+    tools_dir = lfs_dir / "tools" / "bin"
+    tools_dir.mkdir(parents=True, exist_ok=True)
+
+    for tool in BOOTSTRAP_TOOLS:
+        tool_path = tools_dir / tool
+        tool_path.write_text("#!/bin/sh\nexit 0\n")
+        tool_path.chmod(0o755)
+
+    for tool in ("gcc", "ld", "as"):
+        tool_path = tools_dir / f"{lfs_tgt}-{tool}"
+        tool_path.write_text("#!/bin/sh\nexit 0\n")
+        tool_path.chmod(0o755)
+
+
 def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
@@ -23,10 +46,7 @@ def test_lfs_system_bootstraps_shell_and_env(temp_dir):
     (temp_dir / "sources").mkdir(parents=True, exist_ok=True)
     (temp_dir / "sources" / "placeholder.txt").write_text("ok\n")
 
-    for tool in ("gcc", "ld", "as"):
-        tool_path = lfs_dir / "tools" / "bin" / f"{lfs_tgt}-{tool}"
-        tool_path.write_text("#!/bin/sh\nexit 0\n")
-        tool_path.chmod(0o755)
+    create_bootstrap_tools(lfs_dir, lfs_tgt)
 
     fake_bin.mkdir(parents=True, exist_ok=True)
 
@@ -44,7 +64,7 @@ exit 0
 root="$1"
 shift
 if [ "$1" = "/bin/bash" ] && [ "$2" = "-c" ] && [ "$3" = "exit 0" ]; then
-    [ -x "$root/bin/bash" ] || exit 1
+    [ -L "$root/bin/bash" ] || exit 1
     exit 0
 fi
 mkdir -p "$root/usr/bin"
@@ -93,7 +113,7 @@ exit 0
     assert os.path.lexists(lfs_dir / "bin" / "bash")
     assert (lfs_dir / "bin" / "sh").is_symlink()
     assert os.readlink(lfs_dir / "bin" / "sh") == "bash"
-    assert (lfs_dir / "usr" / "bin" / "env").exists()
+    assert os.readlink(lfs_dir / "bin" / "bash") == "/usr/bin/bash"
 
 
 def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
@@ -112,10 +132,7 @@ def test_lfs_system_bootstrap_with_image_root_layout(temp_dir):
     (lfs_dir / "sources" / "placeholder.txt").write_text("ok\n")
     (output_dir / "sources" / "placeholder.txt").write_text("ok\n")
 
-    for tool in ("gcc", "ld", "as"):
-        tool_path = lfs_dir / "tools" / "bin" / f"{lfs_tgt}-{tool}"
-        tool_path.write_text("#!/bin/sh\nexit 0\n")
-        tool_path.chmod(0o755)
+    create_bootstrap_tools(lfs_dir, lfs_tgt)
 
     fake_bin.mkdir(parents=True, exist_ok=True)
 
@@ -133,7 +150,7 @@ exit 0
 root="$1"
 shift
 if [ "$1" = "/bin/bash" ] && [ "$2" = "-c" ] && [ "$3" = "exit 0" ]; then
-    [ -x "$root/bin/bash" ] || exit 1
+    [ -L "$root/bin/bash" ] || exit 1
     exit 0
 fi
 mkdir -p "$root/usr/bin"
@@ -182,7 +199,7 @@ exit 0
     assert os.path.lexists(lfs_dir / "bin" / "bash")
     assert (lfs_dir / "bin" / "sh").is_symlink()
     assert os.readlink(lfs_dir / "bin" / "sh") == "bash"
-    assert (lfs_dir / "usr" / "bin" / "env").exists()
+    assert os.readlink(lfs_dir / "bin" / "bash") == "/usr/bin/bash"
 
 
 def test_lfs_system_diffutils_pathmax_workaround_present():
@@ -209,7 +226,7 @@ def test_lfs_system_does_not_bind_mount_host_usr():
     assert 'umount "$LFS"/usr' not in content
 
 
-def test_lfs_system_uses_cross_compiler_hostcc_for_linux_headers():
+def test_lfs_system_uses_toolchain_bootstrap_and_cross_compiler():
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
@@ -224,47 +241,41 @@ def test_lfs_system_uses_cross_compiler_hostcc_for_linux_headers():
     assert 'if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then' in content
     assert 'make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers' in content
     assert 'make HOSTCC=gcc headers' not in content
-    expected_tool_loop = (
-        "for tool in env xz bzip2 expr grep sed awk find xargs cut head tail"
-        " wc tr sort uniq dirname basename tar uname make rm mkdir cp mv ln rmdir chmod ld bison m4 wget; do"
-    )
-    assert expected_tool_loop in content
-    assert 'copy_tool_with_libs "$(command -v python3)" "$LFS/usr/bin/python3"' in content
-    assert 'ln -sfn python3 "$LFS/usr/bin/python"' in content
+    assert 'local required_tools=(' in content
+    assert 'bash bison m4 xz bzip2 expr grep sed awk' in content
+    assert '[ ! -x "$LFS/tools/bin/$tool" ]' in content
+    assert 'ln -sfn /tools/bin/bash "$LFS/bin/bash"' in content
+    assert 'ln -sfn bash "$LFS/bin/sh"' in content
 
 
-def test_lfs_system_copies_python_stdlib_into_chroot():
-    """glibc 2.39+ runs Python scripts (gen-as-const.py) during compilation.
-    Without the Python standard library in the chroot, the build fails with
-    'ModuleNotFoundError: No module named encodings'.  The script must copy
-    the stdlib directory into the chroot alongside the python3 binary."""
+def test_lfs_system_does_not_copy_host_python():
+    """Python from the build host must not be copied into the target root."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    assert 'python3 -c "import sysconfig; print(sysconfig.get_path(\'stdlib\'))"' in content
-    assert 'run_privileged cp -r "$PYTHON_STDLIB"/. "$LFS$PYTHON_STDLIB"/' in content
+    assert "copy_tool_with_libs" not in content
+    assert 'command -v python3' not in content
 
 
-def test_lfs_system_copies_bison_datadir_into_chroot():
-    """Bootstrapped host bison needs its datadir templates in the chroot.
-    Without /usr/share/bison/m4sugar/m4sugar.m4, glibc's gettext build fails."""
+def test_lfs_system_does_not_copy_host_bison_data():
+    """Bison and its templates must be supplied by the temporary toolchain."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    assert '[ ! -f "$LFS/usr/share/bison/m4sugar/m4sugar.m4" ]' in content
-    assert 'host_bison_datadir="$(bison --print-datadir 2>/dev/null || true)"' in content
-    assert 'run_privileged cp -r "$host_bison_datadir"/. "$LFS$host_bison_datadir"/' in content
+    assert "host_bison_datadir" not in content
+    assert 'bison --print-datadir' not in content
 
 
-def test_lfs_system_copies_libtinfo_following_symlink():
-    """Copy the real libtinfo file, not a dangling symlink, into /lib."""
+def test_lfs_system_does_not_copy_host_libraries():
+    """The target root must not inherit libraries from the build host."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
-    assert 'run_privileged cp -Lv "$_libtinfo_src" "$LFS/lib/libtinfo.so.6"' in content
+    assert 'find /lib /usr/lib' not in content
+    assert 'Copied libtinfo' not in content
 
 
 def test_lfs_system_glibc_install_uses_toolchain_bash():
@@ -294,42 +305,16 @@ def test_lfs_system_glibc_install_uses_toolchain_bash():
     assert 'LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make' not in content
 
 
-def test_lfs_system_ldconfig_after_glibc_install():
-    """After glibc installs its new ld.so the dynamic linker cache must be
-    rebuilt so that /bin/bash can find its host-copied dependencies (e.g.
-    libtinfo.so.6) that live under /lib, which is NOT in the new ld.so's
-    compiled-in search path (/lib64 and /usr/lib).  The inner script must
-    create /etc/ld.so.conf covering the bootstrap library directories and
-    run /sbin/ldconfig immediately after glibc make install.
-
-    /usr/lib must be listed BEFORE /lib so that the newly-installed glibc
-    libc.so.6 takes priority over the Ubuntu host libc copied to
-    /lib/x86_64-linux-gnu, preventing a GLIBC_PRIVATE symbol mismatch when
-    the new ld.so loads libc at bootstrap-tool startup."""
+def test_lfs_system_rebuilds_linker_cache_after_glibc_install():
+    """The new target glibc must be preferred after it is installed."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05-build-lfs-system.sh"
     content = script.read_text()
 
     assert '/etc/ld.so.conf' in content
     assert '/sbin/ldconfig' in content
-    # /etc/ld.so.conf must still cover /lib so libtinfo.so.6 is findable
-    assert '/lib' in content
-    # /usr/lib must be listed first so glibc 2.42 libc.so.6 takes priority over
-    # the Ubuntu host libc, avoiding the __nptl_change_stack_perm symbol error
     assert "printf '/usr/lib" in content
-    # LD_LIBRARY_PATH must be updated after glibc install to prefer /usr/lib
     assert 'LD_LIBRARY_PATH=/usr/lib' in content
-
-
-def test_lfs_system_libtinfo_mirrored_to_usr_lib():
-    """libtinfo.so.6 must also be copied to $LFS/usr/lib so that the new
-    glibc ld.so (which searches /usr/lib by default) can find it without
-    relying solely on ldconfig or /etc/ld.so.conf."""
-    repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "lfs" / "05-build-lfs-system.sh"
-    content = script.read_text()
-
-    assert '"$LFS/usr/lib/libtinfo.so.6"' in content
 
 
 def test_lfs_system_cross_compiler_uses_sysroot_slash():

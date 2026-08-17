@@ -169,7 +169,7 @@ build_toolchain() {
         exit 1
     }
 
-    for pkg in binutils gcc linux glibc; do
+    for pkg in binutils gcc linux glibc bison; do
         if ! find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit | grep -q .; then
             log_error "Source for $pkg not found"
             exit 1
@@ -431,7 +431,11 @@ CROSS_CACHE_EOF
     # 7. BUILD ESSENTIAL TOOLS
     # ==============================================================
     log_info "Building essential tools for /tools"
-    for pkg in m4 xz coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
+    # These programs form the complete bootstrap userspace for the next stage.
+    # Do not let 05-build-lfs-system.sh copy substitutes from the build host:
+    # that leaks host libraries into the target root and makes the result
+    # dependent on the GitHub runner image.
+    for pkg in m4 bison xz coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
         else
