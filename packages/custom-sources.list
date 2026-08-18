@@ -586,7 +586,6 @@ https://sourceforge.net/projects/modplug-xmms/files/libmodplug/0.8.9.0/libmodplu
 
 https://sourceforge.net/projects/sidplay2/files/sidplay2/sidplay-libs-2.1.1/sidplay-libs-2.1.1.tar.gz
 
-https://github.com/lipnitskiy/libcue/releases/download/v2.3.1/libcue-2.3.1.tar.xz
 https://libzip.org/download/libzip-1.10.1.tar.xz
 
 # Additional X applications
@@ -605,3 +604,5 @@ https://www.linuxfromscratch.org/patches/lfs/12.4/expect-5.45.4-gcc15-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/glibc-2.42-fhs-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/kbd-2.8.0-backspace-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/sysvinit-3.14-consolidated-1.patch
+
+https://github.com/mumble-voip/mumble/archive/refs/tags/v1.5.915.tar.gz
