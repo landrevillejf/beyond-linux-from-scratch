@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 03-build-cross-toolchain.sh
+# 04-build-toolchain.sh
 # Build toolchain for LFS / BLFS
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 
@@ -245,7 +245,8 @@ build_toolchain() {
         --disable-libssp \
         --disable-libvtv \
         --disable-libstdcxx \
-        --enable-languages=c,c++
+        --enable-languages=c,c++ \
+        --without-zstd
     make -j"$NUM_JOBS"
     make install
     if [ ! -f "$LFS/tools/bin/cc" ]; then

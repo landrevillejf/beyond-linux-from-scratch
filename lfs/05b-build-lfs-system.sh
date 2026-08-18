@@ -376,18 +376,19 @@ export LD_RUN_PATH=/tools/lib:/tools/lib64
 mkdir -v build
 cd build
 ../configure --prefix=/usr \
-             --enable-languages=c,c++ \
-             --disable-multilib \
-             --disable-bootstrap \
-             --disable-lto \
-             --disable-libcc1 \
-             --with-system-zlib \
-             --enable-default-pie \
-             --enable-default-ssp \
-             --enable-cet=auto \
-             --enable-linker-build-id \
-             CXXFLAGS="-std=gnu++14" \
-             LDFLAGS="$LDFLAGS"
+    --enable-languages=c,c++ \
+    --disable-multilib \
+    --disable-bootstrap \
+    --disable-lto \
+    --disable-libcc1 \
+    --with-system-zlib \
+    --enable-default-pie \
+    --enable-default-ssp \
+    --enable-cet=auto \
+    --enable-linker-build-id \
+    --without-zstd \
+    CXXFLAGS="-std=gnu++14" \
+    LDFLAGS="$LDFLAGS"
 make -j$(nproc)
 make install
 ln -sf gcc /usr/bin/cc
