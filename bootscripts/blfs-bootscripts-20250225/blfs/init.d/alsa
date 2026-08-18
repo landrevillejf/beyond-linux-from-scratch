@@ -1,0 +1,49 @@
+#!/bin/sh
+########################################################################
+# Begin alsa
+#
+# Description : Restore and store ALSA settings
+#
+# Author      : Bruce Dubbs - bdubbs@linuxfromscratch.org
+#
+# Version     : BLFS 7.0
+#
+# Update      : 2021-08-26.  Add --no-ucm
+########################################################################
+
+### BEGIN INIT INFO
+# Provides:            alsa
+# Required-Start:      udev
+# Should-Start:        $remote_fs
+# Required-Stop:
+# Should-Stop:         $remote_fs
+# Default-Start:       S
+# Default-Stop:        0 1 6
+# Short-Description:   Restore and store ALSA mixer settings.
+# Description:         Restores and stores ALSA mixer settings in the default
+#                      location: /var/lib/alsa/asound.state.
+# X-LFS-Provided-By:   BLFS
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+case "$1" in
+   start)
+      log_info_msg "Starting ALSA...    Restoring volumes..."
+      /usr/sbin/alsactl --no-ucm restore
+      evaluate_retval
+      ;;
+
+   stop)
+      log_info_msg "Stopping ALSA...    Saving volumes..."
+      /usr/sbin/alsactl --no-ucm store
+      evaluate_retval
+      ;;
+
+   *)
+      echo "Usage: $0 {start|stop}"
+      exit 1
+      ;;
+esac
+
+# End alsa

@@ -1,0 +1,131 @@
+#!/bin/sh
+########################################################################
+# Begin nfs-server
+#
+# Description : Start nfs server
+#
+# Authors     : Ken Moffat - ken@linuxfromscratch.org
+#               Bruce Dubbs - bdubbs@linuxfromscratch.org
+#               Douglas R. Reno - renodr@linuxfromscratch.org
+#
+# Version     : BLFS 8.1
+#
+# Updated     : In recent versions of the nfs-server,
+#               behavior has changed
+########################################################################
+
+### BEGIN INIT INFO
+# Provides:            nfs-server
+# Required-Start:      $network $portmap
+# Should-Start:        networkmanager wicd
+# Required-Stop:       $network $portmap
+# Should-Stop:         networkmanager wicd
+# Default-Start:       2 3 4 5
+# Default-Stop:        0 1 6
+# Short-Description:   Starts the nfs server
+# Description:         Starts the nfs server and exports directories.
+# X-LFS-Provided-By:   BLFS
+### END INIT INFO
+
+. /usr/lib/lsb/init-functions
+
+. /etc/sysconfig/nfs-server
+
+nfs_status()
+{
+   local nfsiod
+   local nfsd
+   local pid
+
+   nfsiod=$(ps -ef|grep '\[nfsiod]$'|sed 's/ \+/\t/g'| cut -f2)
+   if [ -z "${nfsiod}" ]; then
+     /usr/bin/echo -e "${INFO}[nfsiod] is not running.${NORMAL}"
+   else
+     /usr/bin/echo -e  "${INFO}[nfsiod] is running with Process" \
+         "ID ${nfsiod}.${NORMAL}"
+   fi
+
+   nfsd=""
+   for pid in $(ps -ef|grep '\[nfsd]$'|sed 's/ \+/\t/g'| cut -f2); do
+     nfsd="${nfsd} ${pid}"
+   done
+
+   if [ -z "${nfsd}" ]; then
+     /usr/bin/echo -e "${INFO}No [nfsd] processes are running.${NORMAL}"
+   else
+     /usr/bin/echo -e  "${INFO}[nfsd] is running with Process" \
+         "ID(s)${nfsd}.${NORMAL}"
+   fi
+}
+
+
+ case "$1" in
+   start)
+      log_info_msg "Starting NFS statd..."
+      start_daemon /usr/sbin/rpc.statd --no-notify
+      evaluate_retval
+
+      log_info_msg "Starting NFS nfsd..."
+      start_daemon /usr/sbin/rpc.nfsd -p $PORT $PROCESSES
+      evaluate_retval
+
+      log_info_msg "Starting NFS mountd..."
+      start_daemon /usr/sbin/rpc.mountd
+      evaluate_retval
+
+      # Make certain that the list is refreshed on a restart.
+      log_info_msg "Exporting NFS Filesystems..."
+      /usr/sbin/exportfs -r 2>&1 > /dev/null
+      evaluate_retval
+      ;;
+
+   stop)
+      log_info_msg "Removing NFS Exported Filesystems..."
+      /usr/sbin/exportfs -au 2>&1 > /dev/null
+      evaluate_retval
+
+      log_info_msg "Stopping NFS statd..."
+      killproc /usr/sbin/rpc.statd
+      evaluate_retval
+
+      log_info_msg "Stopping NFS nfsd..."
+      /usr/sbin/rpc.nfsd 0
+      log_success_msg2
+
+      log_info_msg "Stopping NFS mountd..."
+      killproc /usr/sbin/rpc.mountd
+      evaluate_retval
+
+      # Remove a pid file that isn't done automatically
+      if [ -f /run/rpc.statd.pid ]; then
+          log_success_msg "Removing the rpc.statd pid file if it exists"
+          rm -f /run/rpc.statd.pid
+      fi
+      ;;
+
+   reload)
+      log_info_msg "Reloading NFS Server..."
+      /usr/sbin/exportfs -r
+      evaluate_retval
+      ;;
+
+   restart)
+      $0 stop
+      sleep 1
+      $0 start
+      ;;
+
+   status)
+      statusproc /usr/sbin/rpc.mountd
+      statusproc /usr/sbin/rpc.statd
+      ## Special case for nfsd
+      nfs_status
+      ;;
+
+   *)
+      echo "Usage: $0 {start|stop|reload|restart|status}"
+      exit 1
+      ;;
+esac
+
+# End /etc/init.d/nfs-server

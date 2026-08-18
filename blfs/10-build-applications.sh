@@ -161,7 +161,7 @@ have_pc() { pkg-config --exists "$1" 2>/dev/null; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 missing_items() { local missing=() item; for item in "$@"; do case "$item" in pc:*) have_pc "${item#pc:}" || missing+=("${item#pc:}");; cmd:*) have_cmd "${item#cmd:}" || missing+=("${item#cmd:}");; file:*) [ -e "${item#file:}" ] || missing+=("${item#file:}");; *) have_cmd "$item" || missing+=("$item");; esac; done; printf '%s\n' "${missing[@]}"; }
 check_deps() { local app="$1" missing; shift; missing="$(missing_items "$@")"; if [ -n "$missing" ]; then log_warning "$app dependencies missing; skipping $app: $(echo "$missing" | tr '\n' ' ')"; return 1; fi; }
-is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; *) return 1;; esac; }
+is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; thunderbird) [ -x /usr/bin/thunderbird ];; inkscape) [ -x /usr/bin/inkscape ];; evolution) [ -x /usr/bin/evolution ];; filezilla) [ -x /usr/bin/filezilla ];; transmission) [ -x /usr/bin/transmission-gtk ] || [ -x /usr/bin/transmission-qt ];; *) return 1;; esac; }
 finish_app() { touch "$(marker_for "$1")"; log_success "$1 installed"; }
 build_firefox() {
     local app=firefox archive dir rust_version
@@ -215,10 +215,73 @@ build_vlc() {
     make -j"$(jobs)"; make install
     popd >/dev/null; rm -rf "$dir"; finish_app "$app"
 }
+build_thunderbird() {
+    local app=thunderbird archive dir rust_version
+    if is_installed "$app"; then log_info "Thunderbird already installed; skipping"; return 0; fi
+    if ! check_deps Thunderbird cmd:rustc cmd:cbindgen cmd:node cmd:yasm cmd:nasm cmd:python3 cmd:perl cmd:tar cmd:make pc:nspr pc:nss pc:icu-uc; then return 1; fi
+    rust_version="$(rustc --version | awk '{print $2}')"
+    if ! python3 -c "import sys; from distutils.version import LooseVersion; sys.exit(0 if LooseVersion('$rust_version') >= LooseVersion('1.76') else 1)"; then log_warning "Thunderbird requires rustc >= 1.76; found $rust_version; skipping Thunderbird"; return 1; fi
+    archive="$(find_archive 'thunderbird-*.tar.*')"; [ -n "$archive" ] || { log_warning "Thunderbird source archive missing; skipping"; return 1; }
+    log_info "Building Thunderbird from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    cat > .mozconfig <<'EOF'
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/objdir
+ac_add_options --prefix=/usr
+ac_add_options --enable-application=comm/mail
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+ac_add_options --enable-official-branding
+ac_add_options --with-system-nspr
+ac_add_options --with-system-nss
+ac_add_options --with-system-icu
+EOF
+    ./mach configure; ./mach build; ./mach install
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_inkscape() {
+    local app=inkscape archive dir
+    if is_installed "$app"; then log_info "Inkscape already installed; skipping"; return 0; fi
+    if ! check_deps Inkscape cmd:cmake cmd:pkg-config cmd:tar pc:glibmm-2.4 pc:gtkmm-3.0 pc:libxml-2.0 pc:cairo pc:pango; then return 1; fi
+    archive="$(find_archive 'inkscape-*.tar.*')"; [ -n "$archive" ] || { log_warning "Inkscape source archive missing; skipping"; return 1; }
+    log_info "Building Inkscape from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    cmake --build builddir -j"$(jobs)"
+    cmake --install builddir
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_evolution() {
+    local app=evolution archive dir
+    if is_installed "$app"; then log_info "Evolution already installed; skipping"; return 0; fi
+    if ! check_deps Evolution cmd:meson cmd:ninja cmd:pkg-config cmd:tar pc:glib-2.0 pc:gtk+-3.0 pc:webkit2gtk-4.0 pc:nspr pc:nss; then return 1; fi
+    archive="$(find_archive 'evolution-*.tar.*')"; [ -n "$archive" ] || { log_warning "Evolution source archive missing; skipping"; return 1; }
+    log_info "Building Evolution from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    rm -rf builddir; meson setup builddir --prefix=/usr --buildtype=release; ninja -C builddir; ninja -C builddir install
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_filezilla() {
+    local app=filezilla archive dir
+    if is_installed "$app"; then log_info "FileZilla already installed; skipping"; return 0; fi
+    if ! check_deps FileZilla cmd:configure cmd:make cmd:tar pc:wxWidgets pc:libidn pc:gnutls pc:gtk+-2.0; then return 1; fi
+    archive="$(find_archive 'filezilla-*.tar.*')"; [ -n "$archive" ] || { log_warning "FileZilla source archive missing; skipping"; return 1; }
+    log_info "Building FileZilla from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    ./configure --prefix=/usr --disable-static --with-wx-config=/usr/bin/wx-config
+    make -j"$(jobs)"; make install
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_transmission() {
+    local app=transmission archive dir
+    if is_installed "$app"; then log_info "Transmission already installed; skipping"; return 0; fi
+    if ! check_deps Transmission cmd:cmake cmd:pkg-config cmd:tar pc:libevent pc:libcurl pc:openssl; then return 1; fi
+    archive="$(find_archive 'transmission-*.tar.*')"; [ -n "$archive" ] || { log_warning "Transmission source archive missing; skipping"; return 1; }
+    log_info "Building Transmission from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    cmake --build builddir -j"$(jobs)"
+    cmake --install builddir
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
 requested_app() { local app="$1" raw normalized; IFS=',' read -r -a requested <<< "$APPS_TO_BUILD"; for raw in "${requested[@]}"; do normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | xargs)"; [ "$normalized" = "$app" ] && return 0; done; return 1; }
 log_info "Application selection: $APPS_TO_BUILD"
 status=0
-for app in firefox libreoffice gimp vlc; do
+for app in firefox libreoffice gimp vlc thunderbird inkscape evolution filezilla transmission; do
     if requested_app "$app"; then
         log_info "Starting $app build"
         if "build_$app"; then log_success "$app build complete"; else log_warning "$app was not built; see dependency/source messages above"; status=1; fi

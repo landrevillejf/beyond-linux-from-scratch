@@ -1,0 +1,57 @@
+#!/bin/sh
+########################################################################
+# Begin sysmond
+#
+# Description : Start sysmond daemon
+#
+# Author      : Bruce Dubbs - bdubbs@linuxfromscratch.org
+#
+# Version     : BLFS 12.2
+#
+########################################################################
+
+### BEGIN INIT INFO
+# Provides:            sysmond
+# Required-Start:      $network
+# Should-Start:        networkmanager wicd
+# Required-Stop:       $network
+# Should-Stop:         networkmanager wicd 
+# Default-Start:       2 3 4 5
+# Default-Stop:        0 1 6
+# Short-Description:   Starts sysmond daemon.
+# Description:         Starts sysmond daemon.
+# X-LFS-Provided-By:   BLFS
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+case "$1" in
+    start)
+        log_info_msg "Starting sysmond Server..."
+        start_daemon /usr/sbin/sysmond
+        evaluate_retval
+        ;;
+
+    stop)
+        log_info_msg "Stopping sysmond Server..."
+        killproc -p "/run/sysmond.pid" /usr/sbin/sysmond
+        evaluate_retval
+        ;;
+
+    restart)
+        $0 stop
+        sleep 1
+        $0 start
+        ;;
+
+    status)
+        statusproc -p "/run/sysmond.pid" /usr/sbin/sysmond
+        ;;
+
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+# End sysmond bootscript

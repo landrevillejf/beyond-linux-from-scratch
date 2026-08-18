@@ -360,6 +360,83 @@ build_pkg nspr || log_warning "nspr build failed"
 # nss – Network Security Services (Firefox dependency)
 build_pkg nss || log_warning "nss build failed"
 
+log_info "Phase 9: Additional general libraries from BLFS"
+
+# libarchive – archive manipulation (tar, cpio, etc.)
+build_pkg libarchive || log_warning "libarchive build failed"
+
+# libxml2 – XML parsing (already in blfs-base, but verify)
+build_pkg libxml2 || log_warning "libxml2 build failed"
+
+# libxslt – XSLT processing (already in Phase 7)
+build_pkg libxslt || log_warning "libxslt build failed"
+
+# libyaml – YAML parsing
+build_pkg libyaml || log_warning "libyaml build failed"
+
+# libusb – USB library
+build_pkg libusb || log_warning "libusb build failed"
+
+# libcap – POSIX capabilities
+build_pkg libcap || log_warning "libcap build failed"
+
+# libaio – asynchronous I/O
+build_pkg libaio || log_warning "libaio build failed"
+
+# lm-sensors – hardware monitoring
+build_pkg lm-sensors || log_warning "lm-sensors build failed"
+
+# pciutils – PCI utilities
+build_pkg pciutils || log_warning "pciutils build failed"
+
+# usbutils – USB utilities
+build_pkg usbutils || log_warning "usbutils build failed"
+
+# libgpg-error – GPG error codes
+build_pkg libgpg-error || log_warning "libgpg-error build failed"
+
+# libgcrypt – cryptographic library
+build_pkg libgcrypt || log_warning "libgcrypt build failed"
+
+# libassuan – IPC library for GnuPG
+build_pkg libassuan || log_warning "libassuan build failed"
+
+# libksba – X.509 library
+build_pkg libksba || log_warning "libksba build failed"
+
+# npth – POSIX threads library
+build_pkg npth || log_warning "npth build failed"
+
+# libtasn1 – ASN.1 library
+build_pkg libtasn1 || log_warning "libtasn1 build failed"
+
+# nettle – cryptographic library
+build_pkg nettle || log_warning "nettle build failed"
+
+# libunistring – Unicode string library
+build_pkg libunistring || log_warning "libunistring build failed"
+
+# libidn2 – IDNA 2008 implementation
+build_pkg libidn2 || log_warning "libidn2 build failed"
+
+# libidn – Internationalized Domain Names
+build_pkg libidn || log_warning "libidn build failed"
+
+# pcre2 – Perl Compatible Regular Expressions (LFS, verify)
+build_pkg pcre2 || log_warning "pcre2 build failed"
+
+# libseccomp – secure computing mode
+build_pkg libseccomp || log_warning "libseccomp build failed"
+
+# libelf – ELF library (part of LFS)
+build_pkg libelf || log_warning "libelf build failed"
+
+# libffi – Foreign Function Interface (LFS, verify)
+build_pkg libffi || log_warning "libffi build failed"
+
+# expat – XML parsing (blfs-base, verify)
+build_pkg expat || log_warning "expat build failed"
+
 # rust – Rust compiler (required to build modern Firefox)
 if ! have_cmd rustc; then
     archive="$(find_archive rust)"

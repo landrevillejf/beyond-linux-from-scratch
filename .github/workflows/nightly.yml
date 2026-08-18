@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ minimal, xfce, arm64, server, java-dev, audio-studio ]
+        profile: [ minimal, xfce, arm64, server, java-dev, audio-studio, full ]
         init: [ sysvinit ]
         arch: [ x86_64 ]
         include:

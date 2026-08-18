@@ -1,0 +1,77 @@
+#!/bin/sh
+########################################################################
+# Begin mariadb
+#
+# Description : Start MariaDB Server
+#
+# Author      : Bruce Dubbs - bdubbs@linuxfromscratch.org
+#
+# Version     : BLFS 7.0
+#
+########################################################################
+
+### BEGIN INIT INFO
+# Provides:            mariadb
+# Required-Start:      $network
+# Should-Start:        networkmanager wicd
+# Required-Stop:       $network
+# Should-Stop:         networkmanager wicd
+# Default-Start:       2 3 4 5
+# Default-Stop:        0 1 6
+# Short-Description:   Starts MariaDB server.
+# Description:         Starts MariaDB server.
+# X-LFS-Provided-By:   BLFS
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+PIDFILE=/srv/mariadb/`/bin/hostname`.pid
+
+case "$1" in
+   start)
+      log_info_msg "Starting MariaDB daemon..."
+
+      if pidofproc -p "$PIDFILE" mariadb >/dev/null; then
+         log_info_msg " Already started!"
+         evaluate_retval
+         exit 0
+      fi
+      rm -f "$PIDFILE"
+
+      # Make sure the mariadb user can create a socket
+      mkdir -p /run/mariadb
+      chown mariadb:mariadb /run/mariadb
+
+      /usr/bin/mariadbd-safe --user=mariadb 2>&1 >/dev/null &
+      evaluate_retval
+      ;;
+
+   stop)
+      log_info_msg "Stopping MariaDB daemon..."
+      killproc -p ${PIDFILE} /usr/sbin/mariadbd
+      evaluate_retval
+      ;;
+
+   reload)
+      log_info_msg "Reloading MariaDB ..."
+      killproc -p ${PIDFILE} /usr/sbin/mariadbd -HUP
+      evaluate_retval
+      ;;
+
+   restart)
+      $0 stop
+      sleep 1
+      $0 start
+      ;;
+
+   status)
+      statusproc /usr/sbin/mariadbd
+      ;;
+
+   *)
+      echo "Usage: $0 {start|stop|reload|restart|status}"
+      exit 1
+      ;;
+esac
+
+# End /etc/init.d/mariadb

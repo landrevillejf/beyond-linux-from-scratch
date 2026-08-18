@@ -210,6 +210,49 @@ KEYMAP=us
 FONT=Lat2-Terminus16
 VCONSOLE
 
+# Post LFS Configuration - Console Fonts
+mkdir -pv /usr/share/kbd/consolefonts
+mkdir -pv /usr/share/kbd/consoletrans
+mkdir -pv /usr/share/kbd/unimaps
+
+# Post LFS Configuration - Devices
+mkdir -pv /etc/udev/rules.d
+# Basic udev rules for common devices
+cat > /etc/udev/rules.d/10-local.rules << "UDEV"
+# Local udev rules
+KERNEL=="sd[a-z]", NAME="%k", GROUP="disk"
+KERNEL=="sd[a-z][0-9]", NAME="%k", GROUP="disk"
+UDEV
+
+# Post LFS Configuration - Skeleton for new users
+mkdir -pv /etc/skel
+# Create basic skeleton directory structure
+for dir in Desktop Documents Downloads Music Pictures Public Templates Videos; do
+    mkdir -pv /etc/skel/$dir
+done
+
+# Post LFS Configuration - Bash Profile enhancements
+cat > /etc/profile.d/extra-path.sh << "PROFILE"
+# Extra PATH additions
+if [ -d /usr/local/bin ] ; then
+    PATH=/usr/local/bin:"${PATH}"
+fi
+PROFILE
+
+cat > /etc/profile.d/umask.sh << "UMASK"
+# Set default umask
+umask 022
+UMASK
+
+cat > /etc/profile.d/dircolors.sh << "DIRCOLORS"
+# Color support for ls and grep
+if [ -x /usr/bin/dircolors ]; then
+    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    alias ls='ls --color=auto'
+    alias grep='grep --color=auto'
+fi
+DIRCOLORS
+
 echo "========================================="
 echo "System configuration complete!"
 echo "========================================="
