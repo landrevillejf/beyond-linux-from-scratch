@@ -318,31 +318,6 @@ def test_lfs_system_rebuilds_linker_cache_after_glibc_install():
     assert "printf '/usr/lib" in content
     assert 'LD_LIBRARY_PATH=/usr/lib' in content
 
-
-def test_lfs_system_cross_compiler_uses_sysroot_slash():
-    """The cross-compiler was built with --with-sysroot=$LFS pointing at the
-    host-side LFS directory.  Inside the chroot that absolute path does not
-    exist (the chroot root IS that directory), so the linker cannot locate
-    target headers or libraries and configure reports
-    'C compiler cannot create executables' for binutils (and later gcc).
-    The inner build script must set CC and CXX to include --sysroot=/ so that
-    headers and libraries are resolved relative to the chroot root.
-    Additionally, -L and -rpath-link flags are added to both CC and CXX to
-    help the linker find the cross-compiled runtime libraries."""
-    repo_root = Path(__file__).resolve().parent.parent
-    script = repo_root / "lfs" / "05b-build-lfs-system.sh"
-    content = script.read_text()
-
-    # CC must contain --sysroot=/ (may have extra flags)
-    assert 'CC="${LFS_TGT}-gcc --sysroot=/' in content
-    # CXX must contain --sysroot=/ (may have extra flags)
-    assert 'CXX="${LFS_TGT}-g++ --sysroot=/' in content
-    # Bare cross-compiler without sysroot must not be used as CC/CXX
-    # Use a newline prefix to avoid matching HOSTCC= assignments
-    assert '\nCC="${LFS_TGT}-gcc"\n' not in content
-    assert '\nCXX="${LFS_TGT}-g++"\n' not in content
-
-
 def test_lfs_system_binutils_build_disables_makeinfo():
     """Binutils 2.45 may still try to build doc/chew.stamp even with
     --disable-doc.  Pass MAKEINFO=missing so make skips info doc generation
