@@ -229,8 +229,8 @@ else
         exit 1
     fi
     echo "Extracting $GCC_SRC for libgcc build"
-    tar -xf "/sources/$GCC_SRC"
-    GCC_SRC_DIR=$(tar -tf "/sources/$GCC_SRC" | head -1 | cut -d/ -f1)
+    tar -xf "$GCC_SRC"
+    GCC_SRC_DIR=$(tar -tf "$GCC_SRC" | head -1 | cut -d/ -f1)
     cd "/sources/$GCC_SRC_DIR"
     mkdir -v build-libgcc
     cd build-libgcc
