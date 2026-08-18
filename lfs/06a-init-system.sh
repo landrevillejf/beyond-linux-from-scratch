@@ -277,6 +277,20 @@ if [ "$INIT_SYSTEM" = "sysvinit" ]; then
     echo "Building sysvinit..."
     build_pkg sysvinit || echo "WARNING: sysvinit build failed"
 
+    # Install lfs-bootscripts
+    echo "Installing lfs-bootscripts..."
+    archive="$(find_archive lfs-bootscripts)"
+    if [ -n "$archive" ]; then
+        dir="$(extract_archive "$archive")"
+        pushd "$dir" >/dev/null
+        make install
+        popd >/dev/null
+        rm -rf "$dir"
+        echo "=== lfs-bootscripts done ==="
+    else
+        echo "WARNING: lfs-bootscripts source not found"
+    fi
+
     # Create /etc/inittab
     cat > /etc/inittab <<'INITTAB'
 id:3:initdefault:

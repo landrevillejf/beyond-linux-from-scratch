@@ -121,6 +121,22 @@ for pattern in curl-*.tar.xz openssl-*.tar.gz expat-*.tar.xz libxml2-*.tar.xz; d
     done
 done
 
+# Install blfs-bootscripts (requires lfs-bootscripts to be installed first)
+echo "Installing blfs-bootscripts..."
+archive=$(compgen -G "blfs-bootscripts-*.tar.xz" 2>/dev/null | sort -V | tail -n 1)
+if [ -n "$archive" ]; then
+    dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
+    echo "=== Building $dir ==="
+    tar -xf "$archive"
+    cd "$dir"
+    make install
+    cd /sources
+    rm -rf "$dir"
+    echo "=== blfs-bootscripts done ==="
+else
+    echo "WARNING: blfs-bootscripts source not found"
+fi
+
 echo "BLFS base packages built."
 INNEREOF
 

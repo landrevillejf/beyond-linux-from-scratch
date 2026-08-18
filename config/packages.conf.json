@@ -45,7 +45,7 @@
           "description": "Traditional UNIX init - LFS classic",
           "packages": ["sysvinit-3.14"],
           "config": "/etc/inittab",
-          "scripts": "lfs-bootscripts-20240825"
+          "scripts": "lfs-bootscripts-20250827"
         },
         "systemd": {
           "enabled": false,
