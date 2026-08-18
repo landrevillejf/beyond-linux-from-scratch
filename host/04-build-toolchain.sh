@@ -445,13 +445,15 @@ CROSS_CACHE_EOF
     # For cross-compilation, build xz for the host architecture since it's
     # needed during the build process (tar decompression) on the host system.
     for pkg in m4 bison xz ncurses coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch file perl python texinfo util-linux; do
-        if [ "$pkg" = "make" ]; then
-            archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
-        elif [ "$pkg" = "python" ]; then
-            archive=$(find . -maxdepth 1 -name "[Pp]ython-*.tar.*" -print -quit)
-        else
-            archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
-        fi
+      if [ "$pkg" = "make" ]; then
+              archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
+          elif [ "$pkg" = "python" ]; then
+              archive=$(find . -maxdepth 1 -name "[Pp]ython-*.tar.*" -print -quit)
+          elif [ "$pkg" = "file" ]; then
+              archive=$(find . -maxdepth 1 -name "file-[0-9]*.tar.*" -print -quit)
+          else
+              archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+          fi
         if [ -z "$archive" ]; then
             log_warning "Source for $pkg not found, skipping"
             continue
