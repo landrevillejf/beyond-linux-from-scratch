@@ -1,12 +1,14 @@
 #!/bin/bash
 # 02-prepare-host.sh
-# Prepare host system for LFS build - Compatible with Docker and native
+# Prepare host system for LFS / BLFS build - Compatible with Docker and native
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# Language: English
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Fallback functions if utils.sh doesn't exist
+# Fallback logging functions if utils.sh is missing
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
     source "$SCRIPT_DIR/../common/utils.sh"
 else
@@ -16,12 +18,27 @@ else
     log_success() { echo "[SUCCESS] $*"; }
 fi
 
+# Optional error handler
 if [ -f "$SCRIPT_DIR/../common/error-handler.sh" ]; then
     source "$SCRIPT_DIR/../common/error-handler.sh"
     setup_error_handling 2>/dev/null || true
 fi
 
-# Detect distribution
+# ---------- Environment detection ----------
+IN_DOCKER=false
+[ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null && IN_DOCKER=true
+
+IN_LIMA=false
+[ -f /etc/lima-version ] && IN_LIMA=true
+
+if [ "$IN_DOCKER" = true ]; then
+    log_info "Running inside Docker container"
+fi
+if [ "$IN_LIMA" = true ]; then
+    log_info "Running inside Lima VM"
+fi
+
+# ---------- Distribution detection ----------
 detect_distro() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
@@ -37,63 +54,60 @@ detect_distro() {
     fi
 }
 
-# Install packages using the appropriate package manager
+# ---------- Privilege handling ----------
+USE_SUDO=false
+if [ "$EUID" -ne 0 ] && [ "$IN_DOCKER" = false ] && [ "$IN_LIMA" = false ]; then
+    if sudo -n true 2>/dev/null; then
+        USE_SUDO=true
+        log_warning "Not running as root, but sudo is available. Using sudo for privileged commands."
+    else
+        log_error "Please run as root or with sudo."
+        exit 1
+    fi
+fi
+
+# ---------- Package installation function ----------
 install_packages() {
     local distro="$1"
     shift
     local packages=("$@")
+    [ ${#packages[@]} -eq 0 ] && return 0
 
     log_info "Installing packages: ${packages[*]}"
 
     case "$distro" in
-    debian | ubuntu)
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq "${packages[@]}"
-        ;;
-    fedora | rhel | centos | rocky)
-        if command -v dnf &>/dev/null; then
-            sudo dnf install -y "${packages[@]}"
-        else
-            sudo yum install -y "${packages[@]}"
-        fi
-        ;;
-    opensuse* | sles)
-        sudo zypper install -y "${packages[@]}"
-        ;;
-    arch | manjaro)
-        sudo pacman -Syu --noconfirm "${packages[@]}"
-        ;;
-    alpine)
-        sudo apk add "${packages[@]}"
-        ;;
-    gentoo)
-        log_error "Gentoo detected. Please install the following packages manually using emerge: ${packages[*]}"
-        exit 1
-        ;;
-    *)
-        log_error "Unknown distribution. Please install the following packages manually: ${packages[*]}"
-        exit 1
-        ;;
+        debian|ubuntu)
+            $USE_SUDO apt-get update -qq
+            $USE_SUDO apt-get install -y -qq "${packages[@]}"
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            if command -v dnf &>/dev/null; then
+                $USE_SUDO dnf install -y "${packages[@]}"
+            else
+                $USE_SUDO yum install -y "${packages[@]}"
+            fi
+            ;;
+        opensuse*|sles)
+            $USE_SUDO zypper install -y "${packages[@]}"
+            ;;
+        arch|manjaro)
+            $USE_SUDO pacman -Syu --noconfirm "${packages[@]}"
+            ;;
+        alpine)
+            $USE_SUDO apk add "${packages[@]}"
+            ;;
+        gentoo)
+            log_error "Gentoo detected – please install manually using emerge: ${packages[*]}"
+            exit 1
+            ;;
+        *)
+            log_error "Unknown distribution – please install manually: ${packages[*]}"
+            exit 1
+            ;;
     esac
 }
 
-# Detect if running in Docker
-IN_DOCKER=false
-if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
-    IN_DOCKER=true
-    log_info "Running in Docker container"
-fi
-
-# Detect if running in Lima VM
-IN_LIMA=false
-if [ -f /etc/lima-version ]; then
-    IN_LIMA=true
-    log_info "Running in Lima VM"
-fi
-
-log_info "Preparing host system for LFS build"
-
-# Set LFS directory (use /output in Docker, /mnt/lfs otherwise)
+# ---------- Set LFS directory ----------
 if [ "$IN_DOCKER" = true ]; then
     LFS=${LFS:-/output}
     log_info "Using Docker output directory: $LFS"
@@ -101,8 +115,9 @@ else
     LFS=${LFS:-/mnt/lfs}
     log_info "Using LFS directory: $LFS"
 fi
+export LFS
 
-# Function to create user (only on native systems)
+# ---------- Create lfs user (native only) ----------
 create_lfs_user() {
     if [ "$IN_DOCKER" = true ] || [ "$IN_LIMA" = true ]; then
         log_info "Skipping user creation in container/VM environment"
@@ -111,86 +126,108 @@ create_lfs_user() {
 
     if ! id "lfs" &>/dev/null; then
         log_info "Creating lfs user"
-        # Create group if it doesn't exist
+        # Create group if missing
         if ! getent group lfs >/dev/null; then
-            groupadd lfs 2>/dev/null || addgroup lfs 2>/dev/null || true
+            $USE_SUDO groupadd lfs 2>/dev/null || $USE_SUDO addgroup lfs 2>/dev/null || true
         fi
-        # Portable useradd: -m (create home), -s (shell), -g (group)
-        useradd -s /bin/bash -g lfs -m -k /dev/null lfs 2>/dev/null || {
-            log_warning "useradd failed, trying with -d /home/lfs explicitly"
-            useradd -s /bin/bash -g lfs -m -d /home/lfs -k /dev/null lfs
-        }
-        echo "lfs:lfs123" | chpasswd 2>/dev/null || true
-        echo "lfs ALL=(ALL) NOPASSWD: ALL" >>/etc/sudoers 2>/dev/null || true
+        # Create user with home, shell, and group
+        if ! $USE_SUDO useradd -s /bin/bash -g lfs -m -k /dev/null lfs 2>/dev/null; then
+            log_warning "useradd failed, trying with explicit home directory"
+            $USE_SUDO useradd -s /bin/bash -g lfs -m -d /home/lfs -k /dev/null lfs
+        fi
+        # Set password (optional)
+        echo "lfs:lfs123" | $USE_SUDO chpasswd 2>/dev/null || true
+        # Grant sudo access without password (for convenience)
+        echo "lfs ALL=(ALL) NOPASSWD: ALL" | $USE_SUDO tee -a /etc/sudoers >/dev/null 2>&1 || true
     else
         log_info "User lfs already exists"
     fi
 }
 
-# Create LFS directory structure
+# ---------- Create directory structure ----------
 create_directories() {
     log_info "Creating LFS directory structure: $LFS"
 
-    mkdir -pv "$LFS" 2>/dev/null || sudo mkdir -pv "$LFS" 2>/dev/null || {
-        log_warning "Cannot create $LFS, using current directory"
-        LFS="$(pwd)/lfs-root"
-        mkdir -pv "$LFS"
-    }
-
-    # Create base directories
-    for dir in bin boot dev etc home lib lib64 media mnt opt proc root run sbin srv sys tmp usr var; do
-        mkdir -pv "$LFS/$dir" 2>/dev/null || true
-    done
-
-    # Create usr subdirectories
-    for dir in bin include lib lib64 sbin share src; do
-        mkdir -pv "$LFS/usr/$dir" 2>/dev/null || true
-    done
-
-    # Create usr/share subdirectories
-    for dir in man doc info; do
-        mkdir -pv "$LFS/usr/share/$dir" 2>/dev/null || true
-    done
-
-    # Create var subdirectories
-    for dir in cache lib local lock log opt run spool tmp; do
-        mkdir -pv "$LFS/var/$dir" 2>/dev/null || true
-    done
-
-    # Create etc subdirectories
-    for dir in profile.d sysconfig skel; do
-        mkdir -pv "$LFS/etc/$dir" 2>/dev/null || true
-    done
-
-    # Set permissions (skip in Docker)
-    if [ "$IN_DOCKER" = false ]; then
-        chmod -v 1777 "$LFS/tmp" 2>/dev/null || true
-        chmod -v 1777 "$LFS/var/tmp" 2>/dev/null || true
+    # Create the base LFS mount point
+    if [ ! -d "$LFS" ]; then
+        $USE_SUDO mkdir -pv "$LFS" 2>/dev/null || {
+            log_warning "Cannot create $LFS, using fallback directory"
+            LFS="$(pwd)/lfs-root"
+            mkdir -pv "$LFS"
+        }
     fi
 
-    # Create sources directory
-    mkdir -pv "$LFS/sources" 2>/dev/null || true
+    # Create essential directories
+    local base_dirs=(
+        bin boot dev etc home lib lib64 media mnt opt proc root run sbin srv sys tmp usr var
+    )
+    for dir in "${base_dirs[@]}"; do
+        $USE_SUDO mkdir -pv "$LFS/$dir" 2>/dev/null || true
+    done
+
+    # usr subdirectories
+    local usr_dirs=(bin include lib lib64 sbin share src)
+    for dir in "${usr_dirs[@]}"; do
+        $USE_SUDO mkdir -pv "$LFS/usr/$dir" 2>/dev/null || true
+    done
+
+    # usr/share subdirectories
+    local share_dirs=(man doc info)
+    for dir in "${share_dirs[@]}"; do
+        $USE_SUDO mkdir -pv "$LFS/usr/share/$dir" 2>/dev/null || true
+    done
+
+    # var subdirectories
+    local var_dirs=(cache lib local lock log opt run spool tmp)
+    for dir in "${var_dirs[@]}"; do
+        $USE_SUDO mkdir -pv "$LFS/var/$dir" 2>/dev/null || true
+    done
+
+    # etc subdirectories
+    local etc_dirs=(profile.d sysconfig skel)
+    for dir in "${etc_dirs[@]}"; do
+        $USE_SUDO mkdir -pv "$LFS/etc/$dir" 2>/dev/null || true
+    done
+
+    # Set sticky bits on temporary directories (skip in Docker)
     if [ "$IN_DOCKER" = false ]; then
-        chmod -v a+wt "$LFS/sources" 2>/dev/null || true
-        chown -v lfs:lfs "$LFS/sources" 2>/dev/null || true
+        $USE_SUDO chmod -v 1777 "$LFS/tmp" 2>/dev/null || true
+        $USE_SUDO chmod -v 1777 "$LFS/var/tmp" 2>/dev/null || true
     fi
 
-    # Create tools directory
-    mkdir -pv "$LFS/tools" 2>/dev/null || true
+    # Sources directory
+    $USE_SUDO mkdir -pv "$LFS/sources" 2>/dev/null || true
     if [ "$IN_DOCKER" = false ]; then
-        chown -v lfs:lfs "$LFS/tools" 2>/dev/null || true
+        $USE_SUDO chmod -v a+wt "$LFS/sources" 2>/dev/null || true
+        $USE_SUDO chown -v lfs:lfs "$LFS/sources" 2>/dev/null || true
+    else
+        # In Docker, we might not have lfs user, so keep as current user
+        chmod a+wt "$LFS/sources" 2>/dev/null || true
+    fi
+
+    # Tools directory
+    $USE_SUDO mkdir -pv "$LFS/tools" 2>/dev/null || true
+    if [ "$IN_DOCKER" = false ]; then
+        $USE_SUDO chown -v lfs:lfs "$LFS/tools" 2>/dev/null || true
     fi
 }
 
-# Set up user environment (native only)
+# ---------- Set up lfs user environment (native only) ----------
 setup_user_env() {
     if [ "$IN_DOCKER" = true ] || [ "$IN_LIMA" = true ]; then
         log_info "Skipping user environment setup in container/VM"
         return 0
     fi
 
-    if [ ! -f /home/lfs/.bashrc ]; then
-        cat >/home/lfs/.bashrc <<"EOF"
+    local home_dir="/home/lfs"
+    if [ ! -d "$home_dir" ]; then
+        log_warning "Home directory for lfs not found, skipping environment setup"
+        return 0
+    fi
+
+    # .bashrc
+    if [ ! -f "$home_dir/.bashrc" ]; then
+        cat > "$home_dir/.bashrc" <<"EOF"
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -204,30 +241,32 @@ export LFS LC_ALL LFS_TGT PATH CONFIG_SITE
 MAKEFLAGS="-j$(nproc)"
 export MAKEFLAGS
 EOF
-        chown lfs:lfs /home/lfs/.bashrc 2>/dev/null || true
+        $USE_SUDO chown lfs:lfs "$home_dir/.bashrc" 2>/dev/null || true
     fi
 
-    if [ ! -f /home/lfs/.bash_profile ]; then
-        cat >/home/lfs/.bash_profile <<"EOF"
+    # .bash_profile
+    if [ ! -f "$home_dir/.bash_profile" ]; then
+        cat > "$home_dir/.bash_profile" <<"EOF"
 if [ -f "$HOME/.bashrc" ] ; then
     source "$HOME/.bashrc"
 fi
 EOF
-        chown lfs:lfs /home/lfs/.bash_profile 2>/dev/null || true
+        $USE_SUDO chown lfs:lfs "$home_dir/.bash_profile" 2>/dev/null || true
     fi
 }
 
-# Install build dependencies (uses the generic install_packages)
+# ---------- Install build dependencies ----------
 install_dependencies() {
     if [ "$IN_DOCKER" = true ]; then
-        log_info "Skipping dependency installation in Docker (already installed)"
+        log_info "Skipping dependency installation in Docker (assumed pre-installed)"
         return 0
     fi
 
     local distro
     distro=$(detect_distro)
+    log_info "Installing build dependencies for distribution: $distro"
 
-    # Common packages for all LFS builds
+    # Common packages (Debian/Ubuntu names)
     local common_packages=(
         build-essential bison flex gawk texinfo
         wget curl git python3 python3-pip
@@ -238,59 +277,69 @@ install_dependencies() {
         kmod cpio
     )
 
-    # Adjust package names per distribution
     case "$distro" in
-    debian | ubuntu)
-        install_packages "$distro" "${common_packages[@]}"
-        ;;
-    fedora | rhel | centos | rocky)
-        # Map Debian names to Red Hat equivalents
-        local rh_packages=(
-            gcc gcc-c++ make bison flex gawk texinfo
-            wget curl git python3 python3-pip
-            xorriso syslinux mtools dosfstools
-            parted rsync sudo
-            bc cpio unzip xz
-            openssl-devel elfutils-libelf-devel kmod cpio
-        )
-        install_packages "$distro" "${rh_packages[@]}"
-        ;;
-    arch | manjaro)
-        local arch_packages=(
-            base-devel bison flex gawk texinfo
-            wget curl git python python-pip
-            xorriso libisoburn mtools
-            dosfstools parted rsync sudo
-            bc cpio unzip xz
-            openssl elfutils kmod cpio
-        )
-        install_packages "$distro" "${arch_packages[@]}"
-        ;;
-    opensuse* | sles)
-        local suse_packages=(
-            gcc gcc-c++ make bison flex gawk texinfo
-            wget curl git python3 python3-pip
-            xorriso syslinux mtools dosfstools
-            parted rsync sudo
-            bc cpio unzip xz
-            libopenssl-devel libelf-devel kmod cpio
-        )
-        install_packages "$distro" "${suse_packages[@]}"
-        ;;
-    *)
-        log_warning "Unknown distribution, attempt to install common packages anyway"
-        install_packages "$distro" "${common_packages[@]}" || true
-        ;;
+        debian|ubuntu)
+            install_packages "$distro" "${common_packages[@]}"
+            ;;
+        fedora|rhel|centos|rocky|almalinux)
+            local rh_packages=(
+                gcc gcc-c++ make bison flex gawk texinfo
+                wget curl git python3 python3-pip
+                xorriso syslinux mtools dosfstools
+                parted rsync sudo
+                bc cpio unzip xz
+                openssl-devel elfutils-libelf-devel kmod cpio
+            )
+            install_packages "$distro" "${rh_packages[@]}"
+            ;;
+        arch|manjaro)
+            local arch_packages=(
+                base-devel bison flex gawk texinfo
+                wget curl git python python-pip
+                xorriso libisoburn mtools
+                dosfstools parted rsync sudo
+                bc cpio unzip xz
+                openssl elfutils kmod cpio
+            )
+            install_packages "$distro" "${arch_packages[@]}"
+            ;;
+        opensuse*|sles)
+            local suse_packages=(
+                gcc gcc-c++ make bison flex gawk texinfo
+                wget curl git python3 python3-pip
+                xorriso syslinux mtools dosfstools
+                parted rsync sudo
+                bc cpio unzip xz
+                libopenssl-devel libelf-devel kmod cpio
+            )
+            install_packages "$distro" "${suse_packages[@]}"
+            ;;
+        alpine)
+            local alpine_packages=(
+                build-base bison flex gawk texinfo
+                wget curl git python3 py3-pip
+                xorriso syslinux mtools dosfstools
+                parted rsync sudo
+                bc cpio unzip xz
+                openssl-dev elfutils-dev kmod cpio
+            )
+            install_packages "$distro" "${alpine_packages[@]}"
+            ;;
+        *)
+            log_warning "Unknown distribution, attempting to install common packages anyway"
+            install_packages "$distro" "${common_packages[@]}" || true
+            ;;
     esac
 }
 
-# Create build script
+# ---------- Create build script ----------
 create_build_script() {
-    log_info "Creating LFS build script..."
+    log_info "Creating LFS build script at $LFS/build-lfs.sh"
 
-    cat >"$LFS/build-lfs.sh" <<"EOF"
+    cat > "$LFS/build-lfs.sh" <<"EOF"
 #!/usr/bin/env bash
-# Main LFS build script to be run as lfs user
+# Main LFS build script - to be run as lfs user
+# This is a template; actual build steps should follow LFS book chapters.
 
 set -e
 
@@ -308,10 +357,10 @@ if [ -f md5sums ]; then
     md5sum -c md5sums 2>/dev/null || true
 fi
 
-# Build toolchain (simplified for Docker)
+# Build cross-toolchain (simplified example)
 echo "Building cross-toolchain..."
 
-# Binutils
+# Example: Binutils
 if [ -f binutils-*.tar.xz ]; then
     echo "Building binutils..."
     tar -xf binutils-*.tar.xz
@@ -329,7 +378,7 @@ if [ -f binutils-*.tar.xz ]; then
     cd ../..
 fi
 
-# GCC
+# Example: GCC
 if [ -f gcc-*.tar.xz ]; then
     echo "Building GCC..."
     tar -xf gcc-*.tar.xz
@@ -365,11 +414,11 @@ EOF
 
     chmod +x "$LFS/build-lfs.sh" 2>/dev/null || true
     if [ "$IN_DOCKER" = false ]; then
-        chown lfs:lfs "$LFS/build-lfs.sh" 2>/dev/null || true
+        $USE_SUDO chown lfs:lfs "$LFS/build-lfs.sh" 2>/dev/null || true
     fi
 }
 
-# Main execution
+# ---------- Main execution ----------
 main() {
     if [ "$IN_DOCKER" = true ]; then
         log_info "Docker environment detected - setting up in container mode"
@@ -381,7 +430,7 @@ main() {
         exit 0
     fi
 
-    # Native system setup
+    # Native system (including Lima)
     create_lfs_user
     create_directories
     setup_user_env
