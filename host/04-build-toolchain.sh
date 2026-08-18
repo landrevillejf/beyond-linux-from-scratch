@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build cross-toolchain - Compatible with Docker and native
+# 03-build-cross-toolchain.sh
+# Build toolchain for LFS / BLFS
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# CORRECTED: added binutils pass 1, removed premature --with-as/--with-ld
+
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -263,6 +264,7 @@ build_toolchain() {
     # The Linux kernel uses different arch directory names than the toolchain triplet
     case "$ARCH" in
         aarch64) ARCH=arm64 ;;
+        x86_64)  ARCH=x86 ;;
         armv7l|armhf) ARCH=arm ;;
         riscv64) ARCH=riscv ;;
     esac
@@ -295,13 +297,10 @@ build_toolchain() {
 
     validate_tarball() {
         local tarball="$1"
-        # Check if file exists and has non-zero size
         if [ ! -f "$tarball" ] || [ ! -s "$tarball" ]; then
             log_error "Tarball missing or empty: $tarball"
             return 1
         fi
-        # Validate tarball integrity without extracting
-        # Use appropriate decompression flag based on extension
         local tar_cmd="tar -tf"
         case "$tarball" in
             *.tar.gz|*.tgz) tar_cmd="tar -tzf" ;;
