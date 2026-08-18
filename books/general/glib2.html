@@ -1,0 +1,962 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      GLib-2.84.4
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="fmt.html" title="fmt-11.2.0">Prev</a>
+          <p>
+            fmt-11.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="glibmm.html" title="GLibmm-2.66.8">Next</a>
+          <p>
+            GLibmm-2.66.8
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="glib2" name="glib2"></a>GLib-2.84.4
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to GLib
+        </h2>
+        <p>
+          The <span class="application">GLib</span> package contains
+          low-level libraries useful for providing data structure handling
+          for C, portability wrappers and interfaces for runtime
+          functionality such as an event loop, threads, dynamic loading and
+          an object system.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.gnome.org/sources/glib/2.84/glib-2.84.4.tar.xz">
+                https://download.gnome.org/sources/glib/2.84/glib-2.84.4.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 5655d0ff809b98dd77c02490609fadde
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 5.4 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 203 MB (add 13 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.7 SBU (add 0.5 SBU for tests; both
+                using parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <p>
+          <span class="strong"><strong>GObject Introspection
+          (Recommended)</strong></span>
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download: <a class="ulink" href=
+                "https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz">
+                https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 2a62fb1c584616a8ebcd9dd4d045f27e
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.1 MB
+              </p>
+            </li>
+          </ul>
+        </div>
+        <p>
+          <span class="strong"><strong>Patch for Log Level Selection
+          (Optional)</strong></span>
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Optional patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/glib-skip_warnings-1.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/glib-skip_warnings-1.patch</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          GLib Dependencies
+        </h3>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="python-modules.html#docutils" title=
+          "docutils-0.21.2">docutils-0.21.2</a>, <a class="xref" href=
+          "libxslt.html" title="libxslt-1.1.43">libxslt-1.1.43</a>, and
+          <a class="xref" href="pcre2.html" title=
+          "PCRE2-10.45">pcre2-10.45</a> (a copy will be downloaded from the
+          internet if it is not installed)
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../x/cairo.html" title=
+          "Cairo-1.18.4">Cairo-1.18.4</a> (for some GObject Introspection
+          tests), <a class="xref" href="dbus.html" title=
+          "dbus-1.16.2">dbus-1.16.2</a> (for some tests), <a class="xref"
+          href="../postlfs/fuse.html" title="Fuse-3.17.4">Fuse-3.17.4</a> and
+          <a class="ulink" href="https://bindfs.org/">bindfs</a> (both needed
+          for one test), <a class="xref" href="gdb.html" title=
+          "GDB-16.3">GDB-16.3</a> (for bindings), <a class="xref" href=
+          "../gnome/gjs.html" title="Gjs-1.84.2">Gjs-1.84.2</a> (for some
+          GObject Introspection tests), <a class="xref" href="gtk-doc.html"
+          title="GTK-Doc-1.34.0">GTK-Doc-1.34.0</a> (for GObject
+          Introspection documentation), <a class="xref" href=
+          "../pst/docbook.html" title="docbook-xml-4.5">docbook-xml-4.5</a>,
+          <a class="xref" href="../pst/docbook-xsl.html" title=
+          "docbook-xsl-nons-1.79.2">docbook-xsl-nons-1.79.2</a>, <a class=
+          "xref" href="python-modules.html#gi-docgen" title=
+          "Gi-DocGen-2025.4">Gi-DocGen-2025.4</a> (to build API
+          documentation), <a class="xref" href=
+          "../basicnet/glib-networking.html" title=
+          "glib-networking-2.80.1">glib-networking-2.80.1</a> (for some
+          tests, but this is a circular dependency), <a class="xref" href=
+          "python-modules.html#Mako" title="Mako-1.3.10">Mako-1.3.10</a> and
+          <a class="xref" href="python-dependencies.html#markdown" title=
+          "Markdown-3.8.2">Markdown-3.8.2</a> (both for <span class=
+          "command"><strong>g-ir-doc-tool</strong></span>), and <a class=
+          "ulink" href="https://wiki.gnome.org/Apps/Sysprof">sysprof</a>
+        </p>
+        <h4>
+          Additional Runtime Dependencies
+        </h4>
+        <p class="recommended">
+          Quoted directly from the <code class="filename">INSTALL</code>
+          file: <span class="quote">“<span class="quote">Some of the
+          mimetype-related functionality in GIO requires the <span class=
+          "command"><strong>update-mime-database</strong></span> and
+          <span class=
+          "command"><strong>update-desktop-database</strong></span>
+          utilities,</span>”</span> which are part of <a class="xref" href=
+          "shared-mime-info.html" title=
+          "shared-mime-info-2.4">shared-mime-info-2.4</a> and <a class="xref"
+          href="desktop-file-utils.html" title=
+          "desktop-file-utils-0.28">desktop-file-utils-0.28</a>,
+          respectively. These two utilities are also needed for some tests.
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of GLib
+        </h2>
+        <p>
+          If desired, apply the optional patch. In many cases, applications
+          that use this library, either directly or indirectly via other
+          libraries such as <a class="xref" href="../x/gtk3.html" title=
+          "GTK-3.24.50">GTK-3.24.50</a>, output numerous warnings when run
+          from the command line. This patch enables the use of an environment
+          variable, <code class="envar">GLIB_LOG_LEVEL</code>, that
+          suppresses unwanted messages. The value of the variable is a digit
+          that corresponds to:
+        </p>
+        <table border="0" summary="Simple list" class="simplelist">
+          <tr>
+            <td>
+              1 Alert
+            </td>
+          </tr>
+          <tr>
+            <td>
+              2 Critical
+            </td>
+          </tr>
+          <tr>
+            <td>
+              3 Error
+            </td>
+          </tr>
+          <tr>
+            <td>
+              4 Warning
+            </td>
+          </tr>
+          <tr>
+            <td>
+              5 Notice
+            </td>
+          </tr>
+        </table>
+        <p>
+          For instance <strong class="userinput"><code>export
+          GLIB_LOG_LEVEL=4</code></strong> will skip output of Warning and
+          Notice messages (and Info/Debug messages if they are turned on). If
+          <code class="envar">GLIB_LOG_LEVEL</code> is not defined, normal
+          message output will not be affected.
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../glib-skip_warnings-1.patch</kbd></pre>
+        <div class="admon warning">
+          <img alt="[Warning]" src="../images/warning.png" />
+          <h3>
+            Warning
+          </h3>
+          <p>
+            If a previous version of glib is installed, move the headers out
+            of the way so that later packages do not encounter conflicts:
+          </p>
+          <pre class="root"><kbd class=
+          "command">if [ -e /usr/include/glib-2.0 ]; then
+    rm -rf /usr/include/glib-2.0.old &amp;&amp;
+    mv -vf /usr/include/glib-2.0{,.old}
+fi</kbd></pre>
+        </div>
+        <p>
+          Install <span class="application">GLib</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup ..                  \
+      --prefix=/usr             \
+      --buildtype=release       \
+      -D introspection=disabled \
+      -D glib_debug=disabled    \
+      -D man-pages=enabled      \
+      -D sysprof=disabled       &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          The <span class="application">GLib</span> test suite requires
+          <span class="application">desktop-file-utils</span> for some tests.
+          However, <span class="application">desktop-file-utils</span>
+          requires <span class="application">GLib</span> in order to compile;
+          therefore, you must first install <span class=
+          "application">GLib</span> and then run the test suite.
+        </p>
+        <p>
+          As the <code class="systemitem">root</code> user, install this
+          package for the first time to allow building GObject Introspection:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          Build GObject Introspection:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">tar xf ../../gobject-introspection-1.84.0.tar.xz &amp;&amp;
+
+meson setup gobject-introspection-1.84.0 gi-build \
+            --prefix=/usr --buildtype=release     &amp;&amp;
+ninja -C gi-build</kbd></pre>
+        <p>
+          To test the results of GObject Introspection, issue: <span class=
+          "command"><strong>ninja -C gi-build test</strong></span>.
+        </p>
+        <p>
+          As the <code class="systemitem">root</code> user, install GObject
+          Introspection for generating the introspection data of GLib
+          libraries (required by various packages using Glib, especially some
+          GNOME packages):
+        </p>
+        <pre class="root"><kbd class=
+        "command">ninja -C gi-build install</kbd></pre>
+        <p>
+          Now generate the introspection data:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">meson configure -D introspection=enabled &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          If you have <a class="xref" href="python-modules.html#gi-docgen"
+          title="Gi-DocGen-2025.4">Gi-DocGen-2025.4</a> installed and wish to
+          build the API documentation for this package, issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed "/docs_dir =/s|$| / 'glib-' + meson.project_version()|" \
+    -i ../docs/reference/meson.build                        &amp;&amp;
+meson configure -D documentation=true                       &amp;&amp;
+ninja</kbd></pre>
+        <div class="admon warning">
+          <img alt="[Warning]" src="../images/warning.png" />
+          <h3>
+            Warning
+          </h3>
+          <p>
+            Do not run the test suite as <code class="systemitem">root</code>
+            or some tests will fail unexpectedly and leave some
+            non-FHS-compliant directories in the <code class=
+            "filename">/usr</code> hierarchy.
+          </p>
+        </div>
+        <p>
+          To test the results, issue: <span class="command"><strong>LC_ALL=C
+          ninja test</strong></span> as a non-<code class=
+          "systemitem">root</code> user.
+        </p>
+        <p>
+          As the <code class="systemitem">root</code> user, install this
+          package again for the introspection data (and optionally, the
+          documentation):
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--buildtype=release</code></em>:
+          Specify a buildtype suitable for stable releases of the package, as
+          the default may produce unoptimized binaries.
+        </p>
+        <p>
+          <em class="parameter"><code>-D man-pages=enabled</code></em>: This
+          switch causes the build to create and install the package man
+          pages.
+        </p>
+        <p>
+          <em class="parameter"><code>-D glib_debug=disabled</code></em>:
+          This switch causes the build to not include some expensive checks
+          for debugging in the built programs and libraries.
+        </p>
+        <p>
+          <em class="parameter"><code>-D sysprof=disabled</code></em>: This
+          switch disables the tracing support for sysprof. Remove this option
+          if you want the tracing support. Note that if sysprof is not
+          installed, removing this option will cause the build system to
+          download a copy of sysprof from the Internet.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <h3>
+          GLib Contents
+        </h3>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gapplication, gdbus, gdbus-codegen,
+              gi-compile-repository, gi-decompile-typelib, gi-inspect-typelib
+              gio, gio-querymodules, glib-compile-resources,
+              glib-compile-schemas, glib-genmarshal, glib-gettextize,
+              glib-mkenums, gobject-query, gresource, gsettings, gtester, and
+              gtester-report</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libgio-2.0.so, libgirepository-2.0.so,
+              libglib-2.0.so, libgmodule-2.0.so, libgobject-2.0.so, and
+              libgthread-2.0.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/gio-unix-2.0,
+              /usr/include/glib-2.0, /usr/lib/gio, /usr/lib/glib-2.0,
+              /usr/share/glib-2.0, and /usr/share/doc/glib-2.84.4
+              (optional)</span>
+            </div>
+          </div>
+        </div>
+        <h3>
+          GObject Introspection Contents
+        </h3>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">g-ir-annotation-tool, g-ir-compiler,
+              g-ir-doc-tool (optional), g-ir-generate, g-ir-inspect, and
+              g-ir-scanner</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libgirepository-1.0.so and
+              _giscanner.cpython-313-&lt;arch&gt;-linux-gnu.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/gobject-introspection-1.0,
+              /usr/lib/girepository-1.0, /usr/lib/gobject-introspection,
+              /usr/share/gir-1.0, and
+              /usr/share/gobject-introspection-1.0</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gapplication" name="gapplication"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gapplication</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    can be used to start applications and to send messages to
+                    already-running instances of other applications
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gdbus" name="gdbus"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gdbus</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a simple tool used for working with <span class=
+                    "application">D-Bus</span> objects
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gdbus-codegen" name=
+                    "gdbus-codegen"></a><span class="term"><span class=
+                    "command"><strong>gdbus-codegen</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to generate code and/or documentation for one or
+                    more <span class="application">D-Bus</span> interfaces
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gi-compile-repository" name=
+                    "gi-compile-repository"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gi-compile-repository</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    converts one or more GIR files into one or more typelib
+                    files
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gi-decompile-typelib" name=
+                    "gi-decompile-typelib"></a><span class=
+                    "term"><span class="command"><strong>gi-decompile-typelib</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a GIR decompiler that uses the repository API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gi-inspect-typelib" name=
+                    "gi-inspect-typelib"></a><span class="term"><span class=
+                    "command"><strong>gi-inspect-typelib</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a utility that gives information about a GI typelib
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gio" name="gio"></a><span class=
+                    "term"><span class="command"><strong>gio</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a utility that makes many <span class=
+                    "application">GIO</span> features available from the
+                    command line
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gio-querymodules" name=
+                    "gio-querymodules"></a><span class="term"><span class=
+                    "command"><strong>gio-querymodules</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to create a <code class=
+                    "filename">giomodule.cache</code> file in the listed
+                    directories. This file lists the implemented extension
+                    points for each module that has been found
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glib-compile-resources" name=
+                    "glib-compile-resources"></a><span class=
+                    "term"><span class=
+                    "command"><strong>glib-compile-resources</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to read the resource description from a file and
+                    the files that it references to create a binary resource
+                    bundle that is suitable for use with the GResource API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glib-compile-schemas" name=
+                    "glib-compile-schemas"></a><span class=
+                    "term"><span class="command"><strong>glib-compile-schemas</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to compile all the GSettings XML schema files in
+                    a directory into a binary file with the name <code class=
+                    "filename">gschemas.compiled</code> that can be used by
+                    GSettings
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glib-genmarshal" name=
+                    "glib-genmarshal"></a><span class="term"><span class=
+                    "command"><strong>glib-genmarshal</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a C code marshaller generation utility for GLib
+                    closures
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glib-gettextize" name=
+                    "glib-gettextize"></a><span class="term"><span class=
+                    "command"><strong>glib-gettextize</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a variant of the <span class=
+                    "application">gettext</span> internationalization utility
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glib-mkenums" name="glib-mkenums"></a><span class=
+                    "term"><span class=
+                    "command"><strong>glib-mkenums</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a C language enum description generation utility
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gobject-query" name=
+                    "gobject-query"></a><span class="term"><span class=
+                    "command"><strong>gobject-query</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a small utility that draws a tree of types
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gresource" name="gresource"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gresource</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    offers a simple command line interface to GResource
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gsettings" name="gsettings"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gsettings</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    offers a simple command line interface to GSettings
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gtester" name="gtester"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gtester</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a test running utility
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gtester-report" name=
+                    "gtester-report"></a><span class="term"><span class=
+                    "command"><strong>gtester-report</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a test report formatting utility
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgio" name="libgio"></a><span class=
+                    "term"><code class="filename">libgio-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a library providing useful classes for general purpose
+                    I/O, networking, IPC, settings, and other high level
+                    application functionality
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgirepository" name=
+                    "libgirepository"></a><span class="term"><code class=
+                    "filename">libgirepository-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a library providing access to typelibs and
+                    introspection data which describes C APIs
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libglib" name="libglib"></a><span class=
+                    "term"><code class=
+                    "filename">libglib-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a general-purpose, portable utility library, which
+                    provides many useful data types, macros, type
+                    conversions, string utilities, file utilities, a mainloop
+                    abstraction, and so on
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgmodule" name="libgmodule"></a><span class=
+                    "term"><code class=
+                    "filename">libgmodule-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides portable API for dynamically loading modules
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgobject" name="libgobject"></a><span class=
+                    "term"><code class=
+                    "filename">libgobject-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the GLib base type system and object class
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgthread" name="libgthread"></a><span class=
+                    "term"><code class=
+                    "filename">libgthread-2.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a skeleton library for backwards compatibility; it
+                    used to be the GLib thread library but the
+                    functionalities has been merged info <code class=
+                    "systemitem">libglib-2.0</code>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-annotation-tool" name=
+                    "g-ir-annotation-tool"></a><span class=
+                    "term"><span class="command"><strong>g-ir-annotation-tool</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    creates or extracts annotation data from GI typelibs
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-compiler" name=
+                    "g-ir-compiler"></a><span class="term"><span class=
+                    "command"><strong>g-ir-compiler</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a counterpart of <span class=
+                    "command"><strong>gi-compile-repository</strong></span>
+                    for the old <code class=
+                    "systemitem">libgirepository-1.0</code> API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-doc-tool" name=
+                    "g-ir-doc-tool"></a><span class="term"><span class=
+                    "command"><strong>g-ir-doc-tool</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    generates Mallard files that can be viewed with
+                    <span class="command"><strong>yelp</strong></span> or
+                    rendered to HTML with <span class=
+                    "command"><strong>yelp-build</strong></span> from
+                    <a class="ulink" href=
+                    "https://download.gnome.org/sources/yelp-tools">yelp-tools</a>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-inspect" name="g-ir-inspect"></a><span class=
+                    "term"><span class=
+                    "command"><strong>g-ir-inspect</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a counterpart of <span class=
+                    "command"><strong>gi-inspect-typelib</strong></span> for
+                    the old <code class=
+                    "systemitem">libgirepository-1.0</code> API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-generate" name=
+                    "g-ir-generate"></a><span class="term"><span class=
+                    "command"><strong>g-ir-generate</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a counterpart of <span class=
+                    "command"><strong>gi-decompile-typelib</strong></span>
+                    for the old <code class=
+                    "systemitem">libgirepository-1.0</code> API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="g-ir-scanner" name="g-ir-scanner"></a><span class=
+                    "term"><span class=
+                    "command"><strong>g-ir-scanner</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a tool which generates GIR XML files by parsing
+                    headers and introspecting GObject based libraries
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgirepository-1.0" name=
+                    "libgirepository-1.0"></a><span class="term"><code class=
+                    "filename">libgirepository-1.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a counterpart of <code class=
+                    "systemitem">libgirepository-2.0</code> with the old 1.0
+                    API
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="fmt.html" title="fmt-11.2.0">Prev</a>
+          <p>
+            fmt-11.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="glibmm.html" title="GLibmm-2.66.8">Next</a>
+          <p>
+            GLibmm-2.66.8
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

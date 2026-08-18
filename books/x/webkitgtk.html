@@ -1,0 +1,603 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      WebKitGTK-2.48.5
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;25.&nbsp;Graphical Environment Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="vulkan-loader.html" title=
+          "Vulkan-Loader-1.4.321">Prev</a>
+          <p>
+            Vulkan-Loader-1.4.321
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xdg-desktop-portal.html" title=
+          "xdg-desktop-portal-1.20.3">Next</a>
+          <p>
+            xdg-desktop-portal-1.20.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="webkitgtk" name="webkitgtk"></a>WebKitGTK-2.48.5
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to WebKitGTK
+        </h2>
+        <p>
+          The <span class="application">WebKitGTK</span> package is a port of
+          the portable web rendering engine <span class=
+          "application">WebKit</span> to the <span class="application">GTK+
+          3</span> and <span class="application">GTK 4</span> platforms.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <div class="admon important">
+          <img alt="[Important]" src="../images/important.png" />
+          <h3>
+            Important
+          </h3>
+          <p>
+            This package has historically had frequent updates that address
+            security vulnerabilities. To determine the latest status check
+            the <a class="ulink" href=
+            "https://rivendell.linuxfromscratch.org/blfs/advisories/">BLFS
+            Security Advisories</a>.
+          </p>
+        </div>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://webkitgtk.org/releases/webkitgtk-2.48.5.tar.xz">https://webkitgtk.org/releases/webkitgtk-2.48.5.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 23e26bc4e30b80462cb1030fab352409
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 42 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 1.5 GB (186 MB installed, add
+                181 MB for GTK-4)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 21 SBU (for GTK-3, using parallelism=8,
+                add 21 SBU for GTK-4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          WebKitGTK Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="cairo.html" title=
+          "Cairo-1.18.4">Cairo-1.18.4</a>, <a class="xref" href=
+          "../general/cmake.html" title="CMake-4.1.0">CMake-4.1.0</a>,
+          <a class="xref" href="../multimedia/gst10-plugins-base.html" title=
+          "gst-plugins-base-1.26.5">gst-plugins-base-1.26.5</a>, <a class=
+          "xref" href="../multimedia/gst10-plugins-bad.html" title=
+          "gst-plugins-bad-1.26.5">gst-plugins-bad-1.26.5</a>, <a class=
+          "xref" href="gtk3.html" title="GTK-3.24.50">GTK-3.24.50</a>,
+          <a class="xref" href="gtk4.html" title="GTK-4.18.6">GTK-4.18.6</a>,
+          <a class="xref" href="../general/icu.html" title=
+          "icu-77.1">ICU-77.1</a>, <a class="xref" href=
+          "../general/lcms2.html" title="Little CMS-2.17">Little
+          CMS-2.17</a>, <a class="xref" href="../general/libgudev.html"
+          title="libgudev-238">libgudev-238</a>, <a class="xref" href=
+          "../gnome/libsecret.html" title=
+          "libsecret-0.21.7">libsecret-0.21.7</a>, <a class="xref" href=
+          "../basicnet/libsoup3.html" title=
+          "libsoup-3.6.5">libsoup-3.6.5</a>, <a class="xref" href=
+          "../general/libtasn1.html" title=
+          "libtasn1-4.20.0">libtasn1-4.20.0</a>, <a class="xref" href=
+          "../general/libwebp.html" title="libwebp-1.6.0">libwebp-1.6.0</a>,
+          <a class="xref" href="mesa.html" title=
+          "Mesa-25.1.8">Mesa-25.1.8</a>, <a class="xref" href=
+          "../general/openjpeg2.html" title=
+          "OpenJPEG-2.5.3">OpenJPEG-2.5.3</a>, <a class="xref" href=
+          "../general/ruby.html" title="Ruby-3.4.5">Ruby-3.4.5</a>, <a class=
+          "xref" href="../server/sqlite.html" title=
+          "SQLite-3.50.4">SQLite-3.50.4</a>, <a class="xref" href=
+          "../general/unifdef.html" title="unifdef-2.12">unifdef-2.12</a>,
+          and <a class="xref" href="../general/which.html" title=
+          "Which-2.23 and Alternatives">Which-2.23</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/bubblewrap.html" title=
+          "Bubblewrap-0.11.0">bubblewrap-0.11.0</a>, <a class="xref" href=
+          "../general/enchant.html" title=
+          "enchant-2.8.12">enchant-2.8.12</a>, <a class="xref" href=
+          "../basicnet/geoclue2.html" title="GeoClue-2.7.2">GeoClue-2.7.2</a>
+          (runtime), <a class="xref" href="../general/glib2.html" title=
+          "GLib-2.84.4">GLib-2.84.4</a> (with GObject Introspection),
+          <a class="xref" href="hicolor-icon-theme.html" title=
+          "hicolor-icon-theme-0.18">hicolor-icon-theme-0.18</a>, <a class=
+          "xref" href="../general/libavif.html" title=
+          "libavif-1.3.0">libavif-1.3.0</a>, <a class="xref" href=
+          "../general/libjxl.html" title="libjxl-0.11.1">libjxl-0.11.1</a>,
+          <a class="xref" href="../general/libseccomp.html" title=
+          "libseccomp-2.6.0">libseccomp-2.6.0</a>, and <a class="xref" href=
+          "../general/xdg-dbus-proxy.html" title=
+          "xdg-dbus-proxy-0.1.6">xdg-dbus-proxy-0.1.6</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/python-modules.html#gi-docgen"
+          title="Gi-DocGen-2025.4">Gi-DocGen-2025.4</a>, <a class="xref"
+          href="../general/harfbuzz.html" title=
+          "harfBuzz-11.4.1">harfBuzz-11.4.1</a>, <a class="xref" href=
+          "../general/wayland.html" title=
+          "Wayland-1.24.0">Wayland-1.24.0</a>, <a class="xref" href=
+          "../general/woff2.html" title="woff2-1.0.2">WOFF2-1.0.2</a>,
+          <a class="ulink" href="https://ccache.dev/">ccache</a>, <a class=
+          "ulink" href="http://www.festvox.org/flite/">flite</a>, <a class=
+          "ulink" href=
+          "https://sourceforge.net/projects/hunspell/files/Hyphen/">Hyphen</a>,
+          <a class="ulink" href=
+          "https://github.com/ianlancetaylor/libbacktrace">libbacktrace</a>,
+          <a class="ulink" href=
+          "https://gnome.pages.gitlab.gnome.org/libmanette/">libmanette</a>,
+          <a class="ulink" href=
+          "https://github.com/project-spiel/libspiel">libspiel</a>, and
+          <a class="ulink" href=
+          "https://wiki.gnome.org/Apps/Sysprof">sysprof</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of WebKitGTK
+        </h2>
+        <h3>
+          Installation of <span class="application">WebKitGTK</span>
+        </h3>
+        <div class="admon important">
+          <img alt="[Important]" src="../images/important.png" />
+          <h3>
+            Important
+          </h3>
+          <p>
+            This package allows building with either GTK-3 or GTK-4, but not
+            both in the same build. The GTK-4 version is needed for packages
+            such as <a class="xref" href="../xsoft/epiphany.html" title=
+            "Epiphany-48.5">Epiphany-48.5</a>. Other packages, such as
+            <a class="xref" href="../xsoft/balsa.html" title=
+            "Balsa-2.6.5">Balsa-2.6.5</a> or <a class="xref" href=
+            "../gnome/evolution.html" title=
+            "Evolution-3.56.2">Evolution-3.56.2</a>, require the GTK-3
+            version. Both versions can be installed side by side on the same
+            system. We give build instructions for both cases below, but the
+            only difference is the setting of <span class=
+            "command"><strong>-D USE_GTK4</strong></span>
+          </p>
+          <p>
+            With the default <span class="quote">“<span class=
+            "quote">release</span>”</span> build configuration, some source
+            files of this package require more than 4 GiB of RAM to be built.
+            As the result, you should pass <em class=
+            "parameter"><code>-j<em class=
+            "replaceable"><code>&lt;N&gt;</code></em></code></em> to
+            <span class="command"><strong>ninja</strong></span> (replacing
+            <em class="replaceable"><code>&lt;N&gt;</code></em> with the
+            quotient of the amount of available RAM and 4 GiB) to limit the
+            number of parallel jobs and avoid the job from being killed by
+            the kernel OOM killer.
+          </p>
+          <p>
+            On a 32-bit system, the sum of RAM and swap space used by a build
+            job (in fact, any single process) cannot exceed 4 GiB. So if you
+            are building this package on a 32-bit system, you must add the
+            <span class="command"><strong>-D CMAKE_CXX_FLAGS_RELEASE="-O2
+            -DNDEBUG"</strong></span> option to the <span class=
+            "command"><strong>cmake</strong></span> to disable some
+            optimizations which need a lot of memory to limit the memory
+            usage of individual build jobs. Performance will be impacted
+            slightly, but not at a level where it is noticeable during normal
+            usage.
+          </p>
+        </div>
+        <p>
+          If you want to install the GTK+-3 version of <span class=
+          "application">WebKitGTK</span>, run the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mkdir -vp build &amp;&amp;
+cd        build &amp;&amp;
+
+cmake -D CMAKE_BUILD_TYPE=Release     \
+      -D CMAKE_INSTALL_PREFIX=/usr    \
+      -D CMAKE_SKIP_INSTALL_RPATH=ON  \
+      -D PORT=GTK                     \
+      -D LIB_INSTALL_DIR=/usr/lib     \
+      -D USE_LIBBACKTRACE=OFF         \
+      -D USE_LIBHYPHEN=OFF            \
+      -D ENABLE_GAMEPAD=OFF           \
+      -D ENABLE_MINIBROWSER=ON        \
+      -D ENABLE_DOCUMENTATION=OFF     \
+      -D ENABLE_WEBDRIVER=OFF         \
+      -D USE_WOFF2=OFF                \
+      -D USE_GTK4=OFF                 \
+      -D ENABLE_JOURNALD_LOG=OFF      \
+      -D ENABLE_BUBBLEWRAP_SANDBOX=ON \
+      -D USE_SYSPROF_CAPTURE=NO       \
+      -D ENABLE_SPEECH_SYNTHESIS=OFF  \
+      -W no-dev -G Ninja ..           &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          This package does not have a working test suite. However, there is
+          a usable basic graphical web browser in the build directory,
+          <span class="application">build/bin/MiniBrowser</span>. If
+          launching it fails, there is a problem with the build.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          If you want to install the GTK4 version of <span class=
+          "application">WebKitGTK</span>, run the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">rm -rf * .[^.]* &amp;&amp;
+
+cmake -D CMAKE_BUILD_TYPE=Release      \
+      -D CMAKE_INSTALL_PREFIX=/usr     \
+      -D CMAKE_SKIP_INSTALL_RPATH=ON   \
+      -D PORT=GTK                      \
+      -D LIB_INSTALL_DIR=/usr/lib      \
+      -D USE_LIBBACKTRACE=OFF          \
+      -D USE_LIBHYPHEN=OFF             \
+      -D ENABLE_GAMEPAD=OFF            \
+      -D ENABLE_MINIBROWSER=ON         \
+      -D ENABLE_DOCUMENTATION=OFF      \
+      -D USE_WOFF2=OFF                 \
+      -D USE_GTK4=ON                   \
+      -D ENABLE_JOURNALD_LOG=OFF       \
+      -D ENABLE_BUBBLEWRAP_SANDBOX=ON  \
+      -D USE_SYSPROF_CAPTURE=NO        \
+      -D ENABLE_SPEECH_SYNTHESIS=OFF   \
+      -W no-dev -G Ninja ..            &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          As the <code class="option">-D ENABLE_DOCUMENTATION=OFF</code>
+          option is used, the documentation is not rebuilt nor installed now.
+          If you need the documentation, you can either install <a class=
+          "xref" href="../general/python-modules.html#gi-docgen" title=
+          "Gi-DocGen-2025.4">Gi-DocGen-2025.4</a> and remove this option from
+          the <span class="command"><strong>cmake</strong></span> command, or
+          install the pre-built documentation (only for the GTK-4 version)
+          instead:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -vdm755 /usr/share/gtk-doc/html &amp;&amp;
+cp -rv ../Documentation/* /usr/share/gtk-doc/html</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>-D
+          CMAKE_SKIP_INSTALL_RPATH=ON</code></em>: This switch makes
+          <span class="command"><strong>cmake</strong></span> remove
+          hardcoded library search paths (rpath) when installing a binary
+          executable file or a shared library. This package does not need
+          rpath once it's installed into the standard location, and rpath may
+          sometimes cause unwanted effects or even security issues.
+        </p>
+        <p>
+          <em class="parameter"><code>-D USE_LIBBACKTRACE=OFF</code></em>:
+          This switch disables the use of libbacktrace for dumping a stack
+          trace when a crash happens. You need to install <a class="ulink"
+          href=
+          "https://github.com/ianlancetaylor/libbacktrace">libbacktrace</a>
+          if you wish to enable it (replacing OFF with ON or just removing
+          the switch).
+        </p>
+        <p>
+          <em class="parameter"><code>-D USE_LIBHYPHEN=OFF</code></em>: This
+          switch disables the default automatic hyphenation implementation.
+          You need to install <a class="ulink" href=
+          "https://sourceforge.net/projects/hunspell/files/Hyphen/">Hyphen</a>
+          if you wish to enable it (replacing OFF with ON or just removing
+          the switch).
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          ENABLE_DOCUMENTATION=OFF</code></em>: This switch disables
+          regenerating the documentation. Remove this switch if you have
+          <a class="xref" href="../general/python-modules.html#gi-docgen"
+          title="Gi-DocGen-2025.4">Gi-DocGen-2025.4</a> installed and wish to
+          regenerate the documentation.
+        </p>
+        <p>
+          <em class="parameter"><code>-D ENABLE_GAMEPAD=OFF</code></em>: This
+          switch disables gamepad support. Remove this switch if you have
+          <a class="ulink" href=
+          "https://gnome.pages.gitlab.gnome.org/libmanette/">libmanette</a>
+          installed and wish to enable it.
+        </p>
+        <p>
+          <em class="parameter"><code>-D ENABLE_MINIBROWSER=ON</code></em>:
+          This switch enables compiling and installing the MiniBrowser.
+        </p>
+        <p>
+          <em class="parameter"><code>-D ENABLE_WEBDRIVER=OFF</code></em>:
+          This switch disables compiling and installing <span class=
+          "command"><strong>WebKitWebDriver</strong></span>. We use it for
+          the GTK-3 build because the <span class=
+          "command"><strong>WebKitWebDriver</strong></span> from the GTK-3
+          build will be overwritten by the GTK-4 build anyway. Remove this
+          option if you don't plan to build this package with GTK-4.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          ENABLE_BUBBLEWRAP_SANDBOX=ON</code></em>: This switch enables the
+          Bubblewrap sandbox, which helps mitigate the impact of most
+          security vulnerabilities in this package. Change this switch to OFF
+          if you do not want to install <a class="xref" href=
+          "../general/bubblewrap.html" title=
+          "Bubblewrap-0.11.0">bubblewrap-0.11.0</a>, <a class="xref" href=
+          "../general/libseccomp.html" title=
+          "libseccomp-2.6.0">libseccomp-2.6.0</a>, or <a class="xref" href=
+          "../general/xdg-dbus-proxy.html" title=
+          "xdg-dbus-proxy-0.1.6">xdg-dbus-proxy-0.1.6</a>, but note that this
+          may put you at risk.
+        </p>
+        <p>
+          <em class="parameter"><code>-D ENABLE_JOURNALD_LOG=OFF</code></em>:
+          This switch disables using the systemd journal for logging errors
+          and debugging information since it is not available on SysV
+          systems.
+        </p>
+        <p>
+          <em class="parameter"><code>-D USE_SYSPROF_CAPTURE=NO</code></em>:
+          This switch disables a hard dependency on <a class="ulink" href=
+          "https://wiki.gnome.org/Apps/Sysprof">sysprof</a>.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          ENABLE_SPEECH_SYNTHESIS=OFF</code></em>: This switch disables
+          building speech synthesis support into WebKitGTK because it
+          requires additional external dependencies. You will need both
+          <a class="ulink" href="http://www.festvox.org/flite/">flite</a> and
+          <a class="ulink" href=
+          "https://github.com/project-spiel/libspiel">libspiel</a> if you
+          wish to enable this.
+        </p>
+        <p>
+          <code class="option">-D USE_SYSTEM_MALLOC=ON</code>: This switch
+          enables building against the system installed <span class=
+          "application">malloc</span>.
+        </p>
+        <p>
+          <code class="option">-D ENABLE_GEOLOCATION=OFF</code>: Use this
+          switch if you don't want to install <a class="xref" href=
+          "../basicnet/geoclue2.html" title=
+          "GeoClue-2.7.2">GeoClue-2.7.2</a>.
+        </p>
+        <p>
+          <code class="option">-D USE_AVIF=OFF</code>: Use this switch if you
+          don't want to install <a class="xref" href=
+          "../general/libavif.html" title="libavif-1.3.0">libavif-1.3.0</a>.
+          Note that you will not have support for AVIF images if you do this.
+        </p>
+        <p>
+          <code class="option">-D USE_WOFF2=ON</code>: Use this switch if the
+          optional package <a class="xref" href="../general/woff2.html"
+          title="woff2-1.0.2">WOFF2-1.0.2</a> is installed. This adds
+          additional support for fonts.
+        </p>
+        <p>
+          <code class="option">-D USE_JPEGXL=OFF</code>: Use this switch if
+          the recommended package <a class="xref" href=
+          "../general/libjxl.html" title="libjxl-0.11.1">libjxl-0.11.1</a> is
+          not installed. Note that you will not have support for JPEG XL
+          images if this option is passed.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">WebKitWebDriver</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libjavascriptcoregtk-4.1.so,
+              libjavascriptcoregtk-6.0.so, libwebkit2gtk-4.1.so, and
+              libwebkitgtk-6.0.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/webkitgtk-4.1,
+              /usr/include/webkitgtk-6.0, /usr/lib{,exec}/webkit2gtk-4.1,
+              /usr/lib{,exec}/webkitgtk-6.0,
+              /usr/share/gtk-doc/html/{jsc-glib,webkit2gtk{,-web-extension}}-4.1
+              (optional), and
+              /usr/share/gtk-doc/html/{jsc-glib,webkit2gtk{,-web-process-extension}}-6.0</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="WebKitWebDriver" name=
+                    "WebKitWebDriver"></a><span class="term"><span class=
+                    "command"><strong>WebKitWebDriver</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    allows debugging and automation of web pages and browsers
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjavascriptcoregtk-4.1" name=
+                    "libjavascriptcoregtk-4.1"></a> <span class=
+                    "term"><code class=
+                    "filename">libjavascriptcoregtk-4.1.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains core JavaScript API functions used by
+                    <span class="command"><strong>jsc</strong></span> and
+                    <code class="filename">libwebkit2gtk-4.1</code>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjavascriptcoregtk-6.0" name=
+                    "libjavascriptcoregtk-6.0"></a><span class=
+                    "term"><code class=
+                    "filename">libjavascriptcoregtk-6.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains core JavaScript API functions used by
+                    <span class="command"><strong>jsc</strong></span> and
+                    <code class="filename">libwebkitgtk-6.0</code>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libwebkit2gtk-4" name=
+                    "libwebkit2gtk-4"></a><span class="term"><code class=
+                    "filename">libwebkit2gtk-4.1.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">WebKit2</span> API
+                    functions
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libwebkitgtk-6" name=
+                    "libwebkitgtk-6"></a><span class="term"><code class=
+                    "filename">libwebkitgtk-6.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">WebKit</span> API
+                    functions for GTK-4 applications
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="vulkan-loader.html" title=
+          "Vulkan-Loader-1.4.321">Prev</a>
+          <p>
+            Vulkan-Loader-1.4.321
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xdg-desktop-portal.html" title=
+          "xdg-desktop-portal-1.20.3">Next</a>
+          <p>
+            xdg-desktop-portal-1.20.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

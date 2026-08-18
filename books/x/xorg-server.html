@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Xorg-Server-21.1.18
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;24.&nbsp;Graphical Environments
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xwayland.html" title=
+          "Xwayland-24.1.8">Prev</a>
+          <p>
+            Xwayland-24.1.8
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="x7driver.html" title=
+          "Xorg Input Drivers">Next</a>
+          <p>
+            Xorg Input Drivers
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="xorg-server" name="xorg-server"></a>Xorg-Server-21.1.18
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Xorg Server
+        </h2>
+        <p>
+          The <span class="application">Xorg</span> Server is the core of the
+          X Window system.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://www.x.org/pub/individual/xserver/xorg-server-21.1.18.tar.xz">
+                https://www.x.org/pub/individual/xserver/xorg-server-21.1.18.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 43225ddc1fd8d7ae7671c25ab6d1f927
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 4.9 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 151 MB (with tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.3 SBU (using parallelism=4; with
+                tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                With the removal of the xf86-video-* drivers, the TearFree
+                option is no longer functional. To work around this, upstream
+                has added the TearFree option to the default modesetting
+                driver. This patch backports this feature. Apply this patch
+                if you are going to use Xorg in an environment without a
+                compositor (such as TWM, IceWM, Openbox, or Fluxbox).
+              </p>
+              <p>
+                Optional patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/xorg-server-21.1.18-tearfree_backport-1.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/xorg-server-21.1.18-tearfree_backport-1.patch</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Xorg Server Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="libxcvt.html" title=
+          "libxcvt-0.1.3">libxcvt-0.1.3</a>, <a class="xref" href=
+          "../general/pixman.html" title="Pixman-0.46.4">Pixman-0.46.4</a>,
+          <a class="xref" href="x7font.html" title="Xorg Fonts">Xorg
+          Fonts</a> (only font-util), and at runtime: <a class="xref" href=
+          "xkeyboard-config.html" title=
+          "XKeyboardConfig-2.45">xkeyboard-config-2.45</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <span class="phrase"><a class="xref" href="../general/dbus.html"
+          title="dbus-1.16.2">dbus-1.16.2</a>, <a class="xref" href=
+          "../general/elogind.html" title="elogind-255.17">elogind-255.17</a>
+          (runtime; <code class="systemitem">libelogind</code> also referred
+          at build time but it's not really useful),</span> <a class="xref"
+          href="libepoxy.html" title="libepoxy-1.5.10">libepoxy-1.5.10</a>
+          (needed for glamor), <a class="xref" href=
+          "../basicnet/libtirpc.html" title=
+          "libtirpc-1.3.6">libtirpc-1.3.6</a>, and <a class="xref" href=
+          "x7driver.html#xorg-libinput-driver" title=
+          "Xorg Libinput Driver-1.5.0">xorg-libinput-1.5.0</a> (runtime)
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            Although it's possible to <span class="phrase">build this package
+            without <a class="xref" href="../general/dbus.html" title=
+            "dbus-1.16.2">dbus-1.16.2</a> installed or</span> run the Xorg
+            server without <span class="phrase"><a class="xref" href=
+            "../general/elogind.html" title=
+            "elogind-255.17">elogind-255.17</a></span> functioning, it would
+            require running the Xorg server as the <code class=
+            "systemitem">root</code> user or Xorg server will malfunction or
+            even fail to start. The BLFS editors strongly discourage skipping
+            <span class="phrase">these two dependencies</span>. Do not
+            attempt to do so unless you really know what you are doing.
+          </p>
+        </div>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/acpid.html" title=
+          "acpid-2.0.34">acpid-2.0.34</a> (runtime), <a class="xref" href=
+          "../general/doxygen.html" title="Doxygen-1.14.0">Doxygen-1.14.0</a>
+          (to build API documentation), <a class="xref" href=
+          "../pst/fop.html" title="fop-2.11">fop-2.11</a> (to build
+          documentation), <a class="xref" href="../general/libunwind.html"
+          title="libunwind-1.8.2">libunwind-1.8.2</a>, <a class="xref" href=
+          "../postlfs/nettle.html" title="Nettle-3.10.2">Nettle-3.10.2</a>,
+          <a class="xref" href="../general/libgcrypt.html" title=
+          "libgcrypt-1.11.2">libgcrypt-1.11.2</a>, <a class="xref" href=
+          "xcb-utilities.html" title="XCB Utilities">XCB Utilities</a> (to
+          build Xephyr), <a class="xref" href="../pst/xmlto.html" title=
+          "xmlto-0.0.29">xmlto-0.0.29</a> (to build documentation), <a class=
+          "xref" href="xkeyboard-config.html" title=
+          "XKeyboardConfig-2.45">xkeyboard-config-2.45</a> (for tests),
+          <a class="ulink" href=
+          "https://gitlab.freedesktop.org/xorg/test/rendercheck">rendercheck</a>
+          (for tests), and <a class="ulink" href=
+          "https://www.x.org/archive/individual/doc/">xorg-sgml-doctools</a>
+          (to build documentation)
+        </p>
+      </div>
+      <div class="kernel" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="xorg-server-kernel" name="xorg-server-kernel"></a>Kernel
+          Configuration
+        </h2>
+        <p>
+          The traditional Device Dependent X (DDX) drivers have been removed
+          from BLFS in favor of the <code class=
+          "filename">modesetting_drv</code> driver which will be built as a
+          part of this package. To use the <code class=
+          "filename">modesetting_drv</code> driver, the kernel must provide a
+          Direct Rendering Manager (DRM) driver for your GPU.
+        </p>
+        <p>
+          If your GPU supports 3D acceleration and <a class="xref" href=
+          "mesa.html" title="Mesa-25.1.8">Mesa-25.1.8</a> provides a
+          Gallium3D driver for utilizing its 3D capability, you should have
+          already enabled the necessary kernel configuration options in
+          <a class="xref" href="mesa.html#mesa-kernel" title=
+          "Kernel Configuration">Mesa Kernel Configuration</a>. Otherwise,
+          you need to find the kernel configuration option of the DRM driver
+          for the GPU and enable it. Notably, the virtual GPUs provided by
+          some virtual machine managers:
+        </p>
+        <pre class="screen"><span class="blue">D</span>evice Drivers ---&gt;
+  <span class="blue">G</span>raphics support ---&gt;
+    &lt;*/M&gt;   <span class=
+"blue">D</span>irect Rendering Manager (XFree86 4.1.0 and higher DRI support) ---&gt;
+                                                                      ...  [DRM]
+    &lt; /*/M&gt; <span class=
+"blue">D</span>RM driver for VMware Virtual GPU                       [DRM_VMWGFX]
+    &lt; /*/M&gt; <span class=
+"blue">D</span>RM Support for bochs dispi vga interface (qemu stdvga)  [DRM_BOCHS]
+    &lt; /*/M&gt; <span class=
+"blue">V</span>irtual Box Graphics Card                            [DRM_VBOXVIDEO]</pre>
+        <p>
+          If the kernel does not provide a DRM driver for your GPU, on most
+          x86 systems the <span class="quote">“<span class="quote">simple
+          frame buffer</span>”</span> DRM driver running on VESA or UEFI
+          frame buffer can be used as a fallback. Enable the following
+          options in the kernel configurations if you don't have a dedicated
+          DRM driver for the GPU, or you want to keep the simple frame buffer
+          driver as a fallback in case the dedicated driver fails:
+        </p>
+        <pre class="screen"><span class="blue">D</span>evice Drivers ---&gt;
+  <span class="blue">F</span>irmware Drivers ---&gt;
+    [*] M<span class=
+"blue">a</span>rk VGA/VBE/EFI FB as generic system framebuffer       [SYSFB_SIMPLEFB]
+  <span class="blue">G</span>raphics support ---&gt;
+    &lt;*&gt; <span class=
+"blue">D</span>irect Rendering Manager (XFree86 4.1.0 and higher DRI support) ---&gt;
+                                                                      ...  [DRM]
+    <span class="blue">D</span>rivers for system framebuffers ---&gt;
+      &lt;*&gt; <span class=
+"blue">S</span>imple framebuffer driver                              [DRM_SIMPLEDRM]</pre>
+        <p>
+          To allow the kernel to print debug messages at an early boot stage,
+          <code class="option">CONFIG_DRM</code> and <code class=
+          "option">CONFIG_DRM_SIMPLEDRM</code> should not be built as kernel
+          modules unless an initramfs will be used.
+        </p>
+        <p>
+          If you want to use the simple frame buffer driver on a system
+          booted via BIOS (instead of UEFI), add the following line before
+          the first <code class="literal">menuentry</code> block in the
+          <code class="filename">/boot/grub/grub.cfg</code> file to
+          initialize the VESA frame buffer:
+        </p>
+        <pre class="screen"><code class="literal">set gfxpayload=<em class=
+        "replaceable"><code>1024x768x32</code></em></code></pre>
+        <p>
+          You may replace <code class="literal">1024</code>, <code class=
+          "literal">768</code>, and <code class="literal">32</code> with a
+          resolution and color depth setting suitable for your monitor.
+        </p>
+        <p>
+          If all of these DRM drivers do not work for you and you need to use
+          a DDX driver with a non-DRM kernel GPU driver (usually named
+          <code class="option">CONFIG_FB_*</code> in the kernel
+          configuration, or existing as out-tree kernel modules), or you need
+          an device specific functionality requiring a DDX driver, consult
+          <a class="ulink" href=
+          "https://www.linuxfromscratch.org/blfs/view/11.3/x/x7driver.html">a
+          prior version of BLFS</a>, or <a class="ulink" href=
+          "https://www.linuxfromscratch.org/blfs/view/7.6/x/x7driver.html">an
+          even earlier prior version</a> for more DDX drivers.
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Xorg Server
+        </h2>
+        <p>
+          First, if you need the TearFree option to work around screen
+          tearing, apply the backported patch:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../xorg-server-21.1.18-tearfree_backport-1.patch</kbd></pre>
+        <p>
+          Install the server by running the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup ..               \
+      --prefix=$XORG_PREFIX  \
+      --localstatedir=/var   \
+      -D glamor=true         \
+      -D systemd_logind=true \
+      -D xkb_output_dir=/var/lib/xkb &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>ninja
+          test</strong></span>. You will need to run <span class=
+          "command"><strong>ldconfig</strong></span> as the <code class=
+          "systemitem">root</code> user first or some tests may fail.
+        </p>
+        <p>
+          Now as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install &amp;&amp;
+mkdir -pv /etc/X11/xorg.conf.d &amp;&amp;
+install -v -d -m1777 /tmp/.{ICE,X11}-unix &amp;&amp;
+cat &gt;&gt; /etc/sysconfig/createfiles &lt;&lt; "EOF"
+<code class="literal">/tmp/.ICE-unix dir 1777 root root
+/tmp/.X11-unix dir 1777 root root</code>
+EOF</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>-D glamor=true</code></em>: Ensure
+          building the Glamor module. It's needed to build the <code class=
+          "filename">modesetting_drv</code> driver which replaces the
+          traditional Device Dependent X (DDX) drivers.
+        </p>
+        <p>
+          <code class="option">-D secure-rpc=false</code>: This option
+          disables building RPC support if <a class="xref" href=
+          "../basicnet/libtirpc.html" title=
+          "libtirpc-1.3.6">libtirpc-1.3.6</a> is not installed.
+        </p>
+        <p>
+          <em class="parameter"><code>-D systemd_logind=true</code></em>:
+          This switch makes the building system error out if <a class="xref"
+          href="../general/dbus.html" title="dbus-1.16.2">dbus-1.16.2</a> is
+          not installed. The BLFS editors discourage building this package
+          without <a class="xref" href="../general/dbus.html" title=
+          "dbus-1.16.2">dbus-1.16.2</a> installed.
+        </p>
+        <p>
+          <code class="option">-D suid_wrapper=true</code>: Builds the
+          suid-root wrapper for legacy DDX driver support on rootless xserver
+          systems.
+        </p>
+        <p>
+          <span class="command"><strong>cat &gt;&gt;
+          /etc/sysconfig/createfiles...</strong></span>: This command creates
+          the <code class="filename">/tmp/.ICE-unix</code> and <code class=
+          "filename">/tmp/.X11-unix</code> directories at startup, and
+          ensures that the permissions and ownership are correct as required
+          by the server.
+        </p>
+        <p>
+          <code class="option">-D xephyr=true</code>: This option allows
+          building Xephyr if its dependencies are met.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gtf, X, Xnest, Xorg, Xvfb, and optionally
+              Xephyr</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">several under
+              $XORG_PREFIX/lib/xorg/modules/ including the <code class=
+              "filename">modesetting_drv</code> driver</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/etc/X11/xorg.conf.d,
+              $XORG_PREFIX/include/xorg, $XORG_PREFIX/lib/xorg, and
+              $XORG_PREFIX/share/X11/xorg.conf.d</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gtf-x7" name="gtf-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gtf</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    calculates VESA GTF mode lines
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="X-x7" name="X-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>X</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a symbolic link to Xorg
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="Xephyr-x7" name="Xephyr-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>Xephyr</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a nested X server which supports modern X extensions
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="Xnest-x7" name="Xnest-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>Xnest</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a nested X server
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="Xorg-x7" name="Xorg-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>Xorg</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the X11R7 X Server
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="Xvfb-x7" name="Xvfb-x7"></a><span class=
+                    "term"><span class=
+                    "command"><strong>Xvfb</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the virtual framebuffer X server for X Version 11
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="modesetting_drv-x7" name=
+                    "modesetting_drv-x7"></a><span class="term"><code class=
+                    "filename">modesetting_drv.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides a video driver for machines using Kernel Mode
+                    Setting (KMS). This will use glamor if that has been
+                    enabled and the hardware offers acceleration
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xwayland.html" title=
+          "Xwayland-24.1.8">Prev</a>
+          <p>
+            Xwayland-24.1.8
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="x7driver.html" title=
+          "Xorg Input Drivers">Next</a>
+          <p>
+            Xorg Input Drivers
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

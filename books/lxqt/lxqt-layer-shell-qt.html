@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      layer-shell-qt-6.4.4 for lxqt
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;37.&nbsp;LXQt Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-libkscreen.html" title=
+          "libkscreen-6.4.4 for lxqt">Prev</a>
+          <p>
+            libkscreen-6.4.4 for lxqt
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="muparser.html" title=
+          "muparser-2.3.5">Next</a>
+          <p>
+            muparser-2.3.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="lxqt-layer-shell-qt" name=
+      "lxqt-layer-shell-qt"></a>layer-shell-qt-6.4.4 for lxqt
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to layer-shell-qt
+        </h2>
+        <p>
+          This component is meant for applications to be able to easily use
+          clients based on a "wlr-layer-shell" protocol. Clients can use this
+          interface to assign the surface_layer role to wl_surfaces. Such
+          surfaces are assigned to a "layer" of the output and rendered with
+          a defined z-depth respective to each other.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <div class="admon important">
+          <img alt="[Important]" src="../images/important.png" />
+          <h3>
+            Important
+          </h3>
+          <p>
+            This package is extracted from the plasma set of packages. If
+            <a class="xref" href="../kde/plasma-all.html" title=
+            "Building Plasma">Plasma-6.4.4</a> is built, do <span class=
+            "bold"><strong>NOT</strong></span> also build this package as
+            presented here.
+          </p>
+        </div>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.kde.org/stable/plasma/6.4.4/layer-shell-qt-6.4.4.tar.xz">
+                https://download.kde.org/stable/plasma/6.4.4/layer-shell-qt-6.4.4.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 57485b21e575b632223946b936a11d35
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 36 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 5.1 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU (using parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          layer-shell-qt Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../kde/extra-cmake-modules.html" title=
+          "extra-cmake-modules-6.17.0">extra-cmake-modules-6.17.0</a> and
+          <a class="xref" href="../x/qt6.html" title="Qt-6.9.2">Qt-6.9.2</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of layer-shell
+        </h2>
+        <p>
+          Install <span class="application">layer-shell-qt</span> by running
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr \
+      -D CMAKE_BUILD_TYPE=Release  \
+      -W no-dev ..                 &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libLayerShellQtInterface.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/lib/qml/org/kde/layershell and
+              /usr/include/LayerShellQt</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-libkscreen.html" title=
+          "libkscreen-6.4.4 for lxqt">Prev</a>
+          <p>
+            libkscreen-6.4.4 for lxqt
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="muparser.html" title=
+          "muparser-2.3.5">Next</a>
+          <p>
+            muparser-2.3.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

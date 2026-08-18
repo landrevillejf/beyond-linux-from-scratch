@@ -1,0 +1,433 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      libjxl-0.11.1
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;10.&nbsp;Graphics and Font Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libjpeg.html" title=
+          "libjpeg-turbo-3.0.1">Prev</a>
+          <p>
+            libjpeg-turbo-3.0.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libmng.html" title="libmng-2.0.3">Next</a>
+          <p>
+            libmng-2.0.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="graphlib.html" title=
+          "Chapter&nbsp;10.&nbsp;Graphics and Font Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="libjxl" name="libjxl"></a>libjxl-0.11.1
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to libjxl
+        </h2>
+        <p>
+          The <span class="application">libjxl</span> package contains the
+          reference implementation of the JPEG XL image format.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/libjxl/libjxl/archive/v0.11.1/libjxl-0.11.1.tar.gz">
+                https://github.com/libjxl/libjxl/archive/v0.11.1/libjxl-0.11.1.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 8f26fc954c2d9cb377544a5f029182ef
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.8 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 57 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.9 SBU (with parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          libjxl Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="brotli.html" title=
+          "brotli-1.1.0">Brotli-1.1.0</a>, <a class="xref" href="cmake.html"
+          title="CMake-4.1.0">CMake-4.1.0</a>, <a class="xref" href=
+          "giflib.html" title="giflib-5.2.2">giflib-5.2.2</a>, <a class=
+          "xref" href="highway.html" title="highway-1.3.0">highway-1.3.0</a>,
+          <a class="xref" href="lcms2.html" title="Little CMS-2.17">Little
+          CMS-2.17</a>, <a class="xref" href="libjpeg.html" title=
+          "libjpeg-turbo-3.0.1">libjpeg-turbo-3.0.1</a>, and <a class="xref"
+          href="libpng.html" title="libpng-1.6.50">libpng-1.6.50</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../x/gdk-pixbuf.html" title=
+          "gdk-pixbuf-2.42.12">gdk-pixbuf-2.42.12</a> (for the plugin)
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="python-modules.html#asciidoc" title=
+          "Asciidoc-10.2.1">asciidoc-10.2.1</a> (for man pages), <a class=
+          "xref" href="doxygen.html" title=
+          "Doxygen-1.14.0">Doxygen-1.14.0</a> and <a class="xref" href=
+          "graphviz.html" title="Graphviz-13.1.2">Graphviz-13.1.2</a> (for
+          documentation), <a class="xref" href="java.html" title=
+          "Java-24.0.2">Java-24.0.2</a> (for the JAR), <a class="xref" href=
+          "libavif.html" title="libavif-1.3.0">libavif-1.3.0</a>, <a class=
+          "xref" href="libwebp.html" title="libwebp-1.6.0">libwebp-1.6.0</a>,
+          <a class="ulink" href=
+          "https://github.com/google/googletest">gtest</a>, <a class="ulink"
+          href="https://www.openexr.com/">OpenEXR</a>, <a class="ulink" href=
+          "https://github.com/webmproject/sjpeg">sjpeg</a>, and <a class=
+          "ulink" href="https://skia.googlesource.com/skcms/">skcms</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of libjxl
+        </h2>
+        <p>
+          Install <span class="application">libjxl</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr             \
+      -D CMAKE_BUILD_TYPE=Release              \
+      -D BUILD_TESTING=OFF                     \
+      -D BUILD_SHARED_LIBS=ON                  \
+      -D JPEGXL_ENABLE_SKCMS=OFF               \
+      -D JPEGXL_ENABLE_SJPEG=OFF               \
+      -D JPEGXL_ENABLE_PLUGINS=ON              \
+      -D JPEGXL_INSTALL_JARDIR=/usr/share/java \
+      -G Ninja ..                              &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          This package does come with a test suite, but it requires <a class=
+          "ulink" href="https://github.com/google/googletest">gtest</a>,
+          which is not in BLFS.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install &amp;&amp;
+gdk-pixbuf-query-loaders --update-cache</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <span class="command"><strong>gdk-pixbuf-query-loaders
+          --update-cache</strong></span>: This command regenerates the
+          <span class="application">GDK Pixbuf</span> loader cache so that it
+          is aware of the JPEG-XL loader.
+        </p>
+        <p>
+          <em class="parameter"><code>-D BUILD_TESTING=OFF</code></em>: This
+          parameter disables the tests because they require <a class="ulink"
+          href="https://github.com/google/googletest">gtest</a>, which is not
+          in BLFS. If you wish to run the tests and have <a class="ulink"
+          href="https://github.com/google/googletest">gtest</a> installed,
+          remove this parameter.
+        </p>
+        <p>
+          <em class="parameter"><code>-D BUILD_SHARED_LIBS=ON</code></em>:
+          This parameter enables building shared versions of the libraries
+          instead of static ones.
+        </p>
+        <p>
+          <em class="parameter"><code>-D JPEGXL_ENABLE_SKCMS=OFF</code></em>:
+          This parameter disables building support for Skia's <span class=
+          "application">skcms</span> since it is not necessary for BLFS
+          purposes and requires <a class="ulink" href=
+          "https://skia.googlesource.com/skcms/">skcms</a>.
+        </p>
+        <p>
+          <em class="parameter"><code>-D JPEGXL_ENABLE_SJPEG=OFF</code></em>:
+          This parameter disables support for SimpleJPEG since it is not
+          necessary for BLFS purposes and requires <a class="ulink" href=
+          "https://github.com/webmproject/sjpeg">sjpeg</a>.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          JPEGXL_ENABLE_PLUGINS=ON</code></em>: This parameter enables Plugin
+          support, which creates plugins for <a class="xref" href=
+          "../x/gdk-pixbuf.html" title=
+          "gdk-pixbuf-2.42.12">gdk-pixbuf-2.42.12</a> if the package is
+          installed.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          JPEGXL_INSTALL_JARDIR=/usr/share/java</code></em>: This parameter
+          places the JAR file for JPEG XL support in the correct directory if
+          <a class="xref" href="java.html" title=
+          "Java-24.0.2">Java-24.0.2</a> is installed.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">benchmark_xl, cjxl, djxl, and
+              jxlinfo</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libjxl.so, libjxl_cms.so,
+              libjxl_extras_codec.so, libjxl_jni.so, libjxl_threads.so, and
+              libpixbufloader-jxl.so (in
+              /usr/lib/gdk-pixbuf-2.0/2.10.0/loaders)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/jxl</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="benchmark_xl" name="benchmark_xl"></a><span class=
+                    "term"><span class=
+                    "command"><strong>benchmark_xl</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    runs performance benchmarks against libjxl
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="cjxl" name="cjxl"></a><span class=
+                    "term"><span class=
+                    "command"><strong>cjxl</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    compresses images into JPEG XL format
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="djxl" name="djxl"></a><span class=
+                    "term"><span class=
+                    "command"><strong>djxl</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    decompresses images from JPEG XL format into other
+                    formats
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="jxlinfo" name="jxlinfo"></a><span class=
+                    "term"><span class=
+                    "command"><strong>jxlinfo</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    displays information about JPEG XL images
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjxl-lib" name="libjxl-lib"></a><span class=
+                    "term"><code class="filename">libjxl.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the reference implementation of the JPEG XL
+                    standard
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjxl_cms" name="libjxl_cms"></a><span class=
+                    "term"><code class="filename">libjxl_cms.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains support for Little CMS in libjxl
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjxl_extras_codec" name=
+                    "libjxl_extras_codec"></a><span class="term"><code class=
+                    "filename">libjxl_extras_codec.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains additional codec support for JPEG XL images
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjxl_jni" name="libjxl_jni"></a><span class=
+                    "term"><code class="filename">libjxl_jni.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains a Java interface to support JPEG XL on systems
+                    where <a class="xref" href="java.html" title=
+                    "Java-24.0.2">Java-24.0.2</a> was installed at build time
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libjxl_threads" name=
+                    "libjxl_threads"></a><span class="term"><code class=
+                    "filename">libjxl_threads.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains threading functions for JPEG XL
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libpixbufloader-jxl" name=
+                    "libpixbufloader-jxl"></a><span class="term"><code class=
+                    "filename">libpixbufloader-jxl.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains a loader for gdk-pixbuf to allow it to load JPEG
+                    XL images
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libjpeg.html" title=
+          "libjpeg-turbo-3.0.1">Prev</a>
+          <p>
+            libjpeg-turbo-3.0.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libmng.html" title="libmng-2.0.3">Next</a>
+          <p>
+            libmng-2.0.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="graphlib.html" title=
+          "Chapter&nbsp;10.&nbsp;Graphics and Font Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

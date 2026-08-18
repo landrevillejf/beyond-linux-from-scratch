@@ -1,0 +1,546 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      OpenSSH-10.0p1
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;4.&nbsp;Security
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="nss.html" title="NSS-3.115">Prev</a>
+          <p>
+            NSS-3.115
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="p11-kit.html" title=
+          "p11-kit-0.25.5">Next</a>
+          <p>
+            p11-kit-0.25.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="openssh" name="openssh"></a>OpenSSH-10.0p1
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to OpenSSH
+        </h2>
+        <p>
+          The <span class="application">OpenSSH</span> package contains
+          <span class="command"><strong>ssh</strong></span> clients and the
+          <span class="command"><strong>sshd</strong></span> daemon. This is
+          useful for encrypting authentication and subsequent traffic over a
+          network. The <span class="command"><strong>ssh</strong></span> and
+          <span class="command"><strong>scp</strong></span> commands are
+          secure implementations of <span class=
+          "command"><strong>telnet</strong></span> and <span class=
+          "command"><strong>rcp</strong></span> respectively.
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            This package reports version OpenSSH_10.0p2 even though the
+            source package is openssh-10.0p1.
+          </p>
+        </div>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.0p1.tar.gz">
+                https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.0p1.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 689148621a2eaa734497b12bed1c5202
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.9 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 50 MB (add 22 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.4 SBU (Using parallelism=4; running
+                the tests takes about 15 minutes, irrespective of processor
+                speed)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          OpenSSH Dependencies
+        </h3>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/gdb.html" title=
+          "GDB-16.3">GDB-16.3</a> (for tests), <a class="xref" href=
+          "linux-pam.html" title="Linux-PAM-1.7.1">Linux-PAM-1.7.1</a> (PAM
+          configuration files from <a class="xref" href="shadow.html" title=
+          "Shadow-4.18.0">Shadow-4.18.0</a> are used to create openssh ones),
+          <a class="xref" href="../x/x7app.html" title=
+          "Xorg Applications">Xorg Applications</a> (or <a class="xref" href=
+          "../x/xorg7.html#xorg-env" title=
+          "Setting up the Xorg Build Environment">Xorg build environment</a>,
+          see Command Explanations), <a class="xref" href="mitkrb.html"
+          title="MIT Kerberos V5-1.22.1">MIT Kerberos V5-1.22.1</a>,
+          <a class="xref" href="../general/which.html" title=
+          "Which-2.23 and Alternatives">Which-2.23</a> (for tests), <a class=
+          "ulink" href="https://www.thrysoee.dk/editline/">libedit</a>,
+          <a class="ulink" href="https://www.libressl.org/">LibreSSL
+          Portable</a>, <a class="ulink" href=
+          "https://github.com/OpenSC/OpenSC/wiki">OpenSC</a>, and <a class=
+          "ulink" href=
+          "http://www.citi.umich.edu/projects/smartcard/sectok.html">libsectok</a>
+        </p>
+        <h4>
+          Optional Runtime (Used only to gather entropy)
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../basicnet/net-tools.html" title=
+          "Net-tools-2.10">Net-tools-2.10</a>, and <a class="xref" href=
+          "../general/sysstat.html" title="Sysstat-12.7.8">Sysstat-12.7.8</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of OpenSSH
+        </h2>
+        <p>
+          <span class="application">OpenSSH</span> runs as two processes when
+          connecting to other computers. The first process is a privileged
+          process and controls the issuance of privileges as necessary. The
+          second process communicates with the network. Additional
+          installation steps are necessary to set up the proper environment,
+          which are performed by issuing the following commands as the
+          <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -v -g sys -m700 -d /var/lib/sshd &amp;&amp;
+
+groupadd -g 50 sshd        &amp;&amp;
+useradd  -c 'sshd PrivSep' \
+         -d /var/lib/sshd  \
+         -g sshd           \
+         -s /bin/false     \
+         -u 50 sshd</kbd></pre>
+        <p>
+          Install <span class="application">OpenSSH</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr                            \
+            --sysconfdir=/etc/ssh                    \
+            --with-privsep-path=/var/lib/sshd        \
+            --with-default-path=/usr/bin             \
+            --with-superuser-path=/usr/sbin:/usr/bin \
+            --with-pid-dir=/run                      &amp;&amp;
+make</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>make -j1
+          tests</strong></span>.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install &amp;&amp;
+install -v -m755    contrib/ssh-copy-id /usr/bin     &amp;&amp;
+
+install -v -m644    contrib/ssh-copy-id.1 \
+                    /usr/share/man/man1              &amp;&amp;
+install -v -m755 -d /usr/share/doc/openssh-10.0p1     &amp;&amp;
+install -v -m644    INSTALL LICENCE OVERVIEW README* \
+                    /usr/share/doc/openssh-10.0p1</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--sysconfdir=/etc/ssh</code></em>: This
+          prevents the configuration files from being installed in
+          <code class="filename">/usr/etc</code>.
+        </p>
+        <p>
+          <em class=
+          "parameter"><code>--with-default-path=/usr/bin</code></em> and
+          <em class=
+          "parameter"><code>--with-superuser-path=/usr/sbin:/usr/bin</code></em>:
+          These set <code class="envar">PATH</code> consistent with LFS and
+          BLFS <span class="application">Shadow</span> package.
+        </p>
+        <p>
+          <em class="parameter"><code>--with-pid-dir=/run</code></em>: This
+          prevents <span class="application">OpenSSH</span> from referring to
+          deprecated <code class="filename">/var/run</code>.
+        </p>
+        <p>
+          <code class="option">--with-pam</code>: This parameter enables
+          <span class="application">Linux-PAM</span> support in the build.
+        </p>
+        <p>
+          <code class="option">--with-xauth=$XORG_PREFIX/bin/xauth</code>:
+          Set the default location for the <span class=
+          "command"><strong>xauth</strong></span> binary for X
+          authentication. The environment variable <code class=
+          "envar">XORG_PREFIX</code> should be set following <a class="xref"
+          href="../x/xorg7.html#xorg-env" title=
+          "Setting up the Xorg Build Environment">Xorg build environment</a>.
+          This can also be controlled from <code class=
+          "filename">sshd_config</code> with the XAuthLocation keyword. You
+          can omit this switch if <span class="application">Xorg</span> is
+          already installed.
+        </p>
+        <p>
+          <code class="option">--with-kerberos5=/usr</code>: This option is
+          used to include Kerberos 5 support in the build.
+        </p>
+        <p>
+          <code class="option">--with-libedit</code>: This option enables
+          line editing and history features for <span class=
+          "command"><strong>sftp</strong></span>.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring OpenSSH
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="openssh-config" name="openssh-config"></a>Config Files
+          </h3>
+          <p>
+            <code class="filename">~/.ssh/*</code>, <code class=
+            "filename">/etc/ssh/ssh_config</code>, and <code class=
+            "filename">/etc/ssh/sshd_config</code>
+          </p>
+          <p>
+            There are no required changes to any of these files. However, you
+            may wish to view the <code class="filename">/etc/ssh/</code>
+            files and make any changes appropriate for the security of your
+            system. One recommended change is that you disable <code class=
+            "systemitem">root</code> login via <span class=
+            "command"><strong>ssh</strong></span>. Execute the following
+            command as the <code class="systemitem">root</code> user to
+            disable <code class="systemitem">root</code> login via
+            <span class="command"><strong>ssh</strong></span>:
+          </p>
+          <pre class="root"><kbd class=
+          "command">echo "PermitRootLogin no" &gt;&gt; /etc/ssh/sshd_config</kbd></pre>
+          <p>
+            If you want to be able to log in without typing in your password,
+            first create ~/.ssh/id_rsa and ~/.ssh/id_rsa.pub with
+            <span class="command"><strong>ssh-keygen</strong></span> and then
+            copy ~/.ssh/id_rsa.pub to ~/.ssh/authorized_keys on the remote
+            computer that you want to log into. You'll need to change
+            REMOTE_USERNAME and REMOTE_HOSTNAME for the username and hostname
+            of the remote computer and you'll also need to enter your
+            password for the ssh-copy-id command to succeed:
+          </p>
+          <pre class="userinput"><kbd class="command">ssh-keygen &amp;&amp;
+ssh-copy-id -i ~/.ssh/id_ed25519.pub <em class=
+"replaceable"><code>REMOTE_USERNAME</code></em>@<em class=
+"replaceable"><code>REMOTE_HOSTNAME</code></em></kbd></pre>
+          <p>
+            Once you've got passwordless logins working it's actually more
+            secure than logging in with a password (as the private key is
+            much longer than most people's passwords). If you would like to
+            now disable password logins, as the <code class=
+            "systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class=
+          "command">echo "PasswordAuthentication no" &gt;&gt; /etc/ssh/sshd_config &amp;&amp;
+echo "KbdInteractiveAuthentication no" &gt;&gt; /etc/ssh/sshd_config</kbd></pre>
+          <p>
+            If you added <span class="application">Linux-PAM</span> support
+            and you want ssh to use it then you will need to add a
+            configuration file for <span class="application">sshd</span> and
+            enable use of <span class="application">LinuxPAM</span>. Note,
+            ssh only uses PAM to check passwords, if you've disabled password
+            logins these commands are not needed. If you want to use PAM,
+            issue the following commands as the <code class=
+            "systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class=
+          "command">sed 's@d/login@d/sshd@g' /etc/pam.d/login &gt; /etc/pam.d/sshd &amp;&amp;
+chmod 644 /etc/pam.d/sshd &amp;&amp;
+echo "UsePAM yes" &gt;&gt; /etc/ssh/sshd_config</kbd></pre>
+          <p>
+            Additional configuration information can be found in the man
+            pages for <span class="command"><strong>sshd</strong></span>,
+            <span class="command"><strong>ssh</strong></span> and
+            <span class="command"><strong>ssh-agent</strong></span>.
+          </p>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="openssh-init" name="openssh-init"></a>Boot Script
+          </h3>
+          <p>
+            To start the SSH server at system boot, install the <code class=
+            "filename">/etc/rc.d/init.d/sshd</code> init script included in
+            the <a class="xref" href="../introduction/bootscripts.html"
+            title="BLFS Boot Scripts">blfs-bootscripts-20250225</a> package.
+          </p>
+          <div class="admon note">
+            <img alt="[Note]" src="../images/note.png" />
+            <h3>
+              Note
+            </h3>
+            <p>
+              Changing the setting of <code class=
+              "option">ListenAddress</code> in <code class=
+              "filename">/etc/sshd/sshd_config</code> is unsupported with the
+              BLFS sshd <span class="phrase">bootscript</span>.
+            </p>
+          </div>
+          <pre class="root"><kbd class=
+          "command">make install-sshd</kbd></pre>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">scp, sftp, ssh, ssh-add, ssh-agent,
+              ssh-copy-id, ssh-keygen, ssh-keyscan, and sshd</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/etc/ssh, /usr/share/doc/openssh-10.0p1,
+              and /var/lib/sshd</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="scp" name="scp"></a><span class=
+                    "term"><span class="command"><strong>scp</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a file copy program that acts like <span class=
+                    "command"><strong>rcp</strong></span> except it uses an
+                    encrypted protocol
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="sftp" name="sftp"></a><span class=
+                    "term"><span class=
+                    "command"><strong>sftp</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is an FTP-like program that works over the SSH1 and SSH2
+                    protocols
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh" name="ssh"></a><span class=
+                    "term"><span class="command"><strong>ssh</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is an <span class=
+                    "command"><strong>rlogin</strong></span>/<span class=
+                    "command"><strong>rsh</strong></span>-like client program
+                    except it uses an encrypted protocol
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="sshd" name="sshd"></a><span class=
+                    "term"><span class=
+                    "command"><strong>sshd</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a daemon that listens for <span class=
+                    "command"><strong>ssh</strong></span> login requests
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh-add" name="ssh-add"></a><span class=
+                    "term"><span class=
+                    "command"><strong>ssh-add</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a tool which adds keys to the <span class=
+                    "command"><strong>ssh-agent</strong></span>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh-agent" name="ssh-agent"></a><span class=
+                    "term"><span class=
+                    "command"><strong>ssh-agent</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is an authentication agent that can store private keys
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh-copy-id" name="ssh-copy-id"></a><span class=
+                    "term"><span class=
+                    "command"><strong>ssh-copy-id</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a script that enables logins on remote machines using
+                    local keys
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh-keygen" name="ssh-keygen"></a><span class=
+                    "term"><span class=
+                    "command"><strong>ssh-keygen</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a key generation tool
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="ssh-keyscan" name="ssh-keyscan"></a><span class=
+                    "term"><span class=
+                    "command"><strong>ssh-keyscan</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a utility for gathering public host keys from a number
+                    of hosts
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="nss.html" title="NSS-3.115">Prev</a>
+          <p>
+            NSS-3.115
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="p11-kit.html" title=
+          "p11-kit-0.25.5">Next</a>
+          <p>
+            p11-kit-0.25.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

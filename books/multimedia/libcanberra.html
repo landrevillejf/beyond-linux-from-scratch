@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      libcanberra-0.30
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;42.&nbsp;Multimedia Libraries and Drivers
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libass.html" title="libass-0.17.4">Prev</a>
+          <p>
+            libass-0.17.4
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libcddb.html" title="libcddb-1.3.2">Next</a>
+          <p>
+            libcddb-1.3.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="libdriv.html" title=
+          "Chapter&nbsp;42.&nbsp;Multimedia Libraries and Drivers">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="libcanberra" name="libcanberra"></a>libcanberra-0.30
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to libcanberra
+        </h2>
+        <p>
+          <span class="application">libcanberra</span> is an implementation
+          of the XDG Sound Theme and Name Specifications, for generating
+          event sounds on free desktops, such as <span class=
+          "application">GNOME</span>.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz">
+                https://0pointer.de/lennart/projects/libcanberra/libcanberra-0.30.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 34cb7e4430afaf6f447c4ebdb9b42072
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 312 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 7.5 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Required patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/libcanberra-0.30-wayland-1.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/libcanberra-0.30-wayland-1.patch</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          libcanberra Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="libvorbis.html" title=
+          "libvorbis-1.3.7">libvorbis-1.3.7</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="alsa-lib.html" title=
+          "alsa-lib-1.2.14">alsa-lib-1.2.14</a>, <a class="xref" href=
+          "gstreamer10.html" title="gstreamer-1.26.5">gstreamer-1.26.5</a>,
+          and <a class="xref" href="../x/gtk3.html" title=
+          "GTK-3.24.50">GTK-3.24.50</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="pulseaudio.html" title=
+          "PulseAudio-17.0">PulseAudio-17.0</a>, <a class="ulink" href=
+          "https://download.gnome.org/sources/gtk+/2.24/">GTK+-2</a> and
+          <a class="ulink" href="https://tdb.samba.org/">tdb</a>
+        </p>
+        <h4>
+          Recommended Sound Theme (Run Time)
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="sound-theme-freedesktop.html" title=
+          "sound-theme-freedesktop-0.8">sound-theme-freedesktop-0.8</a>, or
+          another theme, for example from <a class="ulink" href=
+          "https://www.gnome-look.org/browse?cat=316">the gnome-look
+          website</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of libcanberra
+        </h2>
+        <p>
+          First, apply a patch to fix an issue causing some applications to
+          crash in Wayland-based desktop environments:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../libcanberra-0.30-wayland-1.patch</kbd></pre>
+        <p>
+          Install <span class="application">libcanberra</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr --disable-oss &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">make docdir=/usr/share/doc/libcanberra-0.30 install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-oss</code></em>: disables
+          optional deprecated OSS support
+        </p>
+        <p>
+          <code class="option">--disable-gtk3</code>: disables optional
+          support for GTK+-3
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">canberra-boot and
+              canberra-gtk-play</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libcanberra-gtk3.so and
+              libcanberra.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/lib/libcanberra-0.30,
+              /usr/share/doc/libcanberra-0.30 and
+              /usr/share/gtk-doc/html/libcanberra</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="canberra-gtk-play" name=
+                    "canberra-gtk-play"></a><span class="term"><span class=
+                    "command"><strong>canberra-gtk-play</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is an application used for playing sound events
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libcanberra-gtk3" name=
+                    "libcanberra-gtk3"></a><span class="term"><code class=
+                    "filename">libcanberra-gtk3.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">libcanberra</span>
+                    bindings for <span class="application">GTK+ 3</span>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libcanberra-lib" name=
+                    "libcanberra-lib"></a><span class="term"><code class=
+                    "filename">libcanberra.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">libcanberra</span>
+                    API functions
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libass.html" title="libass-0.17.4">Prev</a>
+          <p>
+            libass-0.17.4
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libcddb.html" title="libcddb-1.3.2">Next</a>
+          <p>
+            libcddb-1.3.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="libdriv.html" title=
+          "Chapter&nbsp;42.&nbsp;Multimedia Libraries and Drivers">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

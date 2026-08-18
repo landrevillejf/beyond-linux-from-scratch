@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Python-3.11.1
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;13.&nbsp;Programming
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="python3.html" title="Python-3.13.7">Prev</a>
+          <p>
+            Python-3.13.7
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="python-modules.html" title=
+          "Python Modules">Next</a>
+          <p>
+            Python Modules
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="python311" name="python311"></a>Python-3.11.1
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Python 3.11
+        </h2>
+        <p>
+          The <span class="application">Python 3.11</span> package contains
+          an older version of the <span class="application">Python</span>
+          development environment. This is <span class=
+          "bold"><strong>only</strong></span> needed for building <a class=
+          "xref" href="../xsoft/seamonkey.html" title=
+          "Seamonkey-2.53.21">seamonkey-2.53.21</a> because its build system
+          has not been updated to support <a class="xref" href="python3.html"
+          title="Python-3.13.7">Python-3.13.7</a>.
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            Do NOT install this package if you are not installing Seamonkey.
+          </p>
+        </div>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://www.python.org/ftp/python/3.11.1/Python-3.11.1.tar.xz">
+                https://www.python.org/ftp/python/3.11.1/Python-3.11.1.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 4efe92adf28875c77d3b9b2e8d3bc44a
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 19 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 301 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 1.1 SBU (Using parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Python 3.11 Dependencies
+        </h3>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../server/sqlite.html" title=
+          "SQLite-3.50.4">SQLite-3.50.4</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Python 3.11
+        </h2>
+        <p>
+          Install <span class="application">Python 3.11</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/opt/python3.11 \
+            --disable-shared         \
+            --with-system-expat      \
+            --without-static-libpython &amp;&amp;
+make</kbd></pre>
+        <p>
+          Since this package is only used in very limited situations, tests
+          are not recommended.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <span class="command"><strong>CXX="/usr/bin/g++" ./configure
+          ...</strong></span>: Avoid an annoying message during
+          configuration.
+        </p>
+        <p>
+          <em class="parameter"><code>--prefix=/opt/python3.11</code></em>:
+          This installs python 3.11 into /opt in order to avoid conflicts
+          with the system version of python, and allows for easy
+          removal/isolation once programs update to python3.12 or later.
+        </p>
+        <p>
+          <em class="parameter"><code>--disable-shared</code></em>: This
+          switch disables building shared libraries. Since all the packages
+          that need python-3.11 have built in modules and don't directly link
+          to python, it is safe to turn off shared library support.
+        </p>
+        <p>
+          <em class="parameter"><code>--with-system-expat</code></em>: This
+          switch enables linking against the system version of <span class=
+          "application">Expat</span>.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">python3.11</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libpython3.11.a</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/opt/python3.11/include/python3.11, and
+              /opt/python3.11/lib/python3.11,</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="python311-ver" name=
+                    "python311-ver"></a><span class="term"><span class=
+                    "command"><strong>python3.11</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a version-specific name for the <span class=
+                    "command"><strong>python</strong></span> program
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="python3.html" title="Python-3.13.7">Prev</a>
+          <p>
+            Python-3.13.7
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="python-modules.html" title=
+          "Python Modules">Next</a>
+          <p>
+            Python Modules
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

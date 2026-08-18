@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      libgsf-1.14.53
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libgpg-error.html" title=
+          "libgpg-error-1.55">Prev</a>
+          <p>
+            libgpg-error-1.55
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libgudev.html" title="libgudev-238">Next</a>
+          <p>
+            libgudev-238
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="libgsf" name="libgsf"></a>libgsf-1.14.53
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to libgsf
+        </h2>
+        <p>
+          The <span class="application">libgsf</span> package contains a
+          library used for providing an extensible input/output abstraction
+          layer for structured file formats.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.gnome.org/sources/libgsf/1.14/libgsf-1.14.53.tar.xz">
+                https://download.gnome.org/sources/libgsf/1.14/libgsf-1.14.53.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: baf36a3e89293652f67cded4b1608cc5
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 700 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 14 MB (with tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.2 SBU (with tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          libgsf Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="glib2.html" title=
+          "GLib-2.84.4">GLib-2.84.4</a> and <a class="xref" href=
+          "libxml2.html" title="libxml2-2.14.5">libxml2-2.14.5</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../x/gdk-pixbuf.html" title=
+          "gdk-pixbuf-2.42.12">gdk-pixbuf-2.42.12</a> (To build <span class=
+          "command"><strong>gsf-office-thumbnailer</strong></span>)
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="7zip.html" title="7zip-25.01">7zip-25.01</a>
+          (for tests), <a class="xref" href="gtk-doc.html" title=
+          "GTK-Doc-1.34.0">GTK-Doc-1.34.0</a>, <a class="xref" href=
+          "valgrind.html" title="Valgrind-3.25.1">Valgrind-3.25.1</a> (for
+          tests), and <a class="ulink" href=
+          "https://sourceforge.net/projects/infozip/files/UnZip%206.x%20%28latest%29/">
+          unzip</a> (for tests)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of libgsf
+        </h2>
+        <p>
+          Install <span class="application">libgsf</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr --disable-static &amp;&amp;
+make</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>make
+          check</strong></span>. Two tests related to <a class="xref" href=
+          "valgrind.html" title="Valgrind-3.25.1">Valgrind-3.25.1</a> are
+          known to fail.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-static</code></em>: This
+          switch prevents installation of static versions of the libraries.
+        </p>
+        <p>
+          <code class="option">--enable-gtk-doc</code>: Use this parameter if
+          <span class="application">GTK-Doc</span> is installed and you wish
+          to rebuild and install the API documentation.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gsf, gsf-office-thumbnailer, and
+              gsf-vba-dump</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libgsf-1.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/libgsf-1,
+              /usr/share/gtk-doc/html/gsf and /usr/share/thumbnailers</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gsf" name="gsf"></a><span class=
+                    "term"><span class="command"><strong>gsf</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a simple archive utility, somewhat similar to
+                    <a class="ulink" href=
+                    "https://man.archlinux.org/man/tar.1">tar(1)</a>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gsf-office-thumbnailer" name=
+                    "gsf-office-thumbnailer"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gsf-office-thumbnailer</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used internally by <span class=
+                    "application">GNOME</span> applications such as
+                    <span class="application">Nautilus</span> to generate
+                    thumbnails of several types of office application files
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gsf-vba-dump" name="gsf-vba-dump"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gsf-vba-dump</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to extract Visual Basic for Applications macros
+                    from files
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgsf-1" name="libgsf-1"></a><span class=
+                    "term"><code class="filename">libgsf-1.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">libgsf</span> API
+                    functions
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libgpg-error.html" title=
+          "libgpg-error-1.55">Prev</a>
+          <p>
+            libgpg-error-1.55
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libgudev.html" title="libgudev-238">Next</a>
+          <p>
+            libgudev-238
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

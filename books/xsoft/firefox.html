@@ -1,0 +1,687 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Firefox-140.2.0esr
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;40.&nbsp;Graphical Web Browsers
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="falkon.html" title="falkon-25.08.0">Prev</a>
+          <p>
+            falkon-25.08.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="seamonkey.html" title=
+          "Seamonkey-2.53.21">Next</a>
+          <p>
+            Seamonkey-2.53.21
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="graphweb.html" title=
+          "Chapter&nbsp;40.&nbsp;Graphical Web Browsers">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="firefox" name="firefox"></a>Firefox-140.2.0esr
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Firefox
+        </h2>
+        <p>
+          <span class="application">Firefox</span> is a stand-alone browser
+          based on the <span class="application">Mozilla</span> codebase.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <div class="admon important">
+          <img alt="[Important]" src="../images/important.png" />
+          <h3>
+            Important
+          </h3>
+          <p>
+            This package has historically had frequent updates that address
+            security vulnerabilities. To determine the latest status check
+            the <a class="ulink" href=
+            "https://rivendell.linuxfromscratch.org/blfs/advisories/">BLFS
+            Security Advisories</a>.
+          </p>
+        </div>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://archive.mozilla.org/pub/firefox/releases/140.2.0esr/source/firefox-140.2.0esr.source.tar.xz">
+                https://archive.mozilla.org/pub/firefox/releases/140.2.0esr/source/firefox-140.2.0esr.source.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 64773387a541a2ed5c1ce9f247469ba3
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 602 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 7.7 GB (241 MB installed)
+                without tests
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 13 SBU using -j8, without tests
+              </p>
+            </li>
+          </ul>
+        </div>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            The directory name is firefox-140.2.0
+          </p>
+          <p>
+            Extracting the tarball will reset the permissions of the current
+            directory to 0755 if you have permission to do that. If you do
+            this in a directory where the sticky bit is set, such as
+            <code class="filename">/tmp</code> it will end with error
+            messages:
+          </p>
+          <div class="literallayout">
+            <p>
+              tar:&nbsp;.:&nbsp;Cannot&nbsp;utime:&nbsp;Operation&nbsp;not&nbsp;permitted<br />
+
+              tar:&nbsp;.:&nbsp;Cannot&nbsp;change&nbsp;mode&nbsp;to&nbsp;rwxr-xr-t:&nbsp;Operation&nbsp;not&nbsp;permitted<br />
+
+              tar:&nbsp;Exiting&nbsp;with&nbsp;failure&nbsp;status&nbsp;due&nbsp;to&nbsp;previous&nbsp;errors<br />
+            </p>
+          </div>
+          <p>
+            This does finish with non-zero status, but it does <span class=
+            "emphasis"><em>NOT</em></span> mean there is a real problem. Do
+            not untar as the <code class="systemitem">root</code> user in a
+            directory where the sticky bit is set - that will unset it.
+          </p>
+          <p>
+            As with other large packages which use C++ (or rust), the SBU
+            times to build this vary more widely than you might expect. The
+            build times will increase significantly if your machine has to
+            swap.
+          </p>
+          <p>
+            Although upstream prefer to use <span class=
+            "application">PulseAudio</span>, for the moment <span class=
+            "application">Alsa</span> can still be used. Both may need
+            runtime configuration to get sound working.
+          </p>
+        </div>
+        <h3>
+          Firefox Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../general/cbindgen.html" title=
+          "Cbindgen-0.29.0">Cbindgen-0.29.0</a>, <a class="xref" href=
+          "../x/gtk3.html" title="GTK-3.24.50">GTK-3.24.50</a>, <a class=
+          "xref" href="../x/libnotify.html" title=
+          "libnotify-0.8.6">libnotify-0.8.6</a>, <a class="xref" href=
+          "../general/libarchive.html" title=
+          "libarchive-3.8.1">libarchive-3.8.1</a>, <a class="xref" href=
+          "../general/llvm.html" title="LLVM-20.1.8">LLVM-20.1.8</a> (with
+          clang, used for bindgen even if using gcc), <a class="xref" href=
+          "../general/nodejs.html" title=
+          "Node.js-22.18.0">nodejs-22.18.0</a>, <a class="xref" href=
+          "../multimedia/pulseaudio.html" title=
+          "PulseAudio-17.0">PulseAudio-17.0</a> (or <a class="xref" href=
+          "../multimedia/alsa-lib.html" title=
+          "alsa-lib-1.2.14">alsa-lib-1.2.14</a> if you edit the mozconfig;
+          now deprecated by mozilla), in either case please read the
+          Configuration Information, <a class="xref" href=
+          "../general/python3.html" title="Python-3.13.7">Python-3.13.7</a>
+          (after installing <a class="xref" href="../server/sqlite.html"
+          title="SQLite-3.50.4">SQLite-3.50.4</a>), and <a class="xref" href=
+          "../x/startup-notification.html" title=
+          "startup-notification-0.12">startup-notification-0.12</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/icu.html" title=
+          "icu-77.1">ICU-77.1</a>, <a class="xref" href=
+          "../basicnet/libevent.html" title=
+          "libevent-2.1.12">libevent-2.1.12</a>, <a class="xref" href=
+          "../multimedia/libvpx.html" title=
+          "libvpx-1.15.2">libvpx-1.15.2</a>, <a class="xref" href=
+          "../general/libwebp.html" title="libwebp-1.6.0">libwebp-1.6.0</a>,
+          <a class="xref" href="../general/nasm.html" title=
+          "NASM-2.16.03">NASM-2.16.03</a>, and <a class="xref" href=
+          "../postlfs/nss.html" title="NSS-3.115">nss-3.115</a>
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            If you don't install recommended dependencies, then internal
+            copies of those packages will be used. They might be tested to
+            work, but they can be out of date or contain security holes.
+          </p>
+        </div>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../basicnet/curl.html" title=
+          "cURL-8.15.0">cURL-8.15.0</a>, <a class="xref" href=
+          "../general/doxygen.html" title=
+          "Doxygen-1.14.0">Doxygen-1.14.0</a>, <a class="xref" href=
+          "../multimedia/ffmpeg.html" title="FFmpeg-7.1.1">FFmpeg-7.1.1</a>
+          (runtime, to play mov, mp3 or mp4 files), <a class="xref" href=
+          "../basicnet/geoclue2.html" title="GeoClue-2.7.2">GeoClue-2.7.2</a>
+          (runtime), <a class="xref" href="../postlfs/liboauth.html" title=
+          "liboauth-1.0.3">liboauth-1.0.3</a>, <a class="xref" href=
+          "../general/libproxy.html" title=
+          "libproxy-0.5.10">libproxy-0.5.10</a>, <a class="xref" href=
+          "../general/pciutils.html" title=
+          "pciutils-3.14.0">pciutils-3.14.0</a> (runtime), <a class="xref"
+          href="../general/valgrind.html" title=
+          "Valgrind-3.25.1">Valgrind-3.25.1</a>, <a class="xref" href=
+          "../basicnet/wget.html" title="Wget-1.25.0">Wget-1.25.0</a>,
+          <a class="xref" href="../basicnet/wireless_tools.html" title=
+          "Wireless Tools-29">Wireless Tools-29</a>, and <a class="xref"
+          href="../general/yasm.html" title="yasm-1.3.0">yasm-1.3.0</a>
+        </p>
+        <p class="usernotes">
+          Editor Notes: <a class="ulink" href=
+          "https://wiki.linuxfromscratch.org/blfs/wiki/firefox">https://wiki.linuxfromscratch.org/blfs/wiki/firefox</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Firefox
+        </h2>
+        <p>
+          The configuration of <span class="application">Firefox</span> is
+          accomplished by creating a <code class="filename">mozconfig</code>
+          file containing the desired configuration options. A default
+          <code class="filename">mozconfig</code> is created below. To see
+          the entire list of available configuration options (and an
+          abbreviated description of some of them), issue <span class=
+          "command"><strong>./mach configure -- --help |
+          less</strong></span>. You may also wish to review the entire file
+          and uncomment any other desired options. Create the file by issuing
+          the following command:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cat &gt; mozconfig &lt;&lt; "EOF"
+<code class=
+"literal"># If you have a multicore machine, all cores will be used by default.
+
+# If you have installed (or will install) wireless-tools, and you wish
+# to use geolocation web services, comment out this line
+ac_add_options --disable-necko-wifi
+
+# Comment out the following line if you wish not to use Google's Location
+# Service (GLS).  Note that if Geoclue is installed and configured to use
+# GLS (as the BLFS instruction does), Firefox can access GLS via Geoclue
+# anyway.  On the other hand if Geoclue is not installed (or not properly
+# configured) and this line is commented out, the website requiring a
+# location service will not function properly.
+ac_add_options --with-google-location-service-api-keyfile=$PWD/google-key
+
+# If you wish to use libproxy to determine proxy server information, you will
+# need to install the libproxy package and then uncomment the option below:
+#ac_add_options --enable-libproxy
+
+# Uncomment the following option if you have not installed PulseAudio and
+# want to use alsa instead
+#ac_add_options --enable-audio-backends=alsa
+
+# Comment out following options if you have not installed
+# recommended dependencies:
+ac_add_options --with-system-icu
+ac_add_options --with-system-libevent
+ac_add_options --with-system-libvpx
+ac_add_options --with-system-nspr
+ac_add_options --with-system-nss
+ac_add_options --with-system-webp
+
+# The libdav1d library (av1 decoder) requires nasm. Uncomment this
+# if nasm has not been installed. Do not uncomment this if you have
+# ffmpeg installed.
+#ac_add_options --disable-av1
+
+# You cannot distribute the binary if you do this.
+ac_add_options --enable-official-branding
+
+# Stripping is now enabled by default.
+# Uncomment these lines if you need to run a debugger:
+#ac_add_options --disable-strip
+#ac_add_options --disable-install-strip
+
+# Disabling debug symbols makes the build much smaller and a little
+# faster. Comment this if you need to run a debugger.
+ac_add_options --disable-debug-symbols
+
+# The BLFS editors recommend not changing anything below this line:
+ac_add_options --prefix=/usr
+ac_add_options --enable-application=browser
+ac_add_options --disable-crashreporter
+ac_add_options --disable-updater
+
+# Enabling the tests will use a lot more space and significantly
+# increase the build time, for no obvious benefit.
+ac_add_options --disable-tests
+
+# This enables SIMD optimization in the shipped encoding_rs crate.
+ac_add_options --enable-rust-simd
+
+ac_add_options --enable-system-ffi
+ac_add_options --enable-system-pixman
+
+ac_add_options --with-system-jpeg
+ac_add_options --with-system-png
+ac_add_options --with-system-zlib
+
+# Sandboxing works well on x86_64 but might cause issues on other
+# platforms, e.g. i686.
+[ $(uname -m) != x86_64 ] &amp;&amp; ac_add_options --disable-sandbox
+
+# Using sandboxed wasm libraries has been moved to all builds instead
+# of only mozilla automation builds. It requires extra llvm packages
+# and was reported to seriously slow the build. Disable it.
+ac_add_options --without-wasm-sandboxed-libraries
+
+# The following option unsets Telemetry Reporting. With the Addons Fiasco,
+# Mozilla was found to be collecting user's data, including saved passwords and
+# web form data, without users consent. Mozilla was also found shipping updates
+# to systems without the user's knowledge or permission.
+# As a result of this, use the following command to permanently disable
+# telemetry reporting in Firefox.
+unset MOZ_TELEMETRY_REPORTING
+
+mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/firefox-build-dir
+
+# By default firefox will attempt to use the window class firefox-default on
+# launch. This makes the icon not work properly because wayland does not
+# support the X11 property  class header. Change the remoting name to fix this.
+# This is also reflected in the .desktop file where StartupWMClass is set to
+# firefox.
+MOZ_APP_REMOTINGNAME=firefox</code>
+EOF</kbd></pre>
+        <p>
+          Compile <span class="application">Firefox</span> by issuing the
+          following commands:
+        </p>
+        <p>
+          If the geolocation APIs are needed:
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            The Google API Key below is specific to LFS. If using these
+            instructions for another distro, or if you intend to distribute
+            binary copies of the software using these instructions, please
+            obtain your own key following the instructions located at
+            <a class="ulink" href=
+            "https://www.chromium.org/developers/how-tos/api-keys">https://www.chromium.org/developers/how-tos/api-keys</a>.
+          </p>
+        </div>
+        <pre class="userinput"><kbd class=
+        "command">echo "AIzaSyDxKL42zsPjbke5O8_rPVpVrLrJ8aeE9rQ" &gt; google-key</kbd></pre>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            If you are compiling this package in chroot you must ensure that
+            <code class="filename">/dev/shm</code> is mounted. If you do not
+            do this, the <span class="application">Python</span>
+            configuration will fail with a traceback report referencing
+            <code class=
+            "filename">/usr/lib/pythonN.N/multiprocessing/synchronize.py</code>.
+            As the <code class="systemitem">root</code> user, run:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">mountpoint -q /dev/shm || mount -t tmpfs devshm /dev/shm</kbd></pre>
+        </div>
+        <p>
+          Now invoke the Python <span class=
+          "command"><strong>mach</strong></span> script to compile the
+          package.
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">export MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none &amp;&amp;
+export MOZBUILD_STATE_PATH=${PWD}/mozbuild          &amp;&amp;
+./mach build</kbd></pre>
+        <p>
+          The <code class="filename">mozconfig</code> above disables the
+          tests because they use a lot more time and disk space for no
+          obvious benefit. If you have nevertheless enabled them, you can run
+          the tests by executing <span class="command"><strong>./mach
+          gtest</strong></span>. This will require a network connection, and
+          to be run from within an Xorg session - there is a popup dialog
+          when it fails to connect to ALSA (that does not create a failed
+          test). One or two tests will fail. To see the details of the
+          failure(s) you will need to log the output from that command so
+          that you can review it.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">export MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none &amp;&amp;
+./mach install</kbd></pre>
+        <p>
+          Empty the environment variables which were set above:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">unset MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE
+unset MOZBUILD_STATE_PATH</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <span class="command"><strong>export
+          MOZBUILD_STATE_PATH=${PWD}/mozbuild</strong></span>: The build
+          tells you that it intends to create <code class=
+          "filename">~/.mozbuild</code>, and offer you an option to press
+          &lt;ENTER&gt; to accept this, or Ctrl-C to cancel and restart the
+          build after specifying the directory. In practice, the message may
+          not appear until after &lt;ENTER&gt; is keyed, i.e. the build
+          stalls.
+        </p>
+        <p>
+          That directory is used for a (probably random) telemetry
+          identifier. Creating this directory within the build directory and
+          deleting it after the installation prevents it being used.
+        </p>
+        <p>
+          <span class=
+          "command"><strong>MACH_BUILD_PYTHON_NATIVE_PACKAGE_SOURCE=none</strong></span>:
+          Use the system python to create a virtual environment for
+          <span class="command"><strong>mach</strong></span> without
+          downloading any python wheels and without using the system python
+          modules. This prevents version mismatches between system modules
+          and bundled ones.
+        </p>
+        <p>
+          <code class="option">./mach build --verbose</code>: Use this
+          alternative if you need details of which files are being compiled,
+          together with any C or C++ flags being used. But do not add
+          '--verbose' to the install command since it is not accepted there.
+        </p>
+        <p>
+          <code class="option">./mach build -jN</code>: The build should, by
+          default, use all the online CPU cores. If using all the cores
+          causes the build to swap because you have insufficient memory,
+          using fewer cores can be faster.
+        </p>
+        <p>
+          <code class="option"><code class="envar">CC=gcc
+          CXX=g++</code></code>: BLFS used to prefer to use gcc and g++
+          instead of upstream's defaults of the <span class=
+          "application">clang</span> programs. With the release of gcc-12 the
+          build takes longer with gcc and g++, primarily because of extra
+          warnings, and is bigger. Set these environment variables
+          <span class="emphasis"><em>before you run the configure
+          script</em></span> if you wish to continue to use gcc, g++.
+          Building with GCC on i?86 is currently broken.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring Firefox
+        </h2>
+        <p>
+          If you use a desktop environment like <span class=
+          "application">Gnome</span> or <span class="application">KDE</span>
+          you may want to create a <code class=
+          "filename">firefox.desktop</code> file so that <span class=
+          "application">Firefox</span> appears in the panel's menus. As the
+          <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">mkdir -pv /usr/share/applications &amp;&amp;
+mkdir -pv /usr/share/pixmaps      &amp;&amp;
+
+MIMETYPE="text/xml;text/mml;text/html;"                            &amp;&amp;
+MIMETYPE+="application/xhtml+xml;application/vnd.mozilla.xul+xml;" &amp;&amp;
+MIMETYPE+="x-scheme-handler/http;x-scheme-handler/https"           &amp;&amp;
+
+cat &gt; /usr/share/applications/firefox.desktop &lt;&lt; EOF &amp;&amp;
+<code class="literal">[Desktop Entry]
+Encoding=UTF-8
+Name=Firefox Web Browser
+Comment=Browse the World Wide Web
+GenericName=Web Browser
+Exec=firefox %u
+Terminal=false
+Type=Application
+Icon=firefox
+Categories=GNOME;GTK;Network;WebBrowser;
+MimeType=$MIMETYPE
+StartupNotify=true
+StartupWMClass=firefox</code>
+EOF
+
+unset MIMETYPE &amp;&amp;
+
+ln -sfv /usr/lib/firefox/browser/chrome/icons/default/default128.png \
+        /usr/share/pixmaps/firefox.png</kbd></pre>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Configuration Information
+          </h3>
+          <p>
+            The application settings for firefox are accessible by keying
+            <span class="command"><strong>about:config</strong></span> in the
+            address bar.
+          </p>
+          <p>
+            Occasionally, getting working sound in <span class=
+            "application">firefox</span> can be a problem. Although upstream
+            prefers pulseaudio, on balance using <span class=
+            "application">Alsa</span> may be easier.
+          </p>
+          <p>
+            If you enabled <span class="application">Alsa</span> for sound,
+            you may need to alter one variable to get working sound. If you
+            run <span class="command"><strong>firefox</strong></span> from a
+            terminal and try to play something with sound you might encounter
+            error messages like:
+          </p>
+          <p>
+            <code class="literal">Sandbox: seccomp sandbox violation: pid
+            3941, tid 4030, syscall 16, args 48 2147767296 139909894784796 0
+            0 0.</code>
+          </p>
+          <p>
+            That was on x86_64, on i686 the syscall number is 54. To allow
+            this syscall, in <span class=
+            "command"><strong>about:config</strong></span> change
+            <span class="command"><strong>security.sandbox.content.syscall_whitelist</strong></span>
+            to 16 (or 54 if using i686).
+          </p>
+          <p>
+            If you use <span class=
+            "command"><strong>pulseaudio</strong></span> in a Desktop
+            Environment, it might already be started by that DE. But if it is
+            not, although firefox-57 managed to start it, firefox-58 did not.
+            If you run <span class="command"><strong>firefox</strong></span>
+            from a terminal and this problem is present, trying to play sound
+            will encounter error messages warning <code class="literal">Can't
+            get cubeb context!</code>
+          </p>
+          <p>
+            The fix for this is to close firefox, start pulseaudio to check
+            it does start (if not, read the information on Configuring in
+            <a class="xref" href="../multimedia/pulseaudio.html" title=
+            "PulseAudio-17.0">PulseAudio-17.0</a>) and restart firefox to
+            check it is working. If it now works, add the following to your
+            <code class="filename">~/.xinitrc</code>: <span class=
+            "phrase"><code class="literal">pulseaudio --verbose
+            --log-target=syslog&amp;</code></span> (unfortunately, on some
+            systems this does not work).
+          </p>
+          <p>
+            You may wish to use multiple profiles within firefox. To do that,
+            invoke firefox as <span class="command"><strong>firefox
+            --ProfileManager</strong></span>. You can also check which
+            profile is currently in use from <span class=
+            "command"><strong>about:profiles</strong></span>.
+          </p>
+          <p>
+            Although WebRender (using the GPU for compositing) is not used by
+            default, it now appears to work well on supported hardware (ATI,
+            NVIDIA and Intel GPUs with Mesa-18 or later). For an explanation,
+            please see <a class="ulink" href=
+            "https://hacks.mozilla.org/2017/10/the-whole-web-at-maximum-fps-how-webrender-gets-rid-of-jank/">
+            hacks.mozilla.org</a>. The only downside seems to be that on a
+            machine with limited RAM it might use more RAM.
+          </p>
+          <p>
+            To check if WebRender is being used, look in about:support. In
+            the Graphics section, Compositing will either show 'Basic' (i.e.
+            not in use) or 'WebRender'. To enable it, go to about:config and
+            change gfx.webrender.all to True. You will need to restart
+            firefox.
+          </p>
+          <p>
+            It may be useful to mention the processes from firefox which can
+            appear in <span class="command"><strong>top</strong></span> - as
+            well as firefox itself, there may be multiple Web Content
+            processes, and now an RDD Process (Remote Data Decoder) which
+            appears when playing web videos encoded with av1 (libdav1d). If
+            WebRender has been enabled, a GPU Process will also appear when
+            firefox has to repaint (e.g. scrolling, opening a new tab, or
+            playing a video).
+          </p>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">firefox</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">Numerous libraries, browser components,
+              plugins, extensions, and helper modules installed in
+              /usr/lib/firefox</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directory:</strong>
+              <span class="segbody">/usr/lib/firefox</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="firefox-prog" name="firefox-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>firefox</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a <span class="application">GTK+-3</span> internet
+                    browser that uses the Mozilla Gecko rendering engine
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="falkon.html" title="falkon-25.08.0">Prev</a>
+          <p>
+            falkon-25.08.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="seamonkey.html" title=
+          "Seamonkey-2.53.21">Next</a>
+          <p>
+            Seamonkey-2.53.21
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="graphweb.html" title=
+          "Chapter&nbsp;40.&nbsp;Graphical Web Browsers">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

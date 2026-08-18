@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Configuring the Linux Kernel for Wireless
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;15.&nbsp;Networking Programs
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="wget.html" title="Wget-1.25.0">Prev</a>
+          <p>
+            Wget-1.25.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="iw.html" title="iw-6.9">Next</a>
+          <p>
+            iw-6.9
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="netprogs.html" title=
+          "Chapter&nbsp;15.&nbsp;Networking Programs">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="wireless-kernel" name="wireless-kernel"></a>Configuring the
+      Linux Kernel for Wireless
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <p>
+        Before using any userspace tools for connecting to a wireless AP, the
+        Linux kernel must be configured to drive the wireless NIC properly.
+        Enable the following options in the kernel configuration as well as
+        specific device drivers for your hardware and recompile the kernel if
+        necessary:
+      </p>
+      <pre class="screen">[*] N<span class=
+      "blue">e</span>tworking support ---&gt;                                                [NET]
+  [*] <span class=
+"blue">W</span>ireless ---&gt;                                                   [WIRELESS]
+    &lt;*/M&gt;   <span class=
+"blue">c</span>fg80211 - wireless configuration API                     [CFG80211]
+    &lt; /*/M&gt;   <span class=
+"blue">G</span>eneric IEEE 802.11 Networking Stack (mac80211)         [MAC80211]
+
+<span class="blue">D</span>evice Drivers ---&gt;
+  [*] N<span class=
+"blue">e</span>twork device support ---&gt;                                   [NETDEVICES]
+    [*] <span class=
+"blue">W</span>ireless LAN ---&gt;                                                 [WLAN]</pre>
+      <p>
+        Open the <span class="quote">“<span class="quote">Wireless
+        LAN</span>”</span> submenu and select the options that support your
+        hardware. <span class="command"><strong>lspci</strong></span> from
+        <a class="xref" href="../general/pciutils.html" title=
+        "pciutils-3.14.0">pciutils-3.14.0</a> or <span class=
+        "command"><strong>lsusb</strong></span> from <a class="xref" href=
+        "../general/usbutils.html" title="usbutils-018">usbutils-018</a> can
+        be used to view your hardware configuration. Note that many (though
+        not all) options for the wireless NICs depend on <em class=
+        "parameter"><code>CONFIG_MAC80211</code></em>. After the correct
+        drivers are loaded, the interface will appear in <code class=
+        "filename">/sys/class/net</code>, or in the output of the
+        <span class="command"><strong>ip link</strong></span> command.
+      </p>
+      <p>
+        Many wireless NIC drivers require firmware. If you've enabled the
+        correct driver in the kernel configuration but it fails to load (with
+        messages like <code class="computeroutput">Direct firmware load for
+        <em class="replaceable"><code>&lt;filename</code></em>&gt; failed
+        with error -2</code>, it means that you need to install the firmware
+        or the wireless NIC won't work. Read <a class="xref" href=
+        "../postlfs/firmware.html" title="About Firmware">About Firmware</a>
+        for more details.
+      </p>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="wget.html" title="Wget-1.25.0">Prev</a>
+          <p>
+            Wget-1.25.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="iw.html" title="iw-6.9">Next</a>
+          <p>
+            iw-6.9
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="netprogs.html" title=
+          "Chapter&nbsp;15.&nbsp;Networking Programs">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

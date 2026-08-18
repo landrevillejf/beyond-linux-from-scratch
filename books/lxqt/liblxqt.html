@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      liblxqt-2.2.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;37.&nbsp;LXQt Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-menu-data.html" title=
+          "lxqt-menu-data-2.2.0">Prev</a>
+          <p>
+            lxqt-menu-data-2.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libsysstat.html" title=
+          "libsysstat-1.1.0">Next</a>
+          <p>
+            libsysstat-1.1.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="liblxqt" name="liblxqt"></a>liblxqt-2.2.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to liblxqt
+        </h2>
+        <p>
+          The <span class="application">liblxqt</span> is the core utility
+          library for all <span class="application">LXQt</span> components.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/lxqt/liblxqt/releases/download/2.2.0/liblxqt-2.2.0.tar.xz">
+                https://github.com/lxqt/liblxqt/releases/download/2.2.0/liblxqt-2.2.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: ddba93d39782eada9f4d49c816ca1b84
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 88 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 6.9 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.4 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          liblxqt Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="libqtxdg.html" title=
+          "libqtxdg-4.2.0">libqtxdg-4.2.0</a>, <a class="xref" href=
+          "lxqt-kwindowsystem.html" title=
+          "kwindowsystem-6.17.0 for lxqt">kwindowsystem-6.17.0 for lxqt</a>,
+          and <a class="xref" href="../kde/polkit-qt.html" title=
+          "Polkit-Qt-0.200.0">polkit-qt-0.200.0</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of liblxqt
+        </h2>
+        <p>
+          Install <span class="application">liblxqt</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr \
+      -D CMAKE_BUILD_TYPE=Release  \
+      ..                           &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">lxqt-backlight_backend</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">liblxqt.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/lxqt, /usr/share/cmake/lxqt,
+              and /usr/share/lxqt/liblxqt</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="lxqt-backlight_backend" name=
+                    "lxqt-backlight_backend"></a><span class=
+                    "term"><span class=
+                    "command"><strong>lxqt-backlight_backend</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    sets the backlight level for a display
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="liblxqt-lib" name="liblxqt-lib"></a><span class=
+                    "term"><code class="filename">liblxqt.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains a variety of utility functions for LXQt
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-menu-data.html" title=
+          "lxqt-menu-data-2.2.0">Prev</a>
+          <p>
+            lxqt-menu-data-2.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libsysstat.html" title=
+          "libsysstat-1.1.0">Next</a>
+          <p>
+            libsysstat-1.1.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

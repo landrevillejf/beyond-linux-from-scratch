@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      AccountsService-23.13.9
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;12.&nbsp;System Utilities
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="7zip.html" title="7zip-25.01">Prev</a>
+          <p>
+            7zip-25.01
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="acpid.html" title="acpid-2.0.34">Next</a>
+          <p>
+            acpid-2.0.34
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="accountsservice" name=
+      "accountsservice"></a>AccountsService-23.13.9
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to AccountsService
+        </h2>
+        <p>
+          The <span class="application">AccountsService</span> package
+          provides a set of <span class="application">D-Bus</span> interfaces
+          for querying and manipulating user account information and an
+          implementation of those interfaces based on the <a class="ulink"
+          href="https://man.archlinux.org/man/usermod.8">usermod(8)</a>,
+          <a class="ulink" href=
+          "https://man.archlinux.org/man/useradd.8">useradd(8)</a>, and
+          <a class="ulink" href=
+          "https://man.archlinux.org/man/userdel.8">userdel(8)</a> commands.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://www.freedesktop.org/software/accountsservice/accountsservice-23.13.9.tar.xz">
+                https://www.freedesktop.org/software/accountsservice/accountsservice-23.13.9.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 03dccfe1b306b7ca19743e86d118e64d
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 621 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 9.8 MB (add 0.5 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: less than 0.1 SBU (with tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          AccountsService Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../postlfs/polkit.html" title=
+          "Polkit-126">Polkit-126</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="glib2.html" title=
+          "GLib-2.84.4">GLib-2.84.4</a> (with GObject Introspection),
+          <span class="phrase"><a class="xref" href="elogind.html" title=
+          "elogind-255.17">elogind-255.17</a></span> , and <a class="xref"
+          href="vala.html" title="Vala-0.56.18">Vala-0.56.18</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="gtk-doc.html" title=
+          "GTK-Doc-1.34.0">GTK-Doc-1.34.0</a> and <a class="xref" href=
+          "../pst/xmlto.html" title="xmlto-0.0.29">xmlto-0.0.29</a>
+        </p>
+        <h4>
+          Optional (for tests)
+        </h4>
+        <p class="optional">
+          <a class="xref" href="python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a> and <a class="xref" href=
+          "python-modules.html#pygobject3" title=
+          "PyGObject-3.52.3">PyGObject-3.52.3</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of AccountsService
+        </h2>
+        <p>
+          First, rename a directory whose presence prevents the build system
+          from running if <a class="xref" href=
+          "python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a> is not installed:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mv tests/dbusmock{,-tests}</kbd></pre>
+        <p>
+          Then fix a test script so that the new directory is found, and
+          adapt it for Python 3.12.0 or later:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed -e '/accounts_service\.py/s/dbusmock/dbusmock-tests/' \
+    -e 's/assertEquals/assertEqual/'                      \
+    -i tests/test-libaccountsservice.py</kbd></pre>
+        <p>
+          Fix one test that fails if the <code class=
+          "option">en_IE.UTF-8</code> locale is not installed:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed -i '/^SIMULATED_SYSTEM_LOCALE/s/en_IE.UTF-8/en_HK.iso88591/' tests/test-daemon.py</kbd></pre>
+        <p>
+          Install <span class="application">AccountsService</span> by running
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup ..             \
+      --prefix=/usr        \
+      --buildtype=release  \
+      -D admin_group=adm   \
+      -D elogind=true      \
+      -D systemdsystemunitdir=no</kbd></pre>
+        <p>
+          Now adapt the shipped mocklibc copy to allow building the test
+          suite with GCC 14 or later:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">grep 'print_indent'     ../subprojects/mocklibc-1.0/src/netgroup.c \
+     | sed 's/ {/;/' &gt;&gt; ../subprojects/mocklibc-1.0/src/netgroup.h &amp;&amp;
+sed -i '1i#include &lt;stdio.h&gt;'                                      \
+    ../subprojects/mocklibc-1.0/src/netgroup.h</kbd></pre>
+        <p>
+          Build the package:
+        </p>
+        <pre class="userinput"><kbd class="command">ninja</kbd></pre>
+        <p>
+          To test the package, issue <span class="command"><strong>ninja
+          test</strong></span>.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--buildtype=release</code></em>:
+          Specify a buildtype suitable for stable releases of the package, as
+          the default may produce unoptimized binaries.
+        </p>
+        <p>
+          <em class="parameter"><code>-D admin_group=adm</code></em>: This
+          switch sets the group for administrator accounts.
+        </p>
+        <p>
+          <code class="option">-D docbook=true</code>: This switch enables
+          building the D-Bus interface API documentation (needs <a class=
+          "xref" href="../pst/xmlto.html" title=
+          "xmlto-0.0.29">xmlto-0.0.29</a>).
+        </p>
+        <p>
+          <code class="option">-D gtk_doc=true</code>: This switch enables
+          building the libaccountsservice API documentation (needs <a class=
+          "xref" href="gtk-doc.html" title=
+          "GTK-Doc-1.34.0">GTK-Doc-1.34.0</a>).
+        </p>
+        <p>
+          <code class="option">-D vapi=false</code>: This switch disables
+          building the vala bindings. Use it if you have not installed
+          <a class="xref" href="vala.html" title=
+          "Vala-0.56.18">Vala-0.56.18</a>.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring AccountsService
+        </h2>
+        <p>
+          To allow users in the adm group to be listed as Administrators,
+          execute the following commands as the <code class=
+          "systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">cat &gt; /etc/polkit-1/rules.d/40-adm.rules &lt;&lt; "EOF"
+<code class="literal">polkit.addAdminRule(function(action, subject) {
+   return ["unix-group:adm"];
+   });</code>
+EOF</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">accounts-daemon (in <code class=
+              "filename">/usr/libexec</code>)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libaccountsservice.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/accountsservice-1.0,
+              /usr/share/accountsservice,
+              /usr/share/gtk-doc/html/libaccountsservice (optional), and
+              /var/lib/AccountsService</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="accounts-daemon" name=
+                    "accounts-daemon"></a><span class="term"><span class=
+                    "command"><strong>accounts-daemon</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">AccountsService</span>
+                    daemon
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libaccountsservice" name=
+                    "libaccountsservice"></a><span class="term"><code class=
+                    "filename">libaccountsservice.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class=
+                    "application">AccountsService</span> API functions
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="7zip.html" title="7zip-25.01">Prev</a>
+          <p>
+            7zip-25.01
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="acpid.html" title="acpid-2.0.34">Next</a>
+          <p>
+            acpid-2.0.34
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

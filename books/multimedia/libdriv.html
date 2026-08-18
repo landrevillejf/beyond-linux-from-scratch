@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Chapter&nbsp;42.&nbsp;Multimedia Libraries and Drivers
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Part&nbsp;XII.&nbsp;Multimedia
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="multimedia.html" title="Multimedia">Prev</a>
+          <p>
+            Multimedia
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="alsa.html" title="ALSA">Next</a>
+          <p>
+            ALSA
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="multimedia.html" title=
+          "Part&nbsp;XII.&nbsp;Multimedia">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="chapter">
+      <a id="multimedia-libdriv" name="multimedia-libdriv"></a>Multimedia
+      Libraries and Drivers
+    </h1>
+    <div class="chapter" lang="en" xml:lang="en">
+      <p>
+        Many multimedia programs require libraries and/or drivers in order to
+        function properly. The packages in this section fall into this
+        category. Generally you only need to install these if you are
+        installing a program which has the library listed as either a
+        requirement, or as an option to enable it to support certain
+        functionality.
+      </p>
+      <div class="toc">
+        <h3>
+          Table of Contents
+        </h3>
+        <ul>
+          <li class="sect1">
+            <a href="alsa.html">ALSA</a>
+          </li>
+          <li class="sect1">
+            <a href="alsa-lib.html">alsa-lib-1.2.14</a>
+          </li>
+          <li class="sect1">
+            <a href="alsa-plugins.html">alsa-plugins-1.2.12</a>
+          </li>
+          <li class="sect1">
+            <a href="alsa-utils.html">alsa-utils-1.2.14</a>
+          </li>
+          <li class="sect1">
+            <a href="alsa-tools.html">alsa-tools-1.2.14</a>
+          </li>
+          <li class="sect1">
+            <a href="alsa-firmware.html">alsa-firmware-1.2.4</a>
+          </li>
+          <li class="sect1">
+            <a href="audiofile.html">AudioFile-0.3.6</a>
+          </li>
+          <li class="sect1">
+            <a href="faac.html">faac-1.31.1</a>
+          </li>
+          <li class="sect1">
+            <a href="faad2.html">FAAD2-2.11.2</a>
+          </li>
+          <li class="sect1">
+            <a href="fdk-aac.html">fdk-aac-2.0.3</a>
+          </li>
+          <li class="sect1">
+            <a href="flac.html">FLAC-1.5.0</a>
+          </li>
+          <li class="sect1">
+            <a href="frei0r.html">frei0r-2.3.3</a>
+          </li>
+          <li class="sect1">
+            <a href="gavl.html">gavl-1.4.0</a>
+          </li>
+          <li class="sect1">
+            <a href="gstreamer10.html">gstreamer-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gst10-plugins-base.html">gst-plugins-base-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gst10-plugins-good.html">gst-plugins-good-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gst10-plugins-bad.html">gst-plugins-bad-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gst10-plugins-ugly.html">gst-plugins-ugly-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gst10-libav.html">gst-libav-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="id3lib.html">id3lib-3.8.3</a>
+          </li>
+          <li class="sect1">
+            <a href="intel-media-driver.html">intel-media-driver-25.2.6</a>
+          </li>
+          <li class="sect1">
+            <a href="intel-vaapi-driver.html">intel-vaapi-driver-2.4.1</a>
+          </li>
+          <li class="sect1">
+            <a href="liba52.html">Liba52-0.8.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libao.html">Libao-1.2.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libaom.html">libaom-3.12.1</a>
+          </li>
+          <li class="sect1">
+            <a href="libass.html">libass-0.17.4</a>
+          </li>
+          <li class="sect1">
+            <a href="libcanberra.html">libcanberra-0.30</a>
+          </li>
+          <li class="sect1">
+            <a href="libcddb.html">libcddb-1.3.2</a>
+          </li>
+          <li class="sect1">
+            <a href="libcdio.html">libcdio-2.1.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libdvdcss.html">libdvdcss-1.4.3</a>
+          </li>
+          <li class="sect1">
+            <a href="libdvdread.html">Libdvdread-6.1.3</a>
+          </li>
+          <li class="sect1">
+            <a href="libdvdnav.html">Libdvdnav-6.1.1</a>
+          </li>
+          <li class="sect1">
+            <a href="libdv.html">Libdv-1.0.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libgstgtk4.html">libgstgtk4 from
+            gst-plugins-rs-1.26.5</a>
+          </li>
+          <li class="sect1">
+            <a href="libmad.html">libmad-0.15.1b</a>
+          </li>
+          <li class="sect1">
+            <a href="libmpeg2.html">libmpeg2-0.5.1</a>
+          </li>
+          <li class="sect1">
+            <a href="libmusicbrainz5.html">libmusicbrainz-5.1.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libogg.html">libogg-1.3.6</a>
+          </li>
+          <li class="sect1">
+            <a href="libplacebo.html">libplacebo-7.351.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libsamplerate.html">libsamplerate-0.2.2</a>
+          </li>
+          <li class="sect1">
+            <a href="libsndfile.html">libsndfile-1.2.2</a>
+          </li>
+          <li class="sect1">
+            <a href="libva.html">libva-2.22.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libvdpau.html">libvdpau-1.5</a>
+          </li>
+          <li class="sect1">
+            <a href="libvdpau-va-gl.html">libvdpau-va-gl-0.4.2</a>
+          </li>
+          <li class="sect1">
+            <a href="libvorbis.html">libvorbis-1.3.7</a>
+          </li>
+          <li class="sect1">
+            <a href="libvpx.html">libvpx-1.15.2</a>
+          </li>
+          <li class="sect1">
+            <a href="mlt.html">mlt-7.32.0</a>
+          </li>
+          <li class="sect1">
+            <a href="opus.html">Opus-1.5.2</a>
+          </li>
+          <li class="sect1">
+            <a href="pipewire.html">Pipewire-1.4.7</a>
+          </li>
+          <li class="sect1">
+            <a href="pulseaudio.html">PulseAudio-17.0</a>
+          </li>
+          <li class="sect1">
+            <a href="sbc.html">SBC-2.1</a>
+          </li>
+          <li class="sect1">
+            <a href="sdl.html">sdl12-compat-1.2.68</a>
+          </li>
+          <li class="sect1">
+            <a href="sdl2.html">SDL2-2.32.8</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "sound-theme-freedesktop.html">sound-theme-freedesktop-0.8</a>
+          </li>
+          <li class="sect1">
+            <a href="soundtouch.html">SoundTouch-2.4.0</a>
+          </li>
+          <li class="sect1">
+            <a href="speex.html">Speex-1.2.1</a>
+          </li>
+          <li class="sect1">
+            <a href="taglib.html">Taglib-2.1.1</a>
+          </li>
+          <li class="sect1">
+            <a href="v4l-utils.html">v4l-utils-1.30.1</a>
+          </li>
+          <li class="sect1">
+            <a href="wireplumber.html">Wireplumber-0.5.10</a>
+          </li>
+          <li class="sect1">
+            <a href="x264.html">x264-20250815</a>
+          </li>
+          <li class="sect1">
+            <a href="x265.html">x265-4.1</a>
+          </li>
+          <li class="sect1">
+            <a href="xine-lib.html">xine-lib-1.2.13</a>
+          </li>
+          <li class="sect1">
+            <a href="xvid.html">XviD-1.3.7</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="multimedia.html" title="Multimedia">Prev</a>
+          <p>
+            Multimedia
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="alsa.html" title="ALSA">Next</a>
+          <p>
+            ALSA
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="multimedia.html" title=
+          "Part&nbsp;XII.&nbsp;Multimedia">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

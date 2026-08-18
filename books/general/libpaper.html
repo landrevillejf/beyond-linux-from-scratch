@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      libpaper-2.2.6
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libnvme.html" title="libnvme-1.15">Prev</a>
+          <p>
+            libnvme-1.15
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libportal.html" title=
+          "libportal-0.9.1">Next</a>
+          <p>
+            libportal-0.9.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="libpaper" name="libpaper"></a>libpaper-2.2.6
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to libpaper
+        </h2>
+        <p>
+          This package is intended to provide a simple way for applications
+          to take actions based on a system or user-specified paper size.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/rrthomas/libpaper/releases/download/v2.2.6/libpaper-2.2.6.tar.gz">
+                https://github.com/rrthomas/libpaper/releases/download/v2.2.6/libpaper-2.2.6.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 794552e5e5b9796c15bc222fefd9e1ff
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.1 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 12 MB (with tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU (with tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of libpaper
+        </h2>
+        <p>
+          Install <span class="application">libpaper</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr     \
+            --sysconfdir=/etc \
+            --disable-static  \
+            --docdir=/usr/share/doc/libpaper-2.2.6 &amp;&amp;
+make</kbd></pre>
+        <p>
+          The test suite of this package does not work with a configuration
+          using the standard installation location.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-static</code></em>: This
+          switch prevents installation of static versions of the libraries.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring libpaper
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Configuration Information
+          </h3>
+          <p>
+            The paper size is automatically determined from the system
+            locale; see <code class="literal">LC_PAPER</code> in <a class=
+            "ulink" href=
+            "https://man.archlinux.org/man/locale.7">locale(7)</a>. If you
+            want to override it, create a <code class=
+            "filename">papersize</code> file in the user configuration
+            directory. For example:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">mkdir -pv ~/.config &amp;&amp;
+echo "a4" &gt; ~/.config/papersize</kbd></pre>
+          <p>
+            If you want to override the paper size globally (for all users),
+            set up the <code class="envar">PAPERSIZE</code> environment
+            variable. For example:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">echo "PAPERSIZE=a4" &gt; /etc/profile.d/libpaper.sh</kbd></pre>
+          <p>
+            You may use a different paper size, such as <code class=
+            "literal">letter</code>.
+          </p>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">paper and paperconf</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libpaper.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/share/doc/libpaper-2.2.6</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="paper" name="paper"></a><span class=
+                    "term"><span class=
+                    "command"><strong>paper</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    prints paper configuration information
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="paperconf" name="paperconf"></a><span class=
+                    "term"><span class=
+                    "command"><strong>paperconf</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    prints paper configuration information in a compatibility
+                    mode
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libpaper-lib" name="libpaper-lib"></a><span class=
+                    "term"><code class="filename">libpaper.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains functions for interrogating the paper library
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="libnvme.html" title="libnvme-1.15">Prev</a>
+          <p>
+            libnvme-1.15
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="libportal.html" title=
+          "libportal-0.9.1">Next</a>
+          <p>
+            libportal-0.9.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

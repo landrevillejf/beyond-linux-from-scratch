@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      ssh-askpass-10.0p1
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;4.&nbsp;Security
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="shadow.html" title="Shadow-4.18.0">Prev</a>
+          <p>
+            Shadow-4.18.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="stunnel.html" title="stunnel-5.75">Next</a>
+          <p>
+            stunnel-5.75
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="ssh-askpass" name="ssh-askpass"></a>ssh-askpass-10.0p1
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to ssh-askpass
+        </h2>
+        <p>
+          The <span class="application">ssh-askpass</span> is a generic
+          executable name for many packages, with similar names, that provide
+          a interactive X service to grab password for packages requiring
+          administrative privileges to be run. It prompts the user with a
+          window box where the necessary password can be inserted. Here, we
+          choose Damien Miller's package distributed in the <span class=
+          "application">OpenSSH</span> tarball.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.0p1.tar.gz">
+                https://ftp.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.0p1.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 689148621a2eaa734497b12bed1c5202
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.9 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 11 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: less than 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          ssh-askpass Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../x/gtk3.html" title=
+          "GTK-3.24.50">GTK-3.24.50</a>, <a class="xref" href="sudo.html"
+          title="Sudo-1.9.17p2">Sudo-1.9.17p2</a> (runtime), <a class="xref"
+          href="../x/x7lib.html" title="Xorg Libraries">Xorg Libraries</a>,
+          and <a class="xref" href="../x/installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">a graphical
+          environment</a> (runtime)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of ssh-askpass
+        </h2>
+        <p>
+          Install <span class="application">ssh-askpass</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">cd contrib &amp;&amp;
+make gnome-ssh-askpass3</kbd></pre>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -v -d -m755                    /usr/libexec/openssh/contrib  &amp;&amp;
+install -v -m755    gnome-ssh-askpass3 /usr/libexec/openssh/contrib  &amp;&amp;
+ln -sv -f contrib/gnome-ssh-askpass3   /usr/libexec/openssh/ssh-askpass</kbd></pre>
+        <p>
+          The use of /usr/libexec/openssh/contrib and a symlink is justified
+          by the eventual necessity of a different program for that service.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring ssh-askpass
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="ssh-askpass-config" name=
+            "ssh-askpass-config"></a>Configuration Information
+          </h3>
+          <p>
+            As the <code class="systemitem">root</code> user, configure
+            <a class="xref" href="sudo.html" title=
+            "Sudo-1.9.17p2">Sudo-1.9.17p2</a> to use <span class=
+            "application">ssh-askpass</span>:
+          </p>
+          <pre class="root"><kbd class=
+          "command">cat &gt;&gt; /etc/sudo.conf &lt;&lt; "EOF" &amp;&amp;
+<code class="literal"># Path to askpass helper program
+Path askpass /usr/libexec/openssh/ssh-askpass</code>
+EOF
+chmod -v 0644 /etc/sudo.conf</kbd></pre>
+          <p>
+            If a given graphical &lt;application&gt; requires administrative
+            privileges, use <span class="command"><strong>sudo -A
+            &lt;application&gt;</strong></span> from an x-terminal, from a
+            Window Manager menu and/or replace "Exec=&lt;application&gt; ..."
+            by "Exec=sudo -A &lt;application&gt; ..." in the
+            &lt;application&gt;.desktop file.
+          </p>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gnome-ssh-askpass3, ssh-askpass (symlink
+              to <code class="filename">gnome-ssh-askpass3</code>)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directory:</strong>
+              <span class="segbody">/usr/libexec/openssh/contrib</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="shadow.html" title="Shadow-4.18.0">Prev</a>
+          <p>
+            Shadow-4.18.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="stunnel.html" title="stunnel-5.75">Next</a>
+          <p>
+            stunnel-5.75
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

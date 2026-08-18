@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Chapter&nbsp;13.&nbsp;Programming
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Part&nbsp;III.&nbsp;General Libraries and Utilities
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="usbutils.html" title="usbutils-018">Prev</a>
+          <p>
+            usbutils-018
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="cargo-c.html" title=
+          "cargo-c-0.10.15">Next</a>
+          <p>
+            cargo-c-0.10.15
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="general.html" title=
+          "Part&nbsp;III.&nbsp;General Libraries and Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="chapter">
+      <a id="general-prog" name="general-prog"></a>Programming
+    </h1>
+    <div class="chapter" lang="en" xml:lang="en">
+      <p>
+        A base LFS system can be used as a development platform, however the
+        base system only includes language support for <span class=
+        "application">C</span>, <span class="application">C++</span>,
+        <span class="application">Perl</span>, and <span class=
+        "application">Python</span>. This chapter provides instructions to
+        build many popular programming environments to greatly expand your
+        system's development capabilities.
+      </p>
+      <div class="toc">
+        <h3>
+          Table of Contents
+        </h3>
+        <ul>
+          <li class="sect1">
+            <a href="cargo-c.html">cargo-c-0.10.15</a>
+          </li>
+          <li class="sect1">
+            <a href="cbindgen.html">Cbindgen-0.29.0</a>
+          </li>
+          <li class="sect1">
+            <a href="clisp.html">Clisp-2.49.95</a>
+          </li>
+          <li class="sect1">
+            <a href="cmake.html">CMake-4.1.0</a>
+          </li>
+          <li class="sect1">
+            <a href="doxygen.html">Doxygen-1.14.0</a>
+          </li>
+          <li class="sect1">
+            <a href="dtc.html">dtc-1.7.2</a>
+          </li>
+          <li class="sect1">
+            <a href="gcc.html">GCC-15.2.0</a>
+          </li>
+          <li class="sect1">
+            <a href="gc.html">GC-8.2.8</a>
+          </li>
+          <li class="sect1">
+            <a href="gdb.html">GDB-16.3</a>
+          </li>
+          <li class="sect1">
+            <a href="git.html">Git-2.50.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gitserver.html">Running a Git Server</a>
+          </li>
+          <li class="sect1">
+            <a href="guile.html">Guile-3.0.10</a>
+          </li>
+          <li class="sect1">
+            <a href="llvm.html">LLVM-20.1.8</a>
+          </li>
+          <li class="sect1">
+            <a href="lua.html">Lua-5.4.8</a>
+          </li>
+          <li class="sect1">
+            <a href="luajit.html">luajit-20250816</a>
+          </li>
+          <li class="sect1">
+            <a href="mercurial.html">Mercurial-7.1</a>
+          </li>
+          <li class="sect1">
+            <a href="nasm.html">NASM-2.16.03</a>
+          </li>
+          <li class="sect1">
+            <a href="patchelf.html">Patchelf-0.18.0</a>
+          </li>
+          <li class="sect1">
+            <a href="perl-modules.html">Perl Modules</a>
+          </li>
+          <li class="sect1">
+            <a href="perl-deps.html">Perl Module Dependencies</a>
+          </li>
+          <li class="sect1">
+            <a href="php.html">PHP-8.4.11</a>
+          </li>
+          <li class="sect1">
+            <a href="python3.html">Python-3.13.7</a>
+          </li>
+          <li class="sect1">
+            <a href="python311.html">Python-3.11.1</a>
+          </li>
+          <li class="sect1">
+            <a href="python-modules.html">Python Modules</a>
+          </li>
+          <li class="sect1">
+            <a href="python-dependencies.html">Python Dependencies</a>
+          </li>
+          <li class="sect1">
+            <a href="ruby.html">Ruby-3.4.5</a>
+          </li>
+          <li class="sect1">
+            <a href="rust.html">Rustc-1.89.0</a>
+          </li>
+          <li class="sect1">
+            <a href="rust-bindgen.html">rust-bindgen-0.72.0</a>
+          </li>
+          <li class="sect1">
+            <a href="scons.html">SCons-4.9.1</a>
+          </li>
+          <li class="sect1">
+            <a href="slang.html">slang-2.3.3</a>
+          </li>
+          <li class="sect1">
+            <a href="subversion.html">Subversion-1.14.5</a>
+          </li>
+          <li class="sect1">
+            <a href="svnserver.html">Running a Subversion Server</a>
+          </li>
+          <li class="sect1">
+            <a href="swig.html">SWIG-4.3.1</a>
+          </li>
+          <li class="sect1">
+            <a href="tk.html">Tk-8.6.16</a>
+          </li>
+          <li class="sect1">
+            <a href="unifdef.html">unifdef-2.12</a>
+          </li>
+          <li class="sect1">
+            <a href="vala.html">Vala-0.56.18</a>
+          </li>
+          <li class="sect1">
+            <a href="valgrind.html">Valgrind-3.25.1</a>
+          </li>
+          <li class="sect1">
+            <a href="yasm.html">yasm-1.3.0</a>
+          </li>
+          <li class="sect1">
+            <span class="dummy">Java</span>
+          </li>
+          <li class="sect1">
+            <a href="java.html">Java-24.0.2</a>
+          </li>
+          <li class="sect1">
+            <a href="openjdk.html">OpenJDK-24.0.2</a>
+          </li>
+          <li class="sect1">
+            <a href="ojdk-conf.html">Configuring the Java environment</a>
+          </li>
+          <li class="sect1">
+            <a href="apache-ant.html">apache-ant-1.10.15</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="usbutils.html" title="usbutils-018">Prev</a>
+          <p>
+            usbutils-018
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="cargo-c.html" title=
+          "cargo-c-0.10.15">Next</a>
+          <p>
+            cargo-c-0.10.15
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="general.html" title=
+          "Part&nbsp;III.&nbsp;General Libraries and Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

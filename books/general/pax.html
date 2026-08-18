@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Pax-20240817
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;12.&nbsp;System Utilities
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="notification-daemon.html" title=
+          "notification-daemon-3.20.0">Prev</a>
+          <p>
+            notification-daemon-3.20.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="pm-utils.html" title=
+          "pm-utils-1.4.1">Next</a>
+          <p>
+            pm-utils-1.4.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="pax" name="pax"></a>Pax-20240817
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Pax
+        </h2>
+        <p>
+          <span class="application">pax</span> is an archiving utility
+          created by POSIX and defined by the POSIX.1-2001 standard. Rather
+          than sort out the incompatible options that have crept up between
+          <span class="application">tar</span> and <span class=
+          "application">cpio</span>, along with their implementations across
+          various versions of UNIX, the IEEE designed a new archive utility.
+          The name <span class="quote">“<span class=
+          "quote">pax</span>”</span> is an acronym for portable archive
+          exchange. Furthermore, <span class="quote">“<span class=
+          "quote">pax</span>”</span> means <span class="quote">“<span class=
+          "quote">peace</span>”</span> in Latin, so its name implies that it
+          shall create peace between the <span class="application">tar</span>
+          and <span class="application">cpio</span> format supporters. The
+          command invocation and command structure is somewhat a unification
+          of both <span class="application">tar</span> and <span class=
+          "application">cpio</span>.
+        </p>
+        <p>
+          <span class="application">pax</span> has been required to be
+          present in LSB conformant systems since LSB version 3.0.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "http://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20240817.tgz">
+                http://www.mirbsd.org/MirOS/dist/mir/cpio/paxmirabilis-20240817.tgz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 9a723154a4201a0892b7ff815b6753b5
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 180 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 1.6 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: less than 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Pax
+        </h2>
+        <p>
+          Install pax by running the following commands:.
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            This package expands to the directory <span class=
+            "emphasis"><em>pax</em></span>.
+          </p>
+        </div>
+        <pre class="userinput"><kbd class="command">bash Build.sh</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            This package also creates hard links from <span class=
+            "command"><strong>pax</strong></span> to the programs
+            <span class="command"><strong>cpio</strong></span> and
+            <span class="command"><strong>tar</strong></span> in the build
+            directory. The LFS editors do not recommend that they be
+            installed as they will overwrite the GNU versions of these
+            programs.
+          </p>
+        </div>
+        <pre class="root"><kbd class=
+        "command">install -v pax /usr/bin &amp;&amp;
+install -v -m644 pax.1 /usr/share/man/man1</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">pax</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="pax-prog" name="pax-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>pax</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    copies files to and from archives in several formats
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="notification-daemon.html" title=
+          "notification-daemon-3.20.0">Prev</a>
+          <p>
+            notification-daemon-3.20.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="pm-utils.html" title=
+          "pm-utils-1.4.1">Next</a>
+          <p>
+            pm-utils-1.4.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

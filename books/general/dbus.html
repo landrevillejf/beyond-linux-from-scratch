@@ -1,0 +1,621 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      dbus-1.16.2
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;12.&nbsp;System Utilities
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="cups-pk-helper.html" title=
+          "cups-pk-helper-0.2.7">Prev</a>
+          <p>
+            cups-pk-helper-0.2.7
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="elogind.html" title=
+          "elogind-255.17">Next</a>
+          <p>
+            elogind-255.17
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="dbus" name="dbus"></a>dbus-1.16.2
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to D-Bus
+        </h2>
+        <p>
+          <span class="application">D-Bus</span> is a message bus system, a
+          simple way for applications to talk to one another. <span class=
+          "application">D-Bus</span> supplies both a system daemon (for
+          events such as <span class="quote">“<span class="quote">new
+          hardware device added</span>”</span> or <span class=
+          "quote">“<span class="quote">printer queue changed</span>”</span>)
+          and a per-user-login-session daemon (for general IPC needs among
+          user applications). Also, the message bus is built on top of a
+          general one-to-one message passing framework, which can be used by
+          any two applications to communicate directly (without going through
+          the message bus daemon).
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz">
+                https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 97832e6f0a260936d28536e5349c22e5
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.1 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 25 MB (add 6 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.3 SBU (add 0.4 SBU for tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          D-Bus Dependencies
+        </h3>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../x/x7lib.html" title="Xorg Libraries">Xorg
+          Libraries</a> (for <span class=
+          "command"><strong>dbus-launch</strong></span> program)
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          For the tests: <a class="xref" href=
+          "python-modules.html#dbus-python" title="D-Bus Python-1.4.0">D-Bus
+          Python-1.4.0</a>, <a class="xref" href=
+          "python-modules.html#pygobject3" title=
+          "PyGObject-3.52.3">PyGObject-3.52.3</a>, and <a class="xref" href=
+          "valgrind.html" title="Valgrind-3.25.1">Valgrind-3.25.1</a>; for
+          documentation: <a class="xref" href="doxygen.html" title=
+          "Doxygen-1.14.0">Doxygen-1.14.0</a>, <a class="xref" href=
+          "../pst/xmlto.html" title="xmlto-0.0.29">xmlto-0.0.29</a>,
+          <a class="ulink" href=
+          "https://pypi.python.org/pypi/mallard-ducktype">Ducktype</a>, and
+          <a class="ulink" href=
+          "https://download.gnome.org/sources/yelp-tools/">Yelp Tools</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of D-Bus
+        </h2>
+        <p>
+          Install <span class="application">D-Bus</span> by running the
+          following commands (you may wish to review the meson_options.txt
+          file first and add any additional desired options to the meson
+          setup line below):
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup --prefix=/usr          \
+            --buildtype=release    \
+            --wrap-mode=nofallback \</kbd><kbd class="command">
+            -D systemd=disabled    \</kbd><kbd class="command">
+            .. &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          See below for test instructions.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          If you are using a DESTDIR install, <span class=
+          "command"><strong>dbus-daemon-launch-helper</strong></span> needs
+          to be fixed afterwards. Issue, as <code class=
+          "systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">chown -v root:messagebus /usr/libexec/dbus-daemon-launch-helper &amp;&amp;
+chmod -v      4750       /usr/libexec/dbus-daemon-launch-helper</kbd></pre>
+        <p>
+          If you are still building your system in chroot or you did not
+          start the daemon yet, but you want to compile some packages that
+          require <span class="application">D-Bus</span>, generate the
+          <span class="application">D-Bus</span> UUID to avoid warnings when
+          compiling some packages with the following command as the
+          <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">dbus-uuidgen --ensure</kbd></pre>
+        <p>
+          If using <a class="xref" href="elogind.html" title=
+          "elogind-255.17">elogind-255.17</a>, create a symlink to the
+          <code class="filename">/var/lib/dbus/machine-id</code> file:
+        </p>
+        <pre class="root"><kbd class=
+        "command">ln -sfv /var/lib/dbus/machine-id /etc</kbd></pre>
+        <p>
+          Finally, still as the <code class="systemitem">root</code> user,
+          rename the documentation directory (it only exists if the optional
+          dependencies are satisfied for at least one documentation format)
+          to make it versioned:
+        </p>
+        <pre class="root"><kbd class=
+        "command">if [ -e /usr/share/doc/dbus ]; then
+  rm -rf /usr/share/doc/dbus-1.16.2    &amp;&amp;
+  mv -v  /usr/share/doc/dbus{,-1.16.2}
+fi</kbd></pre>
+        <p>
+          Many tests are disabled unless both <a class="xref" href=
+          "python-modules.html#dbus-python" title="D-Bus Python-1.4.0">D-Bus
+          Python-1.4.0</a> and <a class="xref" href=
+          "python-modules.html#pygobject3" title=
+          "PyGObject-3.52.3">PyGObject-3.52.3</a> have been installed. They
+          must be run as an unprivileged user from a local session with bus
+          address. To run the standard tests issue <span class=
+          "command"><strong>ninja test</strong></span>.
+        </p>
+        <p>
+          If you want to run the unit regression tests, meson requires
+          additional parameters which expose additional functionality in the
+          binaries that are not intended to be used in a production build of
+          <span class="application">D-Bus</span>. If you would like to run
+          the tests, issue the following commands (for the tests, you don't
+          need to build the docs):
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">meson configure -D asserts=true -D intrusive_tests=true &amp;&amp;
+ninja test</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--wrap-mode=nofallback</code></em>:
+          This switch prevents <span class=
+          "command"><strong>meson</strong></span> from using subproject
+          fallbacks for any dependency declarations in the build files,
+          preventing it from downloading any optional dependencies which are
+          not installed on the system.
+        </p>
+        <p>
+          <em class="parameter"><code>-D systemd=disabled</code></em>: Don't
+          install systemd support files even if <code class=
+          "systemitem">libsystemd</code> exists (i.e. the <a class="xref"
+          href="elogind.html" title="elogind-255.17">elogind-255.17</a>
+          package is installed).
+        </p>
+        <p>
+          <em class="parameter"><code>-D intrusive_tests=true</code></em>:
+          Builds extra parts of the code to support all tests. Do not use on
+          a production build.
+        </p>
+        <p>
+          <em class="parameter"><code>-D asserts=true</code></em>: Enables
+          debugging code to run assertions for statements normally assumed to
+          be true. This prevents a warning that '<em class=
+          "parameter"><code>-D asserts=true</code></em>' on its own is only
+          useful for profiling and might not give true results for all tests,
+          but adds its own NOTE that this should not be used in a production
+          build.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring D-Bus
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="dbus-config" name="dbus-config"></a>Config Files
+          </h3>
+          <p>
+            <code class="filename">/etc/dbus-1/session.conf</code>,
+            <code class="filename">/etc/dbus-1/system.conf</code> and
+            <code class="filename">/etc/dbus-1/system.d/*</code>
+          </p>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="dbus-session-config" name=
+            "dbus-session-config"></a>Configuration Information
+          </h3>
+          <p>
+            The configuration files listed above should probably not be
+            modified. If changes are required, you should create <code class=
+            "filename">/etc/dbus-1/session-local.conf</code> and/or
+            <code class="filename">/etc/dbus-1/system-local.conf</code> and
+            make any desired changes to these files.
+          </p>
+          <p>
+            If any packages install a <span class="application">D-Bus</span>
+            <code class="filename">.service</code> file outside of the
+            standard <code class="filename">/usr/share/dbus-1/services</code>
+            directory, that directory should be added to the local session
+            configuration. For instance, <code class=
+            "filename">/usr/local/share/dbus-1/services</code> can be added
+            by performing the following commands as the <code class=
+            "systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class=
+          "command">cat &gt; /etc/dbus-1/session-local.conf &lt;&lt; "EOF"
+<code class="literal">&lt;!DOCTYPE busconfig PUBLIC
+ "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd"&gt;
+&lt;busconfig&gt;
+
+  &lt;!-- Search for .service files in /usr/local --&gt;
+  &lt;servicedir&gt;/usr/local/share/dbus-1/services&lt;/servicedir&gt;
+
+&lt;/busconfig&gt;</code>
+EOF</kbd></pre>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="dbus-session" name="dbus-session"></a>D-Bus Session Daemon
+          </h3>
+          <p>
+            To automatically start <span class=
+            "command"><strong>dbus-daemon</strong></span> when the system is
+            rebooted, install the <code class=
+            "filename">/etc/rc.d/init.d/dbus</code> bootscript from the
+            <a class="xref" href="../introduction/bootscripts.html" title=
+            "BLFS Boot Scripts">blfs-bootscripts-20250225</a> package.
+          </p>
+          <pre class="root"><kbd class=
+          "command">make install-dbus</kbd></pre>
+          <p>
+            If this is the first time to install <span class=
+            "application">D-Bus</span> on the system and you are not
+            operating in a chroot environment, you can immediately start
+            <span class="command"><strong>dbus-daemon</strong></span> without
+            rebooting the system:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">/etc/init.d/dbus start</kbd></pre>
+          <p>
+            Note that this boot script only starts the system-wide
+            <span class="application">D-Bus</span> daemon. Each user
+            requiring access to <span class="application">D-Bus</span>
+            services will also need to run a session daemon as well. There
+            are many methods you can use to start a session daemon using the
+            <span class="command"><strong>dbus-launch</strong></span>
+            command. Review the <span class=
+            "command"><strong>dbus-launch</strong></span> man page for
+            details about the available parameters and options. Here are some
+            suggestions and examples:
+          </p>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Add <span class=
+                  "command"><strong>dbus-launch</strong></span> to the line
+                  in the <code class="filename">~/.xinitrc</code> file that
+                  starts your graphical desktop environment.
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  If you use <span class=
+                  "command"><strong>gdm</strong></span> or some other display
+                  manager that calls the <code class=
+                  "filename">~/.xsession</code> file, you can add
+                  <span class="command"><strong>dbus-launch</strong></span>
+                  to the line in your <code class=
+                  "filename">~/.xsession</code> file that starts your
+                  graphical desktop environment. The syntax would be similar
+                  to the example in the <code class=
+                  "filename">~/.xinitrc</code> file.
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  The examples shown previously use <span class=
+                  "command"><strong>dbus-launch</strong></span> to specify a
+                  program to be run. This has the benefit (when also using
+                  the <em class="parameter"><code>--exit-with-x11</code></em>
+                  parameter) of stopping the session daemon when the
+                  specified program is stopped. You can also start the
+                  session daemon in your system or personal startup scripts
+                  by adding the following lines:
+                </p>
+                <pre class="userinput"><kbd class="command"><code class=
+                "literal"># Start the D-Bus session daemon
+eval `dbus-launch`
+export DBUS_SESSION_BUS_ADDRESS</code></kbd></pre>
+                <p>
+                  This method will not stop the session daemon when you exit
+                  your shell, therefore you should add the following line to
+                  your <code class="filename">~/.bash_logout</code> file:
+                </p>
+                <pre class="userinput"><kbd class="command"><code class=
+                "literal"># Kill the D-Bus session daemon
+kill $DBUS_SESSION_BUS_PID</code></kbd></pre>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">dbus-cleanup-sockets, dbus-daemon,
+              dbus-launch, dbus-monitor, dbus-run-session, dbus-send,
+              dbus-test-tool, dbus-update-activation-environment, and
+              dbus-uuidgen</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libdbus-1.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/etc/dbus-1, /usr/{include,lib}/dbus-1.0,
+              /usr/lib/cmake/DBus1, /usr/share/dbus-1, /usr/share/xml/dbus-1,
+              /usr/share/doc/dbus-1.16.2, and /var/{lib,run}/dbus</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-cleanup-sockets" name=
+                    "dbus-cleanup-sockets"></a><span class=
+                    "term"><span class="command"><strong>dbus-cleanup-sockets</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to clean up leftover sockets in a directory
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-daemon" name="dbus-daemon"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-daemon</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">D-Bus</span> message bus
+                    daemon
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-launch" name="dbus-launch"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-launch</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to start <span class=
+                    "command"><strong>dbus-daemon</strong></span> from a
+                    shell script. It would normally be called from a user's
+                    login scripts
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-monitor" name="dbus-monitor"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-monitor</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to monitor messages going through a <span class=
+                    "application">D-Bus</span> message bus
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-run-session" name=
+                    "dbus-run-session"></a><span class="term"><span class=
+                    "command"><strong>dbus-run-session</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    starts a process as a new <span class=
+                    "application">D-Bus</span> session
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-send" name="dbus-send"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-send</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to send a message to a <span class=
+                    "application">D-Bus</span> message bus
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-test-tool" name=
+                    "dbus-test-tool"></a><span class="term"><span class=
+                    "command"><strong>dbus-test-tool</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a <span class="application">D-Bus</span> traffic
+                    generator and test tool; it is a multi-purpose tool for
+                    debugging and profiling <span class=
+                    "application">D-Bus</span>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-update-activation-environment" name=
+                    "dbus-update-activation-environment"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-update-activation-environment</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to update the environment used for <span class=
+                    "application">D-Bus</span> session services; it updates
+                    the list of environment variables used by <span class=
+                    "command"><strong>dbus-daemon --session</strong></span>
+                    when it activates session services without using systemd
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dbus-uuidgen" name="dbus-uuidgen"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dbus-uuidgen</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to generate a universally unique ID
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libdbus-1" name="libdbus-1"></a><span class=
+                    "term"><code class="filename">libdbus-1.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the API functions used by the <span class=
+                    "application">D-Bus</span> message daemon. <span class=
+                    "application">D-Bus</span> is first a library that
+                    provides one-to-one communication between any two
+                    applications; <span class=
+                    "command"><strong>dbus-daemon</strong></span> is an
+                    application that uses this library to implement a message
+                    bus daemon
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="cups-pk-helper.html" title=
+          "cups-pk-helper-0.2.7">Prev</a>
+          <p>
+            cups-pk-helper-0.2.7
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="elogind.html" title=
+          "elogind-255.17">Next</a>
+          <p>
+            elogind-255.17
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="sysutils.html" title=
+          "Chapter&nbsp;12.&nbsp;System Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

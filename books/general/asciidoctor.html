@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Asciidoctor-2.0.23
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;11.&nbsp;General Utilities
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="genutils.html" title=
+          "General Utilities">Prev</a>
+          <p>
+            General Utilities
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="bogofilter.html" title=
+          "Bogofilter-1.2.5">Next</a>
+          <p>
+            Bogofilter-1.2.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genutils.html" title=
+          "Chapter&nbsp;11.&nbsp;General Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="asciidoctor" name="asciidoctor"></a>Asciidoctor-2.0.23
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Asciidoctor
+        </h2>
+        <p>
+          Asciidoctor is a fast, open source text processor and publishing
+          toolchain for converting AsciiDoc content to HTML5, DocBook, PDF,
+          and other formats.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/asciidoctor/asciidoctor/archive/v2.0.23/asciidoctor-2.0.23.tar.gz">
+                https://github.com/asciidoctor/asciidoctor/archive/v2.0.23/asciidoctor-2.0.23.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: e629ec9b6a82a21b4afaab7d5d495e52
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.6 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 5.5 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: less than 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Asciidoctor Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="ruby.html" title="Ruby-3.4.5">Ruby-3.4.5</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Asciidoctor
+        </h2>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            When building this package, the following message may appear:
+          </p>
+          <pre class=
+          "screen">fatal: not a git repository (or any of the parent directories): .git</pre>
+          <p>
+            . This is normal, and the package will continue building past
+            this point.
+          </p>
+        </div>
+        <p>
+          Build the Ruby gem:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">gem build asciidoctor.gemspec</kbd></pre>
+        <p>
+          The test suite needs many Ruby gems beyond the scope of BLFS.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">gem install asciidoctor-2.0.23.gem &amp;&amp;
+install -vm644 man/asciidoctor.1 /usr/share/man/man1</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">asciidoctor</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class=
+              "segbody">/usr/lib/ruby/gems/3.4.0/gems/asciidoctor-2.0.23 and
+              /usr/lib/ruby/gems/3.4.0/doc/asciidoctor-2.0.23</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="asciidoctor-prog" name=
+                    "asciidoctor-prog"></a><span class="term"><span class=
+                    "command"><strong>asciidoctor</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    converts AsciiDoc source files to HTML, DocBook, and
+                    other formats
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="genutils.html" title=
+          "General Utilities">Prev</a>
+          <p>
+            General Utilities
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="bogofilter.html" title=
+          "Bogofilter-1.2.5">Next</a>
+          <p>
+            Bogofilter-1.2.5
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genutils.html" title=
+          "Chapter&nbsp;11.&nbsp;General Utilities">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

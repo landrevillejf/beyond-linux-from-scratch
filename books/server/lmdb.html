@@ -1,0 +1,281 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      lmdb-0.9.33
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;22.&nbsp;Databases
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="upgradedb.html" title=
+          "Important Notes About Upgrading Database Server Software">Prev</a>
+          <p>
+            Important Notes About Upgrading Database Server Software
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="mariadb.html" title=
+          "MariaDB-11.8.3">Next</a>
+          <p>
+            MariaDB-11.8.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="databases.html" title=
+          "Chapter&nbsp;22.&nbsp;Databases">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="lmdb" name="lmdb"></a>lmdb-0.9.33
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to lmdb
+        </h2>
+        <p>
+          The <span class="application">lmdb</span> package is a fast,
+          compact, key-value embedded data store. It uses memory-mapped
+          files, so it has the read performance of a pure in-memory database
+          while still offering the persistence of standard disk-based
+          databases, and is only limited to the size of the virtual address
+          space
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://git.openldap.org/openldap/openldap/-/archive/LMDB_0.9.33.tar.bz2">
+                https://git.openldap.org/openldap/openldap/-/archive/LMDB_0.9.33.tar.bz2</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 28d648201f967e20b454df23ab4bd5b4
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 120 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 4.8 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: less than 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of lmdb
+        </h2>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            This package extracts to
+            openldap-LMDB_0.9.33-3a29a24777c82a0165de813ae696a5068b5add30.
+          </p>
+        </div>
+        <p>
+          Install <span class="application">lmdb</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cd libraries/liblmdb &amp;&amp;
+make                 &amp;&amp;
+sed -i 's| liblmdb.a||' Makefile</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">make prefix=/usr install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <span class="command"><strong>sed ... liblmdb.a ...
+          Makefile</strong></span>: The package executables use a static
+          library so it must be created. This command suppresses installation
+          of the static library.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">mdb_copy, mdb_dump, mdb_load, and
+              mdb_stat</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">liblmdb.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">None</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="mdb_copy" name="mdb_copy"></a><span class=
+                    "term"><span class=
+                    "command"><strong>mdb_copy</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    copies an LMDB environment from one database to another,
+                    including the option to compact the database
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="mdb_dump" name="mdb_dump"></a><span class=
+                    "term"><span class=
+                    "command"><strong>mdb_dump</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    reads a database and writes its contents to standard
+                    output using a portable flat-text format, which can be
+                    interpreted by mdb_load
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="mdb_load" name="mdb_load"></a><span class=
+                    "term"><span class=
+                    "command"><strong>mdb_load</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    imports a database from standard input or from a file
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="mdb_stat" name="mdb_stat"></a><span class=
+                    "term"><span class=
+                    "command"><strong>mdb_stat</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    displays the status of a LMDB environment
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="liblmdb" name="liblmdb"></a><span class=
+                    "term"><code class="filename">liblmdb.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides functions for accessing a LMDB database
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="upgradedb.html" title=
+          "Important Notes About Upgrading Database Server Software">Prev</a>
+          <p>
+            Important Notes About Upgrading Database Server Software
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="mariadb.html" title=
+          "MariaDB-11.8.3">Next</a>
+          <p>
+            MariaDB-11.8.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="databases.html" title=
+          "Chapter&nbsp;22.&nbsp;Databases">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

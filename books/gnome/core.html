@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Part&nbsp;VIII.&nbsp;GNOME
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome.html" title="GNOME">Prev</a>
+          <p>
+            GNOME
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gcr.html" title="Gcr-3.41.2">Next</a>
+          <p>
+            Gcr-3.41.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="gnome.html" title=
+          "Part&nbsp;VIII.&nbsp;GNOME">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="chapter">
+      <a id="gnome-core" name="gnome-core"></a>GNOME Libraries and Desktop
+    </h1>
+    <div class="chapter" lang="en" xml:lang="en">
+      <p>
+        The objective of this section is to build a <span class=
+        "application">GNOME</span> desktop.
+      </p>
+      <div class="toc">
+        <h3>
+          Table of Contents
+        </h3>
+        <ul>
+          <li class="sect1">
+            <span class="dummy">Libraries</span>
+          </li>
+          <li class="sect1">
+            <a href="gcr.html">Gcr-3.41.2</a>
+          </li>
+          <li class="sect1">
+            <a href="gcr4.html">Gcr-4.4.0.1</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "gsettings-desktop-schemas.html">gsettings-desktop-schemas-48.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libsecret.html">libsecret-0.21.7</a>
+          </li>
+          <li class="sect1">
+            <a href="rest.html">rest-0.9.1</a>
+          </li>
+          <li class="sect1">
+            <a href="totem-pl-parser.html">totem-pl-parser-3.26.6</a>
+          </li>
+          <li class="sect1">
+            <a href="vte.html">VTE-0.80.3</a>
+          </li>
+          <li class="sect1">
+            <a href="yelp-xsl.html">yelp-xsl-42.4</a>
+          </li>
+          <li class="sect1">
+            <a href="geocode-glib.html">geocode-glib-3.26.4</a>
+          </li>
+          <li class="sect1">
+            <a href="gjs.html">Gjs-1.84.2</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-autoar.html">gnome-autoar-0.4.5</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-desktop.html">gnome-desktop-44.3</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-menus.html">gnome-menus-3.36.0</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "gnome-online-accounts.html">gnome-online-accounts-3.54.5</a>
+          </li>
+          <li class="sect1">
+            <a href="libgee.html">libgee-0.20.8</a>
+          </li>
+          <li class="sect1">
+            <a href="libgtop.html">libgtop-2.41.3</a>
+          </li>
+          <li class="sect1">
+            <a href="libgweather.html">libgweather-4.4.4</a>
+          </li>
+          <li class="sect1">
+            <a href="libpeas.html">libpeas-1.36.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libshumate.html">libshumate-1.4.0</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "evolution-data-server.html">evolution-data-server-3.56.2</a>
+          </li>
+          <li class="sect1">
+            <a href="tinysparql.html">tinysparql-3.9.2</a>
+          </li>
+          <li class="sect1">
+            <a href="localsearch.html">localsearch-3.9.0</a>
+          </li>
+          <li class="sect1">
+            <a href="gsound.html">GSound-1.0.3</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "xdg-desktop-portal-gnome.html">xdg-desktop-portal-gnome-48.0</a>
+          </li>
+          <li class="sect1">
+            <span class="dummy">GNOME Desktop Components</span>
+          </li>
+          <li class="sect1">
+            <a href="dconf.html">DConf-0.40.0 / DConf-Editor-45.0.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-backgrounds.html">gnome-backgrounds-48.2.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gvfs.html">Gvfs-1.56.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gexiv2.html">gexiv2-0.14.6</a>
+          </li>
+          <li class="sect1">
+            <a href="nautilus.html">Nautilus-48.3</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-bluetooth.html">gnome-bluetooth-47.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-keyring.html">gnome-keyring-48.0</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "gnome-settings-daemon.html">gnome-settings-daemon-48.1</a>
+          </li>
+          <li class="sect1">
+            <a href="tecla.html">Tecla-48.0.2</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-control-center.html">gnome-control-center-48.4</a>
+          </li>
+          <li class="sect1">
+            <a href="mutter.html">Mutter-48.4</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-shell.html">gnome-shell-48.4</a>
+          </li>
+          <li class="sect1">
+            <a href=
+            "gnome-shell-extensions.html">gnome-shell-extensions-48.3</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-session.html">gnome-session-48.0</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-tweaks.html">gnome-tweaks-46.1</a>
+          </li>
+          <li class="sect1">
+            <a href="gnome-user-docs.html">gnome-user-docs-48.2</a>
+          </li>
+          <li class="sect1">
+            <a href="yelp.html">Yelp-42.3</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome.html" title="GNOME">Prev</a>
+          <p>
+            GNOME
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gcr.html" title="Gcr-3.41.2">Next</a>
+          <p>
+            Gcr-3.41.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="gnome.html" title=
+          "Part&nbsp;VIII.&nbsp;GNOME">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

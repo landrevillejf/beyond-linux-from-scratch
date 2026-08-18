@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      XCB Utilities
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;24.&nbsp;Graphical Environments
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xcb-util.html" title=
+          "xcb-util-0.4.1">Prev</a>
+          <p>
+            xcb-util-0.4.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="mesa.html" title="Mesa-25.1.8">Next</a>
+          <p>
+            Mesa-25.1.8
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="xcb-utilities" name="xcb-utilities"></a>XCB Utilities
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to XCB Utilities
+        </h2>
+        <p>
+          The XCB utilities provide extensions that developers can use when
+          making X Window software. <a class="xref" href="xcb-util.html"
+          title="xcb-util-0.4.1">xcb-util-0.4.1</a> was just installed but
+          these utilities offer even more extensions that X Window software
+          may depend on.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://xcb.freedesktop.org/dist/">https://xcb.freedesktop.org/dist/</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.1 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 13.3 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU (ignoring the time to download)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          XCB Utilities Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="libxcb.html" title=
+          "libxcb-1.17.0">libxcb-1.17.0</a> and <a class="xref" href=
+          "xcb-util.html" title="xcb-util-0.4.1">xcb-util-0.4.1</a>
+        </p>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Downloading XCB Utilities
+        </h2>
+        <p>
+          First, create a list of files to be downloaded. This file will also
+          be used to verify the integrity of the downloads when complete:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cat &gt; xcb-utils.md5 &lt;&lt; "EOF"
+<code class=
+"literal">a67bfac2eff696170259ef1f5ce1b611  xcb-util-image-0.4.1.tar.xz
+fbdc05f86f72f287ed71b162f1a9725a  xcb-util-keysyms-0.4.1.tar.xz
+193b890e2a89a53c31e2ece3afcbd55f  xcb-util-renderutil-0.3.10.tar.xz
+581b3a092e3c0c1b4de6416d90b969c3  xcb-util-wm-0.4.2.tar.xz
+bc30cd267b11ac5803fe19929cabd230  xcb-util-cursor-0.1.5.tar.xz</code>
+EOF</kbd></pre>
+        <p>
+          To download the needed files using <a class="xref" href=
+          "../basicnet/wget.html" title="Wget-1.25.0">Wget-1.25.0</a>, use
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mkdir xcb-utils &amp;&amp;
+cd    xcb-utils &amp;&amp;
+grep -v '^#' ../xcb-utils.md5 | awk '{print $2}' | wget -i- -c \
+     -B https://xcb.freedesktop.org/dist/ &amp;&amp;
+md5sum -c ../xcb-utils.md5</kbd></pre>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of XCB Utilities
+        </h2>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            When installing multiple packages in a script, the installation
+            needs to be done as the root user. There are three general
+            options that can be used to do this:
+          </p>
+          <div class="orderedlist">
+            <ol>
+              <li class="listitem">
+                <p>
+                  Run the entire script as the root user (not recommended).
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Use the <span class="command"><strong>sudo</strong></span>
+                  command from the <a class="xref" href=
+                  "../postlfs/sudo.html" title=
+                  "Sudo-1.9.17p2">Sudo-1.9.17p2</a> package.
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Use <span class="command"><strong>su -c "command
+                  arguments"</strong></span> (quotes required) which will ask
+                  for the root password for every iteration of the loop.
+                </p>
+              </li>
+            </ol>
+          </div>
+          <p>
+            One way to handle this situation is to create a short
+            <span class="command"><strong>bash</strong></span> function that
+            automatically selects the appropriate method. Once the command is
+            set in the environment, it does not need to be set again.
+          </p>
+          <pre class="userinput"><kbd class="command">as_root()
+{
+  if   [ $EUID = 0 ];        then $*
+  elif [ -x /usr/bin/sudo ]; then sudo $*
+  else                            su -c \\"$*\\"
+  fi
+}
+
+export -f as_root</kbd></pre>
+        </div>
+        <p>
+          First, start a subshell that will exit on error:
+        </p>
+        <pre class="userinput"><kbd class="command">bash -e</kbd></pre>
+        <p>
+          Install all of the packages by running the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">for package in $(grep -v '^#' ../xcb-utils.md5 | awk '{print $2}')
+do
+  packagedir=${package%.tar.?z*}
+  tar -xf $package
+  pushd $packagedir
+     ./configure $XORG_CONFIG
+     make
+     as_root make install
+  popd
+  rm -rf $packagedir
+done</kbd></pre>
+        <p>
+          Finally, exit the shell that was started earlier:
+        </p>
+        <pre class="userinput"><kbd class="command">exit</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libxcb-image.so, libxcb-keysyms.so,
+              libxcb-render-util.so, libxcb-ewmh.so, libxcb-icccm.so, and
+              libxcb-cursor.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">None</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-image" name="libxcb-image"></a><span class=
+                    "term"><code class=
+                    "filename">libxcb-image.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a port of Xlib's XImage and XShmImage functions
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-keysyms" name=
+                    "libxcb-keysyms"></a><span class="term"><code class=
+                    "filename">libxcb-keysyms.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the standard X key constants and API functions
+                    for conversion to/from keycodes
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-render-util" name=
+                    "libxcb-render-util"></a><span class="term"><code class=
+                    "filename">libxcb-render-util.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides convenience functions for the Render extension
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-ewmh" name="libxcb-ewmh"></a><span class=
+                    "term"><code class=
+                    "filename">libxcb-ewmh.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the client and window-manager helpers for EWMH
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-icccm" name="libxcb-icccm"></a><span class=
+                    "term"><code class=
+                    "filename">libxcb-icccm.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the client and window-manager helpers for ICCCM
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxcb-cursor" name=
+                    "libxcb-cursor"></a><span class="term"><code class=
+                    "filename">libxcb-cursor.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a port of Xlib's libXcursor functions
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xcb-util.html" title=
+          "xcb-util-0.4.1">Prev</a>
+          <p>
+            xcb-util-0.4.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="mesa.html" title="Mesa-25.1.8">Next</a>
+          <p>
+            Mesa-25.1.8
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

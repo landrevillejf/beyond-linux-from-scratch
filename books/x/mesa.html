@@ -1,0 +1,973 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Mesa-25.1.8
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;24.&nbsp;Graphical Environments
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xcb-utilities.html" title=
+          "XCB Utilities">Prev</a>
+          <p>
+            XCB Utilities
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xbitmaps.html" title=
+          "xbitmaps-1.1.3">Next</a>
+          <p>
+            xbitmaps-1.1.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="mesa" name="mesa"></a>Mesa-25.1.8
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Mesa
+        </h2>
+        <p>
+          <span class="application">Mesa</span> is an OpenGL compatible 3D
+          graphics library.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://mesa.freedesktop.org/archive/mesa-25.1.8.tar.xz">https://mesa.freedesktop.org/archive/mesa-25.1.8.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: fe3eb39e8a3c6fbb36eb3da57be022e7
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 45 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 1.1 GB (with docs; add 576 MB
+                for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 3.8 SBU (with docs; add 1.7 SBU for
+                tests; both with parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Recommended patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/mesa-add_xdemos-4.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/mesa-add_xdemos-4.patch</a>
+                (installs 2 demo programs for testing Mesa - not needed if
+                you install the <a class="ulink" href=
+                "https://archive.mesa3d.org/demos/">mesa-demos</a> package)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Mesa Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="x7lib.html" title="Xorg Libraries">Xorg
+          Libraries</a>, <a class="xref" href="libdrm.html" title=
+          "Libdrm-2.4.125">libdrm-2.4.125</a>, <a class="xref" href=
+          "../general/python-modules.html#Mako" title=
+          "Mako-1.3.10">Mako-1.3.10</a>, and <a class="xref" href=
+          "../general/python-modules.html#PyYAML" title=
+          "PyYAML-6.0.2">PyYAML-6.0.2</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended"></p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                <a class="xref" href="glslang.html" title=
+                "glslang-15.4.0">Glslang-15.4.0</a> (required for Vulkan
+                support)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../multimedia/libva.html" title=
+                "libva-2.22.0">libva-2.22.0</a> (to provide VA-API support
+                for some gallium drivers. Note that there is a circular
+                dependency. You must build <span class=
+                "application">libva</span> first without mesa's EGL and GLX
+                support, install this package, and rebuild <span class=
+                "application">libva</span>)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../multimedia/libvdpau.html" title=
+                "libvdpau-1.5">libvdpau-1.5</a> (to build VDPAU drivers)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../general/llvm.html" title=
+                "LLVM-20.1.8">LLVM-20.1.8</a> (required for the llvmpipe,
+                r300, r600, and radeonsi drivers)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../general/wayland-protocols.html"
+                title="Wayland-Protocols-1.45">wayland-protocols-1.45</a>
+                (required for <a class="xref" href="../kde/plasma-all.html"
+                title="Building Plasma">Plasma-6.4.4</a>, GNOME, and
+                recommended for <a class="xref" href="gtk3.html" title=
+                "GTK-3.24.50">GTK-3.24.50</a>)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../general/libclc.html" title=
+                "libclc-20.1.8">libclc-20.1.8</a> (required for the Intel
+                iris gallium driver)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="vulkan-loader.html" title=
+                "Vulkan-Loader-1.4.321">Vulkan-Loader-1.4.321</a> (required
+                for Vulkan support)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../general/python-modules.html#ply"
+                title="ply-3.11">ply-3.11</a> (required for the Intel vulkan
+                driver)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="../general/cbindgen.html" title=
+                "Cbindgen-0.29.0">Cbindgen-0.29.0</a>, <a class="xref" href=
+                "../postlfs/make-ca.html" title=
+                "make-ca-1.16.1">make-ca-1.16.1</a>, and <a class="xref"
+                href="../general/rust-bindgen.html" title=
+                "rust-bindgen-0.72.0">rust-bindgen-0.72.0</a> (required for
+                the Nouveau Vulkan driver)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <p class="recommended"></p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            An Internet connection is needed for building the Nouveau Vulkan
+            driver. The system certificate store may need to be set up with
+            <a class="xref" href="../postlfs/make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> before building this package.
+          </p>
+        </div>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            <span class="bold"><strong>Choosing Mesa Drivers</strong></span>
+          </p>
+          <p>
+            In the instructions below, all the available drivers are built.
+            That will almost always work. However, it is not efficient.
+            Depending on your video hardware, you probably need only specific
+            drivers.
+          </p>
+          <p>
+            The first thing you need to know is which type of video device
+            you have. In some cases it is built into the CPU. In others it is
+            a separate PCI card. In either case you can tell what video
+            hardware you have by installing <a class="xref" href=
+            "../general/pciutils.html" title=
+            "pciutils-3.14.0">pciutils-3.14.0</a> and running:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">lspci | grep VGA</kbd></pre>
+          <p>
+            The video device is most likely one of three families: AMD,
+            Intel, or NVIDIA. See the Command Explanations for <em class=
+            "parameter"><code>-D gallium-drivers=auto</code></em> below to
+            see what options are available for your specific video hardware
+            (or emulated video hardware). You should probably add the
+            softpipe or llvmpipe option as a backup driver.
+          </p>
+          <p>
+            For 'platforms' you can select x11 and/or wayland. Note that in
+            BLFS currently only Gnome and KDE can use wayland. If you are not
+            going to use one of those desktop environments then you probably
+            only want x11.
+          </p>
+          <p>
+            For 'vulkan-drivers' you may want to limit the selection to your
+            current hardware. These drivers are used by some specific
+            applications. For example, ffmpeg (including ffplay) will use
+            Vulkan instead of OpenGL for rendering video on the GPU. If you
+            do not want to do this you may or may not want to install them.
+            See the Command Explanations for <em class="parameter"><code>-D
+            vulkan-drivers=auto</code></em> below to see what options are
+            available for your specific video hardware (or emulated video
+            hardware). You should probably add the swrast option as a backup
+            driver unless you don't need Vulkan at all.
+          </p>
+        </div>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/libgcrypt.html" title=
+          "libgcrypt-1.11.2">libgcrypt-1.11.2</a>, <a class="xref" href=
+          "../general/libunwind.html" title=
+          "libunwind-1.8.2">libunwind-1.8.2</a>, <a class="xref" href=
+          "../general/lm-sensors.html" title=
+          "lm-sensors-3-6-2">lm-sensors-3-6-2</a>, <a class="xref" href=
+          "../postlfs/nettle.html" title="Nettle-3.10.2">Nettle-3.10.2</a>,
+          <a class="xref" href="../general/valgrind.html" title=
+          "Valgrind-3.25.1">Valgrind-3.25.1</a>, <a class="ulink" href=
+          "https://archive.mesa3d.org/demos/">mesa-demos</a> (provides more
+          than 300 extra demos to test <span class="application">Mesa</span>;
+          this includes the same programs added by the patch above),
+          <a class="ulink" href="https://omxil.sourceforge.net/">Bellagio
+          OpenMAX Integration Layer</a> (for mobile platforms), and <a class=
+          "ulink" href=
+          "https://github.com/tizonia/tizonia-openmax-il/wiki/Tizonia-OpenMAX-IL/">
+          libtizonia</a>,
+        </p>
+      </div>
+      <div class="kernel" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="mesa-kernel" name="mesa-kernel"></a>Kernel Configuration
+        </h2>
+        <p>
+          Enable the following options in the kernel configuration and
+          recompile the kernel if necessary:
+        </p>
+        <pre class="screen"><span class="blue">D</span>evice Drivers ---&gt;
+  <span class="blue">G</span>raphics support ---&gt;
+    &lt;*/M&gt;   <span class=
+"blue">D</span>irect Rendering Manager (XFree86 4.1.0 and higher DRI support) ---&gt;
+                                                                      ...  [DRM]
+    
+    # For r300 or r600:
+    &lt; /*/M&gt; <span class=
+"blue">A</span>TI Radeon                                              [DRM_RADEON]
+    
+    # For radeonsi:
+    &lt; /*/M&gt; <span class=
+"blue">A</span>MD GPU                                                 [DRM_AMDGPU]
+    [*]       <span class=
+"blue">E</span>nable amdgpu support for SI parts                 [DRM_AMDGPU_SI]
+    [*]       <span class=
+"blue">E</span>nable amdgpu support for CIK parts               [DRM_AMDGPU_CIK]
+      <span class="blue">D</span>isplay Engine Configuration ---&gt;
+      [*]   <span class=
+"blue">A</span>MD DC - Enable new display engine                      [DRM_AMD_DC]
+    
+    # For nouveau:
+    &lt; /*/M&gt; N<span class=
+"blue">o</span>uveau (NVIDIA) cards                                 [DRM_NOUVEAU]
+    [*]       <span class=
+"blue">U</span>se GSP firmware for Turing/Ampere (needs firmware installed)
+                                                  ...  [DRM_NOUVEAU_GSP_DEFAULT]
+    
+    # For i915, crocus, or iris:
+    &lt; /*/M&gt; <span class=
+"blue">I</span>ntel 8xx/9xx/G3x/G4x/HD Graphics                         [DRM_I915]
+    
+    # For iris:
+    &lt; /*/M&gt; <span class=
+"blue">I</span>ntel Xe2 Graphics                                          [DRM_XE]
+    [*]       <span class=
+"blue">E</span>nable display support                            [DRM_XE_DISPLAY]
+    (*)       <span class=
+"blue">F</span>orce probe xe for selected Intel hardware IDs
+                                                       ...  [DRM_XE_FORCE_PROBE]
+    
+    # For llvmpipe or softpipe:
+    &lt; /*&gt;   <span class=
+"blue">V</span>irtual GEM provider                                      [DRM_VGEM]
+    
+    # For svga:
+    &lt; /*/M&gt; <span class=
+"blue">D</span>RM driver for VMware Virtual GPU                       [DRM_VMWGFX]</pre>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            The corresponding Mesa Gallium3D driver name is provided as the
+            comment for the configuration entries. If you don't know the name
+            of the Mesa Gallium3D driver for your GPU, see <a class="xref"
+            href="mesa.html#mesa-gallium-drivers">Mesa Gallium3D Drivers</a>
+            below.
+          </p>
+          <p>
+            For the GPUs supported by the Iris Gallium3D driver, with
+            <code class="option">CONFIG_DRM_I915</code> enabled and
+            <code class="option">CONFIG_DRM_XE_FORCE_PROBE</code> set to the
+            string <code class="literal">*</code>, the i915 driver will be
+            used if it supports the GPU, and the Xe driver will be used if it
+            supports the GPU but the i915 driver does not. If you are sure
+            your GPU is supported by the i915 driver, you can disable the Xe
+            driver to save some build time. If your GPU is supported by both
+            drivers and you want to use the Xe driver, you can disable the
+            i915 driver, or make the i915 driver deny your GPU via the
+            <code class="option">CONFIG_DRM_I915_FORCE_PROBE</code> option,
+            for example setting it to <code class="literal">!7d55</code>
+            would make i915 deny the Meteor Lake integrated GPU (of which the
+            PCI ID is <code class="literal">8086:7d55</code>), leaving it for
+            the Xe driver.
+          </p>
+          <p>
+            <code class="option">CONFIG_DRM_RADEON</code>, <code class=
+            "option">CONFIG_DRM_AMDGPU</code>, <code class=
+            "option">CONFIG_DRM_NOUVEAU</code>, <code class=
+            "option">CONFIG_DRM_I915</code>, and <code class=
+            "option">CONFIG_DRM_XE</code> may require firmware. See <a class=
+            "xref" href="../postlfs/firmware.html" title=
+            "About Firmware">About Firmware</a> for details.
+          </p>
+          <p>
+            Selecting <code class="option">CONFIG_DRM_RADEON</code>,
+            <code class="option">CONFIG_DRM_AMDGPU</code>, or <code class=
+            "option">CONFIG_DRM_NOUVEAU</code> as <span class=
+            "quote">“<span class="quote"><code class=
+            "literal">y</code></span>”</span> is not recommended. If it is,
+            any required firmware must be built as a part of the kernel image
+            or the initramfs for the driver to function correctly.
+          </p>
+          <p>
+            The sub-entries under <code class=
+            "option">CONFIG_DRM_AMDGPU</code> are used to ensure the AMDGPU
+            kernel driver supports all GPUs using the <code class=
+            "literal">radeonsi</code> driver. They are not needed if you
+            won't need <code class="option">CONFIG_DRM_AMDGPU</code> itself.
+            They may be unneeded for some GPU models.
+          </p>
+          <p>
+            For <code class="literal">llvmpipe</code> or <code class=
+            "literal">softpipe</code>, <code class=
+            "option">CONFIG_DRM_VGEM</code> is required or X clients may fail
+            to start with a cryptic message <code class=
+            "computeroutput">Error: couldn't get an RGB, Double-buffered
+            visual</code>. Strictly speaking, it can be compiled as a module.
+            But the module will not be loaded automatically, so it's more
+            convenient to build it as a part of the kernel image.
+          </p>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Mesa
+        </h2>
+        <p>
+          If you have downloaded the xdemos patch (needed if testing the Xorg
+          installation per BLFS instructions), apply it by running the
+          following command:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../mesa-add_xdemos-4.patch</kbd></pre>
+        <p>
+          Install <span class="application">Mesa</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup ..                 \
+      --prefix=$XORG_PREFIX    \
+      --buildtype=release      \
+      -D platforms=x11,wayland \
+      -D gallium-drivers=auto  \
+      -D vulkan-drivers=auto   \
+      -D valgrind=disabled     \
+      -D video-codecs=all      \
+      -D libunwind=disabled    &amp;&amp;
+
+ninja</kbd></pre>
+        <div class="admon warning">
+          <img alt="[Warning]" src="../images/warning.png" />
+          <h3>
+            Warning
+          </h3>
+          <p>
+            Please ask your lawyer or remove the <em class=
+            "parameter"><code>-D video-codecs=all</code></em> option if you
+            will distribute the compiled Mesa libraries and drivers to
+            others.
+          </p>
+        </div>
+        <p>
+          To test the results, issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">meson configure -D build-tests=true &amp;&amp;
+sed '/float rsqrtf/,/^}/d' \
+    -i ../src/gallium/drivers/llvmpipe/lp_test_arit.c &amp;&amp;
+ninja test</kbd></pre>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          If desired, install the optional documentation by running the
+          following commands as the <code class="systemitem">root</code>
+          user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">cp -rv ../docs -T /usr/share/doc/mesa-25.1.8</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--buildtype=release</code></em>: This
+          switch ensures a fully-optimized build, and disables debug
+          assertions which will severely slow down the libraries in certain
+          use-cases. Without this switch, build sizes can span into the 2 GB
+          range.
+        </p>
+        <p>
+          <a id="mesa-gallium-drivers" name="mesa-gallium-drivers"></a>
+          <em class="parameter"><code>-D gallium-drivers=auto</code></em>:
+          This parameter controls which Gallium3D drivers should be built:
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                <code class="literal">auto</code> selects all Gallium3D
+                drivers available for x86. With a comma-separated list, only
+                a subset of these drivers will be built. If you precisely
+                know which drivers you need, you can select them explicitly.
+                For example, <code class="option">-D
+                gallium-drivers=radeonsi,iris,llvmpipe</code>.
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">r300</code> (for ATI Radeon 9000 or
+                Radeon X series)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">r600</code> (for AMD/ATI Radeon HD
+                2000-6000 series)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">radeonsi</code> (for AMD Radeon HD 7000
+                or newer AMD GPU models)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">nouveau</code> (for supported NVIDIA
+                GPUs, they are listed as all <span class=
+                "quote">“<span class="quote">3D features</span>”</span>
+                either <span class="quote">“<span class=
+                "quote">DONE</span>”</span> or <span class=
+                "quote">“<span class="quote">N/A</span>”</span> in <a class=
+                "ulink" href=
+                "https://nouveau.freedesktop.org/FeatureMatrix.html">the
+                Nouveau status page</a>)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">virgl</code> (for a QEMU virtual GPU
+                with <span class="application">virglrender</span> support;
+                note that BLFS <a class="xref" href="../postlfs/qemu.html"
+                title="qemu-10.0.3">qemu-10.0.3</a> is not built with
+                <span class="application">virglrender</span>)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">svga</code> (for a VMWare virtual GPU)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">llvmpipe</code> (using CPU for 3D
+                rasterization. Note that it's much slower than using a modern
+                3D-capable GPU, so it should be only used if the GPU is not
+                supported by other drivers)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">softpipe</code> (also using CPU for 3D
+                rasterization, but slower than llvmpipe. There is not much
+                reason to use it unless LLVM is not available)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">iris</code> (for Intel GPUs shipped
+                with Broadwell or newer CPUs, or as a dedicated PCIe card)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">crocus</code> (for Intel GMA 3000,
+                X3000 series, 4000 series, or X4000 series GPUs shipped with
+                chipsets, or Intel HD GPUs shipped with pre-Broadwell CPUs)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">i915</code> (for Intel GMA 900, 950,
+                3100, or 3150 GPUs shipped with chipsets or Atom D/N 4xx/5xx
+                CPUs)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">zink</code> (uses Vulkan to implement
+                OpenGL, and while unstable at times, it can be a decent
+                replacement for non-performant gallium drivers like nouveau)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <p>
+          <em class="parameter"><code>-D vulkan-drivers=auto</code></em>:
+          This parameter controls which Vulkan drivers should be built:
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                <code class="literal">auto</code> selects all Vulkan drivers
+                available for x86. With a comma-separated list, only a subset
+                of these drivers will be built. If you precisely know which
+                drivers you need, you can select them explicitly. For
+                example, <code class="option">-D
+                vulkan-drivers=amd,nouveau,swrast</code>.
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">amd</code> (for AMD Radeon HD 7730 or
+                newer AMD GPUs)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">intel</code> (for Intel GPUs shipped
+                with Skylake or newer CPUs, or as a dedicated PCIe card)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">intel_hasvk</code> (for Intel GPUs
+                shipped with Ivy Bridge, Haswell, or Broadwell CPUs)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">nouveau</code> (for GTX 16XX, RTX 20XX,
+                or newer NVIDIA GPUs)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">swrast</code> (for using the CPU for 3D
+                rasterization) Note that it's much slower than using a modern
+                3D-capable GPU, so it should be only used if the GPU is not
+                supported by other drivers.
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <code class="literal">""</code> (empty list, use <code class=
+                "option">-D vulkan-drivers=""</code> if you've not installed
+                and you don't plan to install <a class="xref" href=
+                "vulkan-loader.html" title=
+                "Vulkan-Loader-1.4.321">Vulkan-Loader-1.4.321</a>)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <p>
+          <em class="parameter"><code>-D platforms=...</code></em>: This
+          parameter controls which windowing systems will be supported.
+          Available linux platforms are x11 and wayland.
+        </p>
+        <p>
+          <em class="parameter"><code>-D valgrind=disabled</code></em>: This
+          parameter disables the usage of Valgrind during the build process.
+          Remove this parameter if you have Valgrind installed, and wish to
+          check for memory leaks.
+        </p>
+        <p>
+          <em class="parameter"><code>-D video-codecs=all</code></em>: This
+          parameter enables building codecs for video formats covered by
+          third-party patents.
+        </p>
+        <p>
+          <em class="parameter"><code>-D libunwind=disabled</code></em>: This
+          parameter disables the usage of libunwind.
+        </p>
+        <p>
+          <span class="command"><strong>meson configure -D
+          build-tests=true</strong></span>: This command will reconfigure the
+          build to set <code class="option">-D build-tests=true</code>, but
+          keep the other options specified in the <span class=
+          "command"><strong>meson setup</strong></span> command unchanged. It
+          allows <span class="command"><strong>ninja test</strong></span> to
+          build and run unit tests.
+        </p>
+        <p>
+          <code class="option">-D egl-native-platform="..."</code>: This
+          parameter controls which Embedded Graphics Library support will be
+          built. Available linux options are auto (default), x11, wayland,
+          surfaceless, and drm.
+        </p>
+        <p>
+          <code class="option">-D legacy-x11="..."</code> This parameter
+          controls which legacy X11 features get built-in support. Available
+          linux options are none (default) and dri2. These features are
+          rarely needed anymore.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">glxgears, glxinfo, mme_fermi_sim_hw_test,
+              and mme_tu104_sim_hw_test</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libEGL.so, libGL.so, libGLESv1_CM.so,
+              libGLESv2.so, libgbm.so, libglapi.so, libgallium-25.1.8.so, and
+              libxatracker.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed DRI Driver Stubs:</strong>
+              <span class="segbody">libdril_dri.so and symlinks to it:
+              crocus_dri.so, i915_dri.so, iris_dri.so, kms_swrast_dri.so,
+              nouveau_dri.so, r300_dri.so, r600_dri.so, r600_drv_video.so,
+              radeonsi_dri.so, swrast_dri.so, virtio_gpu_dri.so,
+              vmwgfx_dri.so, and zink_dri.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed VA-API Drivers:</strong>
+              <span class="segbody">nouveau_drv_video.so,
+              radeonsi_drv_video.so, and virtio_gpu_drv_video.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed GBM Backends:</strong>
+              <span class="segbody">dri_gbm.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed VDPAU Drivers:</strong>
+              <span class="segbody">libvdpau_nouveau.so, libvdpau_r600.so,
+              libvdpau_radeonsi.so, and libvdpau_virtio_gpu.so (many of these
+              drivers are hard-linked)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Vulkan Drivers:</strong>
+              <span class="segbody">libvulkan_intel_hasvk.so,
+              libvulkan_intel.so, libvulkan_lvp.so, libvulkan_nouveau.so, and
+              libvulkan_radeon.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class=
+              "segbody">$XORG_PREFIX/{include/{EGL,GLES,GLES2,GLES3,KHR},
+              $XORG_PREFIX/lib/{dri,gbm,vdpau}}, $XORG_PREFIX/share/drirc.d
+              (contains workarounds for various applications, particularly
+              browsers and games), $XORG_PREFIX/share/vulkan, and
+              /usr/share/doc/mesa-25.1.8</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glxgears" name="glxgears"></a><span class=
+                    "term"><span class=
+                    "command"><strong>glxgears</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a GL demo useful for troubleshooting graphics problems
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="glxinfo" name="glxinfo"></a><span class=
+                    "term"><span class=
+                    "command"><strong>glxinfo</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a diagnostic program that displays information about
+                    the graphics hardware and installed GL libraries
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dri_gbm" name="dri_gbm"></a><span class=
+                    "term"><code class="filename">dri_gbm.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    implements Graphics Buffer Management functions needed by
+                    <code class="systemitem">libgbm</code> on top of
+                    <code class="systemitem">libdrm</code>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libdril_dri" name="libdril_dri"></a><span class=
+                    "term"><code class=
+                    "filename">libdril_dri.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a stub allowing Xorg server to co-operate with the
+                    Gallium3D drivers
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libEGL" name="libEGL"></a><span class=
+                    "term"><code class="filename">libEGL.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides a native platform graphics interface as defined
+                    by the EGL-1.4 specification
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgallium" name="libgallium"></a><span class=
+                    "term"><code class=
+                    "filename">libgallium-25.1.8.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains all the Gallium3D drivers
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgbm" name="libgbm"></a><span class=
+                    "term"><code class="filename">libgbm.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">Mesa</span> Graphics
+                    Buffer Manager library
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libglapi" name="libglapi"></a><span class=
+                    "term"><code class="filename">libglapi.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">Mesa</span>
+                    implementation of the OpenGL API
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libGLESv1_CM" name="libGLESv1_CM"></a><span class=
+                    "term"><code class=
+                    "filename">libGLESv1_CM.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">Mesa</span> OpenGL ES
+                    1.1 library
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libGLES2" name="libGLES2"></a><span class=
+                    "term"><code class="filename">libGLES2.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">Mesa</span> OpenGL ES
+                    2.0 library
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libGL" name="libGL"></a><span class=
+                    "term"><code class="filename">libGL.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the main <span class="application">Mesa</span> OpenGL
+                    library
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libxatracker" name="libxatracker"></a><span class=
+                    "term"><code class=
+                    "filename">libxatracker.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the XA state tracker for the VMWare vmwgfx driver
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="xcb-utilities.html" title=
+          "XCB Utilities">Prev</a>
+          <p>
+            XCB Utilities
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xbitmaps.html" title=
+          "xbitmaps-1.1.3">Next</a>
+          <p>
+            xbitmaps-1.1.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="installing.html" title=
+          "Chapter&nbsp;24.&nbsp;Graphical Environments">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

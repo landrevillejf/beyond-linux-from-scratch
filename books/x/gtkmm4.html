@@ -1,0 +1,256 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Gtkmm-4.18.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;25.&nbsp;Graphical Environment Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gtkmm3.html" title="Gtkmm-3.24.10">Prev</a>
+          <p>
+            Gtkmm-3.24.10
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gtk-vnc.html" title="gtk-vnc-1.5.0">Next</a>
+          <p>
+            gtk-vnc-1.5.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="gtkmm4" name="gtkmm4"></a>Gtkmm-4.18.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Gtkmm
+        </h2>
+        <p>
+          The <span class="application">Gtkmm</span> package provides a C++
+          interface to <span class="application">GTK-4</span>.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.gnome.org/sources/gtkmm/4.18/gtkmm-4.18.0.tar.xz">
+                https://download.gnome.org/sources/gtkmm/4.18/gtkmm-4.18.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: d689b73e53fdf8cdc8e45dda4d867ca9
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 16 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 226 MB (with tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.9 SBU (With tests; both using
+                parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Gtkmm Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="gtk4.html" title="GTK-4.18.6">GTK-4.18.6</a>
+          and <a class="xref" href="pangomm2.html" title=
+          "Pangomm-2.56.1">Pangomm-2.56.1</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/doxygen.html" title=
+          "Doxygen-1.14.0">Doxygen-1.14.0</a> and <a class="xref" href=
+          "vulkan-loader.html" title=
+          "Vulkan-Loader-1.4.321">Vulkan-Loader-1.4.321</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Gtkmm
+        </h2>
+        <p>
+          Install <span class="application">Gtkmm</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mkdir gtkmm4-build &amp;&amp;
+cd    gtkmm4-build &amp;&amp;
+
+meson setup --prefix=/usr --buildtype=release .. &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>ninja
+          test</strong></span>. Note that you must be in a graphical
+          environment, as the tests try to open some windows.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          If you have built the documentation (see Command Explanations
+          below) it was installed to <code class=
+          "filename">/usr/share/doc/gtkmm-4.0</code>. For consistency, move
+          it to a versioned directory as the <code class=
+          "systemitem">root</code> user:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mv -v /usr/share/doc/gtkmm-4.0 /usr/share/doc/gtkmm-4.18.0</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <code class="option">-D build-documentation=true</code>: If you
+          have installed <a class="xref" href="../general/doxygen.html"
+          title="Doxygen-1.14.0">Doxygen-1.14.0</a> this define will build
+          and install the documentation.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libgdkmm-4.0.so and
+              libgtkmm-4.0.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/gdkmm-4.0,
+              /usr/include/gtkmm-4.0, /usr/lib/gdkmm-4.0, /usr/lib/gtkmm-4.0,
+              and optionally
+              /usr/share/{devhelp/books/gtkmm-4.0,doc/gtkmm-4.18.0}</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgdkmm-4" name="libgdkmm-4"></a><span class=
+                    "term"><code class=
+                    "filename">libgdkmm-4.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the GDK API classes
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libgtkmm-4" name="libgtkmm-4"></a><span class=
+                    "term"><code class=
+                    "filename">libgtkmm-4.0.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">GTK 4</span> API
+                    classes
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gtkmm3.html" title="Gtkmm-3.24.10">Prev</a>
+          <p>
+            Gtkmm-3.24.10
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gtk-vnc.html" title="gtk-vnc-1.5.0">Next</a>
+          <p>
+            gtk-vnc-1.5.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

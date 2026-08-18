@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Dovecot-2.4.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;21.&nbsp;Mail Server Software
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="mail.html" title=
+          "Mail Server Software">Prev</a>
+          <p>
+            Mail Server Software
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="exim.html" title="Exim-4.98.2">Next</a>
+          <p>
+            Exim-4.98.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="mail.html" title=
+          "Chapter&nbsp;21.&nbsp;Mail Server Software">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="dovecot" name="dovecot"></a>Dovecot-2.4.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Dovecot
+        </h2>
+        <p>
+          <span class="application">Dovecot</span> is an Internet Message
+          Access Protocol (IMAP) and Post Office Protocol (POP) server,
+          written primarily with security in mind. <span class=
+          "application">Dovecot</span> aims to be lightweight, fast and easy
+          to set up as well as highly configurable and easily extensible with
+          plugins.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://www.dovecot.org/releases/2.4/dovecot-2.4.0.tar.gz">https://www.dovecot.org/releases/2.4/dovecot-2.4.0.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 5a0b3aaaf0adc1278d2611ff5f1593cd
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 7.5 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 253 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 4.8 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Dovecot Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../basicnet/libtirpc.html" title=
+          "libtirpc-1.3.6">libtirpc-1.3.6</a> and <a class="xref" href=
+          "../postlfs/linux-pam.html" title=
+          "Linux-PAM-1.7.1">Linux-PAM-1.7.1</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../postlfs/cyrus-sasl.html" title=
+          "Cyrus SASL-2.1.28">Cyrus SASL-2.1.28</a>, <a class="xref" href=
+          "../general/icu.html" title="icu-77.1">ICU-77.1</a>, <a class=
+          "xref" href="../postlfs/libcap.html" title=
+          "libcap-2.76 with PAM">libcap-2.76 with PAM</a>, <a class="xref"
+          href="../general/libunwind.html" title=
+          "libunwind-1.8.2">libunwind-1.8.2</a>, <a class="xref" href=
+          "../general/lua.html" title="Lua-5.4.8">Lua-5.4.8</a>, <a class=
+          "xref" href="mariadb.html" title=
+          "MariaDB-11.8.3">MariaDB-11.8.3</a> or <a class="ulink" href=
+          "https://www.mysql.com/">MySQL</a>, <a class="xref" href=
+          "openldap.html" title="OpenLDAP-2.6.10">OpenLDAP-2.6.10</a>,
+          <a class="xref" href="postgresql.html" title=
+          "PostgreSQL-17.6">PostgreSQL-17.6</a>, <a class="xref" href=
+          "sqlite.html" title="SQLite-3.50.4">SQLite-3.50.4</a>, <a class=
+          "xref" href="../general/valgrind.html" title=
+          "Valgrind-3.25.1">Valgrind-3.25.1</a>, <a class="xref" href=
+          "../general/xapian.html" title="Xapian-1.4.29">xapian-1.4.29</a>,
+          <a class="xref" href="../postlfs/xfsprogs.html" title=
+          "xfsprogs-6.15.0">xfsprogs-6.15.0</a>, <a class="ulink" href=
+          "https://cassandra.apache.org/">Cassandra</a>, <a class="ulink"
+          href="https://github.com/shibukawa/snowball_py">stemmer</a> and
+          <a class="ulink" href=
+          "https://libsodium.gitbook.io/doc/">libsodium</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Dovecot
+        </h2>
+        <div class="admon warning">
+          <img alt="[Warning]" src="../images/warning.png" />
+          <h3>
+            Warning
+          </h3>
+          <p>
+            There are significant changes in the configuration of this
+            package that are required when updating to Dovecot 2.4.0. Please
+            review the documentation at <a class="ulink" href=
+            "https://doc.dovecot.org/2.4.0/installation/upgrade/2.3-to-2.4.html">
+            Dovecot Upgrade Guide</a> before continuing if you are upgrading
+            this package from a previous version.
+          </p>
+        </div>
+        <p>
+          There should be dedicated users and groups for unprivileged Dovecot
+          processes and for processing users' logins. Issue the following
+          commands as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">groupadd -g 42 dovecot &amp;&amp;
+useradd -c "Dovecot unprivileged user" -d /dev/null -u 42 \
+        -g dovecot -s /bin/false dovecot &amp;&amp;
+groupadd -g 43 dovenull &amp;&amp;
+useradd -c "Dovecot login user" -d /dev/null -u 43 \
+        -g dovenull -s /bin/false dovenull</kbd></pre>
+        <p>
+          Install <span class="application">Dovecot</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr                          \
+            --sysconfdir=/etc                      \
+            --localstatedir=/var                   \
+            --with-systemd=no                      \
+            --docdir=/usr/share/doc/dovecot-2.4.0  \
+            --disable-static &amp;&amp;
+make</kbd></pre>
+        <p>
+          To test the results, issue <span class="command"><strong>make -k
+          check</strong></span>.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-static</code></em>: This
+          switch prevents installation of static versions of the libraries.
+        </p>
+        <p>
+          <code class="option">--with-ldap</code>: This switch enables
+          <span class="application">OpenLDAP</span> authentication support.
+        </p>
+        <p>
+          <code class="option">--with-pgsql</code>: This switch enables
+          <span class="application">PostgreSQL</span> database support.
+        </p>
+        <p>
+          <code class="option">--with-mysql</code>: This switch enables
+          <span class="application">MySQL</span> database support.
+        </p>
+        <p>
+          <code class="option">--with-sqlite</code>: This switch enables
+          <span class="application">SQLite</span> database support.
+        </p>
+        <p>
+          <code class="option">--with-lua=no</code>: This switch enables
+          <span class="application">Lua</span> plugin support. This includes
+          a mail and push notification plugin.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring Dovecot
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="dovecot-config" name="dovecot-config"></a>Config Files
+          </h3>
+          <p>
+            <code class="filename">/etc/dovecot/dovecot.conf</code>
+          </p>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Configuration Information
+          </h3>
+          <p>
+            The following configuration is a simple proof of concept with
+            IMAP service using local users for authentication and mailbox
+            location.
+          </p>
+          <pre class="root"><kbd class=
+          "command">mv -v /etc/dovecot/dovecot.conf{,.orig} &amp;&amp;
+chmod -v 1777 /var/mail &amp;&amp;
+cat &gt; /etc/dovecot/dovecot.conf &lt;&lt; "EOF"
+<code class="literal">
+# The dovecot configuration requires a minimum version to be set. The server
+# will refuse to start if the version set here is older than the version of
+# Dovecot installed. This option allows the Dovecot server to set reasonable
+# default values based on what version is set here.
+dovecot_config_version = 2.4.0
+
+# This option sets the minimum version that is able to read data files from
+# the Dovecot server. This is primarily for a cluster which may have several
+# different versions of Dovecot installed, but is required for the server to
+# run.
+dovecot_storage_version = 2.4.0
+
+protocols = imap
+ssl = no
+# The next line is only needed if you have no IPv6 network interfaces
+listen = *
+mail_inbox_path = /var/mail/%{user}
+mail_driver = mbox
+mail_path = ~/Mail
+userdb users {
+  driver = passwd
+}
+passdb passwords {
+  driver = pam
+}</code>
+EOF</kbd></pre>
+          <p>
+            The above configuration also requires a configuration file to be
+            installed for Linux-PAM so dovecot can authenticate users. Issue
+            the following command as the <code class="systemitem">root</code>
+            user to create the configuration file for Linux-PAM:
+          </p>
+          <pre class="root"><kbd class=
+          "command">cat &gt; /etc/pam.d/dovecot &lt;&lt; "EOF"
+<code class="literal"># Begin /etc/pam.d/dovecot
+
+auth     include system-auth
+account  include system-account
+password include system-password
+
+# End /etc/pam.d/dovecot</code>
+EOF</kbd></pre>
+          <p>
+            You will definitely want to read the official documentation at
+            <a class="ulink" href=
+            "https://doc.dovecot.org/2.4.0/">https://doc.dovecot.org/2.4.0/</a>
+            if you plan to use <span class="application">Dovecot</span> in a
+            production environment.
+          </p>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="dovecot-init" name="dovecot-init"></a>Boot Script
+          </h3>
+          <p>
+            If you want the <span class="application">Dovecot</span> server
+            to start automatically when the system is booted, install the
+            <code class="filename">/etc/rc.d/init.d/dovecot</code> init
+            script included in the <a class="xref" href=
+            "../introduction/bootscripts.html" title=
+            "BLFS Boot Scripts">blfs-bootscripts-20250225</a> package.
+          </p>
+          <pre class="root"><kbd class=
+          "command">make install-dovecot</kbd></pre>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">doveadm, doveconf, dovecot, and
+              dovecot-sysreport</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">various internal plugins in <code class=
+              "filename">/usr/lib/dovecot</code></span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/etc/dovecot,
+              /usr/{include,lib,libexec,share}/dovecot and
+              /usr/share/doc/dovecot-2.4.0</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="doveadm" name="doveadm"></a><span class=
+                    "term"><span class=
+                    "command"><strong>doveadm</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the <span class="application">Dovecot</span>
+                    administration tool
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="doveconf" name="doveconf"></a><span class=
+                    "term"><span class=
+                    "command"><strong>doveconf</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is <span class="application">Dovecot</span>'s
+                    configuration dumping utility
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dovecot-prog" name="dovecot-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>dovecot</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the IMAP and POP server
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="dovecot-sysreport" name=
+                    "dovecot-sysreport"></a><span class="term"><span class=
+                    "command"><strong>dovecot-sysreport</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    prints system information that is useful to the Dovecot
+                    developers when submitting bug reports upstream
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="mail.html" title=
+          "Mail Server Software">Prev</a>
+          <p>
+            Mail Server Software
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="exim.html" title="Exim-4.98.2">Next</a>
+          <p>
+            Exim-4.98.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="mail.html" title=
+          "Chapter&nbsp;21.&nbsp;Mail Server Software">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

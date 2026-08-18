@@ -1,0 +1,222 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Cbindgen-0.29.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;13.&nbsp;Programming
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="cargo-c.html" title=
+          "cargo-c-0.10.15">Prev</a>
+          <p>
+            cargo-c-0.10.15
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="clisp.html" title="Clisp-2.49.95">Next</a>
+          <p>
+            Clisp-2.49.95
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="cbindgen" name="cbindgen"></a>Cbindgen-0.29.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Cbindgen
+        </h2>
+        <p>
+          <span class="application">Cbindgen</span> can be used to generate C
+          bindings for <span class="application">Rust</span> code.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/mozilla/cbindgen/archive/v0.29.0/cbindgen-0.29.0.tar.gz">
+                https://github.com/mozilla/cbindgen/archive/v0.29.0/cbindgen-0.29.0.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 6020b670f82890ef7205fd2c84395954
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 236 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 123 MB (add 576 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.4 SBU (add 0.2 SBU for tests), both
+                on a 4-core machine
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          cbindgen Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="rust.html" title=
+          "Rustc-1.89.0">rustc-1.89.0</a>
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            An Internet connection is needed for building this package. The
+            system certificate store may need to be set up with <a class=
+            "xref" href="../postlfs/make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> before building this package.
+          </p>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of cbindgen
+        </h2>
+        <p>
+          Install <span class="application">cbindgen</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cargo build --release</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>cargo
+          test --release</strong></span>. Three tests in <code class=
+          "filename">profile.rs</code> are known to fail because they expect
+          some Rust unstable features disabled in the BLFS <a class="xref"
+          href="rust.html" title="Rustc-1.89.0">rustc-1.89.0</a>
+          configuration.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -Dm755 target/release/cbindgen /usr/bin/</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">cbindgen</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">none</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directory:</strong>
+              <span class="segbody">none</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="cbindgen-prog" name=
+                    "cbindgen-prog"></a><span class="term"><span class=
+                    "command"><strong>cbindgen</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    generates C bindings for <span class=
+                    "application">Rust</span> code
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="cargo-c.html" title=
+          "cargo-c-0.10.15">Prev</a>
+          <p>
+            cargo-c-0.10.15
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="clisp.html" title="Clisp-2.49.95">Next</a>
+          <p>
+            Clisp-2.49.95
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Mutter-48.4
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome-control-center.html" title=
+          "gnome-control-center-48.4">Prev</a>
+          <p>
+            gnome-control-center-48.4
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gnome-shell.html" title=
+          "gnome-shell-48.4">Next</a>
+          <p>
+            gnome-shell-48.4
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="core.html" title=
+          "Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="mutter" name="mutter"></a>Mutter-48.4
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Mutter
+        </h2>
+        <p>
+          <span class="application">Mutter</span> is the window manager for
+          <span class="application">GNOME</span>. It is not invoked directly,
+          but from <span class="application">GNOME Session</span> (on a
+          machine with a hardware accelerated video driver).
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.gnome.org/sources/mutter/48/mutter-48.4.tar.xz">
+                https://download.gnome.org/sources/mutter/48/mutter-48.4.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: e03c4eb4d9df60ec46bcc74fd632cb1e
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 8.0 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 103 MB (with tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.4 SBU (Using parallelism=4; add 1.4
+                SBU for tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Mutter Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../general/python-modules.html#docutils"
+          title="docutils-0.21.2">docutils-0.21.2</a>, <a class="xref" href=
+          "gnome-settings-daemon.html" title=
+          "gnome-settings-daemon-48.1">gnome-settings-daemon-48.1</a>,
+          <a class="xref" href="../x/graphene.html" title=
+          "Graphene-1.10.8">graphene-1.10.8</a>, <a class="xref" href=
+          "../x/libei.html" title="libei-1.4.1">libei-1.4.1</a>, <a class=
+          "xref" href="../x/libxcvt.html" title=
+          "libxcvt-0.1.3">libxcvt-0.1.3</a>, <a class="xref" href=
+          "../general/libxkbcommon.html" title=
+          "libxkbcommon-1.11.0">libxkbcommon-1.11.0</a>, and <a class="xref"
+          href="../multimedia/pipewire.html" title=
+          "Pipewire-1.4.7">pipewire-1.4.7</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/desktop-file-utils.html" title=
+          "desktop-file-utils-0.28">desktop-file-utils-0.28</a>, <a class=
+          "xref" href="../general/glib2.html" title=
+          "GLib-2.84.4">GLib-2.84.4</a> (with GObject Introspection),
+          <a class="xref" href="../general/libdisplay-info.html" title=
+          "libdisplay-info-0.3.0">libdisplay-info-0.3.0</a>, and <a class=
+          "xref" href="../x/startup-notification.html" title=
+          "startup-notification-0.12">startup-notification-0.12</a>
+        </p>
+        <h4>
+          Recommended (Required to build the Wayland compositor)
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../x/x7driver.html#libinput" title=
+          "libinput-1.29.0">libinput-1.29.0</a>, <a class="xref" href=
+          "../general/wayland.html" title=
+          "Wayland-1.24.0">Wayland-1.24.0</a>, <a class="xref" href=
+          "../general/wayland-protocols.html" title=
+          "Wayland-Protocols-1.45">wayland-protocols-1.45</a>, and <a class=
+          "xref" href="../x/xwayland.html" title=
+          "Xwayland-24.1.8">Xwayland-24.1.8</a>
+        </p>
+        <h4>
+          Recommended (Runtime)
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/blocaled.html" title=
+          "blocaled-0.7">blocaled-0.7</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href=
+          "../general/python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a> (required for tests),
+          <a class="xref" href="../x/xorg-server.html" title=
+          "Xorg-Server-21.1.18">Xorg-Server-21.1.18</a> (for X11 sessions),
+          <a class="ulink" href=
+          "https://github.com/scop/bash-completion/">bash-completion</a>,
+          <a class="ulink" href=
+          "https://wiki.gnome.org/Apps/Sysprof">sysprof</a>, <span class=
+          "command"><strong>Xvfb</strong></span> (from <a class="xref" href=
+          "../x/xorg-server.html" title=
+          "Xorg-Server-21.1.18">Xorg-Server-21.1.18</a> or <a class="xref"
+          href="../x/xwayland.html" title=
+          "Xwayland-24.1.8">Xwayland-24.1.8</a>), <a class="ulink" href=
+          "https://anduin.linuxfromscratch.org/BLFS/mutter/xvfb-run">xvfb-run</a>,
+          and <a class="ulink" href=
+          "https://gitlab.gnome.org/GNOME/zenity">zenity</a> (the X11 tests
+          would only run with all of the last three)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Mutter
+        </h2>
+        <p>
+          Fix an issue with the tests that would otherwise require the
+          package to be built with debugging information:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed "/tests_c_args =/s/$/ + ['-U', 'G_DISABLE_ASSERT']/" -i src/tests/meson.build &amp;&amp;
+sed "/c_args:/a '-U', 'G_DISABLE_ASSERT'," -i src/tests/cogl/unit/meson.build</kbd></pre>
+        <p>
+          Install <span class="application">Mutter</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup --prefix=/usr            \
+            --buildtype=release      \
+            -D tests=disabled        \
+            -D profiler=false        \
+            -D bash_completion=false \
+            ..                       &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          If you want to run the test suite, ensure <a class="xref" href=
+          "../general/python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a> is installed and issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">meson configure -D tests=enabled &amp;&amp;
+ninja test</kbd></pre>
+        <p>
+          The tests require an active X or wayland session. Some tests are
+          flaky (especially under a high system load) so if a test fails you
+          can try to re-run it alone with the <span class=
+          "command"><strong>meson test <em class="replaceable"><code>&lt;test
+          name&gt;</code></em></strong></span> command. A few tests may fail
+          depending on some system configuration. Don't make any mouse or
+          keyboard input while the test suite is running or some tests may
+          fail. You can also test basic functions of <span class=
+          "application">Mutter</span> following <a class="xref" href=
+          "mutter.html#mutter-starting" title="Starting Mutter">the section
+          called “Starting Mutter,”</a> after installing it.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--buildtype=release</code></em>:
+          Specify a buildtype suitable for stable releases of the package, as
+          the default may produce unoptimized binaries.
+        </p>
+        <p>
+          <em class="parameter"><code>-D bash_completion=false</code></em>:
+          Allows building the package without the <a class="ulink" href=
+          "https://github.com/scop/bash-completion/">bash-completion</a>
+          package installed.
+        </p>
+        <p>
+          <em class="parameter"><code>-D tests=disabled</code></em>: Allow
+          building the package without <a class="xref" href=
+          "../general/python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a> installed. It'll be
+          overridden with <span class="command"><strong>meson
+          configure</strong></span> if running the test suite.
+        </p>
+        <p>
+          <em class="parameter"><code>-D profiler=false</code></em>: Allows
+          building this package without <span class=
+          "application">Sysprof</span>. Remove this option if you've
+          installed <span class="application">Sysprof</span> and want to
+          analyze the rendering performance of <span class=
+          "application">Mutter</span>.
+        </p>
+      </div>
+      <div class="starting" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="mutter-starting" name="mutter-starting"></a>Starting Mutter
+        </h2>
+        <p>
+          <span class="application">Mutter</span> is normally used as a
+          component of <span class="application">gnome-shell</span>, but it
+          can be used as a standalone Wayland compositor too. To run
+          <span class="application">Mutter</span> as a Wayland compositor, in
+          a virtual console, issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mutter --wayland -- vte-2.91</kbd></pre>
+        <p>
+          Replace <span class="command"><strong>vte-2.91</strong></span> with
+          the command line for the first application you want in the Wayland
+          session. Note that once this application exits, the Wayland session
+          will be terminated.
+        </p>
+        <p>
+          <span class="application">Mutter</span> can also function as a
+          nested compositor in another Wayland session. In a terminal
+          emulator, issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080 mutter --wayland --nested -- vte-2.91</kbd></pre>
+        <p>
+          Replace <em class="replaceable"><code>1920x1080</code></em> with
+          the size you want for the nested Wayland session.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gdctl and mutter</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libmutter-16.so and libmutter-test-16.so
+              (optional)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class=
+              "segbody">/usr/{lib,include,libexec/installed-tests,share/{,installed-tests}}/mutter-16</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gdctl" name="gdctl"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gdctl</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    controls the current monitor configuration on sessions
+                    that use Mutter as a window manager
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="mutter-prog" name="mutter-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>mutter</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a <span class="application">Clutter</span> based
+                    compositing <span class="application">GTK+</span> Window
+                    Manager
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libmutter" name="libmutter"></a><span class=
+                    "term"><code class=
+                    "filename">libmutter-16.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">Mutter</span> API
+                    functions
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libmutter-test" name=
+                    "libmutter-test"></a><span class="term"><code class=
+                    "filename">libmutter-test-16.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the <span class="application">Mutter</span> test
+                    suite API functions; this library is only installed if
+                    the test suite of this package is run and it is needed by
+                    the <span class="application">gnome-shell</span> test
+                    suite
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome-control-center.html" title=
+          "gnome-control-center-48.4">Prev</a>
+          <p>
+            gnome-control-center-48.4
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gnome-shell.html" title=
+          "gnome-shell-48.4">Next</a>
+          <p>
+            gnome-shell-48.4
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="core.html" title=
+          "Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

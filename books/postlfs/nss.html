@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      NSS-3.115
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;4.&nbsp;Security
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="nettle.html" title="Nettle-3.10.2">Prev</a>
+          <p>
+            Nettle-3.10.2
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="openssh.html" title=
+          "OpenSSH-10.0p1">Next</a>
+          <p>
+            OpenSSH-10.0p1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="nss" name="nss"></a>NSS-3.115
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to NSS
+        </h2>
+        <p>
+          The Network Security Services (<span class=
+          "application">NSS</span>) package is a set of libraries designed to
+          support cross-platform development of security-enabled client and
+          server applications. Applications built with NSS can support SSL v2
+          and v3, TLS, PKCS #5, PKCS #7, PKCS #11, PKCS #12, S/MIME, X.509 v3
+          certificates, and other security standards. This is useful for
+          implementing SSL and S/MIME or other Internet security standards
+          into an application.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://archive.mozilla.org/pub/security/nss/releases/NSS_3_115_RTM/src/nss-3.115.tar.gz">
+                https://archive.mozilla.org/pub/security/nss/releases/NSS_3_115_RTM/src/nss-3.115.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 3780ea47a89bccee86feb9d378cdb54e
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 73 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 307 MB (add 151 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.8 SBU (with parallelism=4, add 42 SBU
+                for tests on AMD Ryzens or at least 27 SBU on Intel machines)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Required patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/nss-standalone-1.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/nss-standalone-1.patch</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          NSS Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../general/nspr.html" title=
+          "NSPR-4.37">NSPR-4.37</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../server/sqlite.html" title=
+          "SQLite-3.50.4">SQLite-3.50.4</a> and <a class="xref" href=
+          "p11-kit.html" title="p11-kit-0.25.5">p11-kit-0.25.5</a> (runtime)
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            An Internet connection is needed for some tests of this package.
+            The system certificate store may need to be set up with <a class=
+            "xref" href="make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> before testing this package.
+          </p>
+        </div>
+        <p class="usernotes">
+          Editor Notes: <a class="ulink" href=
+          "https://wiki.linuxfromscratch.org/blfs/wiki/nss">https://wiki.linuxfromscratch.org/blfs/wiki/nss</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of NSS
+        </h2>
+        <p>
+          Install <span class="application">NSS</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../nss-standalone-1.patch &amp;&amp;
+
+cd nss &amp;&amp;
+
+make BUILD_OPT=1                      \
+  NSPR_INCLUDE_DIR=/usr/include/nspr  \
+  USE_SYSTEM_ZLIB=1                   \
+  ZLIB_LIBS=-lz                       \
+  NSS_ENABLE_WERROR=0                 \
+  $([ $(uname -m) = x86_64 ] &amp;&amp; echo USE_64=1) \
+  $([ -f /usr/include/sqlite3.h ] &amp;&amp; echo NSS_USE_SYSTEM_SQLITE=1)</kbd></pre>
+        <p>
+          To run the tests, execute the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">cd tests &amp;&amp;
+HOST=localhost DOMSUF=localdomain ./all.sh
+cd ../</kbd></pre>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            Some information about the tests:
+          </p>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  HOST=localhost and DOMSUF=localdomain are required. Without
+                  these variables, a FQDN is required to be specified and
+                  this generic way should work for everyone, provided
+                  <code class="systemitem">localhost.localdomain</code> is
+                  defined <span class="phrase">in <code class=
+                  "filename">/etc/hosts</code>, as done in <a class="ulink"
+                  href=
+                  "../../../../lfs/view/12.4/chapter09/network.html#ch-config-hosts">
+                  the LFS book</a>.</span>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  The tests take a long time to run. If desired there is
+                  information in the all.sh script about running subsets of
+                  the total test suite.
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  When interrupting the tests, the test suite fails to spin
+                  down test servers that are run. This leads to an infinite
+                  loop in the tests where the test suite tries to kill a
+                  server that doesn't exist anymore because it pulls the
+                  wrong PID.
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Test suite results (in HTML format!) can be found at
+                  ../../test_results/security/localhost.1/results.html
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  A few tests might fail on some Intel machines for unknown
+                  reasons.
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">cd ../dist                                                          &amp;&amp;
+
+install -v -m755 Linux*/lib/*.so              /usr/lib              &amp;&amp;
+install -v -m644 Linux*/lib/{*.chk,libcrmf.a} /usr/lib              &amp;&amp;
+
+install -v -m755 -d                           /usr/include/nss      &amp;&amp;
+cp -v -RL {public,private}/nss/*              /usr/include/nss      &amp;&amp;
+
+install -v -m755 Linux*/bin/{certutil,nss-config,pk12util} /usr/bin &amp;&amp;
+
+install -v -m644 Linux*/lib/pkgconfig/nss.pc  /usr/lib/pkgconfig</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>BUILD_OPT=1</code></em>: This option is
+          passed to <span class="command"><strong>make</strong></span> so
+          that the build is performed with no debugging symbols built into
+          the binaries and the default compiler optimizations are used.
+        </p>
+        <p>
+          <em class=
+          "parameter"><code>NSPR_INCLUDE_DIR=/usr/include/nspr</code></em>:
+          This option sets the location of the nspr headers.
+        </p>
+        <p>
+          <em class="parameter"><code>USE_SYSTEM_ZLIB=1</code></em>: This
+          option is passed to <span class=
+          "command"><strong>make</strong></span> to ensure that the
+          <code class="filename">libssl3.so</code> library is linked to the
+          system installed <span class="application">zlib</span> instead of
+          the in-tree version.
+        </p>
+        <p>
+          <em class="parameter"><code>ZLIB_LIBS=-lz</code></em>: This option
+          provides the linker flags needed to link to the system <span class=
+          "application">zlib</span>.
+        </p>
+        <p>
+          <span class="command"><strong>$([ $(uname -m) = x86_64 ] &amp;&amp;
+          echo USE_64=1)</strong></span>: The <em class=
+          "parameter"><code>USE_64=1</code></em> option is <span class=
+          "emphasis"><em>required on x86_64</em></span>, otherwise
+          <span class="command"><strong>make</strong></span> will try (and
+          fail) to create 32-bit objects. The [ $(uname -m) = x86_64 ] test
+          ensures it has no effect on a 32 bit system.
+        </p>
+        <p>
+          <span class="command"><strong>([ -f /usr/include/sqlite3.h ]
+          &amp;&amp; echo NSS_USE_SYSTEM_SQLITE=1)</strong></span>: This
+          tests if <span class="application">sqlite</span> is installed and
+          if so it <span class="command"><strong>echo</strong></span>s the
+          option NSS_USE_SYSTEM_SQLITE=1 to <span class=
+          "command"><strong>make</strong></span> so that <code class=
+          "filename">libsoftokn3.so</code> will link against the system
+          version of sqlite.
+        </p>
+        <p>
+          <code class="option">NSS_DISABLE_GTESTS=1</code>: If you don't need
+          to run NSS test suite, append this option to <span class=
+          "command"><strong>make</strong></span> command, to prevent the
+          compilation of tests and save some build time.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring NSS
+        </h2>
+        <p>
+          If <a class="xref" href="p11-kit.html" title=
+          "p11-kit-0.25.5">p11-kit-0.25.5</a> is installed, the <span class=
+          "application">p11-kit</span> trust module (<code class=
+          "filename">/usr/lib/pkcs11/p11-kit-trust.so</code>) can be used as
+          a drop-in replacement for <code class=
+          "filename">/usr/lib/libnssckbi.so</code> to transparently make the
+          system CAs available to <span class="application">NSS</span> aware
+          applications, rather than the static library provided by
+          <code class="filename">/usr/lib/libnssckbi.so</code>. As the
+          <code class="systemitem">root</code> user, execute the following
+          command:
+        </p>
+        <pre class="root"><kbd class=
+        "command">ln -sfv ./pkcs11/p11-kit-trust.so /usr/lib/libnssckbi.so</kbd></pre>
+        <p>
+          Additionally, for dependent applications that do not use the
+          internal database (<code class=
+          "filename">/usr/lib/libnssckbi.so</code>), the <code class=
+          "filename">/usr/sbin/make-ca</code> script included on the
+          <a class="xref" href="make-ca.html" title=
+          "make-ca-1.16.1">make-ca-1.16.1</a> page can generate a system wide
+          NSS DB with the <em class="parameter"><code>-n</code></em> switch,
+          or by modifying the <code class=
+          "filename">/etc/make-ca/make-ca.conf</code> file.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">certutil, nss-config, and pk12util</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libcrmf.a, libfreebl3.so,
+              libfreeblpriv3.so, libnss3.so, libnssckbi.so,
+              libnssckbi-testlib.so, libnssdbm3.so, libnsssysinit.so,
+              libnssutil3.so, libpkcs11testmodule.so, libsmime3.so,
+              libsoftokn3.so, and libssl3.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/nss</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="certutil" name="certutil"></a><span class=
+                    "term"><span class=
+                    "command"><strong>certutil</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is the Mozilla Certificate Database Tool. It is a
+                    command-line utility that can create and modify the
+                    Netscape Communicator cert8.db and key3.db database
+                    files. It can also list, generate, modify, or delete
+                    certificates within the cert8.db file and create or
+                    change the password, generate new public and private key
+                    pairs, display the contents of the key database, or
+                    delete key pairs within the key3.db file
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="nss-config" name="nss-config"></a><span class=
+                    "term"><span class=
+                    "command"><strong>nss-config</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to determine the NSS library settings of the
+                    installed NSS libraries
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="pk12util" name="pk12util"></a><span class=
+                    "term"><span class=
+                    "command"><strong>pk12util</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a tool for importing certificates and keys from pkcs
+                    #12 files into NSS or exporting them. It can also list
+                    certificates and keys in such files
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="nettle.html" title="Nettle-3.10.2">Prev</a>
+          <p>
+            Nettle-3.10.2
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="openssh.html" title=
+          "OpenSSH-10.0p1">Next</a>
+          <p>
+            OpenSSH-10.0p1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="security.html" title=
+          "Chapter&nbsp;4.&nbsp;Security">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,465 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      SpiderMonkey from firefox-140.2.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="qcoro.html" title="qcoro-0.12.0">Prev</a>
+          <p>
+            qcoro-0.12.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="spirv-headers.html" title=
+          "SPIRV-Headers-1.4.321.0">Next</a>
+          <p>
+            SPIRV-Headers-1.4.321.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="spidermonkey" name="spidermonkey"></a>SpiderMonkey from
+      firefox-140.2.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to SpiderMonkey
+        </h2>
+        <p>
+          <span class="application">SpiderMonkey</span> is Mozilla's
+          JavaScript and WebAssembly Engine, written in C++ and Rust. In
+          BLFS, the source code of SpiderMonkey is taken from Firefox.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://archive.mozilla.org/pub/firefox/releases/140.2.0esr/source/firefox-140.2.0esr.source.tar.xz">
+                https://archive.mozilla.org/pub/firefox/releases/140.2.0esr/source/firefox-140.2.0esr.source.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 64773387a541a2ed5c1ce9f247469ba3
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 602 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 4.7 GB (48 MB installed after
+                removing 38 MB static lib; add 30 MB for the main tests and
+                27 MB for the jit tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 1.8 SBU (with parallelism=4; add 0.5
+                SBU for the main tests and 2.1 SBU for the jit tests)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          SpiderMonkey Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="cbindgen.html" title=
+          "Cbindgen-0.29.0">Cbindgen-0.29.0</a>, <a class="xref" href=
+          "icu.html" title="icu-77.1">ICU-77.1</a>, <a class="xref" href=
+          "which.html" title="Which-2.23 and Alternatives">Which-2.23</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="llvm.html" title=
+          "LLVM-20.1.8">LLVM-20.1.8</a> (with <span class=
+          "application">Clang</span>, required for 32-bit systems without
+          SSE2 capabilities)
+        </p>
+        <div class="admon important">
+          <img alt="[Important]" src="../images/important.png" />
+          <h3>
+            Important
+          </h3>
+          <p>
+            If you are building this package on a 32-bit system, and Clang is
+            not installed or you're overriding the default compiler choice
+            with the environment variable <code class="envar">CXX</code>,
+            please read the Command Explanations section first.
+          </p>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of SpiderMonkey
+        </h2>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            Unlike most other packages in BLFS, the instructions below
+            require you to untar <code class=
+            "filename">firefox-140.2.0esr.tar.xz</code> and change into the
+            <code class="filename">firefox-140.2.0</code> directory.
+          </p>
+          <p>
+            Extracting the tarball will reset the permissions of the current
+            directory to 0755 if you have permission to do that. If you do
+            this in a directory where the sticky bit is set, such as
+            <code class="filename">/tmp</code> it will end with error
+            messages:
+          </p>
+          <div class="literallayout">
+            <p>
+              tar:&nbsp;.:&nbsp;Cannot&nbsp;utime:&nbsp;Operation&nbsp;not&nbsp;permitted<br />
+
+              tar:&nbsp;.:&nbsp;Cannot&nbsp;change&nbsp;mode&nbsp;to&nbsp;rwxr-xr-t:&nbsp;Operation&nbsp;not&nbsp;permitted<br />
+
+              tar:&nbsp;Exiting&nbsp;with&nbsp;failure&nbsp;status&nbsp;due&nbsp;to&nbsp;previous&nbsp;errors<br />
+            </p>
+          </div>
+          <p>
+            This does finish with non-zero status, but it does <span class=
+            "emphasis"><em>NOT</em></span> mean there is a real problem. Do
+            not untar as the <code class="systemitem">root</code> user in a
+            directory where the sticky bit is set - that will unset it.
+          </p>
+        </div>
+        <p>
+          Install <span class="application">SpiderMonkey</span> by running
+          the following commands:
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            If you are compiling this package in chroot you must ensure that
+            <code class="filename">/dev/shm</code> is mounted. If you do not
+            do this, the <span class="application">Python</span>
+            configuration will fail with a traceback report referencing
+            <code class=
+            "filename">/usr/lib/pythonN.N/multiprocessing/synchronize.py</code>.
+            As the <code class="systemitem">root</code> user, run:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">mountpoint -q /dev/shm || mount -t tmpfs devshm /dev/shm</kbd></pre>
+          <p>
+            Compiling the C++ code respects $MAKEFLAGS and defaults to 'j1',
+            the rust code will use all processors.
+          </p>
+        </div>
+        <pre class="userinput"><kbd class="command">mkdir obj &amp;&amp;
+cd    obj &amp;&amp;
+
+../js/src/configure --prefix=/usr            \
+                    --disable-debug-symbols  \
+                    --disable-jemalloc       \
+                    --enable-readline        \
+                    --enable-rust-simd       \
+                    --with-intl-api          \
+                    --with-system-icu        \
+                    --with-system-zlib       &amp;&amp;
+make</kbd></pre>
+        <p>
+          To run the SpiderMonkey test suite, issue:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">make -C js/src check-jstests \
+     JSTESTS_EXTRA_ARGS="--timeout 300 --wpt=disabled" | tee jstest.log</kbd></pre>
+        <p>
+          Because we are building with system ICU, 24 tests (out of a total
+          of more than 50,000) are known to fail. The list of failed tests
+          can be extracted via <span class="command"><strong>grep
+          'UNEXPECTED-FAIL' jstest.log</strong></span>. Pass the <code class=
+          "option">-c</code> option to <span class=
+          "command"><strong>grep</strong></span> if you only want the total
+          number of failed tests.
+        </p>
+        <p>
+          The test suite is executed with all CPU cores available: even in a
+          cgroup with less cores assigned, it still attempts to spawn as many
+          testing jobs as the number of <span class=
+          "emphasis"><em>all</em></span> cores in the system; fortunately the
+          kernel still won't run these jobs on cores not assigned to the
+          cgroup so the CPU usage is still controlled.
+        </p>
+        <p>
+          To run the JIT test suite, issue the following command:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">make -C js/src check-jit-test</kbd></pre>
+        <p>
+          Like the SpiderMonkey test suite, the number of test jobs is same
+          as the number of all CPU cores in the system even if a cgroup is
+          used. To make things worse, some test cases can use up to 4 GB of
+          system memory, so the peak memory usage may be very large if your
+          CPU have multiple cores. Running the JIT test suite without enough
+          memory may invoke the kernel OOM killer and cause stability issues.
+          If you don't have enough system memory available, append
+          <code class="option">JITTEST_EXTRA_ARGS=-j<em class=
+          "replaceable"><code>N</code></em></code> to the command and replace
+          <em class="replaceable"><code>N</code></em> with the number of test
+          jobs your available system memory can hold. For example, if you
+          have 15 GB system memory available and 4 CPU cores, append
+          <code class="option">JITTEST_EXTRA_ARGS=-j3</code> to run the test
+          suite with 3 parallel jobs so the memory usage won't exceed 12 GB.
+        </p>
+        <div class="admon caution">
+          <img alt="[Caution]" src="../images/caution.png" />
+          <h3>
+            Caution
+          </h3>
+          <p>
+            An issue in the installation process causes any running program
+            which links to SpiderMonkey shared library (for example, GNOME
+            Shell) to crash if SpiderMonkey is reinstalled, or upgraded or
+            downgraded without a change of the major version number (140 in
+            140.2.0). To work around this issue, remove the old version of
+            the SpiderMonkey shared library before installation:
+          </p>
+          <pre class="root"><kbd class=
+          "command">rm -fv /usr/lib/libmozjs-140.so</kbd></pre>
+        </div>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install &amp;&amp;
+rm -v /usr/lib/libjs_static.ajs &amp;&amp;
+sed -i '/@NSPR_CFLAGS@/d' /usr/bin/js140-config</kbd></pre>
+        <p>
+          Still as the <code class="systemitem">root</code> user, fix an
+          issue with one of the installed headers:
+        </p>
+        <pre class="root"><kbd class=
+        "command">sed '$i#define XP_UNIX' -i /usr/include/mozjs-140/js-config.h</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-debug-symbols</code></em>:
+          Don't generate debug symbols since they are very large and most
+          users won't need it. Remove it if you want to debug SpiderMonkey.
+        </p>
+        <p>
+          <em class="parameter"><code>--disable-jemalloc</code></em>: This
+          switch disables the internal memory allocator used in SpiderMonkey.
+          jemalloc is only intended for the Firefox browser environment. For
+          other applications using SpiderMonkey, the application may crash as
+          items allocated in the jemalloc allocator are freed on the system
+          (glibc) allocator.
+        </p>
+        <p>
+          <em class="parameter"><code>--enable-readline</code></em>: This
+          switch enables Readline support in the SpiderMonkey command line
+          interface.
+        </p>
+        <p>
+          <em class="parameter"><code>--enable-rust-simd</code></em>: This
+          switch enables SIMD optimization in the shipped encoding_rs crate.
+        </p>
+        <p>
+          <em class="parameter"><code>--with-intl-api</code></em>: This
+          enables the internationalization functions required by <span class=
+          "application">Gjs</span>.
+        </p>
+        <p>
+          <em class="parameter"><code>--with-system-*</code></em>: These
+          parameters allow the build system to use system versions of the
+          above libraries. These are required for stability.
+        </p>
+        <p>
+          <span class="command"><strong>rm -v
+          /usr/lib/libjs_static.ajs</strong></span>: Remove a large static
+          library which is not used by any BLFS package.
+        </p>
+        <p>
+          <span class="command"><strong>sed -i '/@NSPR_CFLAGS@/d'
+          /usr/bin/js140-config</strong></span>: Prevent <span class=
+          "command"><strong>js140-config</strong></span> from using buggy
+          CFLAGS.
+        </p>
+        <p>
+          <code class="option"><code class="envar">CC=gcc
+          CXX=g++</code></code>: BLFS used to prefer to use gcc and g++
+          instead of upstream's defaults of the <span class=
+          "application">clang</span> programs. With the release of gcc-12 the
+          build takes longer with gcc and g++, primarily because of extra
+          warnings, and is bigger. Pass these environment variables to the
+          configure script if you wish to continue to use gcc, g++ (by
+          exporting them and unset them after the installation, or simply
+          prepending them before the <span class=
+          "command"><strong>../js/src/configure</strong></span> command). If
+          you are building on a 32-bit system, also see below.
+        </p>
+        <p>
+          <code class="option"><code class="envar">CXXFLAGS="-msse2
+          -mfpmath=sse"</code></code>: Use SSE2 instead of 387 for
+          double-precision floating-point operations. It's needed by GCC to
+          satisfy the expectations of upstream (Mozilla) developers with
+          floating-point arithmetic. Use it if you are building this package
+          on a 32-bit system with GCC (if Clang is not installed or GCC is
+          explicitly specified). Note that this will cause SpiderMonkey to
+          crash on a processor without SSE2 capability. If you are running
+          the system on such an old processor, Clang is strictly needed. This
+          setting is not needed on 64-bit systems because all 64-bit x86
+          processors support SSE2 and the 64-bit compilers (both Clang and
+          GCC) use SSE2 by default.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">js140 and js140-config</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libmozjs-140.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/mozjs-140</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="js140" name="js140"></a><span class=
+                    "term"><span class=
+                    "command"><strong>js140</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides a command line interface to the <span class=
+                    "application">JavaScript</span> engine
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="js140-config" name="js140-config"></a><span class=
+                    "term"><span class=
+                    "command"><strong>js140-config</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to find the SpiderMonkey compiler and linker
+                    flags
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libmozjs-140" name="libmozjs-140"></a>
+                    <span class="term"><code class=
+                    "filename">libmozjs-140.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the Mozilla JavaScript API functions
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="qcoro.html" title="qcoro-0.12.0">Prev</a>
+          <p>
+            qcoro-0.12.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="spirv-headers.html" title=
+          "SPIRV-Headers-1.4.321.0">Next</a>
+          <p>
+            SPIRV-Headers-1.4.321.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

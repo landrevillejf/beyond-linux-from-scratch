@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      cURL-8.15.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;17.&nbsp;Networking Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="c-ares.html" title="c-ares-1.34.5">Prev</a>
+          <p>
+            c-ares-1.34.5
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="geoclue2.html" title=
+          "GeoClue-2.7.2">Next</a>
+          <p>
+            GeoClue-2.7.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="netlibs.html" title=
+          "Chapter&nbsp;17.&nbsp;Networking Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="curl" name="curl"></a>cURL-8.15.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to cURL
+        </h2>
+        <p>
+          The <span class="application">cURL</span> package contains a
+          utility and a library used for transferring files with URL syntax
+          to any of the following protocols: DICT, FILE, FTP, FTPS, GOPHER,
+          GOPHERS, HTTP, HTTPS, IMAP, IMAPS, LDAP, LDAPS, MQTT, POP3, POP3S,
+          RTSP, SMB, SMBS, SMTP, SMPTS, TELNET, and TFTP. Its ability to both
+          download and upload files can be incorporated into other programs
+          to support functions like streaming media.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://curl.se/download/curl-8.15.0.tar.xz">https://curl.se/download/curl-8.15.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: b8872bb6cc5d18d03bea8ff5090b2b81
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 2.7 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 49 MB (add 68 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.3 SBU (add 4.5 SBU for tests (without
+                valgrind, add 16 SBU with valgrind) all using parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          cURL Dependencies
+        </h3>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="libpsl.html" title=
+          "libpsl-0.21.5">libpsl-0.21.5</a>
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            While there is an option to build the package without libpsl,
+            both the upstream developers and the BLFS editors alike highly
+            recommend not disabling support for libpsl due to severe security
+            implications.
+          </p>
+        </div>
+        <h4>
+          Recommended at runtime
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../postlfs/make-ca.html" title=
+          "make-ca-1.16.1">make-ca-1.16.1</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/brotli.html" title=
+          "brotli-1.1.0">Brotli-1.1.0</a>, <a class="xref" href="c-ares.html"
+          title="c-ares-1.34.5">c-ares-1.34.5</a>, <a class="xref" href=
+          "../postlfs/gnutls.html" title="GnuTLS-3.8.10">GnuTLS-3.8.10</a>,
+          <a class="xref" href="../general/libidn2.html" title=
+          "libidn2-2.3.8">libidn2-2.3.8</a>, <a class="xref" href=
+          "../general/libssh2.html" title=
+          "libssh2-1.11.1">libssh2-1.11.1</a>, <a class="xref" href=
+          "../postlfs/mitkrb.html" title="MIT Kerberos V5-1.22.1">MIT
+          Kerberos V5-1.22.1</a>, <a class="xref" href="nghttp2.html" title=
+          "nghttp2-1.66.0">nghttp2-1.66.0</a>, <a class="xref" href=
+          "../server/openldap.html" title=
+          "OpenLDAP-2.6.10">OpenLDAP-2.6.10</a>, <a class="xref" href=
+          "samba.html" title="Samba-4.22.4">Samba-4.22.4</a> (runtime, for
+          NTLM authentication), <a class="ulink" href=
+          "https://www.gnu.org/software/gsasl/">gsasl</a>, <a class="ulink"
+          href=
+          "https://www.secureauth.com/labs/open-source-tools/impacket/">impacket</a>,
+          <a class="ulink" href=
+          "https://launchpad.net/libmetalink/">libmetalink</a>, <a class=
+          "ulink" href="https://rtmpdump.mplayerhq.hu/">librtmp</a>,
+          <a class="ulink" href=
+          "https://github.com/ngtcp2/ngtcp2/">ngtcp2</a>, <a class="ulink"
+          href="https://github.com/cloudflare/quiche">quiche</a>, and
+          <a class="ulink" href="https://spnego.sourceforge.net/">SPNEGO</a>
+        </p>
+        <h4>
+          Optional if Running the Test Suite
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../server/apache.html" title=
+          "Apache-2.4.65">Apache-2.4.65</a> and <a class="xref" href=
+          "../postlfs/stunnel.html" title="stunnel-5.75">stunnel-5.75</a>
+          (for the HTTPS and FTPS tests), <a class="xref" href=
+          "../postlfs/openssh.html" title=
+          "OpenSSH-10.0p1">OpenSSH-10.0p1</a>, and <a class="xref" href=
+          "../general/valgrind.html" title=
+          "Valgrind-3.25.1">Valgrind-3.25.1</a> (this will slow the tests
+          down and may cause failures)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of cURL
+        </h2>
+        <p>
+          Install <span class="application">cURL</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr    \
+            --disable-static \
+            --with-openssl   \
+            --with-ca-path=/etc/ssl/certs &amp;&amp;
+make</kbd></pre>
+        <p>
+          To run the test suite, issue: <span class="command"><strong>make
+          test</strong></span>. Some tests are flaky, so if some tests have
+          failed it's possible to run a test again with: <span class=
+          "command"><strong>(cd tests; ./runtests.pl <em class=
+          "replaceable"><code>&lt;test ID&gt;</code></em>)</strong></span>
+          (the ID of failed tests are shown in the <span class=
+          "quote">“<span class="quote"><code class="computeroutput">These
+          test cases failed:</code></span>”</span> message). If you run the
+          tests after the package has been installed, some tests may fail
+          because the man pages were deleted by the 'find' command in the
+          installation instructions below.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install &amp;&amp;
+
+rm -rf docs/examples/.deps &amp;&amp;
+
+find docs \( -name Makefile\* -o  \
+             -name \*.1       -o  \
+             -name \*.3       -o  \
+             -name CMakeLists.txt \) -delete &amp;&amp;
+
+cp -v -R docs -T /usr/share/doc/curl-8.15.0</kbd></pre>
+        <p>
+          To run some simple verification tests on the newly installed
+          <span class="command"><strong>curl</strong></span>, issue the
+          following commands: <span class="command"><strong>curl
+          --trace-ascii debugdump.txt
+          https://www.example.com/</strong></span> and <span class=
+          "command"><strong>curl --trace-ascii d.txt --trace-time
+          https://example.com/</strong></span>. Inspect the locally created
+          trace files <code class="filename">debugdump.txt</code> and
+          <code class="filename">d.txt</code>, which contains version
+          information, downloaded files information, etc. One file has the
+          time for each action logged.
+        </p>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--disable-static</code></em>: This
+          switch prevents installation of static versions of the libraries.
+        </p>
+        <p>
+          <em class=
+          "parameter"><code>--with-ca-path=/etc/ssl/certs</code></em>: This
+          switch sets the location of the BLFS Certificate Authority store.
+        </p>
+        <p>
+          <em class="parameter"><code>--with-openssl</code></em>: This
+          parameter chooses <span class="application">OpenSSL</span> as
+          SSL/TLS implementation. This option is not needed if <code class=
+          "option">--with-gnutls</code> is selected instead.
+        </p>
+        <p>
+          <code class="option">--with-gssapi</code>: This parameter adds
+          <span class="application">Kerberos 5</span> support to <code class=
+          "filename">libcurl</code>.
+        </p>
+        <p>
+          <code class="option">--with-gnutls</code>: Use this switch to build
+          with <span class="application">GnuTLS</span> support instead of
+          <span class="application">OpenSSL</span> for SSL/TLS.
+        </p>
+        <p>
+          <code class=
+          "option">--with-ca-bundle=/etc/pki/tls/certs/ca-bundle.crt</code>:
+          Use this switch instead of <em class=
+          "parameter"><code>--with-ca-path</code></em> if building with
+          <span class="application">GnuTLS</span> support instead of
+          <span class="application">OpenSSL</span> for SSL/TLS.
+        </p>
+        <p>
+          <code class="option">--with-libssh2</code>: This parameter adds
+          <span class="application">SSH</span> support to cURL. This is
+          disabled by default.
+        </p>
+        <p>
+          <code class="option">--enable-ares</code>: This parameter adds
+          support for DNS resolution through the c-ares library.
+        </p>
+        <p>
+          <span class="command"><strong>find docs ... -exec rm {}
+          \;</strong></span>: This command removes <code class=
+          "filename">Makefiles</code> and man files from the documentation
+          directory that would otherwise be installed by the commands that
+          follow.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">curl and curl-config</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libcurl.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/curl and
+              /usr/share/doc/curl-8.15.0</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="curl-prog" name="curl-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>curl</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a command line tool for transferring files with URL
+                    syntax
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="curl-config" name="curl-config"></a><span class=
+                    "term"><span class=
+                    "command"><strong>curl-config</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    prints information about the last compile, like libraries
+                    linked to and prefix setting
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libcurl" name="libcurl"></a><span class=
+                    "term"><code class="filename">libcurl.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the API functions required by <span class=
+                    "command"><strong>curl</strong></span> and other programs
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="c-ares.html" title="c-ares-1.34.5">Prev</a>
+          <p>
+            c-ares-1.34.5
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="geoclue2.html" title=
+          "GeoClue-2.7.2">Next</a>
+          <p>
+            GeoClue-2.7.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="netlibs.html" title=
+          "Chapter&nbsp;17.&nbsp;Networking Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,4033 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Perl Modules
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;13.&nbsp;Programming
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="patchelf.html" title=
+          "Patchelf-0.18.0">Prev</a>
+          <p>
+            Patchelf-0.18.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="perl-deps.html" title=
+          "Perl Module Dependencies">Next</a>
+          <p>
+            Perl Module Dependencies
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="perl-modules" name="perl-modules"></a>Perl Modules
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Perl Modules
+        </h2>
+        <p>
+          The <span class="application">Perl</span> module packages (also
+          referred to as Distributions, because each can contain multiple
+          modules) add useful objects to the <span class=
+          "application">Perl</span> language. The packages listed on this
+          page are required or recommended for other packages in the book. If
+          they have dependent modules, those are either on this page or else
+          on the next page (<a class="xref" href="perl-deps.html" title=
+          "Perl Module Dependencies">Perl Module Dependencies</a>).
+        </p>
+        <p>
+          In many cases, only the required or recommended dependencies are
+          listed - there might be other modules which allow more tests to be
+          run, but omitting them will still allow the tests to <code class=
+          "literal">PASS</code>.
+        </p>
+        <p>
+          For a few modules, the BLFS editors have determined that other
+          modules still listed as prerequisites are not required, and omitted
+          them.
+        </p>
+        <p>
+          Where an alphabetically-earlier dependency of the same module pulls
+          in a dependency, it is not mentioned for the later dependencies of
+          the same module. You should build the listed dependencies in order.
+        </p>
+        <p>
+          It is generally worth running the tests for perl modules, they
+          often can show problems such as missing dependencies which are
+          required to use the module. Here, the editors have attempted to
+          separate those dependencies which are only required for running
+          test suites, but they will not be mentioned for a module where one
+          of its dependencies uses that module for its own test suite. That
+          is to say, if you intend to run the test suites, please run them
+          for each dependency of the module.
+        </p>
+        <p>
+          It is possible to automatically install the current versions of a
+          module and <span class="emphasis"><em>all</em></span> missing or
+          too-old dependencies <span class="emphasis"><em>recommended by
+          upstream</em></span> using CPAN. See <a class="xref" href=
+          "perl-modules.html#perl-alternatives" title=
+          "CPAN automated install of perl modules">CPAN automated install of
+          perl modules</a> at the end of this page.
+        </p>
+        <p>
+          Most of these modules only install files below <code class=
+          "filename">/usr/lib/perl5/site_perl/5.xx.y</code> and those will
+          not be documented. One or two install programs (mostly, perl
+          scripts), or a library, into <code class=
+          "filename">/usr/bin/</code> or <code class=
+          "filename">/usr/lib/</code> and these <span class=
+          "emphasis"><em>are</em></span> documented.
+        </p>
+        <p class="usernotes">
+          Editor Notes: <a class="ulink" href=
+          "https://wiki.linuxfromscratch.org/blfs/wiki/perl-modules">https://wiki.linuxfromscratch.org/blfs/wiki/perl-modules</a>
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-archive-zip"
+                title="Archive::Zip-1.68">Archive-Zip-1.68</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-autovivification" title=
+                "autovivification-0.18">autovivification-0.18</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-business-isbn"
+                title="Business::ISBN-3.012">Business-ISBN-3.012</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-business-ismn"
+                title="Business::ISMN-1.205">Business-ISMN-1.205</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-business-issn"
+                title="Business::ISSN-1.008">Business-ISSN-1.008</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-class-accessor"
+                title="Class::Accessor-0.51">Class-Accessor-0.51</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-data-compare"
+                title="Data::Compare-1.29">Data-Compare-1.29</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-data-dump"
+                title="Data::Dump-1.25">Data-Dump-1.25</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-data-uniqid"
+                title="Data::Uniqid-0.12">Data-Uniqid-0.12</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-datetime-calendar-julian" title=
+                "DateTime::Calendar::Julian-0.107">DateTime-Calendar-Julian-0.107</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-datetime-format-builder" title=
+                "DateTime::Format::Builder-0.83">DateTime-Format-Builder-0.83</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-encode-eucjpascii" title=
+                "Encode::EUCJPASCII-0.03">Encode-EUCJPASCII-0.03</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-encode-hanextra"
+                title="Encode::HanExtra-0.23">Encode-HanExtra-0.23</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-encode-jis2k"
+                title="Encode::JIS2K-0.05">Encode-JIS2K-0.05</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-file-fcntllock"
+                title="File::FcntlLock-0.22">File-FcntlLock-0.22</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-file-slurper"
+                title="File::Slurper-0.014">File-Slurper-0.014</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-file-which"
+                title="File::Which-1.27">File-Which-1.27</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-html-parser"
+                title="HTML::Parser-3.83">HTML-Parser-3.83</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-http-daemon"
+                title="HTTP::Daemon-6.16">HTTP-Daemon-6.16</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-io-socket-ssl"
+                title="IO::Socket::SSL-2.095">IO-Socket-SSL-2.095</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-io-string"
+                title="IO::String-1.08">IO-String-1.08</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-ipc-run3" title=
+                "IPC::Run3-0.049">IPC-Run3-0.049</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-libwww-perl"
+                title="LWP (libwww-perl-6.79)">libwww-perl-6.79</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-lingua-translit"
+                title="Lingua::Translit-0.29">Lingua-Translit-0.29</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-list-allutils"
+                title="List::AllUtils-0.19">List-AllUtils-0.19</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-list-moreutils"
+                title="List::MoreUtils-0.430">List-MoreUtils-0.430</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-log-log4perl"
+                title="Log::Log4perl-1.57">Log-Log4perl-1.57</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-lwp-protocol-https" title=
+                "LWP::Protocol::https-6.14">LWP-Protocol-https-6.14</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-module-build"
+                title="Module::Build-0.4234">Module-Build-0.4234</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-net-dns" title=
+                "Net::DNS-1.52">Net-DNS-1.52</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-parse-recdescent" title=
+                "Parse::RecDescent-1.967015">Parse-RecDescent-1.967015</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-parse-yapp"
+                title="Parse::Yapp-1.21">Parse-Yapp-1.21</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-perlio-utf8_strict" title=
+                "PerlIO::utf8_strict-0.010">PerlIO-utf8_strict-0.010</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-regexp-common"
+                title=
+                "Regexp::Common-2024080801">Regexp-Common-2024080801</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-sgmlspm" title=
+                "SGMLSpm-1.1">SGMLSpm-1.1</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-sort-key" title=
+                "Sort::Key-1.33">Sort-Key-1.33</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-test-command"
+                title="Test::Command-0.11">Test-Command-0.11</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-test-differences" title=
+                "Test::Differences-0.72">Test-Differences-0.72</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-text-bibtex"
+                title="Text::BibTeX-0.91">Text-BibTeX-0.91</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-text-csv" title=
+                "Text::CSV-2.06">Text-CSV-2.06</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-text-roman"
+                title="Text::Roman-3.5">Text-Roman-3.5</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-unicode-collate"
+                title="Unicode::Collate-1.31">Unicode-Collate-1.31</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-unicode-linebreak" title=
+                "Unicode::LineBreak-2019.001">Unicode-LineBreak-2019.001</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-uri" title=
+                "URI-5.32">URI-5.32</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href=
+                "perl-modules.html#perl-xml-libxml-simple" title=
+                "XML::LibXML::Simple-1.01">XML-LibXML-Simple-1.01</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-xml-libxslt"
+                title="XML::LibXSLT-2.003000">XML-LibXSLT-2.003000</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-xml-simple"
+                title="XML::Simple-2.25">XML-Simple-2.25</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-xml-writer"
+                title="XML::Writer-0.900">XML-Writer-0.900</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                <a class="xref" href="perl-modules.html#perl-alternatives"
+                title="CPAN automated install of perl modules">CPAN automated
+                install of perl modules</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-archive-zip" name=
+          "perl-archive-zip"></a>Archive::Zip-1.68
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Archive::Zip
+          </h3>
+          <p>
+            The Archive::Zip module allows a Perl program to create,
+            manipulate, read, and write Zip archive files.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/P/PH/PHRED/Archive-Zip-1.68.tar.gz">
+                  https://www.cpan.org/authors/id/P/PH/PHRED/Archive-Zip-1.68.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: a33993309322164867c99e04a4000ee3
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Archive::Zip Dependencies
+          </h4>
+          <h5>
+            Recommended (for the test suite)
+          </h5>
+          <p class="required">
+            <a class="xref" href="libarchive.html" title=
+            "libarchive-3.8.1">libarchive-3.8.1</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Archive::Zip
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">crc32</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="crc32-prog" name="crc32-prog"></a><span class=
+                      "term"><span class=
+                      "command"><strong>crc32</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      computes and prints to stdout the CRC-32 values of the
+                      given files
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-autovivification" name=
+          "perl-autovivification"></a>autovivification-0.18
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to the autovivification module
+          </h3>
+          <p>
+            This module allows you disable autovivification (the automatic
+            creation and population of new arrays and hashes whenever
+            undefined variables are dereferenced), and optionally throw a
+            warning or an error when it would have occurred.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/V/VP/VPIT/autovivification-0.18.tar.gz">
+                  https://www.cpan.org/authors/id/V/VP/VPIT/autovivification-0.18.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 8dec994e1e7d368e055f21a5777385a0
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of autovivification
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-business-isbn" name=
+          "perl-business-isbn"></a>Business::ISBN-3.012
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Business::ISBN
+          </h3>
+          <p>
+            The Business::ISBN module provides functions for working with
+            International Standard Book Numbers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISBN-3.012.tar.gz">
+                  https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISBN-3.012.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 6b541a4cb26a184efa22c40767c110a1
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Business::ISBN Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-business-isbn-data"
+            title=
+            "Business::ISBN::Data-20250815.001">Business-ISBN-Data-20250815.001</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Business::ISBN
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-business-ismn" name=
+          "perl-business-ismn"></a>Business::ISMN-1.205
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Business::ISMN
+          </h3>
+          <p>
+            The Business::ISMN module provides functions for working with
+            International Standard Music Numbers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISMN-1.205.tar.gz">
+                  https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISMN-1.205.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: b35f42bdaeb2fd797c51bb0821ffc906
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Business::ISMN Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-tie-cycle" title=
+            "Tie::Cycle-1.231">Tie-Cycle-1.231</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Business::ISMN
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-business-issn" name=
+          "perl-business-issn"></a>Business::ISSN-1.008
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Business::ISSN
+          </h3>
+          <p>
+            The Business::ISSN module provides functions for working with
+            International Standard Serial Numbers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISSN-1.008.tar.gz">
+                  https://www.cpan.org/authors/id/B/BR/BRIANDFOY/Business-ISSN-1.008.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 967e79eff741c8710d70c64fb593eda1
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Business::ISSN
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-class-accessor" name=
+          "perl-class-accessor"></a>Class::Accessor-0.51
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Class::Accessor
+          </h3>
+          <p>
+            Class::Accessor generates accessors/mutators for your class.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/K/KA/KASEI/Class-Accessor-0.51.tar.gz">
+                  https://www.cpan.org/authors/id/K/KA/KASEI/Class-Accessor-0.51.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 1f1e5990f87cad7659b292fed7dc0407
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Class::Accessor
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-data-compare" name=
+          "perl-data-compare"></a>Data::Compare-1.29
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Data::Compare
+          </h3>
+          <p>
+            The Data::Compare module compares two <span class=
+            "application">perl</span> data structures.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DC/DCANTRELL/Data-Compare-1.29.tar.gz">
+                  https://www.cpan.org/authors/id/D/DC/DCANTRELL/Data-Compare-1.29.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: ce9cb42ba6af634f5ab51f13f37e2ddb
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Data::Compare Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-clone" title=
+            "Clone-0.47">Clone-0.47</a> and <a class="xref" href=
+            "perl-deps.html#perl-file-find-rule" title=
+            "File::Find::Rule-0.35">File-Find-Rule-0.35</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Data::Compare
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-data-dump" name="perl-data-dump"></a>Data::Dump-1.25
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Data::Dump
+          </h3>
+          <p>
+            Data::Dump provides pretty printing of data structures.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/G/GA/GARU/Data-Dump-1.25.tar.gz">
+                  https://www.cpan.org/authors/id/G/GA/GARU/Data-Dump-1.25.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 9bd7131ef0441e1e0e001bf85e9fae31
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Data::Dump
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-data-uniqid" name=
+          "perl-data-uniqid"></a>Data::Uniqid-0.12
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Data::Uniqid
+          </h3>
+          <p>
+            Data::Uniqid provides three simple routines for generating unique
+            IDs.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/M/MW/MWX/Data-Uniqid-0.12.tar.gz">
+                  https://www.cpan.org/authors/id/M/MW/MWX/Data-Uniqid-0.12.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 6bab3b5da09fedfdf60ce2629a7367db
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Data::Uniqid
+          </h3>
+          <p>
+            Although the final test fails and reports an Error, the test
+            suite returns a status of 0. The error can safely be ignored.
+          </p>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-datetime-calendar-julian" name=
+          "perl-datetime-calendar-julian"></a>DateTime::Calendar::Julian-0.107
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to DateTime::Calendar::Julian
+          </h3>
+          <p>
+            DateTime::Calendar::Julian implements the Julian Calendar.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/W/WY/WYANT/DateTime-Calendar-Julian-0.107.tar.gz">
+                  https://www.cpan.org/authors/id/W/WY/WYANT/DateTime-Calendar-Julian-0.107.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: abd775d1d82f0f45d4fd6214cf7bbed8
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            DateTime::Calendar::Julian Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-datetime" title=
+            "DateTime-1.66">DateTime-1.66</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of DateTime::Calendar::Julian
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-datetime-format-builder" name=
+          "perl-datetime-format-builder"></a>DateTime::Format::Builder-0.83
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to DateTime::Format::Builder
+          </h3>
+          <p>
+            DateTime::Format::Builder creates DateTime parser classes and
+            objects.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DR/DROLSKY/DateTime-Format-Builder-0.83.tar.gz">
+                  https://www.cpan.org/authors/id/D/DR/DROLSKY/DateTime-Format-Builder-0.83.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: aa41917ca9ad69b3898728ce9c2fb477
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            DateTime::Format::Builder Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href=
+            "perl-deps.html#perl-datetime-format-strptime" title=
+            "DateTime::Format::Strptime-1.79">DateTime-Format-Strptime-1.79</a>
+            and <a class="xref" href="perl-deps.html#perl-params-validate"
+            title="Params::Validate-1.31">Params-Validate-1.31</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of DateTime::Format::Builder
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-encode-eucjpascii" name=
+          "perl-encode-eucjpascii"></a>Encode::EUCJPASCII-0.03
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Encode::EUCJPASCII
+          </h3>
+          <p>
+            Encode::EUCJPASCII provides an eucJP-open (Extended Unix Code,
+            Japanese) mapping.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/N/NE/NEZUMI/Encode-EUCJPASCII-0.03.tar.gz">
+                  https://www.cpan.org/authors/id/N/NE/NEZUMI/Encode-EUCJPASCII-0.03.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 5daa65f55b7c2050bb0713d9e95f239d
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Encode::EUCJPASCII
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-encode-hanextra" name=
+          "perl-encode-hanextra"></a>Encode::HanExtra-0.23
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Encode::HanExtra
+          </h3>
+          <p>
+            The Encode::HanExtra module provides extra sets of Chinese
+            Encodings which are not included in the core Encode module
+            because of size issues.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/A/AU/AUDREYT/Encode-HanExtra-0.23.tar.gz">
+                  https://www.cpan.org/authors/id/A/AU/AUDREYT/Encode-HanExtra-0.23.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: e1d3bc32c1c8ee304235a06fbcd5d5a4
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Encode::HanExtra
+          </h3>
+          <p>
+            This module uses the 'unsafe' build and installation instructions
+            (In <span class="application">perl-5.26.0</span> the use of the
+            current directory in <code class="literal">@INC</code> was
+            removed for security reasons and this module has not been
+            updated) :
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">PERL_USE_UNSAFE_INC=1 perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-encode-jis2k" name=
+          "perl-encode-jis2k"></a>Encode::JIS2K-0.05
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Encode::JIS2K
+          </h3>
+          <p>
+            The Encode::JIS2K module provides JIS X 0212 (aka JIS 2000)
+            Encodings.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DA/DANKOGAI/Encode-JIS2K-0.05.tar.gz">
+                  https://www.cpan.org/authors/id/D/DA/DANKOGAI/Encode-JIS2K-0.05.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 06acd9e878d41ffc354258e265db2875
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Encode::JIS2K
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-file-fcntllock" name=
+          "perl-file-fcntllock"></a>File::FcntlLock-0.22
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to File::FcntlLock
+          </h3>
+          <p>
+            File::FcntlLock is a module to do file locking in an object
+            oriented fashion using the <a class="ulink" href=
+            "https://man.archlinux.org/man/fcntl.2">fcntl(2)</a> system call.
+            This allows locks on parts of a file as well as on the whole file
+            and overcomes some known problems with <a class="ulink" href=
+            "https://man.archlinux.org/man/flock.2">flock(2)</a>, on which
+            which Perl's <code class="function">flock()</code> function is
+            based per default.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/J/JT/JTT/File-FcntlLock-0.22.tar.gz">
+                  https://www.cpan.org/authors/id/J/JT/JTT/File-FcntlLock-0.22.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 579698d735d864ee403674f1175f789d
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of File::FcntlLock
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-file-slurper" name=
+          "perl-file-slurper"></a>File::Slurper-0.014
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to File::Slurper
+          </h3>
+          <p>
+            File::Slurper is a simple, sane and efficient module to slurp a
+            file.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/L/LE/LEONT/File-Slurper-0.014.tar.gz">
+                  https://www.cpan.org/authors/id/L/LE/LEONT/File-Slurper-0.014.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: d43bc5f069035eff3b6b7c418b4cedc4
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            File::Slurper Dependencies
+          </h4>
+          <h5>
+            Recommended (required for the test suite)
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-test-warnings" title=
+            "Test::Warnings-0.038">Test-Warnings-0.038</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of File::Slurper
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-file-which" name="perl-file-which"></a>File::Which-1.27
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to File::Which
+          </h3>
+          <p>
+            File::Which provides a portable implementation of the 'which'
+            utility.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/P/PL/PLICEASE/File-Which-1.27.tar.gz">
+                  https://www.cpan.org/authors/id/P/PL/PLICEASE/File-Which-1.27.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: d5c9154262b93398f0750ec364207639
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of File::Which
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-html-parser" name=
+          "perl-html-parser"></a>HTML::Parser-3.83
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to HTML::Parser
+          </h3>
+          <p>
+            The HTML::Parser distribution is a collection of modules that
+            parse and extract information from HTML documents.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/O/OA/OALDERS/HTML-Parser-3.83.tar.gz">
+                  https://www.cpan.org/authors/id/O/OA/OALDERS/HTML-Parser-3.83.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 17a4c886024bfad1cffcbe6b46cda128
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            HTML::Parser Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-html-tagset" title=
+            "HTML::Tagset-3.24">HTML-Tagset-3.24</a> and <a class="xref"
+            href="perl-deps.html#perl-http-message" title=
+            "HTTP::Message-7.00">HTTP-Message-7.00</a> (strictly speaking,
+            not required for building, but its module HTTP::Headers is
+            required for tests and a run-time requirement for
+            HTML::HeadParser from this distribution).
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of HTML::Parser
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-http-daemon" name=
+          "perl-http-daemon"></a>HTTP::Daemon-6.16
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to HTTP::Daemon
+          </h3>
+          <p>
+            Instances of the HTTP::Daemon class are HTTP/1.1 servers that
+            listen on a socket for incoming requests. The HTTP::Daemon is a
+            subclass of IO::Socket::INET, so you can perform socket
+            operations directly on it too.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/O/OA/OALDERS/HTTP-Daemon-6.16.tar.gz">
+                  https://www.cpan.org/authors/id/O/OA/OALDERS/HTTP-Daemon-6.16.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 51425462790165aeafc2819a7359706f
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            HTTP::Daemon Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-http-message" title=
+            "HTTP::Message-7.00">HTTP-Message-7.00</a>
+          </p>
+          <div class="admon note">
+            <img alt="[Note]" src="../images/note.png" />
+            <h3>
+              Note
+            </h3>
+            <p>
+              Makefile.PL and running the tests will complain that
+              Module::Build::Tiny is missing, but that is only needed for
+              <code class="filename">Build.PL</code> which is used if the
+              system lacks a C compiler.
+            </p>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of HTTP::Daemon
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-io-socket-ssl" name=
+          "perl-io-socket-ssl"></a>IO::Socket::SSL-2.095
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to IO::Socket::SSL
+          </h3>
+          <p>
+            IO::Socket::SSL makes using SSL/TLS much easier by wrapping the
+            necessary functionality into the familiar IO::Socket interface
+            and providing secure defaults whenever possible.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/S/SU/SULLR/IO-Socket-SSL-2.095.tar.gz">
+                  https://www.cpan.org/authors/id/S/SU/SULLR/IO-Socket-SSL-2.095.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 0d78acc73c9e65a072a0c8fbb5ec7a47
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            IO::Socket::SSL Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="../postlfs/make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> and <a class="xref" href=
+            "perl-deps.html#perl-net-ssleay" title=
+            "Net::SSLeay-1.94">Net-SSLeay-1.94</a>
+          </p>
+          <h5>
+            Recommended
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-modules.html#perl-uri" title=
+            "URI-5.32">URI-5.32</a> (to access international domain names)
+          </p>
+          <div class="admon note">
+            <img alt="[Note]" src="../images/note.png" />
+            <h3>
+              Note
+            </h3>
+            <p>
+              An Internet connection is needed for some tests of this
+              package. The system certificate store may need to be set up
+              with <a class="xref" href="../postlfs/make-ca.html" title=
+              "make-ca-1.16.1">make-ca-1.16.1</a> before testing this
+              package.
+            </p>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of IO::Socket::SSL
+          </h3>
+          <p>
+            This module uses a variant of the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">yes | perl Makefile.PL &amp;&amp;
+make                   &amp;&amp;
+make test</kbd></pre>
+          <p>
+            One test, <code class="filename">Client non-SSL
+            connection</code>, is known to fail.
+          </p>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+        <div class="commands" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Command Explanations
+          </h3>
+          <p>
+            <span class="command"><strong>yes</strong></span>: Perl will ask
+            if you wish to run external tests, which will 'fail soft' if
+            there are network problems. The default is 'y', which will allow
+            you to script the build.
+          </p>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-io-string" name="perl-io-string"></a>IO::String-1.08
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to IO::String
+          </h3>
+          <p>
+            IO::String - Emulate file interface for in-core strings.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/G/GA/GAAS/IO-String-1.08.tar.gz">
+                  https://www.cpan.org/authors/id/G/GA/GAAS/IO-String-1.08.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 250e5424f290299fc3d6b5d1e9da3835
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of IO::String
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-ipc-run3" name="perl-ipc-run3"></a>IPC::Run3-0.049
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to IPC::Run3
+          </h3>
+          <p>
+            IPC::Run3 is used to run a subprocess with input/output
+            redirection.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/R/RJ/RJBS/IPC-Run3-0.049.tar.gz">
+                  https://www.cpan.org/authors/id/R/RJ/RJBS/IPC-Run3-0.049.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 569393ca56dfb78dedd79e93c0439159
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of IPC::Run3
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-lingua-translit" name=
+          "perl-lingua-translit"></a>Lingua::Translit-0.29
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Lingua::Translit
+          </h3>
+          <p>
+            Lingua::Translit and its <span class=
+            "command"><strong>translit</strong></span> program transliterate
+            text between writing systems.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/A/AL/ALINKE/Lingua-Translit-0.29.tar.gz">
+                  https://www.cpan.org/authors/id/A/AL/ALINKE/Lingua-Translit-0.29.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 605a82f06b05fef4fc18bf069b1be511
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Lingua::Translit
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">translit</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="translit-prog" name=
+                      "translit-prog"></a><span class="term"><span class=
+                      "command"><strong>translit</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      transliterates text between writing systems using
+                      various standards
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-libwww-perl" name="perl-libwww-perl"></a>LWP
+          (libwww-perl-6.79)
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to LWP - The World-wide Web library for Perl
+          </h3>
+          <p>
+            The libwww-perl collection is a set of Perl modules which
+            provides a simple and consistent application programming
+            interface (API) to the World-Wide Web. The main focus of the
+            library is to provide classes and functions that allow you to
+            write WWW clients. The library also contains modules that are of
+            more general use and even classes that help you implement simple
+            HTTP servers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/O/OA/OALDERS/libwww-perl-6.79.tar.gz">
+                  https://www.cpan.org/authors/id/O/OA/OALDERS/libwww-perl-6.79.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: cc91563975e3c27f2cd7a750fa6f4126
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            libwww-perl Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-file-listing" title=
+            "File::Listing-6.16">File-Listing-6.16</a>, <a class="xref" href=
+            "perl-deps.html#perl-http-cookiejar" title=
+            "HTTP::CookieJar-0.014">HTTP-CookieJar-0.014</a>, <a class="xref"
+            href="perl-deps.html#perl-http-cookies" title=
+            "HTTP::Cookies-6.11">HTTP-Cookies-6.11</a>, <a class="xref" href=
+            "perl-modules.html#perl-http-daemon" title=
+            "HTTP::Daemon-6.16">HTTP-Daemon-6.16</a>, <a class="xref" href=
+            "perl-deps.html#perl-http-negotiate" title=
+            "HTTP::Negotiate-6.01">HTTP-Negotiate-6.01</a>, <a class="xref"
+            href="perl-modules.html#perl-html-parser" title=
+            "HTML::Parser-3.83">HTML-Parser-3.83</a>, <a class="xref" href=
+            "perl-deps.html#perl-net-http" title=
+            "Net::HTTP-6.23">Net-HTTP-6.23</a>, <a class="xref" href=
+            "perl-deps.html#perl-try-tiny" title=
+            "Try::Tiny-0.32">Try-Tiny-0.32</a> and <a class="xref" href=
+            "perl-deps.html#perl-www-robotrules" title=
+            "WWW::RobotRules-6.02">WWW-RobotRules-6.02</a>
+          </p>
+          <h5>
+            Recommended (required for the test suite)
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-test-fatal" title=
+            "Test::Fatal-0.017">Test-Fatal-0.017</a>, <a class="xref" href=
+            "perl-deps.html#perl-test-needs" title=
+            "Test::Needs-0.002010">Test-Needs-0.002010</a> and <a class=
+            "xref" href="perl-deps.html#perl-test-requiresinternet" title=
+            "Test::RequiresInternet-0.05">Test-RequiresInternet-0.05</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of libwww-perl
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+          <p>
+            After installing this package, if you want HTTPS protocol support
+            install <a class="xref" href=
+            "perl-modules.html#perl-lwp-protocol-https" title=
+            "LWP::Protocol::https-6.14">LWP-Protocol-https-6.14</a>.
+          </p>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">lwp-download, lwp-dump, lwp-mirror,
+                lwp-request</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="lwp-download-prog" name=
+                      "lwp-download-prog"></a><span class="term"><span class=
+                      "command"><strong>lwp-download</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a script to fetch a large file from the web
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="lwp-dump-prog" name=
+                      "lwp-dump-prog"></a><span class="term"><span class=
+                      "command"><strong>lwp-dump</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is used to see what headers and content is returned for
+                      a URL
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="lwp-mirror-prog" name=
+                      "lwp-mirror-prog"></a><span class="term"><span class=
+                      "command"><strong>lwp-mirror</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a simple mirror utility
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="lwp-request-prog" name=
+                      "lwp-request-prog"></a><span class="term"><span class=
+                      "command"><strong>lwp-request</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a simple command line user agent
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-list-allutils" name=
+          "perl-list-allutils"></a>List::AllUtils-0.19
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to List::AllUtils
+          </h3>
+          <p>
+            The List::Allutils module combines List::Util and List::MoreUtils
+            in one bite-sized package.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DR/DROLSKY/List-AllUtils-0.19.tar.gz">
+                  https://www.cpan.org/authors/id/D/DR/DROLSKY/List-AllUtils-0.19.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 86469b1f6819ba181a8471eb932965f2
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            List::AllUtils Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-list-someutils" title=
+            "List::SomeUtils-0.59">List-SomeUtils-0.59</a> and <a class=
+            "xref" href="perl-deps.html#perl-list-utilsby" title=
+            "List::UtilsBy-0.12">List-UtilsBy-0.12</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of List::AllUtils
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-list-moreutils" name=
+          "perl-list-moreutils"></a>List::MoreUtils-0.430
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to List::MoreUtils
+          </h3>
+          <p>
+            List::MoreUtils provides the stuff missing in List::Util.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/R/RE/REHSACK/List-MoreUtils-0.430.tar.gz">
+                  https://www.cpan.org/authors/id/R/RE/REHSACK/List-MoreUtils-0.430.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: daccd6310021231b827dcc943ff1c6b7
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            List::MoreUtils Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-exporter-tiny" title=
+            "Exporter::Tiny-1.006002">Exporter-Tiny-1.006002</a> and
+            <a class="xref" href="perl-deps.html#perl-list-moreutils-xs"
+            title="List::MoreUtils::XS-0.430">List-MoreUtils-XS-0.430</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of List::MoreUtils
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-log-log4perl" name=
+          "perl-log-log4perl"></a>Log::Log4perl-1.57
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Log::Log4perl
+          </h3>
+          <p>
+            Log::Log4perl provides a Log4j implementation for <span class=
+            "application">perl</span>.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/E/ET/ETJ/Log-Log4perl-1.57.tar.gz">
+                  https://www.cpan.org/authors/id/E/ET/ETJ/Log-Log4perl-1.57.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: acbe29cbaf03f4478a13579a275b0011
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Log::Log4perl
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">l4p-templ</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="l4p-templ-prog" name=
+                      "l4p-templ-prog"></a><span class="term"><span class=
+                      "command"><strong>l4p-templ</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      prints out the text of a template Log4perl
+                      configuration for starting a new Log4perl configuration
+                      file
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-lwp-protocol-https" name=
+          "perl-lwp-protocol-https"></a>LWP::Protocol::https-6.14
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to LWP::Protocol::https
+          </h3>
+          <p>
+            LWP::Protocol::https provides https support for LWP::UserAgent
+            (i.e. <a class="xref" href="perl-modules.html#perl-libwww-perl"
+            title="LWP (libwww-perl-6.79)">libwww-perl-6.79</a>). Once the
+            module is installed LWP is able to access sites using HTTP over
+            SSL/TLS.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/O/OA/OALDERS/LWP-Protocol-https-6.14.tar.gz">
+                  https://www.cpan.org/authors/id/O/OA/OALDERS/LWP-Protocol-https-6.14.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 65401e3e34be653c9e3b31f798ed5454
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            LWP::Protocol::https Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-modules.html#perl-io-socket-ssl"
+            title="IO::Socket::SSL-2.095">IO-Socket-SSL-2.095</a>, <a class=
+            "xref" href="perl-modules.html#perl-libwww-perl" title=
+            "LWP (libwww-perl-6.79)">libwww-perl-6.79</a>, and <a class=
+            "xref" href="../postlfs/make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> with <code class=
+            "literal">/etc/pki/tls/certs/ca-bundle.crt</code>.
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of LWP::Protocol::https
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-module-build" name=
+          "perl-module-build"></a>Module::Build-0.4234
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Module::Build
+          </h3>
+          <p>
+            Module::Build allows perl modules to be built without a
+            <span class="command"><strong>make</strong></span> command being
+            present.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://cpan.metacpan.org/authors/id/L/LE/LEONT/Module-Build-0.4234.tar.gz">
+                  https://cpan.metacpan.org/authors/id/L/LE/LEONT/Module-Build-0.4234.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 0032d0c0bc36a3b68ef41c947829d5e3
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Module::Build
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+          <p>
+            Note that this module can also be built using <code class=
+            "filename">Build.PL</code>
+          </p>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">config_data</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="config-data-prog" name=
+                      "config-data-prog"></a><span class="term"><span class=
+                      "command"><strong>config_data</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is used to query or change the configuration of perl
+                      modules
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-net-dns" name="perl-net-dns"></a>Net::DNS-1.52
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Net::DNS
+          </h3>
+          <p>
+            Net::DNS is a DNS resolver implemented in <span class=
+            "application">Perl</span>. It can be used to perform nearly any
+            type of DNS query from a <span class="application">Perl</span>
+            script.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/N/NL/NLNETLABS/Net-DNS-1.52.tar.gz">
+                  https://www.cpan.org/authors/id/N/NL/NLNETLABS/Net-DNS-1.52.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 49140ed8289205ad4df536952cd60b5e
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Net::DNS
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-parse-recdescent" name=
+          "perl-parse-recdescent"></a>Parse::RecDescent-1.967015
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Parse::RecDescent
+          </h3>
+          <p>
+            Parse::RecDescent incrementally generates top-down
+            recursive-descent text parsers from simple yacc-like grammar
+            specifications.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/J/JT/JTBRAUN/Parse-RecDescent-1.967015.tar.gz">
+                  https://www.cpan.org/authors/id/J/JT/JTBRAUN/Parse-RecDescent-1.967015.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 7a36d45d62a9b68603edcdbd276006cc
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Parse::RecDescent
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-parse-yapp" name="perl-parse-yapp"></a>Parse::Yapp-1.21
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Parse::Yapp
+          </h3>
+          <p>
+            Parse::Yapp is a Perl extension for generating and using LALR
+            parsers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/W/WB/WBRASWELL/Parse-Yapp-1.21.tar.gz">
+                  https://www.cpan.org/authors/id/W/WB/WBRASWELL/Parse-Yapp-1.21.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 69584d5b0f0304bb2a23cffcd982c5de
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Parse::Yapp
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">yapp</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="yapp-prog" name="yapp-prog"></a><span class=
+                      "term"><span class=
+                      "command"><strong>yapp</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a frontend to the Parse::Yapp module, which lets you
+                      create a Perl OO parser from an input grammar file
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-perlio-utf8_strict" name=
+          "perl-perlio-utf8_strict"></a>PerlIO::utf8_strict-0.010
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to PerlIO::utf8_strict
+          </h3>
+          <p>
+            PerlIO::utf8_strict provides a fast and correct UTF-8 PerlIO
+            layer. Unlike Perl's default :utf8 layer it checks the input for
+            correctness.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/L/LE/LEONT/PerlIO-utf8_strict-0.010.tar.gz">
+                  https://www.cpan.org/authors/id/L/LE/LEONT/PerlIO-utf8_strict-0.010.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: d90ca967f66e05ad9221c79060868346
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            PerlIO::utf8_strict Dependencies
+          </h4>
+          <h5>
+            Recommended (required for the test suite)
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-test-exception" title=
+            "Test::Exception-0.43">Test-Exception-0.43</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of PerlIO::utf8_strict
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-regexp-common" name=
+          "perl-regexp-common"></a>Regexp::Common-2024080801
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Regexp::Common
+          </h3>
+          <p>
+            Regexp::Common provides commonly requested regular expressions.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/A/AB/ABIGAIL/Regexp-Common-2024080801.tar.gz">
+                  https://www.cpan.org/authors/id/A/AB/ABIGAIL/Regexp-Common-2024080801.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 73d4b4b2a0690f9ab573d54a69c22aee
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Regexp::Common
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-sgmlspm" name="perl-sgmlspm"></a>SGMLSpm-1.1
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to SGMLSpm
+          </h3>
+          <p>
+            The SGMLSpm module is a <span class="application">Perl</span>
+            library used for parsing the output from James Clark's SGMLS and
+            NSGMLS parsers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/R/RA/RAAB/SGMLSpm-1.1.tar.gz">
+                  https://www.cpan.org/authors/id/R/RA/RAAB/SGMLSpm-1.1.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 746c74ae969992cedb1a2879b4168090
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of SGMLSpm
+          </h3>
+          <p>
+            Before beginning the build, issue the following command to
+            prevent an error:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">chmod -v 644 MYMETA.yml</kbd></pre>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+          <p>
+            After the package has been installed, run the following command
+            as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class=
+          "command">ln -sv sgmlspl.pl /usr/bin/sgmlspl</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">sgmlspl.pl, sgmlspl</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="sgmlspl.pl" name="sgmlspl.pl"></a><span class=
+                      "term"><span class=
+                      "command"><strong>sgmlspl.pl</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is an SGML processor
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="sgmlspl-prog" name=
+                      "sgmlspl-prog"></a><span class="term"><span class=
+                      "command"><strong>sgmlspl</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a symbolic link used during the install of <a class=
+                      "xref" href="../pst/docbook-utils.html" title=
+                      "DocBook-utils-0.6.14">DocBook-utils-0.6.14</a>
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-sort-key" name="perl-sort-key"></a>Sort::Key-1.33
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Sort::Key
+          </h3>
+          <p>
+            Sort::Key provides a set of functions to sort lists of values by
+            some calculated key value.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/S/SA/SALVA/Sort-Key-1.33.tar.gz">
+                  https://www.cpan.org/authors/id/S/SA/SALVA/Sort-Key-1.33.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: a37ab0da0cfdc26e57b4c79e39f6d98f
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Sort::Key
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-test-command" name=
+          "perl-test-command"></a>Test::Command-0.11
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Test::Command
+          </h3>
+          <p>
+            Test::Command tests the exit status, STDOUT, or STDERR, of an
+            external command.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DA/DANBOO/Test-Command-0.11.tar.gz">
+                  https://www.cpan.org/authors/id/D/DA/DANBOO/Test-Command-0.11.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 9ab83c4695961dbe92cd86efe08f0634
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Test::Command
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-test-differences" name=
+          "perl-test-differences"></a>Test::Differences-0.72
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Test::Differences
+          </h3>
+          <p>
+            Test::Differences tests strings and data structures and shows the
+            differences if they do not match.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/D/DC/DCANTRELL/Test-Differences-0.72.tar.gz">
+                  https://www.cpan.org/authors/id/D/DC/DCANTRELL/Test-Differences-0.72.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 348ac35809a53290ac05cf0f18f673fa
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Test::Differences Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-text-diff" title=
+            "Text::Diff-1.45">Text-Diff-1.45</a>
+          </p>
+          <h5>
+            Recommended (required for the test suite)
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-capture-tiny" title=
+            "Capture::Tiny-0.50">Capture-Tiny-0.50</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Test::Differences
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-text-bibtex" name=
+          "perl-text-bibtex"></a>Text::BibTeX-0.91
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Text::BibTeX
+          </h3>
+          <p>
+            Text::BibTeX provides an interface to read and parse <span class=
+            "application">BibTeX</span> files.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/A/AM/AMBS/Text-BibTeX-0.91.tar.gz">
+                  https://www.cpan.org/authors/id/A/AM/AMBS/Text-BibTeX-0.91.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 437862f801cfb7598dff52aa4ff7d888
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Text::BibTeX Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-config-autoconf" title=
+            "Config::AutoConf-0.320">Config-AutoConf-0.320</a> and <a class=
+            "xref" href="perl-deps.html#perl-extutils-libbuilder" title=
+            "ExtUtils::LibBuilder-0.09">ExtUtils-LibBuilder-0.09</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Text::BibTeX
+          </h3>
+          <p>
+            This module is built using <code class=
+            "filename">Build.PL</code>:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Build.PL &amp;&amp;
+./Build       &amp;&amp;
+./Build test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">./Build install</kbd></pre>
+        </div>
+        <div class="content" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Contents
+          </h3>
+          <div class="segmentedlist">
+            <div class="seglistitem">
+              <div class="seg">
+                <strong class="segtitle">Installed Programs:</strong>
+                <span class="segbody">biblex, bibparse, dumpnames</span>
+              </div>
+              <div class="seg">
+                <strong class="segtitle">Installed Libraries:</strong>
+                <span class="segbody">libbtparse.so</span>
+              </div>
+            </div>
+          </div>
+          <div class="variablelist">
+            <h3>
+              Short Descriptions
+            </h3>
+            <table border="0" class="variablelist">
+              <colgroup>
+                <col align="left" valign="top" />
+                <col />
+              </colgroup>
+              <tbody>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="biblex-prog" name="biblex-prog"></a><span class=
+                      "term"><span class=
+                      "command"><strong>biblex</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      performs lexical analysis on a BibTeX file
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="bibparse-prog" name=
+                      "bibparse-prog"></a><span class="term"><span class=
+                      "command"><strong>bibparse</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      parses a series of BibTeX files with command line
+                      options to control the string post-processing behavior
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="dumpnames-prog" name=
+                      "dumpnames-prog"></a><span class="term"><span class=
+                      "command"><strong>dumpnames</strong></span></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      parses a BibTeX file, splitting 'author' and 'editor'
+                      fields into lists of names, and then dumps everything
+                      to stdout
+                    </p>
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    <p>
+                      <a id="libbtparse-lib" name=
+                      "libbtparse-lib"></a><span class="term"><code class=
+                      "filename">libbtparse.so</code></span>
+                    </p>
+                  </td>
+                  <td>
+                    <p>
+                      is a library for parsing and processing BibTeX data
+                      files
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-text-csv" name="perl-text-csv"></a>Text::CSV-2.06
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Text::CSV
+          </h3>
+          <p>
+            Text::CSV is a comma-separated values manipulator, using XS
+            (eXternal Subroutine - for subroutines written in C or C++) or
+            pure perl.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/I/IS/ISHIGAKI/Text-CSV-2.06.tar.gz">
+                  https://www.cpan.org/authors/id/I/IS/ISHIGAKI/Text-CSV-2.06.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 620284340dfd1787c89666d22adfd463
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Text::CSV Dependencies
+          </h4>
+          <h5>
+            Recommended
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-text-csv_xs" title=
+            "Text::CSV_XS-1.61">Text-CSV_XS-1.61</a> (required by <a class=
+            "xref" href="../pst/biber.html" title=
+            "biber-2.21">biber-2.21</a>)
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Text::CSV
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-text-roman" name="perl-text-roman"></a>Text::Roman-3.5
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Text::Roman
+          </h3>
+          <p>
+            Text::Roman allows conversion between Roman and Arabic algorisms
+            (number systems, e.g. MCMXLV and 1945).
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/S/SY/SYP/Text-Roman-3.5.tar.gz">
+                  https://www.cpan.org/authors/id/S/SY/SYP/Text-Roman-3.5.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 1f6b09c0cc1f4425b565ff787a39fd83
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Text::Roman
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-unicode-collate" name=
+          "perl-unicode-collate"></a>Unicode::Collate-1.31
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Unicode::Collate
+          </h3>
+          <p>
+            Unicode::Collate provides a Unicode collation algorithm.
+          </p>
+          <div class="admon note">
+            <img alt="[Note]" src="../images/note.png" />
+            <h3>
+              Note
+            </h3>
+            <p>
+              This is a core module. If you are using <span class=
+              "application">perl-5.28.0</span> or later, its version is good
+              enough for <a class="xref" href="../pst/biber.html" title=
+              "biber-2.21">biber-2.21</a> and you do not need to reinstall
+              this module.
+            </p>
+          </div>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/S/SA/SADAHIRO/Unicode-Collate-1.31.tar.gz">
+                  https://www.cpan.org/authors/id/S/SA/SADAHIRO/Unicode-Collate-1.31.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: ee4d960d057c5e5b02ebb49d0286db8f
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Unicode::Collate
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-unicode-linebreak" name=
+          "perl-unicode-linebreak"></a>Unicode::LineBreak-2019.001
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to Unicode::LineBreak
+          </h3>
+          <p>
+            Unicode::LineBreak provides a UAX #14 Unicode Line Breaking
+            Algorithm.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/N/NE/NEZUMI/Unicode-LineBreak-2019.001.tar.gz">
+                  https://www.cpan.org/authors/id/N/NE/NEZUMI/Unicode-LineBreak-2019.001.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 003d6da7a13700e069afed9238c864b9
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            Unicode::LineBreak Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-mime-charset" title=
+            "MIME::Charset-1.013.1">MIME-Charset-1.013.1</a> and <a class=
+            "xref" href="../basicnet/wget.html" title=
+            "Wget-1.25.0">Wget-1.25.0</a> (to download two files from
+            unicode.org in the test suite)
+          </p>
+          <h5>
+            Optional
+          </h5>
+          <p class="recommended">
+            <a class="ulink" href=
+            "https://linux.thai.net/projects/libthai/">libthai</a> (to break
+            Thai words into segments)
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of Unicode::LineBreak
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-uri" name="perl-uri"></a>URI-5.32
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to URI
+          </h3>
+          <p>
+            This module implements the URI class. Objects of this class
+            represent "Uniform Resource Identifier references" as specified
+            in RFC 2396 (and updated by RFC 2732). A Uniform Resource
+            Identifier is a compact string of characters that identifies an
+            abstract or physical resource. A Uniform Resource Identifier can
+            be further classified as either a Uniform Resource Locator (URL)
+            or a Uniform Resource Name (URN). The distinction between URL and
+            URN does not matter to the URI class interface. A "URI-reference"
+            is a URI that may have additional information attached in the
+            form of a fragment identifier.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/O/OA/OALDERS/URI-5.32.tar.gz">
+                  https://www.cpan.org/authors/id/O/OA/OALDERS/URI-5.32.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 56aa2bc3efb180eceb4c143378ab4327
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            URI Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-mime-base32" title=
+            "MIME::Base32-1.303">MIME-Base32-1.303</a>
+          </p>
+          <h5>
+            Recommended (required for the test suite)
+          </h5>
+          <p class="recommended">
+            <a class="xref" href="perl-deps.html#perl-test-fatal" title=
+            "Test::Fatal-0.017">Test-Fatal-0.017</a>, <a class="xref" href=
+            "perl-deps.html#perl-test-needs" title=
+            "Test::Needs-0.002010">Test-Needs-0.002010</a>, and <a class=
+            "xref" href="perl-deps.html#perl-test-warnings" title=
+            "Test::Warnings-0.038">Test-Warnings-0.038</a>
+          </p>
+          <h5>
+            Optional
+          </h5>
+          <p class="optional">
+            <a class="xref" href="perl-modules.html#perl-business-isbn"
+            title="Business::ISBN-3.012">Business-ISBN-3.012</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of URI
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-xml-libxml-simple" name=
+          "perl-xml-libxml-simple"></a>XML::LibXML::Simple-1.01
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to XML::LibXML::Simple
+          </h3>
+          <p>
+            The XML::LibXML::Simple module is a rewrite of XML::Simple to use
+            the XML::LibXML parser for XML structures, instead of the plain
+            <span class="application">Perl</span> or SAX parsers.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/M/MA/MARKOV/XML-LibXML-Simple-1.01.tar.gz">
+                  https://www.cpan.org/authors/id/M/MA/MARKOV/XML-LibXML-Simple-1.01.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: faad5ed26cd83998f6514be199c56c38
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            XML::LibXML::Simple Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="perl-deps.html#perl-xml-libxml" title=
+            "XML::LibXML-2.0210">XML-LibXML-2.0210</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of XML::LibXML::Simple
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-xml-libxslt" name=
+          "perl-xml-libxslt"></a>XML::LibXSLT-2.003000
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to XML::LibXSLT
+          </h3>
+          <p>
+            XML-LibXSLT provides an interface to <a class="xref" href=
+            "libxslt.html" title="libxslt-1.1.43">libxslt-1.1.43</a>
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/S/SH/SHLOMIF/XML-LibXSLT-2.003000.tar.gz">
+                  https://www.cpan.org/authors/id/S/SH/SHLOMIF/XML-LibXSLT-2.003000.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 632dce587b3c405edd4e622364750191
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            XML::LibXSLT Dependencies
+          </h4>
+          <h5>
+            Required
+          </h5>
+          <p class="required">
+            <a class="xref" href="libxslt.html" title=
+            "libxslt-1.1.43">libxslt-1.1.43</a> and <a class="xref" href=
+            "perl-deps.html#perl-xml-libxml" title=
+            "XML::LibXML-2.0210">XML-LibXML-2.0210</a>
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of XML::LibXSLT
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-xml-simple" name="perl-xml-simple"></a>XML::Simple-2.25
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to XML::Simple
+          </h3>
+          <p>
+            XML::Simple provides an easy API to read and write XML
+            (especially config files). It is deprecated and its use is
+            discouraged.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/G/GR/GRANTM/XML-Simple-2.25.tar.gz">
+                  https://www.cpan.org/authors/id/G/GR/GRANTM/XML-Simple-2.25.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: bb841dce889a26c89a1c2739970e9fbc
+                </p>
+              </li>
+            </ul>
+          </div>
+          <h4>
+            XML::Simple Dependencies
+          </h4>
+          <h5>
+            Optional
+          </h5>
+          <p class="optional">
+            <a class="xref" href="perl-deps.html#perl-xml-sax" title=
+            "XML::SAX-1.02">XML-SAX-1.02</a> (for an alternative parser which
+            will be used if available, otherwise <span class=
+            "application">XML::Parser</span> (which was installed in LFS)
+            will be used)
+          </p>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of XML::Simple
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-xml-writer" name=
+          "perl-xml-writer"></a>XML::Writer-0.900
+        </h2>
+        <div class="package" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Introduction to XML::Writer
+          </h3>
+          <p>
+            XML::Writer provides a <span class="application">Perl</span>
+            extension for writing XML documents.
+          </p>
+          <p>
+            This package is known to build and work properly using an LFS
+            12.4 platform.
+          </p>
+          <h4>
+            Package Information
+          </h4>
+          <div class="itemizedlist">
+            <ul class="compact">
+              <li class="listitem">
+                <p>
+                  Download (HTTP): <a class="ulink" href=
+                  "https://www.cpan.org/authors/id/J/JO/JOSEPHW/XML-Writer-0.900.tar.gz">
+                  https://www.cpan.org/authors/id/J/JO/JOSEPHW/XML-Writer-0.900.tar.gz</a>
+                </p>
+              </li>
+              <li class="listitem">
+                <p>
+                  Download MD5 sum: 2457214360cefda445742a608dd6195e
+                </p>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Installation of XML::Writer
+          </h3>
+          <p>
+            This module uses the standard build and installation
+            instructions:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">perl Makefile.PL &amp;&amp;
+make             &amp;&amp;
+make test</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+        </div>
+      </div>
+      <div class="sect2" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          <a id="perl-alternatives" name="perl-alternatives"></a>CPAN
+          automated install of perl modules
+        </h2>
+        <div class="installation" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="perl-auto-install" name="perl-auto-install"></a> Automatic
+            Installation of Perl Modules.
+          </h3>
+          <p>
+            There is an alternate way of installing the modules using the
+            <span class="command"><strong>cpan</strong></span> shell
+            <span class="command"><strong>install</strong></span> command.
+            The command automatically downloads the latest source from the
+            CPAN archive for the module and any missing prerequisite modules
+            listed by upstream. Then for each module it extracts it, runs the
+            compilation, the tests and installs it.
+          </p>
+          <p>
+            You still need to install any non-perl dependencies before
+            running the automated installation method. You may wish to clean
+            out the <code class="filename">build/</code> directory after
+            installing, to free up the space. If any post-install actions
+            such as creating a symlink are mentioned, you should also do
+            those.
+          </p>
+          <p>
+            The first time you run <span class=
+            "command"><strong>cpan</strong></span>, you'll be prompted to
+            enter some information regarding download locations and methods.
+            This information is retained in files located in <code class=
+            "filename">~/.cpan</code>.
+          </p>
+          <p>
+            In particular, you may wish to configure it so that <a class=
+            "xref" href="../postlfs/sudo.html" title=
+            "Sudo-1.9.17p2">Sudo-1.9.17p2</a> is used for the installs,
+            allowing you to build and test as a regular user. The following
+            examples have not used that approach.
+          </p>
+          <p>
+            Start the <span class="command"><strong>cpan</strong></span>
+            shell by issuing '<span class=
+            "command"><strong>cpan</strong></span>' as the <code class=
+            "systemitem">root</code> user. Any module may now be installed
+            from the <span class="underlined"><code class=
+            "prompt">cpan&gt;&nbsp;</code></span> prompt with the command:
+          </p>
+          <pre class="root"><kbd class="command">install <em class=
+          "replaceable"><code>&lt;Module::Name&gt;</code></em></kbd></pre>
+          <p>
+            For additional commands and help, issue '<span class=
+            "command"><strong>help</strong></span>' from the <span class=
+            "underlined"><code class="prompt">cpan&gt;&nbsp;</code></span>
+            prompt.
+          </p>
+          <p>
+            Alternatively, for scripted or non-interactive installations, use
+            the following syntax as the <code class="systemitem">root</code>
+            user to install one or more modules:
+          </p>
+          <pre class="root"><kbd class="command">cpan -i <em class=
+          "replaceable"><code>&lt;Module1::Name&gt; &lt;Module2::Name&gt;</code></em></kbd></pre>
+          <p>
+            Review the <code class="filename">cpan.1</code> man page for
+            additional parameters you can pass to <span class=
+            "command"><strong>cpan</strong></span> on the command line.
+          </p>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="patchelf.html" title=
+          "Patchelf-0.18.0">Prev</a>
+          <p>
+            Patchelf-0.18.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="perl-deps.html" title=
+          "Perl Module Dependencies">Next</a>
+          <p>
+            Perl Module Dependencies
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

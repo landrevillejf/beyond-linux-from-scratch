@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Inkscape-1.4.2
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;41.&nbsp;Other X-based Programs
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gparted.html" title="Gparted-1.7.0">Prev</a>
+          <p>
+            Gparted-1.7.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="rxvt-unicode.html" title=
+          "rxvt-unicode-9.31">Next</a>
+          <p>
+            rxvt-unicode-9.31
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="other.html" title=
+          "Chapter&nbsp;41.&nbsp;Other X-based Programs">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="inkscape" name="inkscape"></a>Inkscape-1.4.2
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Inkscape
+        </h2>
+        <p>
+          <span class="application">Inkscape</span> is a what you see is what
+          you get Scalable Vector Graphics editor. It is useful for creating,
+          viewing and changing SVG images.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://inkscape.org/gallery/item/56344/inkscape-1.4.2.tar.xz">
+                https://inkscape.org/gallery/item/56344/inkscape-1.4.2.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 0c24e84085bed3f0237d1cdf0856a855
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 51 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 783 MB (197 MB installed)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 2.3 SBU (with parallelism=8)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Required patch: <a class="ulink" href=
+                "https://www.linuxfromscratch.org/patches/blfs/12.4/inkscape-1.4.2-poppler_fixes-3.patch">
+                https://www.linuxfromscratch.org/patches/blfs/12.4/inkscape-1.4.2-poppler_fixes-3.patch</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            The tarball <code class="filename">inkscape-1.4.2.tar.xz</code>
+            will extract to the directory <code class=
+            "filename">inkscape-1.4.2_2025-05-08_ebf0e940d0/</code>.
+          </p>
+        </div>
+        <h3>
+          Inkscape Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../general/boost.html" title=
+          "boost-1.89.0">Boost-1.89.0</a>, <a class="xref" href=
+          "../general/double-conversion.html" title=
+          "Double-conversion-3.3.1">double-conversion-3.3.1</a>, <a class=
+          "xref" href="../general/gc.html" title="GC-8.2.8">GC-8.2.8</a>,
+          <a class="xref" href="../general/gsl.html" title=
+          "gsl-2.8">gsl-2.8</a>, <a class="xref" href="../x/gtkmm3.html"
+          title="Gtkmm-3.24.10">Gtkmm-3.24.10</a>, <a class="xref" href=
+          "../general/libxslt.html" title=
+          "libxslt-1.1.43">libxslt-1.1.43</a>, <a class="xref" href=
+          "../general/poppler.html" title=
+          "Poppler-25.08.0">Poppler-25.08.0</a>, and <a class="xref" href=
+          "../general/popt.html" title="Popt-1.19">popt-1.19</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/imagemagick.html" title=
+          "ImageMagick-7.1.2-1">ImageMagick-7.1.2-1</a> (runtime), <a class=
+          "xref" href="../general/lcms2.html" title="Little CMS-2.17">Little
+          CMS-2.17</a>, <a class="xref" href="../multimedia/libcanberra.html"
+          title="libcanberra-0.30">libcanberra-0.30</a> (to eliminate plugin
+          warnings), <a class="xref" href="../general/potrace.html" title=
+          "Potrace-1.16">Potrace-1.16</a> (for the bucket-fill tool), also
+          various Python modules at runtime for the core extensions:
+          <a class="xref" href="../general/python-modules.html#cachecontrol"
+          title="cachecontrol-0.14.3">cachecontrol-0.14.3</a>, <a class=
+          "xref" href="../general/python-modules.html#cssselect" title=
+          "CSSSelect-1.3.0">cssselect-1.3.0</a>, <a class="xref" href=
+          "../general/python-modules.html#lxml" title=
+          "lxml-6.0.0">lxml-6.0.0</a>, <a class="xref" href=
+          "../general/python-modules.html#numpy" title=
+          "NumPy-2.3.2">NumPy-2.3.2</a>, <a class="xref" href=
+          "../general/python-modules.html#pyserial" title=
+          "pySerial-3.5">pySerial-3.5</a>, and <a class="xref" href=
+          "../general/python-modules.html#scour" title=
+          "Scour-0.38.2">Scour-0.38.2</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/aspell.html" title=
+          "Aspell-0.60.8.1">Aspell-0.60.8.1</a>, <a class="xref" href=
+          "../general/dbus.html" title="dbus-1.16.2">dbus-1.16.2</a> (to run
+          inkscape from scripts), <a class="xref" href=
+          "../general/doxygen.html" title=
+          "Doxygen-1.14.0">Doxygen-1.14.0</a>, <a class="xref" href=
+          "../general/gspell.html" title="gspell-1.14.0">gspell-1.14.0</a>,
+          <a class="ulink" href=
+          "https://sourceforge.net/projects/graphicsmagick">GraphicsMagick</a>,
+          <a class="ulink" href=
+          "https://github.com/LibreOffice/libcdr">libcdr</a>, <a class=
+          "ulink" href=
+          "https://github.com/LibreOffice/libvisio">libvisio</a>, <a class=
+          "ulink" href="https://libwpg.sourceforge.net/">libwpg</a> (or
+          <a class="ulink" href="https://libwpd.sourceforge.net/">libwpd</a>)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Inkscape
+        </h2>
+        <p>
+          First, fix build failures with recent versions of poppler:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">patch -Np1 -i ../inkscape-1.4.2-poppler_fixes-3.patch</kbd></pre>
+        <p>
+          Install <span class="application">Inkscape</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">mkdir build                       &amp;&amp;
+cd    build                       &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr        \
+      -D CMAKE_BUILD_TYPE=Release         \
+      -W no-dev                           \
+      ..                                  &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a working test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            This package installs icon files into the <code class=
+            "filename">/usr/share/icons/hicolor</code> hierarchy and desktop
+            files into the <code class=
+            "filename">/usr/share/applications</code> hierarchy. You can
+            improve system performance and memory usage by updating
+            <code class=
+            "filename">/usr/share/icons/hicolor/index.theme</code> and
+            <code class=
+            "filename">/usr/share/applications/mimeinfo.cache</code>. To
+            perform the update you must have <a class="xref" href=
+            "../x/gtk3.html" title="GTK-3.24.50">GTK-3.24.50</a> installed
+            (for the icon cache) and <a class="xref" href=
+            "../general/desktop-file-utils.html" title=
+            "desktop-file-utils-0.28">desktop-file-utils-0.28</a> (for the
+            desktop cache) and issue the following commands as the
+            <code class="systemitem">root</code> user:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">gtk-update-icon-cache -qtf /usr/share/icons/hicolor &amp;&amp;
+update-desktop-database -q</kbd></pre>
+        </div>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>-D
+          CMAKE_BUILD_TYPE=Release</code></em>: This switch is used to build
+          the release library without any debug `assert` in the code.
+        </p>
+        <p>
+          <em class="parameter"><code>-W no-dev</code></em>: This parameter
+          silences several warnings only intended for project developers.
+        </p>
+        <p>
+          <code class="option">-D WITH_DBUS=ON</code>: use this if you wish
+          to use <span class="command"><strong>inkscape</strong></span> in
+          interactive scripts which manipulate images.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">inkscape and inkview</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libinkscape_base.so (in
+              /usr/lib/inkscape)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/lib/inkscape, and
+              /usr/share/inkscape</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="inkscape-prog" name=
+                    "inkscape-prog"></a><span class="term"><span class=
+                    "command"><strong>inkscape</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a SVG (Scalable Vector Graphics) editing program
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="inkview" name="inkview"></a><span class=
+                    "term"><span class=
+                    "command"><strong>inkview</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a simple program for displaying SVG files
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libinkscape_base" name=
+                    "libinkscape_base"></a><span class="term"><code class=
+                    "filename">libinkscape_base.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    provides the routines used by inkscape and inkview
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gparted.html" title="Gparted-1.7.0">Prev</a>
+          <p>
+            Gparted-1.7.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="rxvt-unicode.html" title=
+          "rxvt-unicode-9.31">Next</a>
+          <p>
+            rxvt-unicode-9.31
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="other.html" title=
+          "Chapter&nbsp;41.&nbsp;Other X-based Programs">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

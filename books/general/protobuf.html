@@ -1,0 +1,346 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Protobuf-32.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="popt.html" title="Popt-1.19">Prev</a>
+          <p>
+            Popt-1.19
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="protobuf-c.html" title=
+          "Protobuf-c-1.5.2">Next</a>
+          <p>
+            Protobuf-c-1.5.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="protobuf" name="protobuf"></a>Protobuf-32.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Protobuf
+        </h2>
+        <p>
+          The <span class="application">Protobuf</span> package contains
+          utilities and libraries for using data in Google's data interchange
+          format.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/protocolbuffers/protobuf/releases/download/v32.0/protobuf-32.0.tar.gz">
+                https://github.com/protocolbuffers/protobuf/releases/download/v32.0/protobuf-32.0.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: a0730ca44019c58538bb2f17e30a96ff
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 9.2 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 134 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 1.3 SBU (with parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Protobuf Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="abseil-cpp.html" title=
+          "Abseil-cpp-20250814.0">Abseil-cpp-20250814.0</a> and <a class=
+          "xref" href="cmake.html" title="CMake-4.1.0">CMake-4.1.0</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="ulink" href="https://github.com/google/googletest">gtest
+          (for tests)</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Protobuf
+        </h2>
+        <p>
+          Install <span class="application">Protobuf</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr      \
+      -D CMAKE_BUILD_TYPE=Release       \
+      -D CMAKE_SKIP_INSTALL_RPATH=ON    \
+      -D protobuf_BUILD_TESTS=OFF       \
+      -D protobuf_BUILD_SHARED_LIBS=ON  \
+      -G Ninja ..                       &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          This package does come with a test suite, but it requires <a class=
+          "ulink" href="https://github.com/google/googletest">gtest</a>,
+          which is not part of BLFS.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>-D
+          CMAKE_SKIP_INSTALL_RPATH=ON</code></em>: This switch makes
+          <span class="command"><strong>cmake</strong></span> remove
+          hardcoded library search paths (rpath) when installing a binary
+          executable file or a shared library. This package does not need
+          rpath once it's installed into the standard location, and rpath may
+          sometimes cause unwanted effects or even security issues.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          protobuf_BUILD_TESTS=OFF</code></em>: This parameter prevents the
+          tests from being built because <a class="ulink" href=
+          "https://github.com/google/googletest">gtest</a> is not part of
+          BLFS.
+        </p>
+        <p>
+          <em class="parameter"><code>-D
+          protobuf_BUILD_SHARED_LIBS=ON</code></em>: This parameter enables
+          building shared versions of the libraries provided by this package
+          instead of static versions.
+        </p>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">protoc (a symlink to protoc-32.0.0),
+              protoc-32.0.0, protoc-gen-upb (a symlink to
+              protoc-gen-upb-32.0.0), and protoc-gen-upbdefs (a symlink to
+              protoc-gen-upbdefs-32.0.0)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libprotobuf.so, libprotobuf-lite.so,
+              libprotoc.so, libupb.a, libutf8_range.so, and
+              libutf8_validity.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/google, /usr/include/upb,
+              /usr/lib/cmake/protobuf, and /usr/lib/cmake/utf8_range</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="protoc" name="protoc"></a><span class=
+                    "term"><span class=
+                    "command"><strong>protoc</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    parses protocol buffer files and generates output for
+                    several programming languages and formats
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libprotobuf" name="libprotobuf"></a><span class=
+                    "term"><code class=
+                    "filename">libprotobuf.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains functions for utilizing data in Google's data
+                    interchange format
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libprotobuf-lite" name=
+                    "libprotobuf-lite"></a><span class="term"><code class=
+                    "filename">libprotobuf-lite.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains a simpler version of the functions for utilizing
+                    data in Google's data interchange format
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libprotoc" name="libprotoc"></a><span class=
+                    "term"><code class="filename">libprotoc.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains functions used by protoc at runtime for
+                    outputting data for several programming languages and
+                    formats
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libupb" name="libupb"></a><span class=
+                    "term"><code class="filename">libupb.a</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a small protobuf implementation written in C
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libutf8_range" name=
+                    "libutf8_range"></a><span class="term"><code class=
+                    "filename">libutf8_range.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains functions that allow a program to determine
+                    whether a sequence of characters is a valid UTF-8
+                    sequence
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libutf8_validity" name=
+                    "libutf8_validity"></a><span class="term"><code class=
+                    "filename">libutf8_validity.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains functions that allow a program to determine
+                    whether a sequence of bytes is a valid UTF-8 sequence,
+                    and to find what the longest valid prefix of the sequence
+                    is
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="popt.html" title="Popt-1.19">Prev</a>
+          <p>
+            Popt-1.19
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="protobuf-c.html" title=
+          "Protobuf-c-1.5.2">Next</a>
+          <p>
+            Protobuf-c-1.5.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

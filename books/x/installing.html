@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Chapter&nbsp;24.&nbsp;Graphical Environments
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Part&nbsp;VI.&nbsp;Graphical Components
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="x.html" title=
+          "Graphical Components">Prev</a>
+          <p>
+            Graphical Components
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xorg7.html" title=
+          "Introduction to Xorg-7">Next</a>
+          <p>
+            Introduction to Xorg-7
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="x.html" title=
+          "Part&nbsp;VI.&nbsp;Graphical Components">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="chapter">
+      <a id="x-window-system" name="x-window-system"></a>Graphical
+      Environments
+    </h1>
+    <div class="chapter" lang="en" xml:lang="en">
+      <p>
+        This chapter contains instructions to build and configure a graphical
+        user environment.
+      </p>
+      <p>
+        For a long time the only graphical environment usable with GNU/Linux
+        has been the <span class="emphasis"><em>X Window System</em></span>.
+        It uses a client/server model which allows writing applications
+        completely independent of the graphical hardware. This has the
+        drawback that accessing modern hardware acceleration is difficult, so
+        another approach named <span class="emphasis"><em>Wayland</em></span>
+        is developed. It is a simpler replacement for X, easier to develop
+        and maintain, using the OpenGL framework. The main desktop
+        environments GNOME and KDE have been ported to it.
+      </p>
+      <p>
+        This chapter provides the basic components of the X Window System and
+        Wayland. For X, the chosen implementation is Xorg, which is a modular
+        implementation and requires more than 100 packages to be installed.
+        The distribution of Xorg is given a release number by the developers,
+        in this case Xorg-7. Individual packages are updated as needed
+        without changing this number.
+      </p>
+      <div class="toc">
+        <h3>
+          Table of Contents
+        </h3>
+        <ul>
+          <li class="sect1">
+            <a href="xorg7.html">Introduction to Xorg-7</a>
+          </li>
+          <li class="sect1">
+            <a href="util-macros.html">util-macros-1.20.2</a>
+          </li>
+          <li class="sect1">
+            <a href="xorgproto.html">xorgproto-2024.1</a>
+          </li>
+          <li class="sect1">
+            <a href="libXau.html">libXau-1.0.12</a>
+          </li>
+          <li class="sect1">
+            <a href="libXdmcp.html">libXdmcp-1.1.5</a>
+          </li>
+          <li class="sect1">
+            <a href="xcb-proto.html">xcb-proto-1.17.0</a>
+          </li>
+          <li class="sect1">
+            <a href="libxcb.html">libxcb-1.17.0</a>
+          </li>
+          <li class="sect1">
+            <a href="x7lib.html">Xorg Libraries</a>
+          </li>
+          <li class="sect1">
+            <a href="libxcvt.html">libxcvt-0.1.3</a>
+          </li>
+          <li class="sect1">
+            <a href="xcb-util.html">xcb-util-0.4.1</a>
+          </li>
+          <li class="sect1">
+            <a href="xcb-utilities.html">XCB Utilities</a>
+          </li>
+          <li class="sect1">
+            <a href="mesa.html">Mesa-25.1.8</a>
+          </li>
+          <li class="sect1">
+            <a href="xbitmaps.html">xbitmaps-1.1.3</a>
+          </li>
+          <li class="sect1">
+            <a href="x7app.html">Xorg Applications</a>
+          </li>
+          <li class="sect1">
+            <a href="luit.html">luit-20240910</a>
+          </li>
+          <li class="sect1">
+            <a href="xcursor-themes.html">xcursor-themes-1.0.7</a>
+          </li>
+          <li class="sect1">
+            <a href="x7font.html">Xorg Fonts</a>
+          </li>
+          <li class="sect1">
+            <a href="xkeyboard-config.html">XKeyboardConfig-2.45</a>
+          </li>
+          <li class="sect1">
+            <a href="xwayland.html">Xwayland-24.1.8</a>
+          </li>
+          <li class="sect1">
+            <a href="xorg-server.html">Xorg-Server-21.1.18</a>
+          </li>
+          <li class="sect1">
+            <a href="x7driver.html">Xorg Input Drivers</a>
+          </li>
+          <li class="sect1">
+            <a href="twm.html">twm-1.0.13.1</a>
+          </li>
+          <li class="sect1">
+            <a href="xterm.html">xterm-401</a>
+          </li>
+          <li class="sect1">
+            <a href="xclock.html">xclock-1.1.1</a>
+          </li>
+          <li class="sect1">
+            <a href="xinit.html">xinit-1.4.4</a>
+          </li>
+          <li class="sect1">
+            <a href="xorg-config.html">Xorg-7 Testing and Configuration</a>
+          </li>
+          <li class="sect1">
+            <a href="tuning-fontconfig.html">Tuning Fontconfig</a>
+          </li>
+          <li class="sect1">
+            <a href="TTF-and-OTF-fonts.html">TTF and OTF fonts</a>
+          </li>
+          <li class="sect1">
+            <a href="x7legacy.html">Xorg Legacy</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="x.html" title=
+          "Graphical Components">Prev</a>
+          <p>
+            Graphical Components
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xorg7.html" title=
+          "Introduction to Xorg-7">Next</a>
+          <p>
+            Introduction to Xorg-7
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="x.html" title=
+          "Part&nbsp;VI.&nbsp;Graphical Components">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

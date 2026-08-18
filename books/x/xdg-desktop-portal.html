@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      xdg-desktop-portal-1.20.3
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;25.&nbsp;Graphical Environment Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="webkitgtk.html" title=
+          "WebKitGTK-2.48.5">Prev</a>
+          <p>
+            WebKitGTK-2.48.5
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xdg-desktop-portal-gtk.html" title=
+          "xdg-desktop-portal-gtk-1.15.3">Next</a>
+          <p>
+            xdg-desktop-portal-gtk-1.15.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="xdg-desktop-portal" name=
+      "xdg-desktop-portal"></a>xdg-desktop-portal-1.20.3
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to xdg-desktop-portal
+        </h2>
+        <p>
+          <span class="application">xdg-desktop-portal</span> is a D-Bus
+          service that allows applications to interact with the desktop in a
+          safe way. Several aspects of desktop interaction, like file
+          chooser, desktop style, etc are implemented in different D-Bus
+          APIs, known as <span class="emphasis"><em>portals</em></span>.
+          Sandboxed applications benefit the most from this service since
+          they don't need special permissions to use the portal APIs, but any
+          application can use it. <span class=
+          "application">xdg-desktop-portal</span> safeguards many resources
+          and features with a user-controlled permission system. This service
+          needs a backend implementing desktop-specific portal interfaces.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/flatpak/xdg-desktop-portal/releases/download/1.20.3/xdg-desktop-portal-1.20.3.tar.xz">
+                https://github.com/flatpak/xdg-desktop-portal/releases/download/1.20.3/xdg-desktop-portal-1.20.3.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 28c2d9b9bbeff811f2d999e1b985c728
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 1.1 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 22 MB (add 3 MB for tests)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU (add 0.1 SBU for tests; with
+                parallelism=4)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          xdg-desktop-portal Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="../postlfs/fuse.html" title=
+          "Fuse-3.17.4">Fuse-3.17.4</a>, <a class="xref" href=
+          "gdk-pixbuf.html" title=
+          "gdk-pixbuf-2.42.12">gdk-pixbuf-2.42.12</a>, <a class="xref" href=
+          "../general/json-glib.html" title=
+          "JSON-GLib-1.10.6">JSON-GLib-1.10.6</a>, <a class="xref" href=
+          "../multimedia/pipewire.html" title=
+          "Pipewire-1.4.7">pipewire-1.4.7</a>, and <a class="xref" href=
+          "../general/dbus.html" title="dbus-1.16.2">dbus-1.16.2</a> (at
+          runtime). Furthermore, a backend is needed at runtime for this
+          package to be of any use, either <a class="xref" href=
+          "xdg-desktop-portal-gtk.html" title=
+          "xdg-desktop-portal-gtk-1.15.3">xdg-desktop-portal-gtk-1.15.3</a>
+          or <a class="xref" href="../gnome/xdg-desktop-portal-gnome.html"
+          title=
+          "xdg-desktop-portal-gnome-48.0">xdg-desktop-portal-gnome-48.0</a>
+          or <a class="xref" href="../lxqt/xdg-desktop-portal-lxqt.html"
+          title=
+          "xdg-desktop-portal-lxqt-1.2.0">xdg-desktop-portal-lxqt-1.2.0</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../general/bubblewrap.html" title=
+          "Bubblewrap-0.11.0">bubblewrap-0.11.0</a> and <a class="xref" href=
+          "../general/python-modules.html#docutils" title=
+          "docutils-0.21.2">docutils-0.21.2</a> (for building the manual
+          pages)
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            Although there is an option to build the package without
+            <span class="application">bubblewrap</span>, upstream developers
+            and LFS editors alike highly recommend to not use this
+            possibility, as it will create a large security issue.
+          </p>
+        </div>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../basicnet/geoclue2.html" title=
+          "GeoClue-2.7.2">GeoClue-2.7.2</a> (for the <span class=
+          "quote">“<span class="quote">location</span>”</span> portal), and
+          <a class="xref" href="../general/python-modules.html#pytest" title=
+          "Pytest-8.4.1">pytest-8.4.1</a> with <a class="xref" href=
+          "../general/libportal.html" title=
+          "libportal-0.9.1">libportal-0.9.1</a>, <a class="xref" href=
+          "../general/python-modules.html#python-dbusmock" title=
+          "dbusmock-0.36.0">dbusmock-0.36.0</a>, and <a class="xref" href=
+          "../general/umockdev.html" title=
+          "Umockdev-0.19.3">umockdev-0.19.3</a> (for running tests)
+        </p>
+        <h4>
+          Optional (for building the documentation)
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../general/python-modules.html#sphinx" title=
+          "Sphinx-8.2.3">sphinx-8.2.3</a> with <a class="ulink" href=
+          "https://pypi.org/project/sphinxext-opengraph/">sphinxext.opengraph</a>,
+          <a class="ulink" href=
+          "https://pypi.org/project/sphinx-copybutton/">sphinx_copybutton</a>,
+          <a class="ulink" href="https://pypi.org/project/furo/">furo</a>,
+          and <a class="ulink" href=
+          "https://github.com/flatpak/flatpak">flatpak</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of xdg-desktop-portal
+        </h2>
+        <p>
+          Install <span class="application">xdg-desktop-portal</span> by
+          running the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup --prefix=/usr --buildtype=release -D tests=disabled .. &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          If the optional dependencies are installed, you can test the
+          results by running:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">meson configure -D tests=enabled &amp;&amp;
+ninja test</kbd></pre>
+        <p>
+          Without the external dependencies one test,
+          integration/dynamiclauncher is known to fail.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          Remove systemd files that are useless (as the <code class=
+          "systemitem">root</code> user):
+        </p>
+        <pre class="root"><kbd class=
+        "command">rm -rvf /usr/lib/systemd</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>-D tests=disabled</code></em>: Prevents
+          requiring several optional dependencies that are only needed for
+          tests.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring xdg-desktop-portal
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            <a id="xdg-desktop-portal-config" name=
+            "xdg-desktop-portal-config"></a>Config Files
+          </h3>
+          <p>
+            The main configuration files are <code class=
+            "filename">~/.config/xdg-desktop-portal/portals.conf</code>,
+            <code class=
+            "filename">/etc/xdg-desktop-portal/portals.conf</code>, and
+            <code class=
+            "filename">/usr/share/xdg-desktop-portal/portals.conf</code>.
+            Several other locations can be searched for configuration files.
+            See <a class="ulink" href=
+            "https://man.archlinux.org/man/portals.conf.5">portals.conf(5)</a>.
+          </p>
+        </div>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Configuration Information
+          </h3>
+          <p>
+            The various configuration files are used to choose the backend
+            depending of various conditions. See <a class="ulink" href=
+            "https://man.archlinux.org/man/portals.conf.5">portals.conf(5)</a>
+            for details.
+          </p>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">several daemons in /usr/libexec</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Librar(y,ies):</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Director(y,ies):</strong>
+              <span class="segbody">None</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="webkitgtk.html" title=
+          "WebKitGTK-2.48.5">Prev</a>
+          <p>
+            WebKitGTK-2.48.5
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="xdg-desktop-portal-gtk.html" title=
+          "xdg-desktop-portal-gtk-1.15.3">Next</a>
+          <p>
+            xdg-desktop-portal-gtk-1.15.3
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lib.html" title=
+          "Chapter&nbsp;25.&nbsp;Graphical Environment Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

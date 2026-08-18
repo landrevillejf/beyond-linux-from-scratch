@@ -1,0 +1,488 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Aspell-0.60.8.1
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;9.&nbsp;General Libraries
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="apr-util.html" title=
+          "Apr-Util-1.6.3">Prev</a>
+          <p>
+            Apr-Util-1.6.3
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="boost.html" title="boost-1.89.0">Next</a>
+          <p>
+            boost-1.89.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="aspell" name="aspell"></a>Aspell-0.60.8.1
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to Aspell
+        </h2>
+        <p>
+          The <span class="application">Aspell</span> package contains an
+          interactive spell checking program and the <span class=
+          "application">Aspell</span> libraries. <span class=
+          "application">Aspell</span> can either be used as a library or as
+          an independent spell checker.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://ftp.gnu.org/gnu/aspell/aspell-0.60.8.1.tar.gz">https://ftp.gnu.org/gnu/aspell/aspell-0.60.8.1.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 187bd142f522ada555c7aa6b9cbf56e6
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 3.4 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 41 MB (Additional 8 MB for EN
+                dictionary)
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.4 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Additional Downloads
+        </h3>
+        <p>
+          You'll need to download at least one dictionary. The English
+          dictionary is given as an example below. Dictionaries in many other
+          languages can be found at <a class="ulink" href=
+          "https://ftp.gnu.org/gnu/aspell/dict">https://ftp.gnu.org/gnu/aspell/dict</a>.
+        </p>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Aspell English dictionary: <a class="ulink" href=
+                "https://ftp.gnu.org/gnu/aspell/dict/en/aspell6-en-2020.12.07-0.tar.bz2">
+                https://ftp.gnu.org/gnu/aspell/dict/en/aspell6-en-2020.12.07-0.tar.bz2</a>
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          Aspell Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="which.html" title=
+          "Which-2.23 and Alternatives">Which-2.23</a> (for the dictionaries)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of Aspell
+        </h2>
+        <p>
+          First, fix a problem when building with gcc-15:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed -e 's/; i.*size)/, e = end(); i != e; ++i, ++size_)/' \
+    -i modules/speller/default/vector_hash-t.hpp</kbd></pre>
+        <p>
+          Install <span class="application">Aspell</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">./configure --prefix=/usr &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install &amp;&amp;
+ln -svfn aspell-0.60 /usr/lib/aspell &amp;&amp;
+
+install -v -m755 -d /usr/share/doc/aspell-0.60.8.1/aspell{,-dev}.html &amp;&amp;
+
+install -v -m644 manual/aspell.html/* \
+    /usr/share/doc/aspell-0.60.8.1/aspell.html &amp;&amp;
+
+install -v -m644 manual/aspell-dev.html/* \
+    /usr/share/doc/aspell-0.60.8.1/aspell-dev.html</kbd></pre>
+        <p>
+          If you do not plan to install <span class=
+          "application">Ispell</span>, then copy the wrapper script
+          <span class="command"><strong>ispell</strong></span>:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -v -m 755 scripts/ispell /usr/bin/</kbd></pre>
+        <p>
+          If you do not plan to install <span class=
+          "application">Spell</span>, then copy the wrapper script
+          <span class="command"><strong>spell</strong></span>:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -v -m 755 scripts/spell /usr/bin/</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <span class="command"><strong>ln -svfn aspell-0.60
+          /usr/lib/aspell</strong></span>: This command is useful for
+          configuration of other applications, such as <a class="xref" href=
+          "enchant.html" title="enchant-2.8.12">enchant-2.8.12</a>.
+        </p>
+      </div>
+      <div class="configuration" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Configuring Aspell
+        </h2>
+        <div class="sect3" lang="en" xml:lang="en">
+          <h3 class="sect3">
+            Configuration Information
+          </h3>
+          <p>
+            After <span class="application">Aspell</span> is installed, you
+            must set up at least one dictionary. Install the English
+            dictionary by running the following commands:
+          </p>
+          <pre class="userinput"><kbd class=
+          "command">tar xf ../aspell6-en-2020.12.07-0.tar.bz2 &amp;&amp;
+cd aspell6-en-2020.12.07-0                &amp;&amp;
+
+./configure &amp;&amp;
+make</kbd></pre>
+          <p>
+            Now, as the <code class="systemitem">root</code> user:
+          </p>
+          <pre class="root"><kbd class="command">make install</kbd></pre>
+          <p>
+            Other dictionaries can be installed with the same instructions.
+          </p>
+        </div>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">aspell, aspell-import, precat, preunzip,
+              prezip, prezip-bin, pspell-config, run-with-aspell,
+              word-list-compress and optionally, ispell and spell.</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">libaspell.so and libpspell.so</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/include/pspell and
+              /usr/lib/aspell-0.60</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="aspell-prog" name="aspell-prog"></a><span class=
+                    "term"><span class=
+                    "command"><strong>aspell</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a utility that can function as an <span class=
+                    "command"><strong>ispell -a</strong></span> replacement,
+                    as an independent spell checker, as a test utility to
+                    test out <span class="application">Aspell</span>
+                    features, and as a utility for managing dictionaries
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="aspell-ispell" name=
+                    "aspell-ispell"></a><span class="term"><span class=
+                    "command"><strong>ispell</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a wrapper around <span class=
+                    "command"><strong>aspell</strong></span> to invoke it in
+                    <span class="command"><strong>ispell</strong></span>
+                    compatible mode
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="aspell-spell" name="aspell-spell"></a><span class=
+                    "term"><span class=
+                    "command"><strong>spell</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a wrapper around <span class=
+                    "command"><strong>aspell</strong></span> to invoke it in
+                    <span class="command"><strong>spell</strong></span>
+                    compatible mode
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="aspell-import" name=
+                    "aspell-import"></a><span class="term"><span class=
+                    "command"><strong>aspell-import</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    imports old personal dictionaries into <span class=
+                    "application">Aspell</span>
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="precat" name="precat"></a><span class=
+                    "term"><span class=
+                    "command"><strong>precat</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    decompresses a <span class=
+                    "command"><strong>prezip</strong></span>ped file to
+                    stdout
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="preunzip" name="preunzip"></a><span class=
+                    "term"><span class=
+                    "command"><strong>preunzip</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    decompresses a <span class=
+                    "command"><strong>prezip</strong></span>ped file
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="prezip" name="prezip"></a><span class=
+                    "term"><span class=
+                    "command"><strong>prezip</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a prefix delta compressor, used to compress sorted
+                    word lists or other similar text files
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="prezip-bin" name="prezip-bin"></a><span class=
+                    "term"><span class=
+                    "command"><strong>prezip-bin</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is called by the various wrapper scripts to perform the
+                    actual compressing and decompressing
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="pspell-config" name=
+                    "pspell-config"></a><span class="term"><span class=
+                    "command"><strong>pspell-config</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    displays information about the <code class=
+                    "filename">libpspell</code> installation, mostly for use
+                    in build scripts
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="run-with-aspell" name=
+                    "run-with-aspell"></a><span class="term"><span class=
+                    "command"><strong>run-with-aspell</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a script to help use <span class=
+                    "application">Aspell</span> as an <span class=
+                    "command"><strong>ispell</strong></span> replacement
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="word-list-compress" name=
+                    "word-list-compress"></a><span class="term"><span class=
+                    "command"><strong>word-list-compress</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    compresses or decompresses sorted word lists for use with
+                    the <span class="application">Aspell</span> spell checker
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libaspell" name="libaspell"></a><span class=
+                    "term"><code class="filename">libaspell.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains spell checking API functions
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libpspell" name="libpspell"></a><span class=
+                    "term"><code class="filename">libpspell.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is an interface to the <code class=
+                    "filename">libaspell</code> library. All the spell
+                    checking functionality is now in <code class=
+                    "filename">libaspell</code> but this library is included
+                    for backward compatibility
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="apr-util.html" title=
+          "Apr-Util-1.6.3">Prev</a>
+          <p>
+            Apr-Util-1.6.3
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="boost.html" title="boost-1.89.0">Next</a>
+          <p>
+            boost-1.89.0
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="genlib.html" title=
+          "Chapter&nbsp;9.&nbsp;General Libraries">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

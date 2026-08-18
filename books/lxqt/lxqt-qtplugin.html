@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      lxqt-qtplugin-2.2.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;37.&nbsp;LXQt Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-globalkeys.html" title=
+          "lxqt-globalkeys-2.2.0">Prev</a>
+          <p>
+            lxqt-globalkeys-2.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="lxqt-panel.html" title=
+          "lxqt-panel-2.2.2">Next</a>
+          <p>
+            lxqt-panel-2.2.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="lxqt-qtplugin" name="lxqt-qtplugin"></a>lxqt-qtplugin-2.2.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to lxqt-qtplugin
+        </h2>
+        <p>
+          The <span class="application">lxqt-qtplugin</span> package provides
+          an <span class="application">LXQt</span> <span class=
+          "application">Qt</span> platform integration plugin.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/lxqt/lxqt-qtplugin/releases/download/2.2.0/lxqt-qtplugin-2.2.0.tar.xz">
+                https://github.com/lxqt/lxqt-qtplugin/releases/download/2.2.0/lxqt-qtplugin-2.2.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: e3cc5c14605f50a93da768d9d58849a7
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 24 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 2.3 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.1 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          lxqt-qtplugin Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="libfm-qt.html" title=
+          "libfm-qt-2.2.0">libfm-qt-2.2.0</a>, <a class="xref" href=
+          "liblxqt.html" title="liblxqt-2.2.0">liblxqt-2.2.0</a>, and
+          <a class="xref" href="libdbusmenu-lxqt.html" title=
+          "libdbusmenu-lxqt-0.3.0">libdbusmenu-lxqt-0.3.0</a>
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of lxqt-qtplugin
+        </h2>
+        <p>
+          Install <span class="application">lxqt-qtplugin</span> by running
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr \
+      -D CMAKE_BUILD_TYPE=Release  \
+      ..                           &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">libqtlxqt.so (in
+              $QT6DIR/plugins/platformthemes)</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directory:</strong>
+              <span class="segbody">$QT6DIR/plugins/platformthemes</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="libqtlxqt-lib" name=
+                    "libqtlxqt-lib"></a><span class="term"><code class=
+                    "filename">libqtlxqt.so</code></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    contains the LXQt QT plugin loader
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-globalkeys.html" title=
+          "lxqt-globalkeys-2.2.0">Prev</a>
+          <p>
+            lxqt-globalkeys-2.2.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="lxqt-panel.html" title=
+          "lxqt-panel-2.2.2">Next</a>
+          <p>
+            lxqt-panel-2.2.2
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

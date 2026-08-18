@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      Part&nbsp;VI.&nbsp;Graphical Components
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="../server/unbound.html" title=
+          "Unbound-1.23.1">Prev</a>
+          <p>
+            Unbound-1.23.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="installing.html" title=
+          "Graphical Environments">Next</a>
+          <p>
+            Graphical Environments
+          </p>
+        </li>
+        <li class="up">.
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="part">
+      <a id="x" name="x"></a>Graphical Components
+    </h1>
+    <div class="part">
+      <div class="toc">
+        <h3>
+          Table of Contents
+        </h3>
+        <ul>
+          <li class="chapter">
+            <h4>
+              <a href="installing.html">24. Graphical Environments</a>
+            </h4>
+            <ul>
+              <li class="sect1">
+                <a href="xorg7.html">Introduction to Xorg-7</a>
+              </li>
+              <li class="sect1">
+                <a href="util-macros.html">util-macros-1.20.2</a>
+              </li>
+              <li class="sect1">
+                <a href="xorgproto.html">xorgproto-2024.1</a>
+              </li>
+              <li class="sect1">
+                <a href="libXau.html">libXau-1.0.12</a>
+              </li>
+              <li class="sect1">
+                <a href="libXdmcp.html">libXdmcp-1.1.5</a>
+              </li>
+              <li class="sect1">
+                <a href="xcb-proto.html">xcb-proto-1.17.0</a>
+              </li>
+              <li class="sect1">
+                <a href="libxcb.html">libxcb-1.17.0</a>
+              </li>
+              <li class="sect1">
+                <a href="x7lib.html">Xorg Libraries</a>
+              </li>
+              <li class="sect1">
+                <a href="libxcvt.html">libxcvt-0.1.3</a>
+              </li>
+              <li class="sect1">
+                <a href="xcb-util.html">xcb-util-0.4.1</a>
+              </li>
+              <li class="sect1">
+                <a href="xcb-utilities.html">XCB Utilities</a>
+              </li>
+              <li class="sect1">
+                <a href="mesa.html">Mesa-25.1.8</a>
+              </li>
+              <li class="sect1">
+                <a href="xbitmaps.html">xbitmaps-1.1.3</a>
+              </li>
+              <li class="sect1">
+                <a href="x7app.html">Xorg Applications</a>
+              </li>
+              <li class="sect1">
+                <a href="luit.html">luit-20240910</a>
+              </li>
+              <li class="sect1">
+                <a href="xcursor-themes.html">xcursor-themes-1.0.7</a>
+              </li>
+              <li class="sect1">
+                <a href="x7font.html">Xorg Fonts</a>
+              </li>
+              <li class="sect1">
+                <a href="xkeyboard-config.html">XKeyboardConfig-2.45</a>
+              </li>
+              <li class="sect1">
+                <a href="xwayland.html">Xwayland-24.1.8</a>
+              </li>
+              <li class="sect1">
+                <a href="xorg-server.html">Xorg-Server-21.1.18</a>
+              </li>
+              <li class="sect1">
+                <a href="x7driver.html">Xorg Input Drivers</a>
+              </li>
+              <li class="sect1">
+                <a href="twm.html">twm-1.0.13.1</a>
+              </li>
+              <li class="sect1">
+                <a href="xterm.html">xterm-401</a>
+              </li>
+              <li class="sect1">
+                <a href="xclock.html">xclock-1.1.1</a>
+              </li>
+              <li class="sect1">
+                <a href="xinit.html">xinit-1.4.4</a>
+              </li>
+              <li class="sect1">
+                <a href="xorg-config.html">Xorg-7 Testing and
+                Configuration</a>
+              </li>
+              <li class="sect1">
+                <a href="tuning-fontconfig.html">Tuning Fontconfig</a>
+              </li>
+              <li class="sect1">
+                <a href="TTF-and-OTF-fonts.html">TTF and OTF fonts</a>
+              </li>
+              <li class="sect1">
+                <a href="x7legacy.html">Xorg Legacy</a>
+              </li>
+            </ul>
+          </li>
+          <li class="chapter">
+            <h4>
+              <a href="lib.html">25. Graphical Environment Libraries</a>
+            </h4>
+            <ul>
+              <li class="sect1">
+                <a href="atkmm.html">Atkmm-2.28.4</a>
+              </li>
+              <li class="sect1">
+                <a href="atkmm2.html">Atkmm-2.36.3</a>
+              </li>
+              <li class="sect1">
+                <a href="at-spi2-core.html">at-spi2-core-2.56.4</a>
+              </li>
+              <li class="sect1">
+                <a href="cairo.html">Cairo-1.18.4</a>
+              </li>
+              <li class="sect1">
+                <a href="cairomm-1.0.html">libcairomm-1.0
+                (cairomm-1.14.5)</a>
+              </li>
+              <li class="sect1">
+                <a href="cairomm-1.16.html">libcairomm-1.16
+                (cairomm-1.18.0)</a>
+              </li>
+              <li class="sect1">
+                <a href="colord-gtk.html">colord-gtk-0.3.1</a>
+              </li>
+              <li class="sect1">
+                <a href="fltk.html">FLTK-1.4.4</a>
+              </li>
+              <li class="sect1">
+                <a href="freeglut.html">Freeglut-3.6.0</a>
+              </li>
+              <li class="sect1">
+                <a href="gdk-pixbuf.html">gdk-pixbuf-2.42.12</a>
+              </li>
+              <li class="sect1">
+                <a href="glew.html">GLEW-2.2.0</a>
+              </li>
+              <li class="sect1">
+                <a href="glslang.html">glslang-15.4.0</a>
+              </li>
+              <li class="sect1">
+                <a href="glu.html">GLU-9.0.3</a>
+              </li>
+              <li class="sect1">
+                <a href="goffice010.html">GOffice-0.10.59</a>
+              </li>
+              <li class="sect1">
+                <a href="graphene.html">Graphene-1.10.8</a>
+              </li>
+              <li class="sect1">
+                <a href="gtk3.html">GTK-3.24.50</a>
+              </li>
+              <li class="sect1">
+                <a href="gtk4.html">GTK-4.18.6</a>
+              </li>
+              <li class="sect1">
+                <a href="gtkmm3.html">Gtkmm-3.24.10</a>
+              </li>
+              <li class="sect1">
+                <a href="gtkmm4.html">Gtkmm-4.18.0</a>
+              </li>
+              <li class="sect1">
+                <a href="gtk-vnc.html">gtk-vnc-1.5.0</a>
+              </li>
+              <li class="sect1">
+                <a href="gtksourceview.html">gtksourceview-3.24.11</a>
+              </li>
+              <li class="sect1">
+                <a href="gtksourceview4.html">gtksourceview4-4.8.4</a>
+              </li>
+              <li class="sect1">
+                <a href="gtksourceview5.html">gtksourceview5-5.16.0</a>
+              </li>
+              <li class="sect1">
+                <a href="imlib2.html">imlib2-1.12.5</a>
+              </li>
+              <li class="sect1">
+                <a href="kcolorpicker.html">kColorPicker-0.3.1</a>
+              </li>
+              <li class="sect1">
+                <a href="kimageannotator.html">kImageAnnotator-0.7.1</a>
+              </li>
+              <li class="sect1">
+                <a href="keybinder-3.html">keybinder-3.0-0.3.2</a>
+              </li>
+              <li class="sect1">
+                <a href="libadwaita.html">libadwaita-1.7.6</a>
+              </li>
+              <li class="sect1">
+                <a href="libei.html">libei-1.4.1</a>
+              </li>
+              <li class="sect1">
+                <a href="libhandy1.html">libhandy-1.8.3</a>
+              </li>
+              <li class="sect1">
+                <a href="libdrm.html">Libdrm-2.4.125</a>
+              </li>
+              <li class="sect1">
+                <a href="libepoxy.html">libepoxy-1.5.10</a>
+              </li>
+              <li class="sect1">
+                <a href="libnotify.html">libnotify-0.8.6</a>
+              </li>
+              <li class="sect1">
+                <a href="libxklavier.html">libxklavier-5.4</a>
+              </li>
+              <li class="sect1">
+                <a href="pango.html">Pango-1.56.4</a>
+              </li>
+              <li class="sect1">
+                <a href="pangomm.html">Pangomm-2.46.4</a>
+              </li>
+              <li class="sect1">
+                <a href="pangomm2.html">Pangomm-2.56.1</a>
+              </li>
+              <li class="sect1">
+                <a href="qt6.html">Qt-6.9.2</a>
+              </li>
+              <li class="sect1">
+                <a href="qtwebengine.html">QtWebEngine-6.9.2</a>
+              </li>
+              <li class="sect1">
+                <a href=
+                "startup-notification.html">startup-notification-0.12</a>
+              </li>
+              <li class="sect1">
+                <a href="vulkan-headers.html">Vulkan-Headers-1.4.321</a>
+              </li>
+              <li class="sect1">
+                <a href="vulkan-loader.html">Vulkan-Loader-1.4.321</a>
+              </li>
+              <li class="sect1">
+                <a href="webkitgtk.html">WebKitGTK-2.48.5</a>
+              </li>
+              <li class="sect1">
+                <a href=
+                "xdg-desktop-portal.html">xdg-desktop-portal-1.20.3</a>
+              </li>
+              <li class="sect1">
+                <a href=
+                "xdg-desktop-portal-gtk.html">xdg-desktop-portal-gtk-1.15.3</a>
+              </li>
+            </ul>
+          </li>
+          <li class="chapter">
+            <h4>
+              <a href="dm.html">26. Display Managers</a>
+            </h4>
+            <ul>
+              <li class="sect1">
+                <a href="gdm.html">GDM-48.0</a>
+              </li>
+              <li class="sect1">
+                <a href="lightdm.html">lightdm-1.32.0</a>
+              </li>
+              <li class="sect1">
+                <a href="sddm.html">sddm-0.21.0</a>
+              </li>
+            </ul>
+          </li>
+          <li class="chapter">
+            <h4>
+              <a href="wm.html">27. Window Managers</a>
+            </h4>
+            <ul>
+              <li class="sect1">
+                <a href="fluxbox.html">Fluxbox-1.3.7</a>
+              </li>
+              <li class="sect1">
+                <a href="icewm.html">IceWM-3.8.2</a>
+              </li>
+              <li class="sect1">
+                <a href="openbox.html">openbox-3.6.1</a>
+              </li>
+            </ul>
+          </li>
+          <li class="chapter">
+            <h4>
+              <a href="icons.html">28. Icons</a>
+            </h4>
+            <ul>
+              <li class="sect1">
+                <a href="adwaita-icon-theme.html">adwaita-icon-theme-48.1</a>
+              </li>
+              <li class="sect1">
+                <a href="breeze-icons.html">breeze-icons-6.17.0</a>
+              </li>
+              <li class="sect1">
+                <a href="gnome-icon-theme.html">gnome-icon-theme-3.12.0</a>
+              </li>
+              <li class="sect1">
+                <a href=
+                "gnome-icon-theme-extras.html">gnome-icon-theme-extras-3.12.0</a>
+              </li>
+              <li class="sect1">
+                <a href=
+                "gnome-icon-theme-symbolic.html">gnome-icon-theme-symbolic-3.12.0</a>
+              </li>
+              <li class="sect1">
+                <a href="gnome-themes-extra.html">gnome-themes-extra-3.28</a>
+              </li>
+              <li class="sect1">
+                <a href="hicolor-icon-theme.html">hicolor-icon-theme-0.18</a>
+              </li>
+              <li class="sect1">
+                <a href="icon-naming-utils.html">icon-naming-utils-0.8.90</a>
+              </li>
+              <li class="sect1">
+                <a href="lxde-icon-theme.html">lxde-icon-theme-0.5.1</a>
+              </li>
+              <li class="sect1">
+                <a href="oxygen-icons.html">oxygen-icons-6.0.0</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="../server/unbound.html" title=
+          "Unbound-1.23.1">Prev</a>
+          <p>
+            Unbound-1.23.1
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="installing.html" title=
+          "Graphical Environments">Next</a>
+          <p>
+            Graphical Environments
+          </p>
+        </li>
+        <li class="up">.
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

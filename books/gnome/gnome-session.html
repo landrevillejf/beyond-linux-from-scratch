@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      gnome-session-48.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome-shell-extensions.html" title=
+          "gnome-shell-extensions-48.3">Prev</a>
+          <p>
+            gnome-shell-extensions-48.3
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gnome-tweaks.html" title=
+          "gnome-tweaks-46.1">Next</a>
+          <p>
+            gnome-tweaks-46.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="core.html" title=
+          "Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="gnome-session" name="gnome-session"></a>gnome-session-48.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to GNOME Session
+        </h2>
+        <p>
+          The <span class="application">GNOME Session</span> package contains
+          the <span class="application">GNOME</span> session manager.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://download.gnome.org/sources/gnome-session/48/gnome-session-48.0.tar.xz">
+                https://download.gnome.org/sources/gnome-session/48/gnome-session-48.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 7b06c3d7aff4c13be55fe90a3a8bb0c4
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 480 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 9.6 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.2 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          GNOME Session Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <span class="phrase"><a class="xref" href="../general/elogind.html"
+          title="elogind-255.17">elogind-255.17</a>,</span> <a class="xref"
+          href="gnome-desktop.html" title=
+          "gnome-desktop-44.3">gnome-desktop-44.3</a>, <a class="xref" href=
+          "../general/json-glib.html" title=
+          "JSON-GLib-1.10.6">JSON-GLib-1.10.6</a>, <a class="xref" href=
+          "../x/mesa.html" title="Mesa-25.1.8">Mesa-25.1.8</a>, and <a class=
+          "xref" href="../general/upower.html" title=
+          "UPower-1.90.9">UPower-1.90.9</a>
+        </p>
+        <h4>
+          Optional
+        </h4>
+        <p class="optional">
+          <a class="xref" href="../pst/xmlto.html" title=
+          "xmlto-0.0.29">xmlto-0.0.29</a>, and <a class="xref" href=
+          "../general/libxslt.html" title="libxslt-1.1.43">libxslt-1.1.43</a>
+          with <a class="xref" href="../pst/docbook.html" title=
+          "docbook-xml-4.5">docbook-xml-4.5</a> and <a class="xref" href=
+          "../pst/docbook-xsl.html" title=
+          "docbook-xsl-nons-1.79.2">docbook-xsl-nons-1.79.2</a> (to build the
+          documentation)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of GNOME Session
+        </h2>
+        <p>
+          When running GNOME under <a class="xref" href=
+          "../general/wayland.html" title=
+          "Wayland-1.24.0">Wayland-1.24.0</a>, environment settings are not
+          imported for the user using the system profile. The Wayland
+          developers are currently undecided on a standard method to provide
+          system environment settings for user sessions. To work around this
+          limitation, execute the following command to make <span class=
+          "command"><strong>gnome-session</strong></span> use a login shell:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">sed 's@/bin/sh@/bin/sh -l@' -i gnome-session/gnome-session.in</kbd></pre>
+        <p>
+          Install <span class="application">GNOME Session</span> by running
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+meson setup --prefix=/usr              \
+            --buildtype=release        \
+            -D man=false               \
+            -D docbook=false           \
+            -D systemduserunitdir=/tmp \
+            ..                         &amp;&amp;
+ninja</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">ninja install</kbd></pre>
+        <p>
+          If you generated the documentation, move it to a versioned
+          directory:
+        </p>
+        <pre class="root"><kbd class=
+        "command">mv -v /usr/share/doc/gnome-session{,-48.0}</kbd></pre>
+        <p>
+          This package creates two Xorg based <code class=
+          "filename">.desktop</code> files in the <code class=
+          "filename">/usr/share/xsessions/</code> directory, and two Wayland
+          based <code class="filename">.desktop</code> files in the
+          <code class="filename">/usr/share/wayland-sessions/</code>
+          directory. Only one is needed in each directory on a BLFS system,
+          so prevent the extra files showing up as options in a display
+          manager. As the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">rm -v /usr/share/xsessions/gnome.desktop &amp;&amp;
+rm -v /usr/share/wayland-sessions/gnome.desktop</kbd></pre>
+        <p>
+          Now, as the <code class="systemitem">root</code> user, remove
+          systemd units that are useless on SysV systems:
+        </p>
+        <pre class="root"><kbd class=
+        "command">rm -rv /tmp/{*.d,*.target,*.service}</kbd></pre>
+        <p>
+          The startup sequence of gnome-wayland needs to create a dbus
+          session. On SysV, this has to be added to the shipped <code class=
+          "filename">gnome-wayland.desktop</code> file, which is written for
+          systemd. As the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">sed -e 's@^Exec=@&amp;/usr/bin/dbus-run-session @' \
+    -i /usr/share/wayland-sessions/gnome-wayland.desktop</kbd></pre>
+      </div>
+      <div class="commands" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Command Explanations
+        </h2>
+        <p>
+          <em class="parameter"><code>--buildtype=release</code></em>:
+          Specify a buildtype suitable for stable releases of the package, as
+          the default may produce unoptimized binaries.
+        </p>
+        <p>
+          <em class="parameter"><code>-D man=false -D
+          docbook=false</code></em>: These parameters disable building
+          documentation. Omit them if you have built the optional
+          dependencies.
+        </p>
+      </div>
+      <div class="starting" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Starting GNOME
+        </h2>
+        <p>
+          The easiest way to start GNOME is to use a display manager.
+          <a class="xref" href="../x/gdm.html" title="GDM-48.0">GDM-48.0</a>
+          is the recommended display manager.
+        </p>
+        <p>
+          It is also possible to start <span class="application">GNOME</span>
+          from the command line. However, you must still have <a class="xref"
+          href="../x/gdm.html" title="GDM-48.0">GDM-48.0</a> installed for
+          the desktop to work. In previous releases of GNOME, gnome-shell
+          would start without it installed, but this changed in 48.0. GDM
+          does not need to be enabled to start gnome-shell from the command
+          line.
+        </p>
+        <p>
+          To start <span class="application">GNOME</span> using <a class=
+          "xref" href="../x/xinit.html" title="xinit-1.4.4">xinit-1.4.4</a>,
+          run the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cat &gt; ~/.xinitrc &lt;&lt; "EOF"
+<code class="literal">dbus-run-session gnome-session</code>
+EOF
+
+startx</kbd></pre>
+        <p>
+          Alternatively, to start <span class="application">GNOME</span> with
+          Wayland support, run the following command:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">XDG_SESSION_TYPE=wayland dbus-run-session gnome-session</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">gnome-session, gnome-session-inhibit, and
+              gnome-session-quit</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/share/doc/gnome-session-48.0 and
+              /usr/share/gnome-session</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gnome-session-prog" name=
+                    "gnome-session-prog"></a><span class="term"><span class=
+                    "command"><strong>gnome-session</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to start up the <span class=
+                    "application">GNOME</span> Desktop environment
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gnome-session-inhibit" name=
+                    "gnome-session-inhibit"></a><span class=
+                    "term"><span class=
+                    "command"><strong>gnome-session-inhibit</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to inhibit certain <span class=
+                    "application">GNOME</span> Session functionality while
+                    executing the given command
+                  </p>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <p>
+                    <a id="gnome-session-quit" name=
+                    "gnome-session-quit"></a><span class="term"><span class=
+                    "command"><strong>gnome-session-quit</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is used to end the <span class="application">GNOME</span>
+                    Session
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="gnome-shell-extensions.html" title=
+          "gnome-shell-extensions-48.3">Prev</a>
+          <p>
+            gnome-shell-extensions-48.3
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="gnome-tweaks.html" title=
+          "gnome-tweaks-46.1">Next</a>
+          <p>
+            gnome-tweaks-46.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="core.html" title=
+          "Chapter&nbsp;33.&nbsp;GNOME Libraries and Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

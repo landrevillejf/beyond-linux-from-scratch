@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      pcmanfm-qt-2.2.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;37.&nbsp;LXQt Desktop
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-panel.html" title=
+          "lxqt-panel-2.2.2">Prev</a>
+          <p>
+            lxqt-panel-2.2.2
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="lxqt-powermanagement.html" title=
+          "lxqt-powermanagement-2.2.1">Next</a>
+          <p>
+            lxqt-powermanagement-2.2.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="pcmanfm-qt" name="pcmanfm-qt"></a>pcmanfm-qt-2.2.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to pcmanfm-qt
+        </h2>
+        <p>
+          The <span class="application">pcmanfm-qt</span> is a file manager
+          and desktop icon manager (a <span class="application">Qt</span>
+          port of <span class="application">pcmanfm</span> and <span class=
+          "application">libfm</span>).
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/lxqt/pcmanfm-qt/releases/download/2.2.0/pcmanfm-qt-2.2.0.tar.xz">
+                https://github.com/lxqt/pcmanfm-qt/releases/download/2.2.0/pcmanfm-qt-2.2.0.tar.xz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 8fa68d4a4abe49c45ecc317c73918319
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 408 KB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 16 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.5 SBU
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          pcmanfm-qt Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="lxqt-layer-shell-qt.html" title=
+          "layer-shell-qt-6.4.4 for lxqt">layer-shell-qt-6.4.4 for lxqt</a>,
+          <a class="xref" href="liblxqt.html" title=
+          "liblxqt-2.2.0">liblxqt-2.2.0</a>, <a class="xref" href=
+          "libfm-qt.html" title="libfm-qt-2.2.0">libfm-qt-2.2.0</a>, and
+          <a class="xref" href="lxqt-menu-data.html" title=
+          "lxqt-menu-data-2.2.0">lxqt-menu-data-2.2.0</a>
+        </p>
+        <h4>
+          Recommended
+        </h4>
+        <p class="recommended">
+          <a class="xref" href="../gnome/gvfs.html" title=
+          "Gvfs-1.56.1">Gvfs-1.56.1</a> (runtime) and <a class="xref" href=
+          "../x/oxygen-icons.html" title=
+          "oxygen-icons-6.0.0">oxygen-icons-6.0.0</a> or another icon theme
+          (depending on your choice, some icons will be missing in several
+          places)
+        </p>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of pcmanfm-qt
+        </h2>
+        <p>
+          If libLayerShellQtInterface.so is installed in /opt, help this
+          package find it. As the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">if [   -e /opt/kf6/lib/libLayerShellQtInterface.so -a \
+     ! -e /usr/lib/libLayerShellQtInterface.so ]; then
+
+    ln -sv /opt/kf6/lib/libLayerShellQtInterface.so \
+           /usr/lib/libLayerShellQtInterface.so
+fi</kbd></pre>
+        <p>
+          Install <span class="application">pcmanfm-qt</span> by running the
+          following commands:
+        </p>
+        <pre class="userinput"><kbd class="command">mkdir build &amp;&amp;
+cd    build &amp;&amp;
+
+cmake -D CMAKE_INSTALL_PREFIX=/usr \
+      -D CMAKE_BUILD_TYPE=Release  \
+      ..                           &amp;&amp;
+make</kbd></pre>
+        <p>
+          This package does not come with a test suite.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class="command">make install</kbd></pre>
+        <p>
+          To make <span class="application">pcmanfm-qt</span> easier to find
+          in menus, adjust the .desktop file. Again, as the <code class=
+          "systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">sed -e '/Categories=/s/=/=System;FileTools;/' \
+    -e '/Name=/s/=.*/=File Manager PCManFM-Qt'/ \
+    -i /usr/share/applications/pcmanfm-qt.desktop</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Program:</strong>
+              <span class="segbody">pcmanfm-qt</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Library:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">/usr/share/pcmanfm-qt</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="pcmanfm-qt-prog" name=
+                    "pcmanfm-qt-prog"></a><span class="term"><span class=
+                    "command"><strong>pcmanfm-qt</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    is a file manager and desktop icon manager
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="lxqt-panel.html" title=
+          "lxqt-panel-2.2.2">Prev</a>
+          <p>
+            lxqt-panel-2.2.2
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="lxqt-powermanagement.html" title=
+          "lxqt-powermanagement-2.2.1">Next</a>
+          <p>
+            lxqt-powermanagement-2.2.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="lxqt-desktop.html" title=
+          "Chapter&nbsp;37.&nbsp;LXQt Desktop">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="application/xhtml+xml; charset=utf-8" />
+    <title>
+      rust-bindgen-0.72.0
+    </title>
+    <link rel="stylesheet" type="text/css" href="../stylesheets/lfs.css" />
+    <meta name="generator" content="DocBook XSL-NS Stylesheets Vsnapshot" />
+    <link rel="stylesheet" href="../stylesheets/lfs-print.css" type=
+    "text/css" media="print" />
+  </head>
+  <body class="blfs" id="blfs-12.4">
+    <div class="navheader">
+      <h4>
+        Beyond Linux<sup>®</sup> From Scratch <span class="phrase">(System
+        V</span> Edition) - Version 12.4
+      </h4>
+      <h3>
+        Chapter&nbsp;13.&nbsp;Programming
+      </h3>
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="rust.html" title="Rustc-1.89.0">Prev</a>
+          <p>
+            Rustc-1.89.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="scons.html" title="SCons-4.9.1">Next</a>
+          <p>
+            SCons-4.9.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+    <h1 class="sect1">
+      <a id="rust-bindgen" name="rust-bindgen"></a>rust-bindgen-0.72.0
+    </h1>
+    <div class="sect1" lang="en" xml:lang="en">
+      <div class="package" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Introduction to rust-bindgen
+        </h2>
+        <p>
+          The <span class="application">rust-bindgen</span> package contains
+          a utility that generates Rust bindings from C/C++ headers.
+        </p>
+        <p>
+          This package is known to build and work properly using an LFS 12.4
+          platform.
+        </p>
+        <h3>
+          Package Information
+        </h3>
+        <div class="itemizedlist">
+          <ul class="compact">
+            <li class="listitem">
+              <p>
+                Download (HTTP): <a class="ulink" href=
+                "https://github.com/rust-lang/rust-bindgen/archive/v0.72.0/rust-bindgen-0.72.0.tar.gz">
+                https://github.com/rust-lang/rust-bindgen/archive/v0.72.0/rust-bindgen-0.72.0.tar.gz</a>
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download MD5 sum: 15888c0e5c60a1d367cf6c1b6e51c067
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Download size: 2.2 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated disk space required: 219 MB
+              </p>
+            </li>
+            <li class="listitem">
+              <p>
+                Estimated build time: 0.3 SBU (with parallelism=8)
+              </p>
+            </li>
+          </ul>
+        </div>
+        <h3>
+          rust-bindgen Dependencies
+        </h3>
+        <h4>
+          Required
+        </h4>
+        <p class="required">
+          <a class="xref" href="rust.html" title=
+          "Rustc-1.89.0">rustc-1.89.0</a> and <a class="xref" href=
+          "llvm.html" title="LLVM-20.1.8">LLVM-20.1.8</a> (with Clang,
+          runtime)
+        </p>
+        <div class="admon note">
+          <img alt="[Note]" src="../images/note.png" />
+          <h3>
+            Note
+          </h3>
+          <p>
+            An Internet connection is needed for building this package. The
+            system certificate store may need to be set up with <a class=
+            "xref" href="../postlfs/make-ca.html" title=
+            "make-ca-1.16.1">make-ca-1.16.1</a> before building this package.
+          </p>
+        </div>
+      </div>
+      <div class="installation" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Installation of rust-bindgen
+        </h2>
+        <p>
+          Install <span class="application">rust-bindgen</span> by running
+          the following commands:
+        </p>
+        <pre class="userinput"><kbd class=
+        "command">cargo build --release</kbd></pre>
+        <p>
+          To test the results, issue: <span class="command"><strong>cargo
+          test --release</strong></span>.
+        </p>
+        <p>
+          Now, as the <code class="systemitem">root</code> user:
+        </p>
+        <pre class="root"><kbd class=
+        "command">install -v -m755 target/release/bindgen /usr/bin</kbd></pre>
+        <p>
+          Still as the <code class="systemitem">root</code> user, install the
+          Bash and Zsh completion support files:
+        </p>
+        <pre class="root"><kbd class=
+        "command">bindgen --generate-shell-completions bash \
+    &gt; /usr/share/bash-completion/completions/bindgen
+bindgen --generate-shell-completions zsh  \
+    &gt; /usr/share/zsh/site-functions/_bindgen</kbd></pre>
+      </div>
+      <div class="content" lang="en" xml:lang="en">
+        <h2 class="sect2">
+          Contents
+        </h2>
+        <div class="segmentedlist">
+          <div class="seglistitem">
+            <div class="seg">
+              <strong class="segtitle">Installed Programs:</strong>
+              <span class="segbody">bindgen</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Libraries:</strong>
+              <span class="segbody">None</span>
+            </div>
+            <div class="seg">
+              <strong class="segtitle">Installed Directories:</strong>
+              <span class="segbody">None</span>
+            </div>
+          </div>
+        </div>
+        <div class="variablelist">
+          <h3>
+            Short Descriptions
+          </h3>
+          <table border="0" class="variablelist">
+            <colgroup>
+              <col align="left" valign="top" />
+              <col />
+            </colgroup>
+            <tbody>
+              <tr>
+                <td>
+                  <p>
+                    <a id="bindgen" name="bindgen"></a><span class=
+                    "term"><span class=
+                    "command"><strong>bindgen</strong></span></span>
+                  </p>
+                </td>
+                <td>
+                  <p>
+                    generates bindings for Rust from C/C++ headers
+                  </p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="navfooter">
+      <ul>
+        <li class="prev">
+          <a accesskey="p" href="rust.html" title="Rustc-1.89.0">Prev</a>
+          <p>
+            Rustc-1.89.0
+          </p>
+        </li>
+        <li class="next">
+          <a accesskey="n" href="scons.html" title="SCons-4.9.1">Next</a>
+          <p>
+            SCons-4.9.1
+          </p>
+        </li>
+        <li class="up">
+          <a accesskey="u" href="prog.html" title=
+          "Chapter&nbsp;13.&nbsp;Programming">Up</a>
+        </li>
+        <li class="home">
+          <a accesskey="h" href="../index.html" title=
+          "Beyond Linux® From Scratch    (System V Edition) - Version 12.4">Home</a>
+        </li>
+      </ul>
+    </div>
+  </body>
+</html>
