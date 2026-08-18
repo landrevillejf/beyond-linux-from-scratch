@@ -184,82 +184,17 @@ fi
 # Add -L and -rpath-link to both CC and CXX so the linker can find
 # the cross-compiler's runtime libraries (libgcc_s, libstdc++, etc.)
 # installed in /tools/lib and /tools/lib64.
-CC="${LFS_TGT}-gcc --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64"
-CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64"
+CC_NORMAL="${LFS_TGT}-gcc --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64"
+CXX_NORMAL="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64"
 LD="${LFS_TGT}-ld"
 AS="${LFS_TGT}-as"
-export CC CXX LD AS
+export CC_NORMAL CXX_NORMAL LD AS
 
-# ---- S'assurer que libgcc_s est disponible pour glibc ----
-# glibc's configure must be able to link a test program.  The cross-compiler
-# always needs libgcc_s for linking; without it even "int main(){}" fails
-# and configure reports "cannot compute suffix of object files".
-# The toolchain GCC (pass 1) is built with --disable-shared which may skip
-# producing libgcc_s.so.  Detect what's available and build it if missing.
-echo "Ensuring libgcc_s is available for glibc..."
-echo "Contents of /tools/lib before libgcc_s check:"
-ls -la /tools/lib/ 2>/dev/null || echo "  /tools/lib does not exist"
-echo "Contents of /tools/lib64 before libgcc_s check:"
-ls -la /tools/lib64/ 2>/dev/null || echo "  /tools/lib64 does not exist"
-
-# Search for any libgcc_s variant (soname, real file, or unversioned symlink)
-LIBGCC_S=""
-for candidate in $(find /tools -name "libgcc_s.so*" 2>/dev/null); do
-    if [ -z "$LIBGCC_S" ]; then
-        LIBGCC_S="$candidate"
-    fi
-done
-
-if [ -n "$LIBGCC_S" ]; then
-    echo "Found libgcc_s at: $LIBGCC_S"
-    # Ensure both the soname and unversioned symlink exist in /tools/lib
-    if [ "$LIBGCC_S" != "/tools/lib/libgcc_s.so.1" ] && [ -f "$LIBGCC_S" ]; then
-        cp -v "$LIBGCC_S" /tools/lib/libgcc_s.so.1
-    fi
-    ln -sf libgcc_s.so.1 /tools/lib/libgcc_s.so
-    echo "libgcc_s ready in /tools/lib"
-else
-    echo "libgcc_s.so not found in /tools – building from GCC source"
-    # The cross-compiler was built with --disable-shared so libgcc_s.so was
-    # never produced.  Build just the target shared libgcc inside the chroot
-    # using the cross-compiler and install it to /tools/lib.
-    GCC_SRC=$(find_archive gcc)
-    if [ -z "$GCC_SRC" ]; then
-        echo "ERROR: GCC source not found – cannot build libgcc_s"
-        exit 1
-    fi
-    echo "Extracting $GCC_SRC for libgcc build"
-    tar -xf "$GCC_SRC"
-    GCC_SRC_DIR=$(tar -tf "$GCC_SRC" | head -1 | cut -d/ -f1)
-    cd "/sources/$GCC_SRC_DIR"
-    mkdir -v build-libgcc
-    cd build-libgcc
-    # Build only the target shared library (libgcc_s.so)
-    "${LFS_TGT}-gcc" -v || true   # diagnostic: confirm compiler works
-    make -j"$(nproc)" \
-        CC="${LFS_TGT}-gcc" \
-        CFLAGS="-O2 -g" \
-        libgcc_s.so || {
-        # Fallback: use the gcc-internal Makefile target
-        echo "Direct make failed, trying via libgcc Makefile..."
-        CC="${LFS_TGT}-gcc --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
-        CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
-        ../libgcc/configure --host="$LFS_TGT" --prefix=/tools
-        make -j"$(nproc)"
-        make install
-    }
-    # Install libgcc_s.so into /tools/lib if the build placed it elsewhere
-    find . -name "libgcc_s.so*" -exec cp -v {} /tools/lib/ \;
-    ln -sf libgcc_s.so.1 /tools/lib/libgcc_s.so 2>/dev/null || true
-    cd /sources
-    rm -rf "/sources/$GCC_SRC_DIR"
-    echo "libgcc_s built and installed"
-    if [ ! -f /tools/lib/libgcc_s.so ] && [ ! -f /tools/lib/libgcc_s.so.1 ]; then
-        echo "ERROR: libgcc_s build failed – no .so produced"
-        exit 1
-    fi
-fi
-echo "libgcc_s available: $(ls -la /tools/lib/libgcc_s.so* 2>/dev/null)"
+# ---- For glibc we need static libgcc (libgcc.a) because shared libgcc_s is not yet built ----
+# We add -static-libgcc to the compiler flags for glibc build only.
+CC_GLIBC="${CC_NORMAL} -static-libgcc"
+CXX_GLIBC="${CXX_NORMAL} -static-libgcc"
+export CC_GLIBC CXX_GLIBC
 
 # ============================================================
 # 1. BUILD GLIBC
@@ -267,18 +202,14 @@ echo "libgcc_s available: $(ls -la /tools/lib/libgcc_s.so* 2>/dev/null)"
 echo "=== Building glibc ==="
 
 # Sanity check: verify the cross-compiler can compile and link a test program
-# with the same flags used by glibc's configure.  If this fails we get a clear
-# error instead of the cryptic "cannot compute suffix of object files".
-echo "Verifying cross-compiler can link with libgcc_s..."
+# with the same flags used by glibc's configure.  This time we use -static-libgcc.
+echo "Verifying cross-compiler can link with static libgcc..."
 echo 'int main(void){return 0;}' > /tmp/conftest.c
-if $CC -v /tmp/conftest.c -o /tmp/conftest 2>&1; then
+if $CC_GLIBC -v /tmp/conftest.c -o /tmp/conftest 2>&1; then
     echo "Cross-compiler sanity check: PASSED"
 else
     echo "ERROR: Cross-compiler cannot create executables"
-    echo "CC=$CC"
-    echo "LDFLAGS=$LDFLAGS"
-    echo "libgcc_s status:"
-    ls -la /tools/lib/libgcc_s* 2>/dev/null || echo "  no libgcc_s in /tools/lib"
+    echo "CC_GLIBC=$CC_GLIBC"
     rm -f /tmp/conftest.c /tmp/conftest
     exit 1
 fi
@@ -292,8 +223,10 @@ fi
 extract "$GLIBC_ARCHIVE"
 mkdir -v build
 cd build
-# Add LDFLAGS to help linker find libgcc_s during glibc tests
+# Use $CC_GLIBC and $CXX_GLIBC (with -static-libgcc) for configure
 LDFLAGS="-L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
+CC="$CC_GLIBC" \
+CXX="$CXX_GLIBC" \
 ../configure --prefix=/usr \
              --host=$LFS_TGT \
              --build=$(uname -m)-linux-gnu \
@@ -306,12 +239,7 @@ LDFLAGS="-L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,
              --enable-multi-arch
 make -j$(nproc)
 # Use /tools/bin/bash (cross-compiled toolchain bash) as SHELL so that make
-# recipes keep working after glibc installs its new ld.so.  The new ld.so
-# (glibc 2.34+) requires __nptl_change_stack_perm@GLIBC_PRIVATE from
-# libc.so.6; the toolchain bash links against /usr/lib/libc.so.6 which is
-# updated to glibc 2.42 early in the install sequence, while the bootstrapped
-# /bin/bash links against the HOST /lib/x86_64-linux-gnu/libc.so.6 which
-# does not carry that private symbol.
+# recipes keep working after glibc installs its new ld.so.
 make RM=/tools/bin/rm SHELL=/tools/bin/bash install
 cd /sources
 rm -rf "$(basename "$GLIBC_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-9]*$//')"
@@ -330,14 +258,15 @@ mkdir -p /etc
 printf '/usr/lib\n/usr/lib/x86_64-linux-gnu\n/lib\n/lib/x86_64-linux-gnu\n/lib64\n' > /etc/ld.so.conf
 /sbin/ldconfig || true
 echo "ldconfig cache rebuilt after glibc install"
-# The new glibc 2.42 ld.so (/lib64/ld-linux-x86-64.so.2) requires the
-# __nptl_change_stack_perm@GLIBC_PRIVATE symbol from a matching libc.so.6.
-# The old cross-toolchain libc at /tools/lib/libc.so.6 uses a different
-# GLIBC_PRIVATE ABI, causing a symbol-lookup failure when bootstrapped host
-# tools (tar, head, cut ...) are executed after glibc installs its new ld.so.
+
 # Prefer the newly-installed /usr/lib/libc.so.6 (glibc 2.42) so both the
 # Ubuntu-bootstrapped binaries and the toolchain binaries use a compatible libc.
 export LD_LIBRARY_PATH=/usr/lib:/tools/lib
+
+# Now we can revert to the normal compiler (without -static-libgcc) for the rest.
+CC="$CC_NORMAL"
+CXX="$CXX_NORMAL"
+export CC CXX
 
 # ============================================================
 # 2. BUILD BINUTILS (official LFS)
@@ -371,7 +300,7 @@ rm -rf "$(basename "$BINUTILS_ARCHIVE" .tar.* 2>/dev/null | sed 's/\.tar\.[a-z0-
 echo "binutils done"
 
 # ============================================================
-# 3. BUILD GCC (official LFS) – compilation native avec GCC hôte
+# 3. BUILD GCC (official LFS) – builds libgcc_s and libstdc++
 # ============================================================
 echo "=== Building gcc ==="
 GCC_ARCHIVE=$(find_archive gcc)
@@ -381,7 +310,7 @@ if [ -z "$GCC_ARCHIVE" ]; then
 fi
 extract "$GCC_ARCHIVE"
 
-# ---- Vérification que GMP, MPFR, MPC sont présents ----
+# ---- Verify that GMP, MPFR, MPC are present ----
 for pkg in gmp mpfr mpc; do
     if [ -z "$(find_archive "$pkg")" ]; then
         echo "ERROR: $pkg source not found in /sources – please check sources.list"
@@ -418,31 +347,28 @@ else
     echo "WARNING: MPC source not found – GCC may fail"
 fi
 
-# ---- Copie des bibliothèques C++ dans le sysroot (recherche dans /tools/lib et /tools/lib64) ----
+# ---- Copy C++ runtime libraries to /usr/lib for GCC build ----
 echo "Copying C++ runtime libraries to /usr/lib for GCC build..."
 mkdir -p /usr/lib
-
-# Recherche les bibliothèques dans les deux répertoires possibles
 for libdir in /tools/lib /tools/lib64; do
     if [ -d "$libdir" ]; then
         echo "Looking for libraries in $libdir"
         cp -a $libdir/libstdc++.so* /usr/lib/ 2>/dev/null || true
-        cp -a $libdir/libgcc_s.so* /usr/lib/ 2>/dev/null || true
-        cp -a $libdir/libgomp.so* /usr/lib/ 2>/dev/null || true
-        cp -a $libdir/libatomic.so* /usr/lib/ 2>/dev/null || true
+        # libgcc_s is not yet available, but we will copy it after GCC build (or skip)
+        # We already have libgcc.a, but shared libgcc_s will be built by GCC itself.
+        # No need to copy libgcc_s now.
     fi
 done
 
-# Reconstruire le cache du linker avec les bons chemins
+# Rebuild linker cache with the proper paths
 echo "/usr/lib" > /etc/ld.so.conf
 echo "/tools/lib" >> /etc/ld.so.conf
 echo "/tools/lib64" >> /etc/ld.so.conf
 /sbin/ldconfig
 
-# Forcer le linker dynamique à utiliser ces chemins pour les tests
 export LD_LIBRARY_PATH=/tools/lib:/tools/lib64:/usr/lib
 
-# ---- Ajout des flags pour libcody (CXX et LDFLAGS) ----
+# ---- Set flags for libcody (CXX and LDFLAGS) ----
 export CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64 -Wl,-rpath,/tools/lib -Wl,-rpath,/tools/lib64"
 export LDFLAGS="-L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64 -Wl,-rpath,/tools/lib -Wl,-rpath,/tools/lib64"
 export LD_RUN_PATH=/tools/lib:/tools/lib64
@@ -488,7 +414,7 @@ build_simple() {
     echo "=== Building $dir ==="
     tar -xf "$archive"
     cd "$dir"
-    
+
     # Package-specific patches and flags
     case "$pkg" in
         diffutils)
@@ -505,7 +431,7 @@ build_simple() {
             cflags="-D_GNU_SOURCE"
             ;;
     esac
-    
+
     if [ -f "configure" ]; then
         CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc $configure_args
     elif [ -f "Makefile" ]; then
