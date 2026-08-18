@@ -192,7 +192,8 @@ build_toolchain() {
         --with-sysroot="$LFS" \
         --disable-nls \
         --disable-werror \
-        --disable-multilib
+        --disable-multilib \
+        --without-zstd
     make -j"$NUM_JOBS"
     make install
     cd "$LFS/sources"
@@ -505,15 +506,15 @@ CROSS_CACHE_EOF
             make -j"$NUM_JOBS"
             make install
         else
+            # Construire nativement pour l'hôte (comme pour xz)
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
+            if ! CC="gcc" \
+                CXX="g++" \
+                AR="ar" \
+                RANLIB="ranlib" \
                 CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" --host="$LFS_TGT" \
-                --build="$(uname -m)-linux-gnu" \
+                ./configure --prefix="$LFS/tools" \
                 --cache-file="$PKG_CACHE" \
                 --disable-nls; then
                 log_error "Configure failed for $pkg"
