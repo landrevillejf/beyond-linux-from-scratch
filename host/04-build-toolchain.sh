@@ -132,7 +132,7 @@ mkdir -p "$LFS_HOME"
     printf 'LFS=%q\n' "$LFS"
     echo "LC_ALL=POSIX"
     # shellcheck disable=SC2016
-    echo 'LFS_TGT=$(uname -m)-lfs-linux-gnu'
+    echo 'LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}'
     # shellcheck disable=SC2016
     echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
     echo "export LFS LC_ALL LFS_TGT PATH"
@@ -336,7 +336,7 @@ build_toolchain() {
         else
             log_warning "Extraction failed (attempt $attempt), removing corrupt tarball..."
             rm -f "$LINUX_TAR"
-            if [ $attempt -lt $MAX_RETRIES ]; then
+            if [ "$attempt" -lt $MAX_RETRIES ]; then
                 log_info "Re-downloading kernel..."
                 if download_kernel; then
                     continue
