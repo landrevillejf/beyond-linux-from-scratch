@@ -509,29 +509,24 @@ CROSS_CACHE_EOF
             make install
 
         elif [ "$pkg" = "ncurses" ]; then
-            # Build ncurses cross-compiled for target (needed by bash)
-            # Disable progs (tic, tput, etc.), database, C++ bindings to avoid cross-execution issues
+            # Build ncurses natively for the host (not cross-compiled)
+            # It's only needed during the build process and will be replaced later
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
+            if ! CC="gcc" \
+                CXX="g++" \
+                AR="ar" \
+                RANLIB="ranlib" \
                 CFLAGS="$CFLAGS" \
                 ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
                     --cache-file="$PKG_CACHE" \
                     --disable-nls \
                     --with-shared \
                     --without-debug \
                     --without-normal \
-                    --enable-pc-files \
                     --with-termlib \
                     --without-cxx-binding \
                     --without-cxx \
-                    --without-progs \
-                    --disable-database \
                     --without-manpages; then
                 log_error "Configure failed for $pkg"
                 exit 1
