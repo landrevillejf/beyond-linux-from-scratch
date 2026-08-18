@@ -242,6 +242,8 @@ else
         libgcc_s.so || {
         # Fallback: use the gcc-internal Makefile target
         echo "Direct make failed, trying via libgcc Makefile..."
+        CC="${LFS_TGT}-gcc --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
+        CXX="${LFS_TGT}-g++ --sysroot=/ -L/tools/lib -L/tools/lib64 -Wl,-rpath-link,/tools/lib -Wl,-rpath-link,/tools/lib64" \
         ../libgcc/configure --host="$LFS_TGT" --prefix=/tools
         make -j"$(nproc)"
         make install

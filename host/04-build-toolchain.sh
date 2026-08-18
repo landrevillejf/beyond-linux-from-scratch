@@ -441,6 +441,8 @@ CROSS_CACHE_EOF
     # Do not let 05-build-lfs-system.sh copy substitutes from the build host:
     # that leaks host libraries into the target root and makes the result
     # dependent on the GitHub runner image.
+    # For cross-compilation, build xz for the host architecture since it's
+    # needed during the build process (tar decompression) on the host system.
     for pkg in m4 bison xz coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
@@ -483,6 +485,25 @@ CROSS_CACHE_EOF
                 -j"$NUM_JOBS"
             make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
                 PREFIX="$LFS/tools" install
+        elif [ "$pkg" = "xz" ]; then
+            # Build xz for host architecture when cross-compiling
+            # since it's needed during the build process (tar decompression)
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="gcc" \
+                CXX="g++" \
+                AR="ar" \
+                RANLIB="ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                --cache-file="$PKG_CACHE" \
+                --disable-nls; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
         else
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
