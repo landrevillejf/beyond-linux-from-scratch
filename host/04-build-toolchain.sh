@@ -510,7 +510,7 @@ CROSS_CACHE_EOF
 
         elif [ "$pkg" = "ncurses" ]; then
             # Build ncurses cross-compiled for target (needed by bash)
-            # Disable C++ bindings to avoid GCC 15.2.0 compatibility issues
+            # Disable terminfo database installation to avoid running cross-compiled 'tic'
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
             if ! CC="$LFS_TGT-gcc" \
@@ -529,7 +529,9 @@ CROSS_CACHE_EOF
                     --enable-pc-files \
                     --with-termlib \
                     --without-cxx-binding \
-                    --without-cxx; then
+                    --without-cxx \
+                    --without-terminfo \
+                    --without-manpages; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
