@@ -174,7 +174,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 6. **Respect the flattened env var contract** — stage scripts read `LFS_CONFIG_*` and `LFS_PROFILE_*`. Any new configuration key added to `build.conf` must be exported in `builder.py`'s environment propagation logic.
 7. **Document new profiles** — add new profiles to the profile table in `README.md` and `builder.py`'s `ProfileManager`.
 8. **No Emoji** -- No emoji in code.
-9. **Follow the books** -- Follow the LFS and BLFS books as closely as possible. they are in `/books`
+9. **Follow the books** -- Follow the LFS and BLFS books as closely as possible. they are in `/docs/books`
 ---
 
 ## 1. Commit Convention
