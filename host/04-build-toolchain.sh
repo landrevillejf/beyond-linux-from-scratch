@@ -560,17 +560,15 @@ CROSS_CACHE_EOF
             make install
 
         elif [ "$pkg" = "file" ]; then
-            # Build file cross-compiled for target
+            # Build file natively for the host (needed to generate magic database)
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
+            if ! CC="gcc" \
+                CXX="g++" \
+                AR="ar" \
+                RANLIB="ranlib" \
                 CFLAGS="$CFLAGS" \
                 ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
                     --cache-file="$PKG_CACHE" \
                     --disable-nls; then
                 log_error "Configure failed for $pkg"
