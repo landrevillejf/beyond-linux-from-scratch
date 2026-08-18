@@ -510,7 +510,7 @@ CROSS_CACHE_EOF
 
         elif [ "$pkg" = "ncurses" ]; then
             # Build ncurses cross-compiled for target (needed by bash)
-            # Disable terminfo database installation to avoid running cross-compiled 'tic'
+            # Disable progs (tic, tput, etc.), database, C++ bindings to avoid cross-execution issues
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
             if ! CC="$LFS_TGT-gcc" \
@@ -530,7 +530,8 @@ CROSS_CACHE_EOF
                     --with-termlib \
                     --without-cxx-binding \
                     --without-cxx \
-                    --without-terminfo \
+                    --without-progs \
+                    --disable-database \
                     --without-manpages; then
                 log_error "Configure failed for $pkg"
                 exit 1
