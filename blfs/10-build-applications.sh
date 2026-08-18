@@ -23,7 +23,7 @@ if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt
     log_error "LFS variable not set"
     exit 1
 }
-APPS_TO_BUILD="${LFS_CONFIG_APPS_TO_BUILD:-firefox,vlc}"
+APPS_TO_BUILD="${LFS_CONFIG_APPS_TO_BUILD:-firefox,vlc,clamav}"
 export APPS_TO_BUILD
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -275,6 +275,27 @@ build_vlc() {
     make -j"$(jobs)"; make install
     popd >/dev/null; rm -rf "$dir"; finish_app "$app"
 }
+build_clamav() {
+    local app=clamav archive dir
+    if is_installed "$app"; then log_info "ClamAV already installed; skipping"; return 0; fi
+    if ! check_deps ClamAV cmd:cmake cmd:make cmd:gcc cmd:ld cmd:ar cmd:tar pc:zlib pc:openssl; then return 1; fi
+    archive="$(find_archive 'clamav-*.tar.*')"
+    [ -n "$archive" ] || { log_warning "ClamAV source archive missing; skipping"; return 1; }
+    log_info "Building ClamAV from $archive"
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    mkdir -p build && cd build
+    cmake .. -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release \
+             -DENABLE_SHARED=ON -DENABLE_STATIC=OFF \
+             -DENABLE_MILTER=ON -DENABLE_CLAMD=ON
+    make -j"$(jobs)"
+    make install
+    # Installer les bases de données signatures (optionnel)
+    # freshclam --daemon  # pour les mises à jour automatiques
+    popd >/dev/null
+    rm -rf "$dir"
+    finish_app "$app"
+}
 build_thunderbird() {
     local app=thunderbird archive dir rust_version
     if is_installed "$app"; then log_info "Thunderbird already installed; skipping"; return 0; fi
@@ -397,7 +418,7 @@ build_obsidian() {
 requested_app() { local app="$1" raw normalized; IFS=',' read -r -a requested <<< "$APPS_TO_BUILD"; for raw in "${requested[@]}"; do normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | xargs)"; [ "$normalized" = "$app" ] && return 0; done; return 1; }
 log_info "Application selection: $APPS_TO_BUILD"
 status=0
-for app in firefox libreoffice gimp vlc thunderbird inkscape evolution filezilla transmission audacity mumble hexchat pidgin obsidian; do
+for app in firefox libreoffice gimp vlc clamav thunderbird inkscape evolution filezilla transmission audacity mumble hexchat pidgin obsidian; do
     if requested_app "$app"; then
         log_info "Starting $app build"
         if "build_$app"; then log_success "$app build complete"; else log_warning "$app was not built; see dependency/source messages above"; status=1; fi

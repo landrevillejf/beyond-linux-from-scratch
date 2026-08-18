@@ -603,3 +603,6 @@ https://www.linuxfromscratch.org/patches/lfs/12.4/kbd-2.8.0-backspace-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/sysvinit-3.14-consolidated-1.patch
 
 https://github.com/mumble-voip/mumble/archive/refs/tags/v1.5.915.tar.gz
+
+# Optional BLFS dependencies ClamAV LTS
+https://www.clamav.net/downloads/production/clamav-1.4.6.tar.gz
