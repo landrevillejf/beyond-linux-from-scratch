@@ -444,9 +444,11 @@ CROSS_CACHE_EOF
     # dependent on the GitHub runner image.
     # For cross-compilation, build xz for the host architecture since it's
     # needed during the build process (tar decompression) on the host system.
-    for pkg in m4 bison xz ncurses coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch; do
+    for pkg in m4 bison xz ncurses coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch file perl python texinfo util-linux; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
+        elif [ "$pkg" = "python" ]; then
+            archive=$(find . -maxdepth 1 -name "[Pp]ython-*.tar.*" -print -quit)
         else
             archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
         fi
@@ -550,6 +552,139 @@ CROSS_CACHE_EOF
                     --cache-file="$PKG_CACHE" \
                     --disable-nls \
                     --without-bash-malloc; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
+
+        elif [ "$pkg" = "file" ]; then
+            # Build file cross-compiled for target
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="$LFS_TGT-gcc" \
+                CXX="$LFS_TGT-g++" \
+                AR="$LFS_TGT-ar" \
+                RANLIB="$LFS_TGT-ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                    --host="$LFS_TGT" \
+                    --build="$(uname -m)-linux-gnu" \
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
+
+        elif [ "$pkg" = "perl" ]; then
+            # Build perl cross-compiled for target
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="$LFS_TGT-gcc" \
+                CXX="$LFS_TGT-g++" \
+                AR="$LFS_TGT-ar" \
+                RANLIB="$LFS_TGT-ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                    --host="$LFS_TGT" \
+                    --build="$(uname -m)-linux-gnu" \
+                    --cache-file="$PKG_CACHE" \
+                    -Dcc="$LFS_TGT-gcc" \
+                    -Dprefix="$LFS/tools" \
+                    -Dprivlib="$LFS/tools/lib/perl5/5.38" \
+                    -Darchlib="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                    -Dvendorprefix="$LFS/tools" \
+                    -Dvendorlib="$LFS/tools/lib/perl5/5.38" \
+                    -Dvendorarch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                    -Dsiteprefix="$LFS/tools" \
+                    -Dsitelib="$LFS/tools/lib/perl5/5.38" \
+                    -Dsitearch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                    -Dman1dir="$LFS/tools/share/man/man1" \
+                    -Dman3dir="$LFS/tools/share/man/man3" \
+                    -Duseshrplib \
+                    -Dusethreads \
+                    -Duseithreads; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
+
+        elif [ "$pkg" = "python" ]; then
+            # Build python cross-compiled for target
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="$LFS_TGT-gcc" \
+                CXX="$LFS_TGT-g++" \
+                AR="$LFS_TGT-ar" \
+                RANLIB="$LFS_TGT-ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                    --host="$LFS_TGT" \
+                    --build="$(uname -m)-linux-gnu" \
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls \
+                    --enable-shared \
+                    --with-system-expat \
+                    --with-system-ffi \
+                    --with-ensurepip=upgrade \
+                    --with-openssl="$LFS/tools" \
+                    --with-ssl-default-suites=openssl \
+                    --with-optimizations; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
+
+        elif [ "$pkg" = "texinfo" ]; then
+            # Build texinfo cross-compiled for target
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="$LFS_TGT-gcc" \
+                CXX="$LFS_TGT-g++" \
+                AR="$LFS_TGT-ar" \
+                RANLIB="$LFS_TGT-ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                    --host="$LFS_TGT" \
+                    --build="$(uname -m)-linux-gnu" \
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls \
+                    --with-libiconv-prefix="$LFS/tools" \
+                    --with-libncurses-prefix="$LFS/tools"; then
+                log_error "Configure failed for $pkg"
+                exit 1
+            fi
+            rm -f "$PKG_CACHE"
+            make -j"$NUM_JOBS"
+            make install
+
+        elif [ "$pkg" = "util-linux" ]; then
+            # Build util-linux cross-compiled for target
+            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
+            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            if ! CC="$LFS_TGT-gcc" \
+                CXX="$LFS_TGT-g++" \
+                AR="$LFS_TGT-ar" \
+                RANLIB="$LFS_TGT-ranlib" \
+                CFLAGS="$CFLAGS" \
+                ./configure --prefix="$LFS/tools" \
+                    --host="$LFS_TGT" \
+                    --build="$(uname -m)-linux-gnu" \
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls \
+                    --disable-makeinstall-chown \
+                    --without-python \
+                    --without-systemd \
+                    --without-ncursesw \
+                    --with-ncurses="$LFS/tools"; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
