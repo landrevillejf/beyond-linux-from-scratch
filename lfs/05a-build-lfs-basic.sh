@@ -260,9 +260,7 @@ run_privileged mkdir -p "$LFS"/{boot,home,mnt,opt,srv}
 run_privileged mkdir -p "$LFS"/etc/{opt,sysconfig}
 run_privileged mkdir -p "$LFS"/lib/firmware
 run_privileged mkdir -p "$LFS"/media/{floppy,cdrom}
-run_privileged mkdir -p "$LFS"/usr/{local,share}
-run_privileged mkdir -p "$LFS"/usr/local/{bin,include,lib,sbin,src}
-run_privileged mkdir -p "$LFS"/usr/local/etc
+run_privileged mkdir -p "$LFS"/usr/share   # only /usr/share, not /usr/local at this stage
 run_privileged mkdir -p "$LFS"/var/{cache,lib,local,log,opt,spool}
 run_privileged mkdir -p "$LFS"/var/lib/{color,misc,locate}
 run_privileged mkdir -p "$LFS"/dev/{pts,shm}
