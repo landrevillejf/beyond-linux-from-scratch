@@ -149,6 +149,29 @@ is_installed() {
         nspr)                have_pc nspr ;;
         nss)                 have_pc nss ;;
         rust)                have_cmd rustc ;;
+        wxWidgets)            have_pc wxWidgets ;;
+        libnotify)           have_pc libnotify ;;
+        libsecret)           have_pc libsecret-1 ;;
+        libgudev)            have_pc libgudev-1.0 ;;
+        libxkbcommon)        have_pc xkbcommon ;;
+        libinput)            have_pc libinput ;;
+        libwacom)            have_pc libwacom ;;
+        libevdev)            have_pc libevdev ;;
+        libdrm)              have_pc libdrm ;;
+        mesa)                have_pc egl ;;
+        libva)               have_pc libva ;;
+        libvdpau)            have_pc vdpau ;;
+        libass)              have_pc libass ;;
+        libbluray)           have_pc libbluray ;;
+        libdvdnav)           have_pc dvdnav ;;
+        libdvdread)          have_pc dvdread ;;
+        libcdio)             have_pc libcdio ;;
+        libcddb)             have_pc libcddb ;;
+        libmodplug)          have_pc libmodplug ;;
+        libsidplay)          have_pc libsidplay ;;
+        libcue)              have_pc libcue ;;
+        libopenmpt)          have_pc libopenmpt ;;
+        libzip)              have_pc libzip ;;
         *) return 1 ;;
     esac
 }
@@ -436,6 +459,80 @@ build_pkg libffi || log_warning "libffi build failed"
 
 # expat – XML parsing (blfs-base, verify)
 build_pkg expat || log_warning "expat build failed"
+
+log_info "Phase 10: Optional dependencies for BLFS packages"
+
+# wxWidgets – GUI toolkit (for FileZilla, Audacity)
+build_pkg wxWidgets || log_warning "wxWidgets build failed"
+
+# libnotify – desktop notifications
+build_pkg libnotify || log_warning "libnotify build failed"
+
+# libsecret – password storage
+build_pkg libsecret || log_warning "libsecret build failed"
+
+# libgudev – GObject wrapper for udev
+build_pkg libgudev || log_warning "libgudev build failed"
+
+# libxkbcommon – keyboard handling library
+build_pkg libxkbcommon || log_warning "libxkbcommon build failed"
+
+# libinput – input device handling
+build_pkg libinput || log_warning "libinput build failed"
+
+# libwacom – tablet support
+build_pkg libwacom || log_warning "libwacom build failed"
+
+# libevdev – evdev wrapper
+build_pkg libevdev || log_warning "libevdev build failed"
+
+# libdrm – Direct Rendering Manager
+build_pkg libdrm || log_warning "libdrm build failed"
+
+# mesa – 3D graphics library
+build_pkg mesa || log_warning "mesa build failed"
+
+# libva – Video Acceleration API
+build_pkg libva || log_warning "libva build failed"
+
+# libvdpau – VDPAU library
+build_pkg libvdpau || log_warning "libvdpau build failed"
+
+# libass – ASS/SSA subtitle renderer
+build_pkg libass || log_warning "libass build failed"
+
+# libbluray – Blu-ray disc playback
+build_pkg libbluray || log_warning "libbluray build failed"
+
+# libdvdnav – DVD navigation
+build_pkg libdvdnav || log_warning "libdvdnav build failed"
+
+# libdvdread – DVD reading
+build_pkg libdvdread || log_warning "libdvdread build failed"
+
+# libcdio – CD-ROM access
+build_pkg libcdio || log_warning "libcdio build failed"
+
+# libcddb – CDDB database access
+build_pkg libcddb || log_warning "libcddb build failed"
+
+# libmodplug – Mod music playback
+build_pkg libmodplug || log_warning "libmodplug build failed"
+
+# libsidplay – SID music playback
+build_pkg libsidplay || log_warning "libsidplay build failed"
+
+# libcue – CUE sheet parser
+build_pkg libcue || log_warning "libcue build failed"
+
+# libopenmpt – module music playback
+build_pkg libopenmpt || log_warning "libopenmpt build failed"
+
+# libzip – ZIP file access
+build_pkg libzip || log_warning "libzip build failed"
+
+# libarchive – archive manipulation (already in Phase 9, verify)
+build_pkg libarchive || log_warning "libarchive build failed"
 
 # rust – Rust compiler (required to build modern Firefox)
 if ! have_cmd rustc; then

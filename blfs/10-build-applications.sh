@@ -88,6 +88,66 @@ Icon=vlc
 Categories=AudioVideo;Player;
 EOF
             ;;
+        audacity)
+            run_privileged tee "$LFS/usr/share/applications/audacity.desktop" >/dev/null <<'EOF'
+[Desktop Entry]
+Name=Audacity
+Comment=Record and edit audio
+Exec=audacity %F
+Terminal=false
+Type=Application
+Icon=audacity
+Categories=AudioVideo;Audio;
+EOF
+            ;;
+        mumble)
+            run_privileged tee "$LFS/usr/share/applications/mumble.desktop" >/dev/null <<'EOF'
+[Desktop Entry]
+Name=Mumble
+Comment=Voice Chat Application
+Exec=mumble %u
+Terminal=false
+Type=Application
+Icon=mumble
+Categories=Network;Chat;
+EOF
+            ;;
+        hexchat)
+            run_privileged tee "$LFS/usr/share/applications/hexchat.desktop" >/dev/null <<'EOF'
+[Desktop Entry]
+Name=HexChat
+Comment=IRC Client
+Exec=hexchat
+Terminal=false
+Type=Application
+Icon=hexchat
+Categories=Network;IRCClient;
+EOF
+            ;;
+        pidgin)
+            run_privileged tee "$LFS/usr/share/applications/pidgin.desktop" >/dev/null <<'EOF'
+[Desktop Entry]
+Name=Pidgin Internet Messenger
+Comment=Chat over IM. Supports AIM, Google Talk, Jabber/XMPP, MSN, Yahoo and more
+Exec=pidgin
+Terminal=false
+Type=Application
+Icon=pidgin
+Categories=Network;InstantMessaging;
+EOF
+            ;;
+        obsidian)
+            run_privileged tee "$LFS/usr/share/applications/obsidian.desktop" >/dev/null <<'EOF'
+[Desktop Entry]
+Name=Obsidian
+Comment=Knowledge base that works on local Markdown files
+Exec=obsidian %u
+Terminal=false
+Type=Application
+Icon=obsidian
+Categories=Office;
+EOF
+            ;;
         *)
             log_warning "Unknown application '$app' requested; metadata not installed"
             continue
@@ -161,7 +221,7 @@ have_pc() { pkg-config --exists "$1" 2>/dev/null; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 missing_items() { local missing=() item; for item in "$@"; do case "$item" in pc:*) have_pc "${item#pc:}" || missing+=("${item#pc:}");; cmd:*) have_cmd "${item#cmd:}" || missing+=("${item#cmd:}");; file:*) [ -e "${item#file:}" ] || missing+=("${item#file:}");; *) have_cmd "$item" || missing+=("$item");; esac; done; printf '%s\n' "${missing[@]}"; }
 check_deps() { local app="$1" missing; shift; missing="$(missing_items "$@")"; if [ -n "$missing" ]; then log_warning "$app dependencies missing; skipping $app: $(echo "$missing" | tr '\n' ' ')"; return 1; fi; }
-is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; thunderbird) [ -x /usr/bin/thunderbird ];; inkscape) [ -x /usr/bin/inkscape ];; evolution) [ -x /usr/bin/evolution ];; filezilla) [ -x /usr/bin/filezilla ];; transmission) [ -x /usr/bin/transmission-gtk ] || [ -x /usr/bin/transmission-qt ];; *) return 1;; esac; }
+is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; thunderbird) [ -x /usr/bin/thunderbird ];; inkscape) [ -x /usr/bin/inkscape ];; evolution) [ -x /usr/bin/evolution ];; filezilla) [ -x /usr/bin/filezilla ];; transmission) [ -x /usr/bin/transmission-gtk ] || [ -x /usr/bin/transmission-qt ];; audacity) [ -x /usr/bin/audacity ];; mumble) [ -x /usr/bin/mumble ];; hexchat) [ -x /usr/bin/hexchat ];; pidgin) [ -x /usr/bin/pidgin ];; obsidian) [ -x /usr/bin/obsidian ];; *) return 1;; esac; }
 finish_app() { touch "$(marker_for "$1")"; log_success "$1 installed"; }
 build_firefox() {
     local app=firefox archive dir rust_version
@@ -278,10 +338,66 @@ build_transmission() {
     cmake --install builddir
     popd >/dev/null; rm -rf "$dir"; finish_app "$app"
 }
+build_audacity() {
+    local app=audacity archive dir
+    if is_installed "$app"; then log_info "Audacity already installed; skipping"; return 0; fi
+    if ! check_deps Audacity cmd:cmake cmd:pkg-config cmd:tar pc:wxWidgets pc:libsoxr pc:ffmpeg pc:flac pc:mp3lame pc:soundtouch; then return 1; fi
+    archive="$(find_archive 'audacity-*.tar.*')"; [ -n "$archive" ] || { log_warning "Audacity source archive missing; skipping"; return 1; }
+    log_info "Building Audacity from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    cmake --build builddir -j"$(jobs)"
+    cmake --install builddir
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_mumble() {
+    local app=mumble archive dir
+    if is_installed "$app"; then log_info "Mumble already installed; skipping"; return 0; fi
+    if ! check_deps Mumble cmd:cmake cmd:pkg-config cmd:tar pc:qt5 pc:opus pc:speex pc:celt; then return 1; fi
+    archive="$(find_archive 'mumble-*.tar.*')"; [ -n "$archive" ] || { log_warning "Mumble source archive missing; skipping"; return 1; }
+    log_info "Building Mumble from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release
+    cmake --build builddir -j"$(jobs)"
+    cmake --install builddir
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_hexchat() {
+    local app=hexchat archive dir
+    if is_installed "$app"; then log_info "HexChat already installed; skipping"; return 0; fi
+    if ! check_deps HexChat cmd:configure cmd:make cmd:tar pc:gtk+-2.0 pc:libnotify pc:libcanberra pc:openssl; then return 1; fi
+    archive="$(find_archive 'hexchat-*.tar.*')"; [ -n "$archive" ] || { log_warning "HexChat source archive missing; skipping"; return 1; }
+    log_info "Building HexChat from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    ./configure --prefix=/usr --disable-textfe --disable-gtktextfe --enable-libnotify --enable-libcanberra
+    make -j"$(jobs)"
+    make install
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_pidgin() {
+    local app=pidgin archive dir
+    if is_installed "$app"; then log_info "Pidgin already installed; skipping"; return 0; fi
+    if ! check_deps Pidgin cmd:configure cmd:make cmd:tar pc:gtk+-2.0 pc:libpurple pc:gstreamer-1.0 pc:libxml-2.0; then return 1; fi
+    archive="$(find_archive 'pidgin-*.tar.*')"; [ -n "$archive" ] || { log_warning "Pidgin source archive missing; skipping"; return 1; }
+    log_info "Building Pidgin from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    ./configure --prefix=/usr --disable-gtkui --disable-consoleui --enable-nss --enable-gnutls
+    make -j"$(jobs)"
+    make install
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
+build_obsidian() {
+    local app=obsidian archive dir
+    if is_installed "$app"; then log_info "Obsidian already installed; skipping"; return 0; fi
+    if ! check_deps Obsidian cmd:electron-builder cmd:node cmd:npm; then return 1; fi
+    archive="$(find_archive 'obsidian-*.tar.*')"; [ -n "$archive" ] || { log_warning "Obsidian source archive missing; skipping"; return 1; }
+    log_info "Building Obsidian from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    npm install
+    npm run build
+    npm install -g electron-builder
+    electron-builder --linux
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
+}
 requested_app() { local app="$1" raw normalized; IFS=',' read -r -a requested <<< "$APPS_TO_BUILD"; for raw in "${requested[@]}"; do normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | xargs)"; [ "$normalized" = "$app" ] && return 0; done; return 1; }
 log_info "Application selection: $APPS_TO_BUILD"
 status=0
-for app in firefox libreoffice gimp vlc thunderbird inkscape evolution filezilla transmission; do
+for app in firefox libreoffice gimp vlc thunderbird inkscape evolution filezilla transmission audacity mumble hexchat pidgin obsidian; do
     if requested_app "$app"; then
         log_info "Starting $app build"
         if "build_$app"; then log_success "$app build complete"; else log_warning "$app was not built; see dependency/source messages above"; status=1; fi
