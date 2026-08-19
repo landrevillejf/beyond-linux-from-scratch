@@ -104,6 +104,36 @@
   - Tests: 6 new guardrail tests
     (`tests/test_acceptance_shell.py::TestInitSystemErrorPolicyGuardrails`)
 
+- **LPM 2.7.0: improvements and integration** (`blfs/19-lpm.sh`,
+  `blfs/14-create-base-packages.sh`, `blfs/18-system-updater.sh`)
+  - Build-time database seeding: stage 14 now resolves real package
+    versions from the tarballs in `$LFS/sources` (same name-version
+    split rule as LPM), refreshes the curated fallback table to LFS
+    13.0 versions, and seeds `/var/lib/lpm/installed.list` so
+    `lpm list/upgrade/verify` work on the finished system
+  - Real repository pipeline: stage 14 exports the manifest to
+    `lpm-repo/` (`packages.list` + `.sha256`, optional GPG `.sig`);
+    the release and ISO workflows upload it as release assets; the
+    installed default repo in `/etc/lpm/repos.d/default.conf` now
+    points at the GitHub releases `latest/download` URL
+  - `lpm update-db` no longer silently overwrites the database with
+    sample data when configured remotes fail — it keeps the existing
+    database and warns; sample data only seeds an empty database with
+    no remotes configured
+  - New commands: `lpm upgradable`, `lpm why` (alias `rdepends`),
+    `lpm autoremove [--dry-run]`, `lpm hold/unhold/holds` (upgrade
+    skips held packages with a warning), `lpm history` (timestamped
+    transaction log at `/var/lib/lpm/history.log`), `lpm reinstall`
+  - `lfs-update` hardening: curl-first fetch with wget fallback,
+    init-system-agnostic `status` (no more `systemctl`), the
+    `/etc/lfs-version` marker is only written when the repo manifest
+    declares a version (hardcoded `13.0` write removed), `check`
+    reports the upgradable package count, weekly
+    `/etc/cron.weekly/lfs-update-check` installed when cron is present
+  - Tests: `tests/test_lpm.py` (guardrails + sysroot smoke tests) and
+    two new guardrails in
+    `tests/test_acceptance_shell.py::TestLFSComplianceGuardrails`
+
 ### Added
 
 - **Production-ready first-boot service** (`blfs/17-first-boot-service.sh`)
@@ -117,7 +147,8 @@
 
 - **LPM remote repository configuration** (`blfs/19-lpm.sh`)
   - Installs `config/lpm.conf` and creates `/etc/lpm/repos.d/default.conf`
-    with `lfs-stable` and `lfs-updates` remote repos
+    with the `lfs-releases` remote repo backed by GitHub release assets
+    (manifest published by the release pipeline)
 
 - **GRUB config template** (`config/grub.cfg`)
   - Branded boot menu with build-time variable substitution (ROOT_UUID,

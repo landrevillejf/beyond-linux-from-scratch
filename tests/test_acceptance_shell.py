@@ -495,6 +495,61 @@ class TestLFSComplianceGuardrails:
             assert 'CFLAGS="-O2 -std=gnu17"' in content, \
                 f"{script} must force C17 for ncurses (GCC 15 bool bug)"
 
+    def test_stage14_seeds_installed_registry_from_sources(self):
+        """Stage 14 must seed installed.list with versions resolved
+        from the build's source tarballs, not just a hardcoded table.
+
+        Without a seeded installed registry, lpm list/upgrade/verify
+        are useless on the finished system.
+        """
+        content = Path('blfs/14-create-base-packages.sh').read_text()
+
+        # Same name-version split rule as LPM itself: the version part
+        # must start with a digit.
+        assert '[a-zA-Z0-9._+-]+)-([0-9]' in content, \
+            "Stage 14 must reuse the LPM name-version regex"
+        assert '"$LFS/sources"' in content, \
+            "Versions must come from the tarballs actually built"
+        assert 'resolve_version()' in content
+
+        # installed.list is seeded, merging idempotently (existing
+        # non-seeded entries win, seeded entries are refreshed).
+        assert 'INSTALLED_FILE="$LFS/var/lib/lpm/installed.list"' in content
+        assert 'Seeding installed registry' in content
+
+        # base-packages.list stays (autoremove depends on it).
+        assert 'base-packages.list' in content
+
+        # The repository manifest is exported for the release
+        # pipeline, with checksum and optional signature.
+        assert 'lpm-repo' in content
+        assert 'packages.list.sha256' in content
+        assert '--detach-sign' in content
+
+    def test_lfs_update_is_hardened_and_init_agnostic(self):
+        """lfs-update must fetch with curl first, never hardcode the
+        system version, and avoid systemctl (sysvinit profiles)."""
+        content = Path('blfs/18-system-updater.sh').read_text()
+
+        # curl-first fetch with wget fallback.
+        assert 'fetch_url()' in content
+        fetch = content.split('fetch_url()')[1].split('\n}\n')[0]
+        assert fetch.index('curl') < fetch.index('wget'), \
+            "fetch_url must prefer curl and fall back to wget"
+
+        # No hardcoded version write; the marker only moves when the
+        # repo manifest declares a version.
+        assert 'echo "13.0" > "$VERSION_FILE"' not in content
+        assert 'declared_version' in content
+
+        # status must not assume systemd.
+        assert 'systemctl' not in content
+        assert 'count_upgradable' in content
+
+        # Weekly check only when a cron.weekly directory exists.
+        assert 'cron.weekly/lfs-update-check' in content
+        assert '-d "$LFS/etc/cron.weekly"' in content
+
     def test_shellcheck_on_compliance_scripts(self):
         """shellcheck must be clean on every script touched by the
         compliance remediation."""

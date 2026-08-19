@@ -37,6 +37,27 @@ BACKUP_DIR="/var/lib/lfs-updater/backups"
 
 mkdir -p "$(dirname "$VERSION_FILE")" "$(dirname "$REPO_FILE")" "$BACKUP_DIR"
 
+# Fetch a URL to stdout: curl first, wget fallback.
+fetch_url() {
+    local url="$1"
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL --connect-timeout 15 "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "$url"
+    else
+        return 1
+    fi
+}
+
+# Count packages lpm could upgrade (0 when lpm is missing).
+count_upgradable() {
+    if command -v lpm >/dev/null 2>&1; then
+        lpm upgradable --no-color 2>/dev/null | grep -c ' -> ' || true
+    else
+        echo 0
+    fi
+}
+
 # Get current system version
 get_current_version() {
     if [ -f "$VERSION_FILE" ]; then
@@ -50,6 +71,10 @@ get_current_version() {
 check_updates() {
     local current_version=$(get_current_version)
     log_info "Current system version: $current_version"
+
+    if command -v lpm >/dev/null 2>&1; then
+        log_info "Package updates available: $(count_upgradable)"
+    fi
 
     # Try to read from local repo file first
     if [ -f "$REPO_FILE" ]; then
@@ -68,16 +93,14 @@ check_updates() {
     # Fallback: fetch from official LFS site
     local default_url="https://www.linuxfromscratch.org/lfs/view/stable/version.txt"
     log_info "Fetching latest version from $default_url"
-    if command -v wget >/dev/null 2>&1; then
-        local remote_version=$(wget -qO- "$default_url" 2>/dev/null)
-        if [ -n "$remote_version" ]; then
-            if [ "$current_version" != "$remote_version" ]; then
-                log_warn "Update available: $remote_version (current: $current_version)"
-                return 0
-            else
-                log_success "System is up to date (version $remote_version)"
-                return 1
-            fi
+    local remote_version
+    if remote_version=$(fetch_url "$default_url" 2>/dev/null) && [ -n "$remote_version" ]; then
+        if [ "$current_version" != "$remote_version" ]; then
+            log_warn "Update available: $remote_version (current: $current_version)"
+            return 0
+        else
+            log_success "System is up to date (version $remote_version)"
+            return 1
         fi
     fi
 
@@ -130,8 +153,13 @@ apply_updates() {
         log_warn "LPM not found; skipping package updates"
     fi
 
-    # Update version file
-    echo "13.0" > "$VERSION_FILE"  # Replace with actual detection
+    # Update the version marker only when the repo manifest declares a
+    # version; never overwrite it with a hardcoded value.
+    local declared_version
+    declared_version=$(grep -E '^LFS_VERSION=' "$REPO_FILE" 2>/dev/null | head -1 | cut -d= -f2 || true)
+    if [ -n "$declared_version" ]; then
+        echo "$declared_version" > "$VERSION_FILE"
+    fi
     log_success "System update completed"
 }
 
@@ -145,7 +173,12 @@ case "$1" in
         ;;
     status)
         echo "Current version: $(get_current_version)"
-        echo "System status: $(systemctl is-system-running 2>/dev/null || echo 'unknown')"
+        if command -v lpm >/dev/null 2>&1; then
+            echo "Installed packages: $(lpm list --no-color 2>/dev/null | grep -c '^  ' || true)"
+            echo "Upgradable packages: $(count_upgradable)"
+        else
+            echo "LPM: not installed"
+        fi
         ;;
     *)
         echo "Usage: $0 [check|upgrade|status]"
@@ -158,6 +191,17 @@ esac
 SCRIPT
 
 chmod +x "$LFS/usr/bin/lfs-update"
+
+# Optional weekly update check, only on systems that ship cron.weekly
+# (nothing is scheduled on minimal images without cron).
+if [ -d "$LFS/etc/cron.weekly" ]; then
+    cat >"$LFS/etc/cron.weekly/lfs-update-check" <<'CRON'
+#!/bin/sh
+/usr/bin/lfs-update check >>/var/log/lfs-update-check.log 2>&1 || true
+CRON
+    chmod 0755 "$LFS/etc/cron.weekly/lfs-update-check"
+    log_info "Weekly update check installed: /etc/cron.weekly/lfs-update-check"
+fi
 
 # Create default repo manifest if missing
 if [ ! -f "$LFS/var/lib/lfs-updater/repo.list" ]; then

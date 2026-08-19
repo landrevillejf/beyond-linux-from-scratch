@@ -100,6 +100,7 @@ jobs:
             /tmp/lfs-build/${{ steps.iso_name.outputs.iso_name }}
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
+            /tmp/lfs-build/lpm-repo/packages.list*
 
       - name: Create release tag metadata
         id: release_info
@@ -124,11 +125,12 @@ jobs:
             - Profile: xfce
             - Init: sysvinit
             - ISO: ${{ steps.iso_name.outputs.iso_name }}
-            - Includes: live ISO + compiled kernel + SHA256SUMS
+            - Includes: live ISO + compiled kernel + SHA256SUMS + LPM repository manifest
           files: |
             /tmp/lfs-build/${{ steps.iso_name.outputs.iso_name }}
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
+            /tmp/lfs-build/lpm-repo/packages.list*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,7 +3,7 @@
 LPM is a lightweight, full‑featured package manager designed specifically for Linux From Scratch (LFS) and other custom distributions.  
 It handles package installation, removal, upgrades, dependency resolution, integrity verification, and database management without relying on any external package management infrastructure.
 
-**Status**: ✅ Production-Ready (v2.5.0)
+**Status**: ✅ Production-Ready (v2.7.0)
 
 ## Features
 
@@ -23,10 +23,12 @@ It handles package installation, removal, upgrades, dependency resolution, integ
 - **Log rotation** – automatic removal of logs older than a configurable number of days.
 - **Robust JSON support** – profiles can be parsed with `jq` (if available) or a portable built‑in parser, with JSON validation.
 - **Verbose and dry‑run modes** – simulate operations or get detailed debug output.
-- **Repository support** – local and remote HTTP(S) repository support.
+- **Repository support** – local and remote HTTP(S) repository support; the default remote points at this project's GitHub releases, and repositories can be declared in `/etc/lpm/repos.d/*.conf`.
+- **Build-time database seeding** – the build pipeline registers the base package set with real versions (resolved from the source tarballs) in both the available and installed databases, so `lpm list/upgrade/verify` work on the finished system.
+- **Holds, history and housekeeping** – hold packages against upgrades, browse a timestamped transaction history, show reverse dependencies (`why`), list upgradable packages, and remove orphaned packages (`autoremove`).
 - **Portable** – works on minimal LFS systems (no GNU‑specific dependencies); adapts to systems without `flock`, `jq`, etc.
 - **High performance** – optimized dependency resolution and file operations.
-- **Command set** – install, remove, update, upgrade, list, search, info, verify, clean, list-profiles, add-profile, and more.
+- **Command set** – install, remove, update, upgrade, upgradable, reinstall, autoremove, why, hold, unhold, holds, history, list, search, info, verify, clean, list-profiles, add-profile, and more.
 
 ## Installation
 
@@ -98,6 +100,25 @@ ALLOW_DUMMY_CHECKSUMS="false"               # Emit warnings on placeholder check
 
 You can also set `NO_COLOR=true` to disable colorised output (respects `NO_COLOR` environment variable).
 
+### Repository configuration (`/etc/lpm/repos.d`)
+
+Remote repositories can additionally be declared in drop-in files under
+`/etc/lpm/repos.d/*.conf`, one `name=url` pair per line (blank lines and
+`#` comments are ignored). Their URLs are appended to
+`REPO_REMOTE_URLS` at startup, so configuration files work even when
+`lpm.conf` leaves the array empty.
+
+```
+# /etc/lpm/repos.d/default.conf (installed by the build)
+lfs-releases=https://github.com/landrevillejf/beyond-linux-from-scratch/releases/latest/download
+```
+
+`update-db` fetches `<url>/packages.list` from each configured remote
+(plus `.sig` when `VERIFY_SIGNATURES=true`). If every remote fails, the
+existing local database is kept untouched and a warning is printed —
+sample data is only written when the database is empty and no remote is
+configured.
+
 ## Package Format
 
 A package is a **tar.xz** archive with the following structure:
@@ -148,6 +169,11 @@ LPM maintains three files under `$LPM_DB`:
   /usr/lib/libreadline.so.8 readline-8.2
   /etc/bash.bashrc bash-5.3
   ```
+
+- **`holds.list`** – packages pinned against `lpm upgrade` (one name per line), managed via `lpm hold/unhold/holds`.
+
+- **`history.log`** – timestamped transaction log appended by every install, upgrade, reinstall, removal, hold and unhold.  
+  Format: `timestamp|action|package|version`
 
 ### Dependency Format
 
@@ -202,12 +228,86 @@ lpm update --dry-run bash           # Preview the upgrade
 ### `upgrade`
 
 Check all installed packages and upgrade those that have a newer version in the database.  
-Respects version constraints from the installed package's dependency specification.
+Respects version constraints from the installed package's dependency specification.  
+Held packages (`lpm hold`) are skipped with a warning.
 
 **Example:**
 ```bash
 lpm upgrade --dry-run               # Check upgradable packages
 lpm upgrade                         # Upgrade all available packages
+```
+
+### `upgradable`
+
+List installed packages that have a newer version available in the
+database, without changing anything. Held packages are flagged. This is
+the read-only counterpart of `lpm upgrade`, also used by `lfs-update
+check/status`.
+
+**Example:**
+```bash
+lpm upgradable
+# Output:
+# bash        5.3    -> 5.3.1
+# openssl     3.6.0  -> 3.6.1  (held)
+```
+
+### `reinstall <package>`
+
+Force a re-fetch and re-install of an already installed package, useful
+when files were damaged outside of LPM's control.
+
+**Example:**
+```bash
+lpm reinstall curl
+```
+
+### `why <package>` (or `rdepends`)
+
+Reverse dependency lookup: show which packages in the database depend
+on the given package, marking the dependents that are installed.
+
+**Example:**
+```bash
+lpm why ncurses
+```
+
+### `autoremove`
+
+Remove installed packages that are neither part of the base system
+(`/usr/share/lpm/base-packages.list`) nor a dependency of another
+installed package. Held and base packages are never touched.
+
+**Example:**
+```bash
+lpm autoremove --dry-run            # List orphans without removing
+lpm autoremove                      # Remove orphans
+```
+
+### `hold` / `unhold` / `holds`
+
+Pin a package so `lpm upgrade` skips it (`hold`), release the pin
+(`unhold`), or list the current pins (`holds`). Each pin change is
+recorded in the transaction history.
+
+**Example:**
+```bash
+lpm hold linux-api-headers
+lpm holds
+lpm unhold linux-api-headers
+```
+
+### `history`
+
+Show the timestamped transaction log (`/var/lib/lpm/history.log`).
+Every install, upgrade, reinstall, removal, hold and unhold appends a
+`timestamp|action|package|version` record. An optional argument limits
+the number of entries shown (default 50).
+
+**Example:**
+```bash
+lpm history
+lpm history 100
 ```
 
 ### `build <source|.lpm>` (new in v2.5.0)
@@ -348,8 +448,11 @@ lpm --sysroot /mnt/lfs verify       # Verify packages in an alternate root
 
 ### `update-db` (or `sync`)
 
-Refresh the package database by downloading/syncing repository indices.  
-Currently supports local repositories; remote repository support is in development.
+Refresh the package database from the configured repositories: local
+repository indexes plus every remote URL from `REPO_REMOTE_URLS` and
+`/etc/lpm/repos.d/*.conf` (each remote is fetched as
+`<url>/packages.list`). When all remotes fail, the existing local
+database is preserved and a warning is emitted.
 
 **Example:**
 ```bash

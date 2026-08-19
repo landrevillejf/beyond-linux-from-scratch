@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # LPM – Linux Package Manager
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# Version: 2.6.0
+# Version: 2.7.0
 
 set -euo pipefail
 
@@ -19,7 +19,7 @@ USE_COLOR=true
 # ======================================================================
 # Default configuration
 # ======================================================================
-LPM_VERSION="2.6.0"
+LPM_VERSION="2.7.0"
 LPM_CONF="${LPM_CONF:-/etc/lpm/lpm.conf}"
 LPM_ETC="${LPM_ETC:-/etc/lpm}"
 LPM_DB="${LPM_DB:-/var/lib/lpm}"
@@ -49,7 +49,8 @@ DRY_RUN=false
 FORCE=false
 NO_COLOR=false
 LOCK_FD=""
-VISITED_DEPS="" # Visited packages as pipe-separated list (e.g., "pkg1|pkg2|pkg3|")
+VISITED_DEPS=""        # Visited packages as pipe-separated list (e.g., "pkg1|pkg2|pkg3|")
+HISTORY_ACTION="install" # Transaction type recorded by install_package
 
 # ======================================================================
 # Logging helpers (respecting NO_COLOR and USE_COLOR)
@@ -185,14 +186,17 @@ refresh_runtime_paths() {
     installed_file="$LPM_DB/installed.list"
     file_index="$LPM_DB/file_index"
     kernel_deps_file="$LPM_DB/kernel_deps.list"
+    holds_file="$LPM_DB/holds.list"
+    history_file="$LPM_DB/history.log"
 }
 
 root_path() {
     local path="$1"
-    if [ "$LPM_ROOT" = "/" ] || [ "\${path#"$LPM_ROOT"}" != "$path" ]; then
+    local stripped="${path#"$LPM_ROOT"}"
+    if [ "$LPM_ROOT" = "/" ] || [ "$stripped" != "$path" ]; then
         printf '%s\n' "$path"
     else
-        printf '%s%s\n' "\${LPM_ROOT%/}" "$path"
+        printf '%s%s\n' "${LPM_ROOT%/}" "$path"
     fi
 }
 
@@ -208,6 +212,40 @@ apply_sysroot_paths() {
     GPG_KEYRING=$(root_path "$GPG_KEYRING")
 }
 
+# Read repository definitions from $LPM_ETC/repos.d/*.conf (name=url lines)
+# and append their URLs to REPO_REMOTE_URLS. Config files keep working even
+# when lpm.conf leaves REPO_REMOTE_URLS empty.
+load_repos_d() {
+    local repos_dir="$LPM_ETC/repos.d"
+    [ -d "$repos_dir" ] || return 0
+    local conf line url
+    for conf in "$repos_dir"/*.conf; do
+        [ -f "$conf" ] || continue
+        while IFS= read -r line; do
+            case "$line" in
+            '' | \#*) continue ;;
+            *=*) : ;;
+            *) continue ;;
+            esac
+            url="${line#*=}"
+            if [ -z "$url" ]; then
+                continue
+            fi
+            # Skip duplicates (config array may already hold the URL).
+            local known
+            known=false
+            local existing
+            for existing in "${REPO_REMOTE_URLS[@]:-}"; do
+                if [ "$existing" = "$url" ]; then
+                    known=true
+                    break
+                fi
+            done
+            $known || REPO_REMOTE_URLS+=("$url")
+        done <"$conf"
+    done
+}
+
 # Read configuration file (sourced)
 load_config() {
     if [ -f "$LPM_CONF" ]; then
@@ -215,6 +253,7 @@ load_config() {
         source "$LPM_CONF"
     fi
     apply_sysroot_paths
+    load_repos_d
     refresh_runtime_paths
     log_verbose "Configuration loaded from $LPM_CONF"
 }
@@ -222,7 +261,8 @@ load_config() {
 # Ensure directories exist
 init_dirs() {
     mkdir -p "$LPM_DB" "$LPM_LOGS" "$LPM_ETC" "$LPM_PACKAGES_DIR" "$(dirname "$LOCK_FILE")"
-    touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index" "$LPM_DB/kernel_deps.list"
+    touch "$LPM_DB/packages.list" "$LPM_DB/installed.list" "$LPM_DB/file_index" "$LPM_DB/kernel_deps.list" \
+        "$LPM_DB/holds.list" "$LPM_DB/history.log"
     mkdir -p "$LPM_BUILD_DIR"/{sources,src,pkg}
     # Rotate old logs and detect jq availability
     rotate_logs
@@ -260,6 +300,71 @@ is_installed() {
 # Get installed version (exact first-column match)
 installed_version() {
     awk -v p="$1" '$1 == p { print $2; exit }' "$installed_file" 2>/dev/null
+}
+
+# Append a transaction record: timestamp|action|package|version
+record_history() {
+    local action="$1" pkg="$2" version="${3:-}"
+    printf '%s|%s|%s|%s\n' "$(timestamp)" "$action" "$pkg" "$version" >>"$history_file"
+}
+
+# Show the transaction history (newest entries last), optional line limit
+show_history() {
+    local limit="${1:-50}"
+    if [ ! -s "$history_file" ]; then
+        log_info "No transaction history recorded"
+        return 0
+    fi
+    echo -e "$(_apply_color "${C_BLUE}")Transaction history (last $limit entries):$(_apply_color "${C_NC}")"
+    tail -n "$limit" "$history_file" | while IFS='|' read -r ts action pkg version; do
+        printf "  %-19s %-9s %-20s %s\n" "$ts" "$action" "$pkg" "$version"
+    done
+}
+
+# Hold management: held packages are skipped by lpm upgrade
+is_held() {
+    [ -s "$holds_file" ] || return 1
+    awk -v p="$1" '$1 == p { found=1; exit } END { exit !found }' "$holds_file" 2>/dev/null
+}
+
+hold_package() {
+    local pkg="$1"
+    [ -z "$pkg" ] && die "Usage: lpm hold <package>"
+    if is_held "$pkg"; then
+        log_info "Package '$pkg' is already held"
+        return 0
+    fi
+    echo "$pkg" >>"$holds_file"
+    record_history "hold" "$pkg" "$(installed_version "$pkg")"
+    log_success "Package '$pkg' held; lpm upgrade will skip it"
+}
+
+unhold_package() {
+    local pkg="$1"
+    [ -z "$pkg" ] && die "Usage: lpm unhold <package>"
+    if ! is_held "$pkg"; then
+        log_info "Package '$pkg' is not held"
+        return 0
+    fi
+    local tmp
+    tmp=$(mktemp)
+    awk -v p="$pkg" '$1 != p' "$holds_file" >"$tmp"
+    mv "$tmp" "$holds_file"
+    record_history "unhold" "$pkg" "$(installed_version "$pkg")"
+    log_success "Package '$pkg' unheld"
+}
+
+list_holds() {
+    if [ ! -s "$holds_file" ]; then
+        log_info "No held packages"
+        return 0
+    fi
+    echo -e "$(_apply_color "${C_BLUE}")Held packages (skipped by upgrade):$(_apply_color "${C_NC}")"
+    local pkg
+    while read -r pkg; do
+        [ -z "$pkg" ] && continue
+        printf "  %-20s %s\n" "$pkg" "$(installed_version "$pkg")"
+    done <"$holds_file"
 }
 
 # Compare versions: returns 0 if $1 >= $2 (portable, handles suffixes like a, b, rc)
@@ -604,6 +709,8 @@ install_package() {
     fi
     echo "$pkg_name $pkg_version" >>"$installed_file"
     echo "$(timestamp) - Installed $pkg_name-$pkg_version" >>"$LPM_LOGS/install.log"
+    record_history "$HISTORY_ACTION" "$pkg_name" "$pkg_version"
+    HISTORY_ACTION="install"
     log_success "Package '$pkg_name-$pkg_version' installed"
 }
 
@@ -680,6 +787,7 @@ remove_package() {
     # Also remove from kernel dependency registry
     unregister_kernel_dep "$pkg_name"
     echo "$(timestamp) - Removed $pkg_name-$installed_ver" >>"$LPM_LOGS/remove.log"
+    record_history "remove" "$pkg_name" "$installed_ver"
     log_success "Package '$pkg_name' removed"
 }
 
@@ -693,21 +801,31 @@ update_package() {
     # new version's files are copied (with rollback on failure).
     local old_force=$FORCE
     FORCE=true
+    HISTORY_ACTION="upgrade"
     install_package "$pkg"
     FORCE=$old_force
+}
+
+# Reinstall an already-installed package at the DB version (forced re-fetch)
+reinstall_package() {
+    local pkg="$1"
+    [ -z "$pkg" ] && die "Usage: lpm reinstall <package>"
+    if ! is_installed "$pkg"; then
+        die "Package '$pkg' is not installed (use: lpm install $pkg)"
+    fi
+    HISTORY_ACTION="reinstall"
+    update_package "$pkg"
 }
 
 # ======================================================================
 # Upgrade all installed packages that have newer versions
 # ======================================================================
-upgrade_all() {
-    log_info "Checking for upgradable packages..."
-    local installed_list
-    # Read installed list once to prevent race conditions
-    installed_list=$(cat "$installed_file")
 
-    # Build list of upgradable packages (no subshell: process substitution keeps vars)
-    local -a to_upgrade=()
+# List installed packages that have a newer version in the database.
+# Prints "name installed-version available-version" lines; shared by
+# the upgradable and upgrade commands.
+list_upgradable() {
+    [ -s "$installed_file" ] || return 0
     local line name version latest
     while IFS= read -r line; do
         [ -z "$line" ] && continue
@@ -715,10 +833,43 @@ upgrade_all() {
         version=$(echo "$line" | awk '{print $2}')
         latest=$(get_pkg_field "$name" version)
         if [ -n "$latest" ] && [ "$version" != "$latest" ]; then
-            echo "  $name $version -> $latest"
-            to_upgrade+=("$name")
+            printf '%s %s %s\n' "$name" "$version" "$latest"
         fi
-    done <<<"$installed_list"
+    done <"$installed_file"
+}
+
+show_upgradable() {
+    local -a lines=()
+    local name old new
+    while read -r name old new; do
+        [ -z "$name" ] && continue
+        if is_held "$name"; then
+            printf '  %-20s %-10s -> %-10s (held)\n' "$name" "$old" "$new"
+        else
+            printf '  %-20s %-10s -> %s\n' "$name" "$old" "$new"
+        fi
+        lines+=("$name")
+    done <<<"$(list_upgradable)"
+    if [ ${#lines[@]} -eq 0 ]; then
+        log_info "All packages are up to date."
+    fi
+}
+
+upgrade_all() {
+    log_info "Checking for upgradable packages..."
+
+    # Build list of upgradable packages (held packages are skipped)
+    local -a to_upgrade=()
+    local name version latest
+    while read -r name version latest; do
+        [ -z "$name" ] && continue
+        if is_held "$name"; then
+            log_warn "Skipping held package: $name ($version -> $latest)"
+            continue
+        fi
+        echo "  $name $version -> $latest"
+        to_upgrade+=("$name")
+    done <<<"$(list_upgradable)"
 
     if [ ${#to_upgrade[@]} -eq 0 ]; then
         log_info "All packages are up to date."
@@ -734,6 +885,101 @@ upgrade_all() {
     local pkg
     for pkg in "${to_upgrade[@]}"; do
         update_package "$pkg"
+    done
+}
+
+# ======================================================================
+# Reverse dependencies (lpm why)
+# ======================================================================
+why_package() {
+    local pkg="$1"
+    [ -z "$pkg" ] && die "Usage: lpm why <package>"
+    echo -e "$(_apply_color "${C_BLUE}")Packages depending on '$pkg':$(_apply_color "${C_NC}")"
+    local found=false
+    local name deps dep
+    while IFS='|' read -r name _ver _desc deps _chk; do
+        [ -z "$name" ] && [ -z "$deps" ] && continue
+        [ "$name" = "$pkg" ] && continue
+        [ -z "$deps" ] && continue
+        local dep_list
+        IFS=',' read -ra dep_list <<<"$deps"
+        for dep in "${dep_list[@]}"; do
+            dep=$(echo "$dep" | tr -d '[:space:]')
+            [ -z "$dep" ] && continue
+            parse_dep_spec "$dep"
+            if [ "$DEP_NAME" = "$pkg" ]; then
+                local status=""
+                if is_installed "$name"; then
+                    status=" [installed]"
+                fi
+                printf "  %-20s (%s)%s\n" "$name" "$dep" "$status"
+                found=true
+                break
+            fi
+        done
+    done <"$db_file"
+    $found || echo "  No known dependents (not required by any package in the database)"
+}
+
+# ======================================================================
+# Orphan removal (lpm autoremove)
+# ======================================================================
+autoremove_orphans() {
+    local base_list
+    base_list=$(root_path "/usr/share/lpm/base-packages.list")
+
+    if [ ! -s "$installed_file" ]; then
+        log_info "No packages installed"
+        return 0
+    fi
+
+    # Every dependency required by an installed package (names only).
+    local required
+    required=$(
+        while read -r name _ver; do
+            [ -z "$name" ] && continue
+            get_pkg_field "$name" dependencies
+        done <"$installed_file" | tr ',' '\n' | sed -e 's/>=.*//' -e 's/=.*//' | sort -u
+    )
+
+    local -a orphans=()
+    local name
+    while read -r name _ver; do
+        [ -z "$name" ] && continue
+        if is_held "$name"; then
+            log_verbose "Keeping held package: $name"
+            continue
+        fi
+        # Base packages are part of the core system: never auto-remove.
+        if [ -s "$base_list" ] &&
+            awk -F'|' -v n="$name" '$1 == n { found=1; exit } END { exit !found }' "$base_list" 2>/dev/null; then
+            continue
+        fi
+        # Keep packages another installed package depends on.
+        if printf '%s\n' "$required" | awk -v n="$name" '$0 == n { found=1; exit } END { exit !found }'; then
+            continue
+        fi
+        orphans+=("$name")
+    done <"$installed_file"
+
+    if [ ${#orphans[@]} -eq 0 ]; then
+        log_info "No orphan packages to remove."
+        return 0
+    fi
+
+    echo -e "$(_apply_color "${C_BLUE}")Orphan packages (not in the base set, not required):$(_apply_color "${C_NC}")"
+    local o
+    for o in "${orphans[@]}"; do
+        echo "  $o $(installed_version "$o")"
+    done
+
+    if $DRY_RUN; then
+        log_info "Dry run complete, no changes made."
+        return 0
+    fi
+
+    for o in "${orphans[@]}"; do
+        remove_package "$o"
     done
 }
 
@@ -939,10 +1185,25 @@ update_db() {
             return 0
         fi
         rm -f "$tmp_db"
-        log_warn "All remote syncs failed, falling back to sample data"
+        # Honesty over convenience: never overwrite a working database
+        # with sample data just because the network failed.
+        if [ -s "$db_file" ]; then
+            log_warn "All remote syncs failed; keeping the existing local database"
+        else
+            log_warn "All remote syncs failed and no local database exists"
+        fi
+        return 0
     fi
 
-    # Fallback: initialize with sample data in pipe-separated format
+    # No remote repositories configured: keep whatever is already there.
+    if [ -s "$db_file" ]; then
+        log_info "Database unchanged (no remote repositories configured)"
+        return 0
+    fi
+
+    # Empty database and no remotes: seed minimal sample data so the
+    # commands have something to show. A real deployment should point
+    # /etc/lpm/repos.d at a published manifest instead.
     cat >"$db_file" <<'EOF'
 bash|5.3|Bourne Again Shell|readline|sha256-dummy
 coreutils|9.4|GNU core utilities|glibc|sha256-dummy
@@ -955,7 +1216,7 @@ openssl|3.6.1|OpenSSL library|glibc|sha256-dummy
 curl|8.5.0|Command line URL fetcher|openssl,glibc|sha256-dummy
 linux|6.16.1|Linux kernel||sha256-dummy
 EOF
-    log_success "Database updated"
+    log_warn "Database seeded with SAMPLE data; configure /etc/lpm/repos.d for a real repository"
 }
 
 # ======================================================================
@@ -1226,6 +1487,7 @@ build_package() {
     if [ -n "$dependencies" ]; then
         log_info "Ensuring dependencies: $dependencies"
         local deps_order
+        # shellcheck disable=SC2086  # intentional word split of the dep list
         deps_order=$(install_order $dependencies)
         if [ -n "$deps_order" ]; then
             while IFS= read -r dep; do
@@ -1617,6 +1879,14 @@ Commands:
   remove <pkg>          Remove a package
   update <pkg>          Update (reinstall) a specific package
   upgrade               Upgrade all installed packages to latest versions
+  upgradable            List installed packages with a newer version available
+  reinstall <pkg>       Force re-fetch and re-install an installed package
+  autoremove            Remove orphan packages (not base, not required)
+  why <pkg>             Show which packages depend on <pkg>
+  hold <pkg>            Pin a package: lpm upgrade will skip it
+  unhold <pkg>          Remove the pin on a package
+  holds                 List held packages
+  history [N]           Show the last N transactions (default 50)
   build <source|.lpm>   Build, package, and install from source
   add-profile <prof>    Install all packages from a build profile
   list-profiles         List available profiles
@@ -1676,6 +1946,11 @@ Examples:
   lpm build myapp-2.0.tar.xz --desc "My App" --deps "glibc,curl"
   lpm add-profile audio-studio
   lpm upgrade --dry-run
+  lpm upgradable
+  lpm why glibc
+  lpm hold openssl
+  lpm history
+  lpm autoremove --dry-run
   lpm search gcc
   lpm install --no-color bash
   lpm list-profiles
@@ -1767,6 +2042,7 @@ add_profile() {
 
     # Install all packages in dependency order
     local pkgs_to_install
+    # shellcheck disable=SC2086  # intentional word split of the package list
     pkgs_to_install=$(install_order $pkg_list) || die "Failed to resolve profile dependencies"
 
     if $DRY_RUN; then
@@ -1858,6 +2134,34 @@ main() {
     upgrade)
         upgrade_all
         ;;
+    upgradable)
+        show_upgradable
+        ;;
+    reinstall)
+        [ "$#" -eq 0 ] && die "Missing package name"
+        reinstall_package "$1"
+        ;;
+    autoremove)
+        autoremove_orphans
+        ;;
+    why | rdepends)
+        [ "$#" -eq 0 ] && die "Missing package name"
+        why_package "$1"
+        ;;
+    hold)
+        [ "$#" -eq 0 ] && die "Missing package name"
+        hold_package "$1"
+        ;;
+    unhold)
+        [ "$#" -eq 0 ] && die "Missing package name"
+        unhold_package "$1"
+        ;;
+    holds)
+        list_holds
+        ;;
+    history)
+        show_history "${1:-50}"
+        ;;
     build)
         build_package "$@"
         ;;
@@ -1903,7 +2207,7 @@ main() {
     version | --version | -v)
         echo "LPM version $LPM_VERSION (LFS Package Manager)"
         echo "Built for LFS 13.0 and Beyond Linux from Scratch"
-        echo "Improvements: Source build support, automatic packaging, recipe system"
+        echo "Improvements: build-time DB seeding, holds, history, autoremove"
         ;;
     *)
         log_error "Unknown command: $cmd"
@@ -1933,14 +2237,16 @@ install_lpm_stage() {
         $run_privileged chmod 0644 "$target/etc/lpm/lpm.conf"
     fi
 
-    # Configure default remote repositories
+    # Configure default remote repositories. The manifest is published
+    # by the release pipeline (blfs/14-create-base-packages.sh exports
+    # lpm-repo/packages.list, uploaded as a GitHub release asset).
     cat > "$target/etc/lpm/repos.d/default.conf" <<'REPOS'
 # LPM default remote repositories
 # Format: name=url
 # The first matching repo is tried first; falls back to the next.
+# update-db fetches <url>/packages.list (and .sig when VERIFY_SIGNATURES=true).
 
-lfs-stable=https://packages.linuxfromscratch.org/x86_64/stable
-lfs-updates=https://packages.linuxfromscratch.org/x86_64/updates
+lfs-releases=https://github.com/landrevillejf/beyond-linux-from-scratch/releases/latest/download
 REPOS
     $run_privileged chmod 0644 "$target/etc/lpm/repos.d/default.conf"
 

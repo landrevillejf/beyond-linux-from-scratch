@@ -201,6 +201,7 @@ jobs:
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/build_info.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
           if-no-files-found: error
 
       - name: Boot ISO in QEMU (smoke test)
@@ -230,6 +231,7 @@ jobs:
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/SHA256SUMS
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
           generate_release_notes: true
 
       - name: Upload logs on failure
