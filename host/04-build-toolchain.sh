@@ -221,7 +221,7 @@ build_toolchain() {
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
     for lib in gmp mpfr mpc; do
-        LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print -quit)
+        LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
         if [ -z "$LIB_TAR" ]; then
             log_error "Tarball for $lib not found"
             exit 1
