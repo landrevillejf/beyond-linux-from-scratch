@@ -597,7 +597,8 @@ CROSS_CACHE_EOF
                 -Dman3dir="$LFS/tools/share/man/man3" \
                 -Duseshrplib \
                 -Dusethreads \
-                -Duseithreads; then
+                -Duseithreads \
+                -Uusecrypt; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
