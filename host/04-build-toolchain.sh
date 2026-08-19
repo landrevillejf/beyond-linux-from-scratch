@@ -8,7 +8,6 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
-    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -21,7 +20,6 @@ KERNEL_TYPE=${KERNEL_TYPE:-linux}
 
 detect_distro() {
     if [ -f /etc/os-release ]; then
-        # shellcheck source=/dev/null
         . /etc/os-release
         echo "$ID"
     elif [ -f /etc/debian_version ]; then
@@ -118,13 +116,11 @@ log_info "LFS=$LFS, TARGET=$LFS_TGT, JOBS=$NUM_JOBS"
 
 mkdir -pv "$LFS"/tools "$LFS"/sources
 
-# Ensure lfs user exists
 if ! id -u lfs &>/dev/null; then
     groupadd lfs
     useradd -s /bin/bash -g lfs -m -k /dev/null lfs
 fi
 
-# Set up environment for lfs user
 LFS_HOME="/home/lfs"
 mkdir -p "$LFS_HOME"
 {
@@ -132,9 +128,7 @@ mkdir -p "$LFS_HOME"
     echo "umask 022"
     printf 'LFS=%q\n' "$LFS"
     echo "LC_ALL=POSIX"
-    # shellcheck disable=SC2016
     echo 'LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}'
-    # shellcheck disable=SC2016
     echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
     echo "export LFS LC_ALL LFS_TGT PATH"
 } >"$LFS_HOME/.bashrc"
@@ -161,16 +155,13 @@ if check_toolchain; then
     exit 0
 fi
 
-# -------------------------------------------------------------------
-# Build logic (to be run as lfs)
-# -------------------------------------------------------------------
 build_toolchain() {
     cd "$LFS/sources" || {
         log_error "Sources directory missing"
         exit 1
     }
 
-    for pkg in binutils gcc linux glibc bison; do
+    for pkg in binutils gcc linux glibc; do
         if ! find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit | grep -q .; then
             log_error "Source for $pkg not found"
             exit 1
@@ -207,7 +198,6 @@ build_toolchain() {
     GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
-    # Embed GMP, MPFR, MPC into GCC source tree
     for lib in gmp mpfr mpc; do
         LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
         if [ -n "$LIB_TAR" ]; then
@@ -227,7 +217,6 @@ build_toolchain() {
     cd "$GCC_DIR"
     mkdir -v build
     cd build
-    # NO --with-as / --with-ld – they are not needed at this stage
     ../configure --target="$LFS_TGT" \
         --prefix="$LFS/tools" \
         --with-glibc-version=2.38 \
@@ -263,7 +252,6 @@ build_toolchain() {
     log_info "Installing Linux API headers"
 
     ARCH=$(echo "$LFS_TGT" | cut -d- -f1)
-    # The Linux kernel uses different arch directory names than the toolchain triplet
     case "$ARCH" in
         aarch64) ARCH=arm64 ;;
         x86_64)  ARCH=x86 ;;
@@ -392,7 +380,7 @@ build_toolchain() {
     # 5. LIBSTDC++ (part of GCC pass 2 but we build it now)
     # ==============================================================
     log_info "Building libstdc++"
-    tar -xf "$GCC_TAR" # re-extract GCC (still available)
+    tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
     mkdir -v build-libstdc++
@@ -411,7 +399,83 @@ build_toolchain() {
     log_success "libstdc++ done"
 
     # ==============================================================
-    # 6. CROSS‑COMPILE CACHE (for later tools)
+    # 6. BINUTILS (pass 2)
+    # ==============================================================
+    log_info "Building Binutils (pass 2)"
+    tar -xf "$BINUTILS_TAR"
+    BINUTILS_DIR=$(find . -maxdepth 1 -type d -name "binutils-*" -print -quit | sed 's|^\./||')
+    cd "$BINUTILS_DIR"
+    sed '6009s/$add_dir//' -i ltmain.sh
+    mkdir -v build
+    cd build
+    ../configure --prefix=/usr \
+        --build=$(../config.guess) \
+        --host="$LFS_TGT" \
+        --disable-nls \
+        --enable-shared \
+        --enable-gprofng=no \
+        --disable-werror \
+        --enable-64-bit-bfd \
+        --enable-new-dtags \
+        --enable-default-hash-style=gnu
+    make -j"$NUM_JOBS"
+    make DESTDIR="$LFS" install
+    rm -v "$LFS/usr/lib/lib"{bfd,ctf,ctf-nobfd,opcodes,sframe}.{a,la} 2>/dev/null || true
+    cd "$LFS/sources"
+    rm -rf "$BINUTILS_DIR"
+    log_success "Binutils (pass 2) done"
+
+    # ==============================================================
+    # 7. GCC (pass 2)
+    # ==============================================================
+    log_info "Building GCC (pass 2)"
+    tar -xf "$GCC_TAR"
+    GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
+    cd "$GCC_DIR"
+    for lib in gmp mpfr mpc; do
+        LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
+        if [ -n "$LIB_TAR" ]; then
+            tar -xf "$LIB_TAR"
+            LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
+            if [ -d "$LIB_DIR" ]; then
+                mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+            fi
+        fi
+    done
+    case $(uname -m) in
+        x86_64)
+            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+    esac
+    sed '/thread_header =/s/@.*@/gthr-posix.h/' \
+        -i libgcc/Makefile.in libstdc++-v3/include/Makefile.in
+    mkdir -v build
+    cd build
+    ../configure --build=$(../config.guess) \
+        --host="$LFS_TGT" \
+        --target="$LFS_TGT" \
+        --prefix=/usr \
+        --with-build-sysroot="$LFS" \
+        --enable-default-pie \
+        --enable-default-ssp \
+        --disable-nls \
+        --disable-multilib \
+        --disable-libatomic \
+        --disable-libgomp \
+        --disable-libquadmath \
+        --disable-libsanitizer \
+        --disable-libssp \
+        --disable-libvtv \
+        --enable-languages=c,c++ \
+        LDFLAGS_FOR_TARGET=-L$PWD/$LFS_TGT/libgcc
+    make -j"$NUM_JOBS"
+    make DESTDIR="$LFS" install
+    cd "$LFS/sources"
+    rm -rf "$GCC_DIR"
+    log_success "GCC (pass 2) done"
+
+    # ==============================================================
+    # 8. CROSS-COMPILE CACHE
     # ==============================================================
     CROSS_CACHE_TMPL="$LFS/sources/.cross-compile-cache"
     cat >"$CROSS_CACHE_TMPL" <<'CROSS_CACHE_EOF'
@@ -435,23 +499,17 @@ gl_cv_func_memmem_works=yes
 CROSS_CACHE_EOF
 
     # ==============================================================
-    # 7. BUILD ESSENTIAL TOOLS
+    # 9. BUILD ESSENTIAL TOOLS
     # ==============================================================
     log_info "Building essential tools for /tools"
-    # These programs form the complete bootstrap userspace for the next stage.
-    # Do not let 05-build-lfs-system.sh copy substitutes from the build host:
-    # that leaks host libraries into the target root and makes the result
-    # dependent on the GitHub runner image.
-    # For cross-compilation, build xz for the host architecture since it's
-    # needed during the build process (tar decompression) on the host system.
-    for pkg in m4 xz ncurses coreutils bash make grep sed gawk findutils tar gzip bzip2 diffutils patch file; do
-      if [ "$pkg" = "make" ]; then
-              archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
-          elif [ "$pkg" = "file" ]; then
-              archive=$(find . -maxdepth 1 -name "file-[0-9]*.tar.*" -print -quit)
-          else
-              archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
-          fi
+    for pkg in m4 xz ncurses coreutils bash grep sed gawk findutils tar gzip bzip2 diffutils patch file; do
+        if [ "$pkg" = "make" ]; then
+            archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
+        elif [ "$pkg" = "file" ]; then
+            archive=$(find . -maxdepth 1 -name "file-[0-9]*.tar.*" -print -quit)
+        else
+            archive=$(find . -maxdepth 1 -name "${pkg}-*.tar.*" -print -quit)
+        fi
         if [ -z "$archive" ]; then
             log_warning "Source for $pkg not found, skipping"
             continue
@@ -461,7 +519,6 @@ CROSS_CACHE_EOF
         tar -xf "$archive"
         cd "$dir"
 
-        # Patches for modern glibc
         if [ "$pkg" = "findutils" ]; then
             if grep -q "ctl->posix_arg_size_min = _POSIX_ARG_MAX;" lib/buildcmd.c 2>/dev/null &&
                 ! grep -q "#ifdef _POSIX_ARG_MAX" lib/buildcmd.c 2>/dev/null; then
@@ -490,19 +547,17 @@ CROSS_CACHE_EOF
                 PREFIX="$LFS/tools" install
 
         elif [ "$pkg" = "xz" ]; then
-            # Build xz for host architecture (used during build on host)
+            # Build xz natively for the host (used during build)
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
+            if ! CC="gcc" \
+                CXX="g++" \
+                AR="ar" \
+                RANLIB="ranlib" \
                 CFLAGS="$CFLAGS" \
                 ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                        --cache-file="$PKG_CACHE" \
-                --disable-nls; then
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
@@ -511,10 +566,17 @@ CROSS_CACHE_EOF
             make install
 
         elif [ "$pkg" = "ncurses" ]; then
-            # Build ncurses natively for the host (not cross-compiled)
-            # It's only needed during the build process and will be replaced later
+            # Build ncurses following LFS methodology
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            # Build native tic for the host
+            mkdir -v build
+            pushd build
+            ../configure --cache-file="$PKG_CACHE"
+            make -C include
+            make -C progs tic
+            popd
+            # Cross-compile ncurses for target
             if ! CC="$LFS_TGT-gcc" \
                 CXX="$LFS_TGT-g++" \
                 AR="$LFS_TGT-ar" \
@@ -523,24 +585,24 @@ CROSS_CACHE_EOF
                 ./configure --prefix="$LFS/tools" \
                     --host="$LFS_TGT" \
                     --build="$(uname -m)-linux-gnu" \
-                        --cache-file="$PKG_CACHE" \
+                    --cache-file="$PKG_CACHE" \
                     --disable-nls \
                     --with-shared \
-                    --without-debug \
                     --without-normal \
-                    --with-termlib \
-                    --without-cxx-binding \
-                    --without-cxx \
-                    --without-manpages; then
+                    --with-cxx-shared \
+                    --without-debug \
+                    --without-ada \
+                    --disable-stripping; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
             rm -f "$PKG_CACHE"
             make -j"$NUM_JOBS"
-            make install
+            make TIC_PATH=$(pwd)/build/progs/tic install
+            cd "$LFS/sources"
+            rm -rf "$dir"
 
         elif [ "$pkg" = "bash" ]; then
-            # Build bash cross-compiled for target (needed inside chroot)
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
             if ! CC="$LFS_TGT-gcc" \
@@ -551,9 +613,7 @@ CROSS_CACHE_EOF
                 ./configure --prefix="$LFS/tools" \
                     --host="$LFS_TGT" \
                     --build="$(uname -m)-linux-gnu" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                        --cache-file="$PKG_CACHE" \
+                    --cache-file="$PKG_CACHE" \
                     --disable-nls \
                     --without-bash-malloc; then
                 log_error "Configure failed for $pkg"
@@ -564,9 +624,20 @@ CROSS_CACHE_EOF
             make install
 
         elif [ "$pkg" = "file" ]; then
-            # Build file natively for the host (needed to generate magic database)
+            # Build file following LFS methodology
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
+            # Build native file for the host
+            mkdir -v build
+            pushd build
+            ../configure --disable-bzlib \
+                --disable-libseccomp \
+                --disable-xzlib \
+                --disable-zlib \
+                --cache-file="$PKG_CACHE"
+            make
+            popd
+            # Cross-compile file for target
             if ! CC="$LFS_TGT-gcc" \
                 CXX="$LFS_TGT-g++" \
                 AR="$LFS_TGT-ar" \
@@ -575,18 +646,19 @@ CROSS_CACHE_EOF
                 ./configure --prefix="$LFS/tools" \
                     --host="$LFS_TGT" \
                     --build="$(uname -m)-linux-gnu" \
-                        --cache-file="$PKG_CACHE" \
+                    --cache-file="$PKG_CACHE" \
                     --disable-nls; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
             rm -f "$PKG_CACHE"
-            make -j"$NUM_JOBS"
+            make -j"$NUM_JOBS" FILE_COMPILE=$(pwd)/build/src/file
             make install
+            cd "$LFS/sources"
+            rm -rf "$dir"
 
         else
-            # Build other tools cross-compiled for target following LFS section 6 methodology
-            # (coreutils, grep, sed, gawk, findutils, tar, gzip, diffutils, patch, make, m4)
+            # Cross-compile remaining tools for target
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
             if ! CC="$LFS_TGT-gcc" \
@@ -597,8 +669,8 @@ CROSS_CACHE_EOF
                 ./configure --prefix="$LFS/tools" \
                     --host="$LFS_TGT" \
                     --build="$(uname -m)-linux-gnu" \
-                        --cache-file="$PKG_CACHE" \
-                --disable-nls; then
+                    --cache-file="$PKG_CACHE" \
+                    --disable-nls; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
@@ -621,14 +693,11 @@ CROSS_CACHE_EOF
     log_success "Temporary toolchain built successfully."
 }
 
-# -------------------------------------------------------------------
-# Main execution
-# -------------------------------------------------------------------
 main() {
     ensure_compiler
 
     if [ "$(whoami)" != "lfs" ]; then
-        log_info "Re‑executing as lfs user"
+        log_info "Re-executing as lfs user"
         exec sudo -n -u lfs env LFS="$LFS" LFS_TGT="$LFS_TGT" KERNEL_TYPE="$KERNEL_TYPE" NUM_JOBS="$NUM_JOBS" bash "$0" --force
     fi
 
