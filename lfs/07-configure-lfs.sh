@@ -1,12 +1,16 @@
 #!/bin/bash
-# Configure LFS system – copy binaries and minimal configuration
+# Configure LFS system – LFS 12.4 chapter 9 configuration files
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# 07-configure-lfs.sh
+# 07-configure-lfs.sh – Write the book chapter 9 configuration files inside
+#                        the already built system.  No host binary is ever
+#                        copied into the target: every command runs inside the
+#                        chroot using the programs built in chapter 8.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -32,32 +36,15 @@ if [ -z "$LFS" ]; then
     exit 1
 fi
 
+INIT_SYSTEM=${INIT_SYSTEM:-sysvinit}
+HOSTNAME_LFS=${LFS_CONFIG_HOSTNAME:-lfs-desktop}
+
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
         "$@"
     else
         sudo "$@"
     fi
-}
-
-copy_binaries() {
-    local dest="$1"
-    shift
-    for tool in "$@"; do
-        src=$(which "$tool" 2>/dev/null || echo "/bin/$tool")
-        if [ -f "$src" ]; then
-            run_privileged cp -L -v "$src" "$dest/bin/"
-            # Copy libraries
-            ldd "$src" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read lib; do
-                lib_dir="$dest/lib"
-                [[ $lib == *"/lib64/"* ]] && lib_dir="$dest/lib64"
-                run_privileged mkdir -p "$lib_dir"
-                run_privileged cp -v "$lib" "$lib_dir/"
-            done
-        else
-            log_warning "Command not found: $tool"
-        fi
-    done
 }
 
 log_info "========================================="
@@ -107,7 +94,7 @@ INNEREOF
 fi
 
 # Native mode
-log_info "Native mode – full configuration"
+log_info "Native mode – book chapter 9 configuration"
 
 # Mount virtual filesystems
 cleanup_mounts() {
@@ -125,54 +112,215 @@ run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
 run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
 run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
 
-# Copy essential binaries to chroot
-log_info "Copying essential binaries to chroot"
-run_privileged mkdir -p "$LFS/bin" "$LFS/usr/bin" "$LFS/sbin"
-copy_binaries "$LFS" mkdir chmod chown ln cat echo cp mv rm sed grep which
-# Copy user management tools if present (optional)
-for tool in groupadd useradd chpasswd; do
-    src=$(which "$tool" 2>/dev/null || echo "/usr/sbin/$tool")
-    if [ -f "$src" ]; then
-        run_privileged cp -L -v "$src" "$LFS/usr/sbin/"
-        ldd "$src" 2>/dev/null | grep "=> /" | awk '{print $3}' | while read lib; do
-            lib_dir="$LFS/lib"
-            [[ $lib == *"/lib64/"* ]] && lib_dir="$LFS/lib64"
-            run_privileged mkdir -p "$lib_dir"
-            run_privileged cp -v "$lib" "$lib_dir/"
-        done
-    fi
-done
-
-# Create a simplified configuration script (without depending on grub, systemd, etc.)
-cat >"$LFS/configure-system.sh" <<'INNEREOF'
+# -----------------------------------------------------------------
+# Configuration script following LFS 12.4 chapter 9 plus the
+# project-specific additions (locked accounts, desktop launcher).
+# Runs entirely inside the chroot with the chapter 8 userland.
+# -----------------------------------------------------------------
+cat >"$LFS/configure-system.sh" <<INNEREOF
 #!/bin/bash
 set -e
+export INIT_SYSTEM="$INIT_SYSTEM"
+export HOSTNAME_LFS="$HOSTNAME_LFS"
+
 echo "========================================="
-echo "Configuring LFS System (minimal)"
+echo "Configuring LFS System (LFS 12.4 ch 9)"
 echo "========================================="
 
-# Base files
-mkdir -pv /etc
-mkdir -pv /usr/bin
-mkdir -pv /etc/X11/xorg.conf.d
+# --- 10.2 /etc/fstab (placeholders replaced by the installer) ---
+if [ ! -f /etc/fstab ]; then
+cat > /etc/fstab << "EOF"
+# Begin /etc/fstab
 
-# Create users if absent – lock accounts, password set during install/first-boot
-if ! grep -q lfsuser /etc/passwd; then
-    echo "lfsuser:x:1000:1000::/home/lfsuser:/bin/bash" >> /etc/passwd
-    echo "lfsuser:x:1000:" >> /etc/group
-    # Lock the account – password will be set during installation or first boot
-    passwd -l lfsuser 2>/dev/null || true
-    mkdir -pv /home/lfsuser
-    chown -R lfsuser:lfsuser /home/lfsuser
+# file system  mount-point  type     options             dump  fsck
+#                                                              order
+
+/dev/<xxx>     /            <fff>    defaults            1     1
+/dev/<yyy>     swap         swap     pri=1               0     0
+proc           /proc        proc     nosuid,noexec,nodev 0     0
+sysfs          /sys         sysfs    nosuid,noexec,nodev 0     0
+devpts         /dev/pts     devpts   gid=5,mode=620      0     0
+tmpfs          /run         tmpfs    defaults            0     0
+devtmpfs       /dev         devtmpfs mode=0755,nosuid    0     0
+tmpfs          /dev/shm     tmpfs    nosuid,nodev        0     0
+cgroup2        /sys/fs/cgroup cgroup2 nosuid,noexec,nodev 0    0
+
+# End /etc/fstab
+EOF
 fi
 
-# Lock root account – password must be set during installation
+# --- 9.4 Hostname and 9.5 hosts file ---
+echo "\$HOSTNAME_LFS" > /etc/hostname
+cat > /etc/hosts << EOF
+# Begin /etc/hosts
+
+127.0.0.1 localhost.localdomain localhost
+127.0.1.1 \$HOSTNAME_LFS
+::1       localhost ip6-localhost ip6-loopback
+
+# End /etc/hosts
+EOF
+
+# --- 9.3 Network configuration ---
+if [ "\$INIT_SYSTEM" = "sysvinit" ]; then
+    cat > /etc/sysconfig/network << EOF
+# Begin /etc/sysconfig/network
+
+HOSTNAME=\$HOSTNAME_LFS
+
+# End /etc/sysconfig/network
+EOF
+    cat > /etc/sysconfig/ifconfig.eth0 << "EOF"
+# Begin /etc/sysconfig/ifconfig.eth0
+
+ONBOOT=yes
+IFACE=eth0
+SERVICE=ipv4-static
+IP=192.168.1.2
+GATEWAY=192.168.1.1
+PREFIX=24
+BROADCAST=192.168.1.255
+
+# End /etc/sysconfig/ifconfig.eth0
+EOF
+elif [ "\$INIT_SYSTEM" = "systemd" ]; then
+    mkdir -pv /etc/systemd/network
+    cat > /etc/systemd/network/10-eth-static.network << EOF
+# Begin /etc/systemd/network/10-eth-static.network
+
+[Match]
+Name=eth0
+
+[Network]
+Address=192.168.1.2/24
+Gateway=192.168.1.1
+
+# End /etc/systemd/network/10-eth-static.network
+EOF
+fi
+
+# --- 9.6 System locale (locales installed by glibc 8.5) ---
+cat > /etc/locale.conf << "EOF"
+# Begin /etc/locale.conf
+
+LANG=en_US.UTF-8
+
+# End /etc/locale.conf
+EOF
+
+# --- 9.7 /etc/profile ---
+cat > /etc/profile << "EOF"
+# Begin /etc/profile
+
+for i in \$(locale); do
+    unset \${i%=*}
+done
+
+if [[ "\$TERM" = linux ]]; then
+    export LANG=C.UTF-8
+else
+    export LANG=en_US.UTF-8
+fi
+
+# End /etc/profile
+EOF
+
+# --- 9.8 /etc/inputrc ---
+cat > /etc/inputrc << "EOF"
+# Begin /etc/inputrc
+# Modified by Chris Lynn <roryo@roryo.dynup.net>
+
+# Allow the command prompt to wrap to the next line
+set horizontal-scroll-mode Off
+
+# Enable 8-bit input
+set meta-flag On
+set input-meta On
+
+# Turns off 8th bit stripping
+set convert-meta Off
+
+# Keep the 8th bit for display
+set output-meta On
+
+# none, visible or audible
+set bell-style none
+
+# All of the following map the escape sequence of the value
+# contained in the 1st argument to the readline specific functions
+"\eOd": backward-word
+"\eOc": forward-word
+
+# for linux console
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\e[5~": beginning-of-history
+"\e[6~": end-of-history
+"\e[3~": delete-char
+"\e[2~": quoted-insert
+
+# for xterm
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+
+# for Konsole
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+
+# End /etc/inputrc
+EOF
+
+# --- 9.9 /etc/shells ---
+cat > /etc/shells << "EOF"
+# Begin /etc/shells
+
+/bin/sh
+/bin/bash
+
+# End /etc/shells
+EOF
+
+# --- Console configuration ---
+cat > /etc/vconsole.conf << "EOF"
+# Begin /etc/vconsole.conf
+
+KEYMAP=us
+FONT=Lat2-Terminus16
+
+# End /etc/vconsole.conf
+EOF
+
+# --- Dynamic linker configuration ---
+if [ ! -s /etc/ld.so.conf ]; then
+cat > /etc/ld.so.conf << "EOF"
+# Begin /etc/ld.so.conf
+
+/usr/local/lib
+/opt/lib
+
+# End /etc/ld.so.conf
+EOF
+fi
+
+# --- Timezone (UTC default, installer adjusts) ---
+ln -sfv /usr/share/zoneinfo/UTC /etc/localtime
+
+# --- Project additions on top of the book baseline ---
+
+# Users: lfsuser + locked accounts, passwords set at install/first boot
+if ! grep -q '^lfsuser:' /etc/passwd; then
+    useradd -u 1000 -g users -G wheel,audio,video -m lfsuser 2>/dev/null || true
+    passwd -l lfsuser 2>/dev/null || true
+fi
 passwd -l root 2>/dev/null || true
 
-# Sudoers
-echo "lfsuser ALL=(ALL) ALL" >> /etc/sudoers 2>/dev/null || echo "Warning: sudoers not updated"
+# Sudoers (sudo is provided by BLFS, guard against its absence)
+if [ -f /etc/sudoers ] && ! grep -q '^lfsuser' /etc/sudoers; then
+    echo "lfsuser ALL=(ALL) ALL" >> /etc/sudoers
+fi
 
-# Keyboard
+# Keyboard layout for X11
+mkdir -pv /etc/X11/xorg.conf.d
 cat > /etc/X11/xorg.conf.d/00-keyboard.conf << "XORG"
 Section "InputClass"
     Identifier "system-keyboard"
@@ -188,57 +336,21 @@ exec startx
 START
 chmod +x /usr/bin/start-desktop
 
-# Hostname
-echo "lfs-desktop" > /etc/hostname
-cat > /etc/hosts << "HOSTS"
-127.0.0.1   localhost.localdomain localhost
-::1         localhost ip6-localhost ip6-loopback
-127.0.1.1   lfs-desktop
-HOSTS
-
-# Timezone
-ln -sfv /usr/share/zoneinfo/UTC /etc/localtime
-
-# Locale
-cat > /etc/locale.conf << "LOCALE"
-LANG=en_US.UTF-8
-LOCALE
-
-# Console
-cat > /etc/vconsole.conf << "VCONSOLE"
-KEYMAP=us
-FONT=Lat2-Terminus16
-VCONSOLE
-
-# Post LFS Configuration - Console Fonts
-mkdir -pv /usr/share/kbd/consolefonts
-mkdir -pv /usr/share/kbd/consoletrans
-mkdir -pv /usr/share/kbd/unimaps
-
-# Post LFS Configuration - Devices
+# Basic udev rules directory for local rules
 mkdir -pv /etc/udev/rules.d
-# Basic udev rules for common devices
 cat > /etc/udev/rules.d/10-local.rules << "UDEV"
 # Local udev rules
 KERNEL=="sd[a-z]", NAME="%k", GROUP="disk"
 KERNEL=="sd[a-z][0-9]", NAME="%k", GROUP="disk"
 UDEV
 
-# Post LFS Configuration - Skeleton for new users
+# Skeleton directories for new users
 mkdir -pv /etc/skel
-# Create basic skeleton directory structure
 for dir in Desktop Documents Downloads Music Pictures Public Templates Videos; do
-    mkdir -pv /etc/skel/$dir
+    mkdir -pv "/etc/skel/\$dir"
 done
 
-# Post LFS Configuration - Bash Profile enhancements
-cat > /etc/profile.d/extra-path.sh << "PROFILE"
-# Extra PATH additions
-if [ -d /usr/local/bin ] ; then
-    PATH=/usr/local/bin:"${PATH}"
-fi
-PROFILE
-
+# Extra profile fragments
 cat > /etc/profile.d/umask.sh << "UMASK"
 # Set default umask
 umask 022
@@ -247,7 +359,7 @@ UMASK
 cat > /etc/profile.d/dircolors.sh << "DIRCOLORS"
 # Color support for ls and grep
 if [ -x /usr/bin/dircolors ]; then
-    test -r ~/.dircolors && eval "$(dircolors -b ~/.dircolors)" || eval "$(dircolors -b)"
+    test -r ~/.dircolors && eval "\$(dircolors -b ~/.dircolors)" || eval "\$(dircolors -b)"
     alias ls='ls --color=auto'
     alias grep='grep --color=auto'
 fi
@@ -260,9 +372,12 @@ INNEREOF
 
 run_privileged chmod +x "$LFS/configure-system.sh"
 
-# Run configuration inside chroot
+# Run configuration inside chroot with a book-style clean environment;
+# PATH=/usr/bin:/usr/sbin only, the system is standalone at this point.
 log_info "Running configuration in chroot..."
-run_privileged chroot "$LFS" /bin/bash /configure-system.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /configure-system.sh
 
 # Unmount
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true

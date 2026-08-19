@@ -45,7 +45,7 @@ echo "========================================="
 # --------------------------------------------------------------------------
 echo ""
 echo "--- Critical binaries ---"
-for bin in /bin/bash /bin/sh /usr/bin/env /usr/bin/ls /usr/bin/cat; do
+for bin in /bin/bash /bin/sh /usr/bin/bash /usr/bin/env /usr/bin/ls /usr/bin/cat; do
     log_check "$bin exists and is executable"
     full="$LFS$bin"
     if [ -x "$full" ] || [ -L "$full" ]; then
@@ -130,6 +130,38 @@ else
     log_fail "No initramfs found in $LFS/boot/"
 fi
 
+# Kernel configuration provenance (LFS book 10.3 installs the .config
+# used for the build into /boot).
+log_check "kernel config installed in /boot"
+if ls "$LFS/boot/config-"* >/dev/null 2>&1; then
+    log_pass
+else
+    log_fail "No /boot/config-* found (kernel stage must install its .config)"
+fi
+
+log_check "installed kernel config matches repository config"
+SCRIPT_DIR_FINAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+boot_cfg=$(find "$LFS/boot" -maxdepth 1 -name 'config-*' 2>/dev/null | head -n1)
+repo_cfg=""
+for candidate in "$SCRIPT_DIR_FINAL/../config/kernel-config-${PROFILE:-}" \
+                 "$SCRIPT_DIR_FINAL/../config/kernel-config"; do
+    if [ -f "$candidate" ]; then
+        repo_cfg="$candidate"
+        break
+    fi
+done
+if [ -n "$boot_cfg" ] && [ -n "$repo_cfg" ]; then
+    if cmp -s "$boot_cfg" "$repo_cfg" 2>/dev/null; then
+        log_pass
+    else
+        # olddefconfig legitimately adds/removes lines when the kernel
+        # version differs from the one the curated config was written for.
+        log_warn "boot config differs from $(basename "$repo_cfg")"
+    fi
+else
+    log_warn "cannot compare kernel configs (boot config or repo config missing)"
+fi
+
 # --------------------------------------------------------------------------
 # 5. /sbin/init or equivalent exists
 # --------------------------------------------------------------------------
@@ -161,6 +193,47 @@ for dir in /bin /sbin /usr/bin /usr/sbin /etc /proc /sys /dev /tmp /var /home /r
         log_fail "$dir missing"
     fi
 done
+
+# --------------------------------------------------------------------------
+# 6b. Standalone system (LFS book 8.84/8.85): /tools must be gone and no
+#     binary may carry an rpath pointing into the removed toolchain.
+# --------------------------------------------------------------------------
+echo ""
+echo "--- Standalone system (no /tools leftovers) ---"
+log_check "/tools removed (standalone system)"
+if [ -d "$LFS/tools" ]; then
+    log_fail "/tools still present – system is not standalone"
+else
+    log_pass
+fi
+
+log_check "no /tools rpath embedded in installed binaries"
+if command -v readelf >/dev/null 2>&1; then
+    scan_dirs=""
+    for d in /bin /sbin /lib /lib64 /usr/bin /usr/sbin /usr/lib /usr/lib64; do
+        if [ -d "$LFS$d" ]; then
+            scan_dirs="$scan_dirs $LFS$d"
+        fi
+    done
+    tools_rpath=0
+    # shellcheck disable=SC2086  # scan_dirs is a space-separated dir list
+    while IFS= read -r f; do
+        # readelf silently fails on non-ELF files, which is what we want
+        if readelf -d "$f" 2>/dev/null | grep -E 'RPATH|RUNPATH' | grep -q '/tools'; then
+            tools_rpath=$((tools_rpath + 1))
+            if [ "$tools_rpath" -le 5 ]; then
+                echo "    rpath references /tools: $f"
+            fi
+        fi
+    done < <(find $scan_dirs -type f 2>/dev/null)
+    if [ "$tools_rpath" -eq 0 ]; then
+        log_pass
+    else
+        log_fail "$tools_rpath binaries reference /tools in RPATH/RUNPATH"
+    fi
+else
+    echo "SKIP (readelf unavailable on host)"
+fi
 
 # --------------------------------------------------------------------------
 # 7. Essential configuration files

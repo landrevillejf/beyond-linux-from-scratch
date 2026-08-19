@@ -382,3 +382,126 @@ class TestIntegrationWorkflow:
                 print(f"  - {script}: {error[:100]}")
         else:
             print(f"✅ {len(scripts)} scripts syntaxiquement valides")
+
+
+class TestLFSComplianceGuardrails:
+    """Guardrail tests from docs/LFS_COMPLIANCE_AUDIT.md phase 6.
+
+    These tests freeze the book-compliance fixes: no host binary
+    imports in the LFS stages, a complete chapter 8 package list,
+    per-package BLFS commands without error masking, and the
+    standalone-system checks in final/16.
+    """
+
+    def test_lfs_scripts_have_no_host_binary_imports(self):
+        """No stage may copy host binaries into the built system."""
+        import re
+
+        scripts = list(Path('lfs').glob('*.sh'))
+        assert scripts, "lfs/ stage scripts not found"
+
+        forbidden = ['copy_binaries', 'copy_host_binaries',
+                     'import_host_binaries']
+        # Host import pattern: cp from the host /bin or /usr/bin into the
+        # $LFS tree.  In-chroot copies (no $LFS on the line) are fine.
+        host_copy_re = re.compile(
+            r'cp[^\n]*\s/(?:usr/)?bin/[^\n]*\$LFS')
+
+        for script in scripts:
+            content = script.read_text()
+            for token in forbidden:
+                assert token not in content, \
+                    f"{script} still imports host binaries ({token})"
+            assert not host_copy_re.search(content), \
+                f"{script} copies binaries from the host /bin or /usr/bin"
+
+    def test_chapter8_package_list_is_complete(self):
+        """The chapter 8 loop must build every book package."""
+        import re
+
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        match = re.search(r'CH8_PACKAGES="([^"]*)"', content)
+        assert match, "CH8_PACKAGES list not found in 05b"
+        packages = set(match.group(1).split())
+
+        # Critical LFS 12.4 chapter 8 packages (subset used as canary).
+        expected = {
+            'man-pages', 'iana-etc', 'glibc', 'zlib', 'bzip2', 'xz',
+            'file', 'readline', 'm4', 'bc', 'flex', 'tcl', 'dejagnu',
+            'pkgconf', 'binutils', 'gmp', 'mpfr', 'mpc', 'attr', 'acl',
+            'libcap', 'libxcrypt', 'shadow', 'gcc', 'ncurses', 'sed',
+            'psmisc', 'gettext', 'bison', 'grep', 'bash', 'libtool',
+            'gdbm', 'gperf', 'expat', 'inetutils', 'less', 'perl',
+            'autoconf', 'automake', 'openssl', 'libelf', 'libffi',
+            'python', 'ninja', 'meson', 'kmod', 'coreutils',
+            'diffutils', 'gawk', 'findutils', 'groff', 'grub', 'gzip',
+            'iproute2', 'kbd', 'libpipeline', 'make', 'patch', 'tar',
+            'texinfo', 'vim', 'udev', 'man-db', 'procps-ng',
+            'util-linux', 'e2fsprogs', 'sysklogd', 'sysvinit',
+        }
+        missing = expected - packages
+        assert not missing, f"Chapter 8 packages missing: {sorted(missing)}"
+
+    def test_blfs_base_uses_per_package_commands(self):
+        """blfs-base must use the BLFS book commands, not a generic
+        configure/make template, and must not mask build failures."""
+        content = Path('blfs/08-build-blfs-base.sh').read_text()
+
+        # The generic template is gone.
+        assert 'compile_package' not in content, \
+            "Generic compile_package template must be removed"
+
+        # Per-package book commands.
+        assert './config --prefix=/usr' in content, \
+            "OpenSSL must be built with ./config (BLFS book)"
+        assert '--openssldir=/etc/ssl' in content
+        assert '--with-openssl' in content, "cURL must link against OpenSSL"
+        assert '--with-ca-path=/etc/ssl/certs' in content
+        assert '--with-history' in content, "libxml2 needs readline history"
+        assert 'PYTHON=/usr/bin/python3' in content
+
+        # No error masking on package builds: '|| true' is only allowed
+        # on mount/umount cleanup lines.
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            if '|| true' in stripped:
+                assert 'mount' in stripped, \
+                    f"Error masking outside mount cleanup: {stripped}"
+
+    def test_final_validation_has_standalone_guardrails(self):
+        """final/16 must verify /tools removal and scan for /tools
+        rpaths (audit finding F-08)."""
+        content = Path('final/16-validate-build.sh').read_text()
+        assert '/tools removed' in content
+        assert 'readelf -d' in content
+        assert 'RPATH|RUNPATH' in content
+        assert 'config-' in content, \
+            "Kernel .config provenance check missing"
+
+    def test_shellcheck_on_compliance_scripts(self):
+        """shellcheck must be clean on every script touched by the
+        compliance remediation."""
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip("shellcheck not installed")
+
+        scripts = [
+            'lfs/05b-build-lfs-system.sh',
+            'lfs/07-configure-lfs.sh',
+            'lfs/08-build-kernel.sh',
+            'blfs/08-build-blfs-base.sh',
+            'final/16-validate-build.sh',
+        ]
+        for script in scripts:
+            assert Path(script).exists(), f"{script} missing"
+            result = subprocess.run(
+                ['shellcheck', script],
+                capture_output=True,
+                text=True
+            )
+            assert result.returncode == 0, \
+                f"shellcheck failed on {script}:\n{result.stdout}"

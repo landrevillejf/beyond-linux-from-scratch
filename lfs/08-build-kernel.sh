@@ -1,7 +1,11 @@
 #!/bin/bash
 # Build and install the Linux kernel in the LFS system.
-# Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-# 08-build-kernel.sh
+# Author : Jean-Francois Landreville, landrevvillejf@protonmail.com, 2026.
+# 08-build-kernel.sh – LFS 12.4 section 10.3: the kernel is compiled inside
+#                       the chroot with the system toolchain using the curated
+#                       repository configuration (config/kernel-config*).
+#                       Cross-compile profiles (CROSS_COMPILE set) still build
+#                       on the host, but with the same repository config.
 set -e
 
 if [ "$EUID" -ne 0 ]; then
@@ -9,10 +13,12 @@ if [ "$EUID" -ne 0 ]; then
     exec sudo -E "$0" "$@"
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 LFS=${LFS:-/mnt/lfs}
 KERNEL_TYPE=${KERNEL_TYPE:-linux}
 ARCH=${ARCH:-$(uname -m)}
-LFS_TGT=${LFS_TGT:-${ARCH}-lfs-linux-gnu}
+PROFILE=${PROFILE:-minimal}
 CROSS_COMPILE=${CROSS_COMPILE:-}
 
 # Normalise ARCH for make
@@ -24,14 +30,37 @@ riscv64) MAKE_ARCH="riscv" ;;
 *) MAKE_ARCH="$ARCH" ;;
 esac
 
-KERNEL_VERSION=""
-
 log_info() { echo "[INFO] $*"; }
 log_error() { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
+if [ -d "$LFS/image/tools" ] && [ -d "$LFS/image/usr" ] && [ ! -d "$LFS/tools" ]; then
+    LFS="$LFS/image"
+fi
+
 # ---------------------------------------------------------------------------
-# Use the host's sources directory (where the builder downloads tarballs)
+# Select the curated kernel configuration from the repository.  Explicit
+# KERNEL_CONFIG_FILE wins, then per-profile variants, then the default.
+# ---------------------------------------------------------------------------
+CONFIG_DIR="$SCRIPT_DIR/../config"
+if [ -n "${KERNEL_CONFIG_FILE:-}" ] && [ -f "$KERNEL_CONFIG_FILE" ]; then
+    KERNEL_CONFIG_SRC="$KERNEL_CONFIG_FILE"
+elif [ -f "$CONFIG_DIR/kernel-config-$PROFILE" ]; then
+    KERNEL_CONFIG_SRC="$CONFIG_DIR/kernel-config-$PROFILE"
+elif [ "$MAKE_ARCH" = "arm64" ] && [ -f "$CONFIG_DIR/kernel-config-arm64" ]; then
+    KERNEL_CONFIG_SRC="$CONFIG_DIR/kernel-config-arm64"
+else
+    KERNEL_CONFIG_SRC="$CONFIG_DIR/kernel-config"
+fi
+if [ ! -f "$KERNEL_CONFIG_SRC" ]; then
+    log_error "Kernel configuration not found: $KERNEL_CONFIG_SRC"
+    exit 1
+fi
+log_info "Using kernel configuration: $KERNEL_CONFIG_SRC"
+
+# ---------------------------------------------------------------------------
+# Locate the kernel sources (host sources dir, mirrored into the chroot by
+# the lfs-basic stage)
 # ---------------------------------------------------------------------------
 SOURCES_HOST="$(dirname "$LFS")/sources"
 if [ ! -d "$SOURCES_HOST" ]; then
@@ -40,13 +69,15 @@ if [ ! -d "$SOURCES_HOST" ]; then
 fi
 
 cd "$SOURCES_HOST"
-KERNEL_TARBALL=$(find . -maxdepth 1 -name "${KERNEL_TYPE}-*.tar.xz" -print -quit 2>/dev/null | head -n1)
+KERNEL_TARBALL=$(find . -maxdepth 1 -name "${KERNEL_TYPE}-*.tar.*" -print -quit 2>/dev/null | head -n1)
 if [ -z "$KERNEL_TARBALL" ]; then
     log_error "No kernel source found for type '$KERNEL_TYPE'"
     exit 1
 fi
+KERNEL_TARBALL=${KERNEL_TARBALL#./}
 
-KERNEL_VERSION=$(echo "$KERNEL_TARBALL" | sed -E 's/^[^-]+-([0-9]+\.[0-9]+\.[0-9]+)\.tar\..*$/\1/')
+KERNEL_VERSION=$(echo "$KERNEL_TARBALL" | sed -E 's/^[^-]+(-libre)?-([0-9]+\.[0-9]+\.[0-9]+)\.tar\..*$/\2/')
+KERNEL_DIR=$(tar -tf "$KERNEL_TARBALL" | head -1 | cut -d/ -f1)
 log_info "Using kernel source: $KERNEL_TARBALL (version $KERNEL_VERSION)"
 
 # Skip if already installed
@@ -56,69 +87,133 @@ if [ -f "$LFS/boot/vmlinuz" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# Extract and compile on the host (temporary directory)
+# Cross-compile path: the chroot cannot execute host-foreign binaries, so
+# ARM-style profiles compile on the host with the cross toolchain but still
+# use the curated repository configuration instead of defconfig.
 # ---------------------------------------------------------------------------
-WORKDIR=$(mktemp -d)
-cd "$WORKDIR"
-log_info "Extracting kernel source"
-tar -xf "$SOURCES_HOST/$KERNEL_TARBALL"
-KERNEL_DIR=$(tar -tf "$SOURCES_HOST/$KERNEL_TARBALL" | head -1 | cut -d/ -f1)
+if [ -n "$CROSS_COMPILE" ]; then
+    WORKDIR=$(mktemp -d)
+    trap 'rm -rf "$WORKDIR"' EXIT
+    cd "$WORKDIR"
+    log_info "Extracting kernel source (cross-compile on host)"
+    tar -xf "$SOURCES_HOST/$KERNEL_TARBALL"
+    cd "$KERNEL_DIR"
+
+    MAKE_CMD="make ARCH=$MAKE_ARCH CROSS_COMPILE=$CROSS_COMPILE"
+
+    log_info "Cleaning source tree (make mrproper)"
+    $MAKE_CMD mrproper
+    log_info "Configuring kernel from $KERNEL_CONFIG_SRC"
+    cp "$KERNEL_CONFIG_SRC" .config
+    $MAKE_CMD olddefconfig
+    log_info "Compiling kernel (using -j$(nproc))"
+    $MAKE_CMD -j"$(nproc)"
+    log_info "Installing modules to $LFS"
+    $MAKE_CMD modules_install INSTALL_MOD_PATH="$LFS"
+
+    KERNEL_IMAGE=""
+    for candidate in "arch/$MAKE_ARCH/boot/bzImage" "arch/$MAKE_ARCH/boot/Image" \
+                     "arch/$MAKE_ARCH/boot/zImage" "vmlinuz"; do
+        if [ -f "$candidate" ]; then
+            KERNEL_IMAGE="$candidate"
+            break
+        fi
+    done
+    if [ -z "$KERNEL_IMAGE" ]; then
+        log_error "No kernel image found"
+        exit 1
+    fi
+
+    mkdir -p "$LFS/boot"
+    cp -v "$KERNEL_IMAGE" "$LFS/boot/vmlinuz-${KERNEL_VERSION}"
+    ln -sf "vmlinuz-${KERNEL_VERSION}" "$LFS/boot/vmlinuz"
+    cp System.map "$LFS/boot/System.map"
+    cp .config "$LFS/boot/config-${KERNEL_VERSION}"
+    log_success "Kernel $KERNEL_TYPE cross-compiled and installed to $LFS/boot/vmlinuz"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Native path: build inside the chroot with the chapter 8 toolchain
+# (LFS 12.4 section 10.3).  The source tarball is already present in the
+# chroot's /sources directory; only the configuration file is injected.
+# ---------------------------------------------------------------------------
+if [ ! -f "$LFS/sources/$KERNEL_TARBALL" ]; then
+    log_error "Kernel tarball missing from chroot: $LFS/sources/$KERNEL_TARBALL"
+    exit 1
+fi
+cp "$KERNEL_CONFIG_SRC" "$LFS/sources/.kernel-config"
+
+cleanup_mounts() {
+    umount "$LFS"/dev/pts 2>/dev/null || true
+    umount "$LFS"/dev 2>/dev/null || true
+    umount "$LFS"/proc 2>/dev/null || true
+    umount "$LFS"/sys 2>/dev/null || true
+    umount "$LFS"/run 2>/dev/null || true
+}
+trap cleanup_mounts EXIT
+
+mount --bind /dev "$LFS"/dev 2>/dev/null || true
+mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
+mount -t proc proc "$LFS"/proc 2>/dev/null || true
+mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
+mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
+
+cat >"$LFS/build-kernel.sh" <<EOF
+#!/bin/bash
+set -e
+cd /sources
+rm -rf "$KERNEL_DIR"
+echo "=== Extracting $KERNEL_TARBALL ==="
+tar -xf "$KERNEL_TARBALL"
 cd "$KERNEL_DIR"
 
-# Force ALL tools – override any inherited false* variables
-MAKE_CMD="make ARCH=$MAKE_ARCH"
-MAKE_CMD="$MAKE_CMD CC=gcc HOSTCC=gcc CXX=g++ HOSTCXX=g++"
-MAKE_CMD="$MAKE_CMD LD=ld HOSTLD=ld"
-MAKE_CMD="$MAKE_CMD AR=ar HOSTAR=ar"
-MAKE_CMD="$MAKE_CMD NM=nm HOSTNM=nm"
-MAKE_CMD="$MAKE_CMD READELF=readelf HOSTREADELF=readelf"
-MAKE_CMD="$MAKE_CMD OBJCOPY=objcopy HOSTOBJCOPY=objcopy"
-MAKE_CMD="$MAKE_CMD OBJDUMP=objdump HOSTOBJDUMP=objdump"
-MAKE_CMD="$MAKE_CMD STRIP=strip HOSTSTRIP=strip"
-MAKE_CMD="$MAKE_CMD RANLIB=ranlib HOSTRANLIB=ranlib"
+echo "=== make mrproper ==="
+make mrproper
 
-log_info "Cleaning source tree (make mrproper)"
-$MAKE_CMD mrproper
+echo "=== Installing curated .config ==="
+cp /sources/.kernel-config .config
+make olddefconfig
 
-log_info "Configuring kernel (defconfig)"
-$MAKE_CMD defconfig
+echo "=== Compiling kernel ==="
+make -j"\$(nproc)"
 
-log_info "Resolving new config symbols with olddefconfig"
-$MAKE_CMD olddefconfig
+echo "=== Installing modules ==="
+make modules_install
 
-log_info "Compiling kernel (using -j$(nproc))"
-$MAKE_CMD ${CROSS_COMPILE:+CROSS_COMPILE="$CROSS_COMPILE"} -j"$(nproc)"
-
-log_info "Installing modules to $LFS"
-$MAKE_CMD ${CROSS_COMPILE:+CROSS_COMPILE="$CROSS_COMPILE"} modules_install INSTALL_MOD_PATH="$LFS"
-
-log_info "Copying kernel image and System.map to $LFS/boot"
-mkdir -p "$LFS/boot"
-
-# Determine the correct kernel image path
 KERNEL_IMAGE=""
-if [ -f "arch/x86/boot/bzImage" ]; then
-    KERNEL_IMAGE="arch/x86/boot/bzImage"
-elif [ -f "arch/$MAKE_ARCH/boot/bzImage" ]; then
-    KERNEL_IMAGE="arch/$MAKE_ARCH/boot/bzImage"
-elif [ -f "arch/$MAKE_ARCH/boot/Image" ]; then
-    KERNEL_IMAGE="arch/$MAKE_ARCH/boot/Image"
-elif [ -f "vmlinuz" ]; then
-    KERNEL_IMAGE="vmlinuz"
-elif [ -f "arch/$MAKE_ARCH/boot/zImage" ]; then
-    KERNEL_IMAGE="arch/$MAKE_ARCH/boot/zImage"
-else
-    log_error "No kernel image found"
+for candidate in "arch/$MAKE_ARCH/boot/bzImage" "arch/$MAKE_ARCH/boot/Image" \\
+                 "arch/$MAKE_ARCH/boot/zImage" "vmlinuz"; do
+    if [ -f "\$candidate" ]; then
+        KERNEL_IMAGE="\$candidate"
+        break
+    fi
+done
+if [ -z "\$KERNEL_IMAGE" ]; then
+    echo "ERROR: no kernel image found"
     exit 1
 fi
 
-cp -v "$KERNEL_IMAGE" "$LFS/boot/vmlinuz-${KERNEL_VERSION}"
-# Create symlink for convenience
-ln -sf "vmlinuz-${KERNEL_VERSION}" "$LFS/boot/vmlinuz"
-cp System.map "$LFS/boot/System.map"
-cp .config "$LFS/boot/config-${KERNEL_VERSION}"
+echo "=== Installing kernel image to /boot ==="
+cp -v "\$KERNEL_IMAGE" "/boot/vmlinuz-$KERNEL_VERSION"
+ln -sf "vmlinuz-$KERNEL_VERSION" /boot/vmlinuz
+cp -v System.map /boot/System.map
+cp -v .config "/boot/config-$KERNEL_VERSION"
+echo "=== Kernel build complete ==="
+EOF
+chmod +x "$LFS/build-kernel.sh"
 
-cd /
-rm -rf "$WORKDIR"
+log_info "Building kernel inside the chroot"
+chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-kernel.sh
+
+rm -f "$LFS/sources/.kernel-config"
+
+umount "$LFS"/dev/pts 2>/dev/null || true
+umount "$LFS"/dev 2>/dev/null || true
+umount "$LFS"/proc 2>/dev/null || true
+umount "$LFS"/sys 2>/dev/null || true
+umount "$LFS"/run 2>/dev/null || true
 
 log_success "Kernel $KERNEL_TYPE compiled and installed to $LFS/boot/vmlinuz"

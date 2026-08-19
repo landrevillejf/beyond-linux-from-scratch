@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Changed
+
+- **LFS/BLFS book compliance remediation, wave 1** (`docs/LFS_COMPLIANCE_AUDIT.md`)
+  - `lfs/05b-build-lfs-system.sh`: full rewrite — native chapter 7/8
+    rebuild inside the chroot with a per-package dispatcher following the
+    exact LFS 12.4 book commands (~80 packages), book configure flags
+    (`--enable-gold` dropped, glibc `--enable-kernel=5.4`,
+    `libc_cv_slibdir=/usr/lib`), book 8.84 stripping, 8.85 cleanup
+    (`.la` removal, cross-compile dir purge), `rm -rf /tools` and a
+    standalone smoke test at the end
+  - `lfs/07-configure-lfs.sh`: rewritten per book chapter 9 — every
+    config file generated inside the chroot, no host binary imports
+  - `lfs/08-build-kernel.sh`: kernel now compiled inside the chroot with
+    the chapter 8 toolchain (book 10.3) using `config/kernel-config*`
+    (`olddefconfig`); host build kept only for `CROSS_COMPILE` profiles
+  - `blfs/08-build-blfs-base.sh`: per-package BLFS book commands
+    (OpenSSL `./config`, cURL `--with-openssl --with-ca-path`, expat,
+    libxml2, blfs-bootscripts); `|| true` error masking removed — a
+    failed package now fails the stage
+  - `final/16-validate-build.sh`: new guardrails — `/tools` removal
+    check, `/usr/bin/bash` presence, recursive `readelf -d` scan for
+    residual `/tools` RPATH/RUNPATH entries, kernel `.config`
+    provenance vs repository config
+  - Tests: 5 new guardrail tests
+    (`tests/test_acceptance_shell.py::TestLFSComplianceGuardrails`),
+    `tests/test_lfs_system_bootstrap.py` updated for the new 05b
+
 ### Added
 
 - **Production-ready first-boot service** (`blfs/17-first-boot-service.sh`)

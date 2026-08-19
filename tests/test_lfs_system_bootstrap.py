@@ -201,19 +201,47 @@ exit 0
     assert os.readlink(lfs_dir / "bin" / "bash") == "/tools/bin/bash"
 
 
-def test_lfs_system_diffutils_pathmax_workaround_present():
+def test_lfs_system_chapter8_follows_lfs_book():
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05b-build-lfs-system.sh"
     content = script.read_text()
 
-    # The PATH_MAX workaround is now in a case statement within build_simple()
-    assert 'diffutils)' in content
-    assert 'grep -q "PATH_MAX" lib/stackvma.c' in content
-    assert '! grep -q "#include <limits.h>" lib/stackvma.c' in content
-    assert "sed -i '1s/^/#include <limits.h>\\n/' lib/stackvma.c" in content
-    assert 'cflags="-D_GNU_SOURCE -DPATH_MAX=4096"' in content
-    assert 'CFLAGS="$cflags" ./configure --prefix=/usr --sysconfdir=/etc' in content
-    assert 'CFLAGS="$cflags" make -j$(nproc)' in content
+    # The generic configure template broke packages without autoconf
+    # (zlib, perl, openssl); the book gives a recipe per package.
+    assert "build_simple" not in content
+    assert "--sysconfdir=/etc $configure_args" not in content
+    assert "sh Configure -des" in content
+    assert "./config --prefix=/usr" in content
+    # Book binutils 8.20 flags: gold was removed from binutils >= 2.44
+    assert "--enable-gold" not in content
+    assert "--enable-ld=default" in content
+    assert "--enable-default-hash-style=gnu" in content
+    assert "make tooldir=/usr install" in content
+    # Book glibc 8.5 flags
+    assert "--enable-kernel=5.4" in content
+    assert "libc_cv_slibdir=/usr/lib" in content
+    # Book gcc 8.29 flags (native build, no rpath hacks)
+    assert "LD=ld \\\n            --enable-languages=c,c++" in content or "LD=ld" in content
+    assert "-Wl,-rpath,/tools/lib" not in content
+    # The chapter 8 list must include the base userland the old loop omitted
+    for pkg in ("bash", "coreutils", "grep", "sed", "gawk", "findutils",
+                "tar", "gzip", "make", "patch", "diffutils", "udev",
+                "sysklogd", "sysvinit"):
+        assert f"{pkg})" in content
+
+
+def test_lfs_system_strips_and_removes_tools():
+    """The produced system must be standalone: book 8.84 stripping,
+    8.85 cleanup, then /tools removal and a smoke test."""
+    repo_root = Path(__file__).resolve().parent.parent
+    script = repo_root / "lfs" / "05b-build-lfs-system.sh"
+    content = script.read_text()
+
+    assert "strip --strip-debug" in content
+    assert "find /usr/lib /usr/libexec -name \\*.la -delete" in content
+    assert "rm -rf /tools" in content
+    assert "env -i PATH=/usr/bin:/usr/sbin /bin/bash -c" in content
+    assert "ln -sfn /usr/bin/bash /bin/bash" in content
 
 
 def test_lfs_system_does_not_bind_mount_host_usr():
@@ -225,7 +253,7 @@ def test_lfs_system_does_not_bind_mount_host_usr():
     assert 'umount "$LFS"/usr' not in content
 
 
-def test_lfs_system_uses_toolchain_bootstrap_and_cross_compiler():
+def test_lfs_system_builds_natively_inside_chroot():
     repo_root = Path(__file__).resolve().parent.parent
     script_basic = repo_root / "lfs" / "05a-build-lfs-basic.sh"
     script_system = repo_root / "lfs" / "05b-build-lfs-system.sh"
@@ -234,14 +262,12 @@ def test_lfs_system_uses_toolchain_bootstrap_and_cross_compiler():
 
     # The toolchain stage already installs Linux API headers to $LFS/usr/include
     # before lfs-system runs.  lfs-system must check for their presence and skip
-    # reinstallation when they already exist, because the host gcc is not
-    # accessible inside the chroot (PATH=/tools/bin:/bin:/usr/bin:/sbin).
-    # When the headers are absent, the cross-compiler is used as HOSTCC with an
-    # explicit --sysroot=/ override so that it can find the C headers (glibc +
-    # Linux) that were installed to /usr/include by the toolchain stage.
+    # reinstallation when they already exist.
     assert 'if [ -d /usr/include/linux ] && [ -f /usr/include/linux/types.h ]; then' in system_content
-    assert 'make HOSTCC="${LFS_TGT}-gcc" HOSTCFLAGS="--sysroot=/" headers' in system_content
-    assert 'make HOSTCC=gcc headers' not in system_content
+    # Chapter 8 is rebuilt natively with the pass 2 compiler from /usr/bin;
+    # /tools/bin stays last in PATH only as a bootstrap fallback.
+    assert 'export PATH=/usr/bin:/usr/sbin:/tools/bin' in system_content
+    assert '${LFS_TGT}-gcc --sysroot=/' not in system_content
     # Bootstrap function is in 05a
     assert 'local required_tools=(' in basic_content
     assert 'bash bison m4 xz bzip2 expr grep sed awk' in basic_content
@@ -286,9 +312,8 @@ def test_lfs_system_glibc_install_uses_toolchain_bash():
     the HOST libc (e.g. /lib/x86_64-linux-gnu/libc.so.6 on ubuntu-latest) which
     does not expose that private symbol, so make recipes fail the moment the new
     ld.so is installed.  The inner build script must export
-    SHELL=/tools/bin/bash and the glibc 'make install' must also pass
-    SHELL=/tools/bin/bash explicitly so that all make recipe subshells use the
-    cross-compiled toolchain bash, which links against /usr/lib/libc.so.6
+    SHELL=/tools/bin/bash (used by every make recipe) so that all subshells use
+    the cross-compiled toolchain bash, which links against /usr/lib/libc.so.6
     (replaced by the new glibc early in the install sequence) and is therefore
     always ABI-compatible with the new ld.so."""
     repo_root = Path(__file__).resolve().parent.parent
@@ -301,38 +326,35 @@ def test_lfs_system_glibc_install_uses_toolchain_bash():
     assert 'export SHELL=/bin/bash' not in content
     assert 'export CONFIG_SHELL=/bin/bash' not in content
 
-    # glibc make install must also explicitly pass the toolchain bash
-    assert 'make RM=/tools/bin/rm SHELL=/tools/bin/bash install' in content
-    # The old workaround that used HOST-libc paths must be gone
+    # Cross-compiler rpath workarounds must be gone
     assert 'LD_LIBRARY_PATH=/lib:/lib/x86_64-linux-gnu make' not in content
+    assert 'LD_RUN_PATH=/tools/lib' not in content
 
 
-def test_lfs_system_rebuilds_linker_cache_after_glibc_install():
-    """The new target glibc must be preferred after it is installed."""
+def test_lfs_system_glibc_post_install_configuration():
+    """Book 8.5 configuration steps must follow the glibc install."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05b-build-lfs-system.sh"
     content = script.read_text()
 
-    assert '/etc/ld.so.conf' in content
-    assert '/sbin/ldconfig' in content
-    assert "printf '/usr/lib" in content
-    assert 'LD_LIBRARY_PATH=/usr/lib' in content
+    assert 'touch /etc/ld.so.conf' in content
+    assert '/etc/nsswitch.conf' in content
+    assert 'zic -d $ZONEINFO -p America/New_York' in content
+    assert 'make localedata/install-locales' in content
 
-def test_lfs_system_binutils_build_disables_makeinfo():
-    """Binutils 2.45 may still try to build doc/chew.stamp even with
-    --disable-doc.  Pass MAKEINFO=missing so make skips info doc generation
-    inside the chroot where texinfo/makeinfo is not yet installed, and set
-    CC_FOR_BUILD to the cross-compiler so build-side host tools (e.g. chew)
-    are not linked against the absent host gcc."""
+
+def test_lfs_system_binutils_uses_book_flags():
+    """Binutils ch8 must follow book 8.20 exactly; --enable-gold is invalid
+    for binutils >= 2.44 and made configure fail."""
     repo_root = Path(__file__).resolve().parent.parent
     script = repo_root / "lfs" / "05b-build-lfs-system.sh"
     content = script.read_text()
 
-    assert '--disable-doc' in content
-    assert 'MAKEINFO=missing' in content
-    assert 'CC_FOR_BUILD=' in content
-    assert '--without-zstd' in content
-    assert '--with-system-zlib' not in content.split('echo "binutils done"')[0]
+    assert '--enable-gold' not in content
+    assert '--enable-plugins' in content
+    assert '--enable-64-bit-bfd' in content
+    assert '--with-system-zlib' in content
+    assert 'make tooldir=/usr install' in content
 
 
 def test_lfs_system_creates_dynamic_linker_symlink():
