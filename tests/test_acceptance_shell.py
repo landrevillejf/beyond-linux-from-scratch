@@ -175,59 +175,61 @@ exit 1
         assert "find . -maxdepth 1 -type f -printf '%f\\n' | grep -E \"^${KERNEL_TYPE}-[0-9].*\\\\.tar\\\\.xz$\" | head -n1" in content
         assert 'LINUX_DIR=$(tar -tf "$LINUX_TAR" | head -1 | cut -d/ -f1)' in content
 
-    def test_toolchain_cross_compile_cache(self):
-        """Toolchain script must use a configure cache to pre-answer gnulib runtime
-        tests that cannot execute when cross-compiling (e.g. diffutils-3.12
-        strcasecmp check, patch-2.8 strncasecmp check).
+    def test_toolchain_temporary_tools_follow_lfs_book(self):
+        """Toolchain script must build the Chapter 6 temporary tools exactly
+        like the LFS book (cross configure with --host=$LFS_TGT, no autoconf
+        cache files) and keep Binutils/GCC pass 2 before the tools loop.
 
-        Regression test for CI failure: 'cannot run test program while cross
-        compiling' on diffutils during the release pipeline toolchain stage.
+        Regression test for the nightly toolchain failure: libstdc++ built
+        with --prefix=$LFS/tools landed in a directory the pass 1 cross
+        compiler does not search ('C++ compiler cannot create executables'
+        in the GCC pass 2 libcody subconfigure).
         """
         toolchain_script = Path('host/04-build-toolchain.sh')
         assert toolchain_script.exists()
         content = toolchain_script.read_text()
 
-        # A template cache file must be created before the package loop
-        assert 'CROSS_CACHE_TMPL' in content, \
-            "Missing cross-compile configure cache template variable"
-        assert 'CROSS_CACHE_EOF' in content, \
-            "Missing CROSS_CACHE_EOF heredoc terminator"
+        # The old gnulib cache hacks are gone: the book does not use them.
+        assert 'CROSS_CACHE_TMPL' not in content, \
+            "Cross-compile cache template must be removed (not in the LFS book)"
+        assert '--cache-file=' not in content, \
+            "Configure cache files must not be used (not in the LFS book)"
 
-        # The cache must cover the key gnulib tests that fail when cross-compiling
-        assert 'ac_cv_func_strcasecmp=yes' in content, \
-            "Missing ac_cv_func_strcasecmp cache entry (fixes diffutils-3.12)"
-        assert 'gl_cv_func_strcasecmp_works=yes' in content, \
-            "Missing gl_cv_func_strcasecmp_works cache entry"
-        assert 'ac_cv_func_strncasecmp=yes' in content, \
-            "Missing ac_cv_func_strncasecmp cache entry (fixes patch-2.8)"
-        assert 'gl_cv_func_working_mktime=yes' in content, \
-            "Missing gl_cv_func_working_mktime cache entry"
-        assert 'gl_cv_func_strnlen_works=yes' in content, \
-            "Missing gl_cv_func_strnlen_works cache entry"
-        assert 'if [ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]; then' in content, \
-            "Missing PATH_MAX stackvma workaround for diffutils in the toolchain loop"
-        assert '[ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]' in content, \
-            "Missing diffutils stackvma fix guard"
-        assert '[ "$pkg" = "diffutils" ]; then' in content, \
-            "Missing diffutils-specific handling in toolchain script"
+        # LFS 12.4 section 5.6: libstdc++ installs into the final location
+        # through DESTDIR so the pass 1 cross compiler finds it via sysroot.
+        assert '--prefix=/usr' in content
+        assert 'make DESTDIR="$LFS" install' in content
+        assert '--with-gxx-include-dir=/tools/"$LFS_TGT"/include/c++/' in content
 
-        # The per-package cache copy must be used in the configure invocation
-        assert '--cache-file=' in content, \
-            "Missing --cache-file flag in configure invocation"
-        assert 'PKG_CACHE' in content, \
-            "Missing PKG_CACHE per-package cache variable"
+        # LFS 12.4 section 6.18: GCC pass 2 needs LDFLAGS_FOR_TARGET and the
+        # generic cc symlink.
+        assert 'LDFLAGS_FOR_TARGET=-L"$PWD"/"$LFS_TGT"/libgcc' in content
+        assert 'ln -sv gcc "$LFS/usr/bin/cc"' in content
 
-        # diffutils and patch must be in the package build loop
-        assert 'diffutils' in content
-        assert 'patch' in content
+        # The Chapter 6 loop must build every tool required by 05a.
+        tools_loop = 'for pkg in m4 ncurses bash coreutils diffutils file ' \
+            'findutils gawk grep gzip make patch sed tar xz bison bzip2; do'
+        assert tools_loop in content, "Tool loop does not follow book order"
 
-        # libstdc++ must be built BEFORE the essential-tools loop (correct LFS order)
-        # Use CROSS_CACHE_TMPL as the marker for the cache section
+        # Book-mandated per-package handling must be present.
+        assert 'gl_cv_func_strcasecmp_works=y' in content, \
+            "Missing diffutils strcasecmp cross-compile answer (LFS 6.6)"
+        assert 'make TIC_PATH="$(pwd)/build/progs/tic" install' in content, \
+            "Missing native tic handling for ncurses (LFS 6.3)"
+        assert 'FILE_COMPILE="$(pwd)/build/src/file"' in content, \
+            "Missing native file binary handling (LFS 6.7)"
+        assert 'ln -sv bash "$LFS/tools/bin/sh"' in content, \
+            "Missing /tools/bin/sh symlink (LFS 6.4)"
+
+        # Ordering: libstdc++ -> Binutils pass 2 -> GCC pass 2 -> tools loop.
         libstdc_pos = content.find('Building libstdc++')
-        cross_cache_pos = content.find('CROSS_CACHE_TMPL')
-        tools_loop_pos = content.find('Building essential tools for /tools')
-        assert libstdc_pos < cross_cache_pos < tools_loop_pos, \
-            "libstdc++ must be built before the cross-compile cache and tools loop"
+        binutils_p2_pos = content.find('Building Binutils (pass 2)')
+        gcc_p2_pos = content.find('Building GCC (pass 2)')
+        tools_loop_pos = content.find('Building temporary tools (LFS Chapter 6)')
+        assert -1 not in (libstdc_pos, binutils_p2_pos, gcc_p2_pos,
+                          tools_loop_pos), "Missing toolchain stage marker"
+        assert libstdc_pos < binutils_p2_pos < gcc_p2_pos < tools_loop_pos, \
+            "Pass 2 stages must run after libstdc++ and before the tools loop"
 
     def test_shellcheck_on_scripts(self):
         """Exécuter shellcheck sur tous les scripts (si installé)"""
