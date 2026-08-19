@@ -582,30 +582,22 @@ CROSS_CACHE_EOF
             # Build perl cross-compiled for target
             PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
             cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                    --cache-file="$PKG_CACHE" \
-                    -Dcc="$LFS_TGT-gcc" \
-                    -Dprefix="$LFS/tools" \
-                    -Dprivlib="$LFS/tools/lib/perl5/5.38" \
-                    -Darchlib="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
-                    -Dvendorprefix="$LFS/tools" \
-                    -Dvendorlib="$LFS/tools/lib/perl5/5.38" \
-                    -Dvendorarch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
-                    -Dsiteprefix="$LFS/tools" \
-                    -Dsitelib="$LFS/tools/lib/perl5/5.38" \
-                    -Dsitearch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
-                    -Dman1dir="$LFS/tools/share/man/man1" \
-                    -Dman3dir="$LFS/tools/share/man/man3" \
-                    -Duseshrplib \
-                    -Dusethreads \
-                    -Duseithreads; then
+            if ! ./Configure -des \
+                -Dcc="$LFS_TGT-gcc" \
+                -Dprefix="$LFS/tools" \
+                -Dprivlib="$LFS/tools/lib/perl5/5.38" \
+                -Darchlib="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                -Dvendorprefix="$LFS/tools" \
+                -Dvendorlib="$LFS/tools/lib/perl5/5.38" \
+                -Dvendorarch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                -Dsiteprefix="$LFS/tools" \
+                -Dsitelib="$LFS/tools/lib/perl5/5.38" \
+                -Dsitearch="$LFS/tools/lib/perl5/5.38/$LFS_TGT" \
+                -Dman1dir="$LFS/tools/share/man/man1" \
+                -Dman3dir="$LFS/tools/share/man/man3" \
+                -Duseshrplib \
+                -Dusethreads \
+                -Duseithreads; then
                 log_error "Configure failed for $pkg"
                 exit 1
             fi
