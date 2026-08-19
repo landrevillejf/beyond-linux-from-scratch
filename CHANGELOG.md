@@ -113,8 +113,11 @@
     `lpm list/upgrade/verify` work on the finished system
   - Real repository pipeline: stage 14 exports the manifest to
     `lpm-repo/` (`packages.list` + `.sha256`, optional GPG `.sig`);
-    the release and ISO workflows upload it as release assets; the
-    installed default repo in `/etc/lpm/repos.d/default.conf` now
+    the release, ISO and nightly workflows upload it as release
+    assets (nightly releases are marked as prereleases so GitHub's
+    `latest` pointer keeps serving the stable manifest); the
+    installed default repo in
+    `/etc/lpm/repos.d/default.conf` now
     points at the GitHub releases `latest/download` URL
   - `lpm update-db` no longer silently overwrites the database with
     sample data when configured remotes fail — it keeps the existing

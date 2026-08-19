@@ -91,10 +91,19 @@ class TestLPMRepositoryPipeline:
 
     def test_release_workflows_publish_manifest(self):
         for workflow in ('.github/workflows/release.yml',
-                         '.github/workflows/xfce-live-boot-iso.yml'):
+                         '.github/workflows/xfce-live-boot-iso.yml',
+                         '.github/workflows/nightly.yml'):
             content = _content(Path(workflow))
             assert 'lpm-repo/packages.list*' in content, \
                 f"{workflow} must upload the LPM repository manifest"
+
+    def test_nightly_release_is_a_prerelease(self):
+        # GitHub's "latest" pointer skips prereleases, so nightly
+        # releases must not shadow the stable repo manifest fetched
+        # by lpm update-db via releases/latest/download.
+        content = _content(Path('.github/workflows/nightly.yml'))
+        create_release = content.split('create-release:')[1]
+        assert 'prerelease: true' in create_release
 
 
 class TestSystemUpdater:

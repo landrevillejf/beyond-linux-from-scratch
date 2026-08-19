@@ -223,6 +223,7 @@ jobs:
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/build_info.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
           if-no-files-found: error
 
       - name: Boot ISO in QEMU (smoke test)
@@ -273,6 +274,10 @@ jobs:
         with:
           files: artifacts/**/*
           generate_release_notes: true
+          # Nightly releases are prereleases: GitHub's "latest" pointer
+          # skips them, so `lpm update-db` (releases/latest/download)
+          # keeps serving the stable repository manifest.
+          prerelease: true
 
 
 #name: Nightly Builds
