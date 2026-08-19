@@ -167,6 +167,16 @@
 
 ### Fixed
 
+- **ncurses C++ binding fails with GCC 15** (`host/04-build-toolchain.sh`, `lfs/05b-build-lfs-system.sh`)
+  - GCC 15 defaults to C23 where `bool` is a keyword, so ncurses
+    configure misdetects `bool` and emits a `curses.h` that leaks
+    `#define bool unsigned char` into the C++ binding, breaking it
+    against GCC 15 libstdc++ headers (`redefinition of 'struct
+    std::hash<unsigned char>'`)
+  - Both ncurses builds (temporary toolchain and final system) now
+    pass `CFLAGS="-O2 -std=gnu17"` — same workaround shipped by
+    Arch Linux
+
 - **Hardcoded root password replaced with random generation** (`lfs/07-configure-lfs.sh`)
   - Initial password is now 16-character random alphanumeric, stored in
     `/etc/.initial-password` (mode 600), cleaned up by first-boot service

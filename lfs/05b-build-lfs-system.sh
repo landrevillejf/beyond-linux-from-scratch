@@ -639,6 +639,11 @@ EOF
         ;;
     ncurses)
         extract "$(find_archive ncurses)"
+        # GCC 15 defaults to C23 where bool is a keyword, which makes
+        # configure misdetect bool and emit a curses.h that leaks
+        # "#define bool unsigned char" into the C++ binding, breaking
+        # it against GCC 15 libstdc++ headers. Force C17 for this
+        # package (same workaround as Arch Linux).
         ./configure --prefix=/usr \
             --mandir=/usr/share/man \
             --with-shared \
@@ -646,7 +651,8 @@ EOF
             --without-normal \
             --with-cxx-shared \
             --enable-pc-files \
-            --with-pkg-config-libdir=/usr/lib/pkgconfig
+            --with-pkg-config-libdir=/usr/lib/pkgconfig \
+            CFLAGS="-O2 -std=gnu17"
         make -j"$(nproc)"
         # Install via DESTDIR so the running shell's libncursesw is replaced
         # atomically with the install command instead of being overwritten

@@ -480,6 +480,21 @@ class TestLFSComplianceGuardrails:
         assert 'config-' in content, \
             "Kernel .config provenance check missing"
 
+    def test_ncurses_built_with_gnu17_for_gcc15(self):
+        """ncurses must be built with -std=gnu17 under GCC 15.
+
+        GCC 15 defaults to C23 where bool is a keyword; ncurses
+        configure then misdetects bool and emits a curses.h that
+        leaks "#define bool unsigned char" into the C++ binding,
+        breaking it against GCC 15 libstdc++ headers. Regression
+        test for the nightly toolchain failures.
+        """
+        for script in ('host/04-build-toolchain.sh',
+                       'lfs/05b-build-lfs-system.sh'):
+            content = Path(script).read_text()
+            assert 'CFLAGS="-O2 -std=gnu17"' in content, \
+                f"{script} must force C17 for ncurses (GCC 15 bool bug)"
+
     def test_shellcheck_on_compliance_scripts(self):
         """shellcheck must be clean on every script touched by the
         compliance remediation."""

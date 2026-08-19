@@ -587,9 +587,16 @@ build_toolchain() {
         ncurses)
             # LFS 12.4 section 6.3: a native tic is required because
             # the target tic cannot run on the host during install.
+            #
+            # GCC 15 defaults to C23 where bool is a keyword, which
+            # makes configure misdetect bool and emit a curses.h that
+            # leaks "#define bool unsigned char" into the C++ binding,
+            # breaking it against GCC 15 libstdc++ headers. Force C17
+            # for this package (same workaround as Arch Linux).
             mkdir -v build
             pushd build
-            ../configure --prefix="$LFS/tools" AWK=gawk
+            ../configure --prefix="$LFS/tools" AWK=gawk \
+                CFLAGS="-O2 -std=gnu17"
             make -C include
             make -C progs tic
             popd
@@ -604,7 +611,8 @@ build_toolchain() {
                 --without-debug \
                 --without-ada \
                 --disable-stripping \
-                AWK=gawk
+                AWK=gawk \
+                CFLAGS="-O2 -std=gnu17"
             make -j"$NUM_JOBS"
             make TIC_PATH="$(pwd)/build/progs/tic" install
             ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"
