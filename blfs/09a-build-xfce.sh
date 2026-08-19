@@ -2,11 +2,16 @@
 # 09a-build-xfce.sh
 # Build XFCE desktop environment (called by 09-build-desktop.sh dispatcher).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -193,7 +198,7 @@ cd /sources
 mkdir -p /var/lib/lfs-builder/desktop /usr/share/xsessions /etc/X11 /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
 jobs() { nproc 2>/dev/null || echo 1; }
 marker_for() { echo "/var/lib/lfs-builder/desktop/$1.done"; }
-find_archive() { compgen -G "${1}-*.tar.*" | sort -V | tail -n 1; }
+find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() { local archive="$1" dir; dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"; rm -rf "$dir"; tar -xf "$archive"; printf '%s\n' "$dir"; }
 is_installed() {
     local pkg="$1"; [ -f "$(marker_for "$pkg")" ] && return 0
@@ -232,11 +237,14 @@ verify_prerequisites() {
 }
 build_xfce_pkg() {
     local pkg="$1" archive dir version docdir
-    archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    archive="$(find_archive "$pkg")"
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"; version="${dir#${pkg}-}"; docdir="/usr/share/doc/${pkg}-${version}"
+    dir="$(extract_archive "$archive")"; version="${dir#"$pkg"-}"; docdir="/usr/share/doc/${pkg}-${version}"
     pushd "$dir" >/dev/null
     if [ -f meson.build ]; then
         rm -rf build; meson setup build --prefix=/usr --buildtype=release --sysconfdir=/etc; ninja -C build; ninja -C build install
@@ -248,6 +256,21 @@ build_xfce_pkg() {
         log_error "$pkg has neither meson.build nor configure/autogen.sh"; exit 1
     fi
     popd >/dev/null; rm -rf "$dir"; touch "$(marker_for "$pkg")"; log_success "$pkg installed"
+}
+
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_xfce_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
 }
 install_session_files() {
     cat > /usr/share/xsessions/xfce.desktop <<'EOF'
@@ -275,12 +298,16 @@ EOF
 }
 verify_prerequisites
 log_info "Building XFCE 4.20 core in dependency order"
-for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager picom; do
-    build_xfce_pkg "$pkg"
+for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
+    run_build required "$pkg"
 done
+# picom is not in packages/stable/12.4/sources.list; optional compositor
+run_build optional picom
 install_session_files
 log_success "XFCE desktop installation complete"
 INNEREOF
 run_privileged chmod +x "$LFS/build-xfce.sh"
-run_privileged chroot "$LFS" /bin/bash /build-xfce.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-xfce.sh
 log_success "XFCE desktop environment installed successfully"

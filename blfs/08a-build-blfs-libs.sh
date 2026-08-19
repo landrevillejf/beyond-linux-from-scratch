@@ -2,12 +2,18 @@
 # 08a-build-blfs-libs.sh
 # Build BLFS core libraries (glib2, cairo, pango, dbus, gdk-pixbuf, etc.)
 # These are the foundational libraries required by all desktop environments.
-# Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+# Author : Jean-Francois Landreville, landrevvillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (application-specific
+# dependencies or packages missing from packages/stable/12.4/sources.list)
+# are allowed to fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -141,15 +147,14 @@ is_installed() {
         poppler)             have_pc poppler ;;
         babl)                have_pc babl ;;
         gegl)                have_pc gegl-0.4 ;;
-        ffmpeg)              have_cmd ffmpeg || have_cmd avconv ;;
-        libmatroska)          have_pc libmatroska ;;
-        libebml)              have_pc libebml ;;
+        libmatroska)         have_pc libmatroska ;;
+        libebml)             have_pc libebml ;;
         taglib)              have_pc taglib ;;
         icu)                 have_cmd icu-config || have_pc icu-i18n ;;
         nspr)                have_pc nspr ;;
         nss)                 have_pc nss ;;
         rust)                have_cmd rustc ;;
-        wxWidgets)            have_pc wxWidgets ;;
+        wxWidgets)           have_pc wxWidgets ;;
         libnotify)           have_pc libnotify ;;
         libsecret)           have_pc libsecret-1 ;;
         libgudev)            have_pc libgudev-1.0 ;;
@@ -168,33 +173,66 @@ is_installed() {
         libcdio)             have_pc libcdio ;;
         libcddb)             have_pc libcddb ;;
         libmodplug)          have_pc libmodplug ;;
-        libsidplay)          have_pc libsidplay ;;
         libcue)              have_pc libcue ;;
-        libopenmpt)          have_pc libopenmpt ;;
         libzip)              have_pc libzip ;;
+        libarchive)          have_cmd bsdtar || have_pc libarchive ;;
+        libyaml)             have_pc yaml-0.1 ;;
+        libusb)              have_pc libusb-1.0 ;;
+        libcap)              have_cmd setcap ;;
+        libaio)              [ -f /usr/lib/libaio.so ] ;;
+        lm-sensors)          have_cmd sensors ;;
+        pciutils)            have_cmd lspci ;;
+        usbutils)            have_cmd lsusb ;;
+        libgpg-error)        have_pc gpg-error ;;
+        libgcrypt)           have_pc libgcrypt ;;
+        libassuan)           have_pc libassuan ;;
+        libksba)             have_pc ksba ;;
+        npth)                have_pc npth ;;
+        libtasn1)            have_pc libtasn1 ;;
+        nettle)              have_pc nettle ;;
+        libunistring)        have_pc libunistring ;;
+        libidn2)             have_pc libidn2 ;;
+        libidn)              have_pc libidn ;;
+        pcre2)               have_pc libpcre2-8 ;;
+        libseccomp)          have_pc libseccomp ;;
+        libelf)              have_pc libelf ;;
+        libffi)              have_pc libffi ;;
+        expat)               have_pc expat ;;
+        libxml2)             have_pc libxml-2.0 ;;
         *) return 1 ;;
     esac
 }
 
-# Build a package: auto-detect meson vs autotools
+# Archive name mapping when the tarball base name differs from the
+# package name used in this script.
+archive_names() {
+    case "$1" in
+        glib2)       echo "glib2 glib" ;;
+        icu)         echo "icu4c icu" ;;
+        libelf)      echo "libelf elfutils" ;;
+        libyaml)     echo "libyaml yaml" ;;
+        lm-sensors)  echo "lm-sensors lm_sensors" ;;
+        wxWidgets)   echo "wxWidgets wxwidgets" ;;
+        rust)        echo "rustc rust" ;;
+        *)           echo "$1" ;;
+    esac
+}
+
+# Build a package: auto-detect meson vs autotools vs cmake.
+# Returns non-zero on any failure, including a missing source archive.
 build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
+    local pkg="$1" archive="" dir extra_opts="" base
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
-    archive="$(find_archive "$pkg")"
+    for base in $(archive_names "$pkg"); do
+        archive="$(find_archive "$base")"
+        [ -n "$archive" ] && break
+    done
     if [ -z "$archive" ]; then
-        # Try alternate archive name patterns
-        case "$pkg" in
-            glib2)               archive="$(find_archive glib)" ;;
-            libjpeg-turbo)       archive="$(find_archive jpegsrc)" || archive="$(find_archive libjpeg-turbo)" ;;
-            shared-mime-info)    archive="$(find_archive shared-mime-info)" ;;
-            hicolor-icon-theme)  archive="$(find_archive hicolor-icon-theme)" || archive="$(find_archive icon-theme)" ;;
-            at-spi2-core)        archive="$(find_archive at-spi2-core)" ;;
-            gobject-introspection) archive="$(find_archive gobject-introspection)" ;;
-        esac
+        log_error "Source archive missing for $pkg"
+        return 1
     fi
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -215,6 +253,7 @@ build_pkg() {
         make -j"$(jobs)"
         make install
     elif [ -f CMakeLists.txt ]; then
+        # shellcheck disable=SC2086
         cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts
         cmake --build builddir -j"$(jobs)"
         cmake --install builddir
@@ -225,6 +264,142 @@ build_pkg() {
     rm -rf "$dir"
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
+}
+
+# giflib – plain make build, no configure (BLFS general/giflib)
+build_giflib() {
+    local archive dir
+    is_installed giflib && { log_info "giflib already installed; skipping"; return 0; }
+    archive="$(find_archive giflib)" || { log_error "Source archive missing for giflib"; return 1; }
+    log_info "Building giflib from $archive"
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    # Book patches are applied only when they were downloaded
+    for p in giflib-5.2.2-upstream_fixes-1.patch giflib-5.2.2-security_fixes-1.patch; do
+        if [ -f "../$p" ]; then patch -Np1 -i "../$p"; fi
+    done
+    if [ -f pic/gifgrid.gif ]; then cp pic/gifgrid.gif doc/giflib-logo.gif; fi
+    make
+    make PREFIX=/usr install
+    rm -fv /usr/lib/libgif.a
+    find doc \( -name 'Makefile*' -o -name '*.1' -o -name '*.xml' \) -exec rm -v {} \;
+    install -v -dm755 "/usr/share/doc/${dir}"
+    cp -v -R doc/* "/usr/share/doc/${dir}"
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for giflib)"
+    log_success "giflib installed"
+}
+
+# icu – configure lives in the source/ subdirectory (BLFS general/icu)
+build_icu() {
+    local archive="" base
+    is_installed icu && { log_info "icu already installed; skipping"; return 0; }
+    for base in $(archive_names icu); do
+        archive="$(find_archive "$base")"
+        [ -n "$archive" ] && break
+    done
+    if [ -z "$archive" ]; then log_error "Source archive missing for icu"; return 1; fi
+    log_info "Building icu from $archive"
+    rm -rf icu
+    tar -xf "$archive"
+    pushd icu/source >/dev/null
+    ./configure --prefix=/usr
+    make -j"$(jobs)"
+    make install
+    popd >/dev/null
+    rm -rf icu
+    touch "$(marker_for icu)"
+    log_success "icu installed"
+}
+
+# nspr – book seds + mozilla/pthreads flags (BLFS general/nspr)
+build_nspr() {
+    local archive dir
+    is_installed nspr && { log_info "nspr already installed; skipping"; return 0; }
+    archive="$(find_archive nspr)" || { log_error "Source archive missing for nspr"; return 1; }
+    log_info "Building nspr from $archive"
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    cd nspr
+    sed -i '/^RELEASE/s|^|#|' pr/src/misc/Makefile.in
+    # shellcheck disable=SC2016  # literal Makefile variable
+    sed -i 's|$(LIBRARY) ||' config/rules.mk
+    # shellcheck disable=SC2046  # conditional book flag
+    ./configure --prefix=/usr \
+        --with-mozilla \
+        --with-pthreads \
+        $([ "$(uname -m)" = x86_64 ] && echo --enable-64bit)
+    make -j"$(jobs)"
+    make install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for nspr)"
+    log_success "nspr installed"
+}
+
+# nss – plain make install into dist/, manual install (BLFS postlfs/nss)
+build_nss() {
+    local archive dir
+    is_installed nss && { log_info "nss already installed; skipping"; return 0; }
+    archive="$(find_archive nss)" || { log_error "Source archive missing for nss"; return 1; }
+    log_info "Building nss from $archive"
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    if [ -f ../nss-standalone-1.patch ]; then patch -Np1 -i ../nss-standalone-1.patch; fi
+    cd nss
+    # shellcheck disable=SC2046  # conditional book variables
+    make BUILD_OPT=1 \
+        NSPR_INCLUDE_DIR=/usr/include/nspr \
+        USE_SYSTEM_ZLIB=1 \
+        ZLIB_LIBS=-lz \
+        NSS_ENABLE_WERROR=0 \
+        $([ "$(uname -m)" = x86_64 ] && echo USE_64=1) \
+        $([ -f /usr/include/sqlite3.h ] && echo NSS_USE_SYSTEM_SQLITE=1)
+    cd ../dist
+    install -v -m755 Linux*/lib/*.so /usr/lib
+    install -v -m644 Linux*/lib/{*.chk,libcrmf.a} /usr/lib
+    install -v -m755 -d /usr/include/nss
+    cp -v -RL {public,private}/nss/* /usr/include/nss
+    install -v -m755 Linux*/bin/{certutil,nss-config,pk12util} /usr/bin
+    install -v -m644 Linux*/lib/pkgconfig/nss.pc /usr/lib/pkgconfig
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for nss)"
+    log_success "nss installed"
+}
+
+# Policy wrapper.  required: any failure aborts the stage.
+# optional: failures are logged and the build continues (application
+# specific dependencies and packages not present in the source list).
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    case "$pkg" in
+        giflib) build_giflib && return 0 ;;
+        icu)    build_icu && return 0 ;;
+        nspr)   build_nspr && return 0 ;;
+        nss)    build_nss && return 0 ;;
+        *)      build_pkg "$pkg" "$@" && return 0 ;;
+    esac
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
+# hicolor-icon-theme – data only, nothing to compile
+build_hicolor() {
+    local archive
+    is_installed hicolor-icon-theme && { log_info "hicolor-icon-theme already installed; skipping"; return 0; }
+    archive="$(find_archive hicolor-icon-theme)" || { log_error "Source archive missing for hicolor-icon-theme"; return 1; }
+    log_info "Installing hicolor-icon-theme from $archive"
+    tar -xf "$archive"
+    cp -a hicolor /usr/share/icons/
+    rm -rf hicolor
+    touch "$(marker_for hicolor-icon-theme)"
+    log_success "hicolor-icon-theme installed"
 }
 
 # ======================================================================
@@ -259,303 +434,282 @@ log_info "systemd detected: $HAVE_SYSTEMD"
 log_info "Phase 1: Image and font libraries"
 
 # libpng – required by freetype, cairo, gdk-pixbuf
-build_pkg libpng || log_warning "libpng build failed"
+run_build required libpng
 
 # libjpeg-turbo – required by gdk-pixbuf, tiff
-build_pkg libjpeg-turbo || log_warning "libjpeg-turbo build failed"
+run_build required libjpeg-turbo
 
 # giflib – required by gdk-pixbuf
-build_pkg giflib || log_warning "giflib build failed"
+run_build required giflib
 
 # tiff – depends on libjpeg-turbo
-build_pkg tiff || log_warning "tiff build failed"
+run_build required tiff
 
 # libwebp – depends on libpng, libjpeg-turbo
-build_pkg libwebp || log_warning "libwebp build failed"
+run_build required libwebp
 
 log_info "Phase 2: Font rendering"
 
 # freetype – depends on libpng
-build_pkg freetype || log_warning "freetype build failed"
+run_build required freetype
 
 # fontconfig – depends on freetype, expat
-build_pkg fontconfig || log_warning "fontconfig build failed"
+run_build required fontconfig
 
 log_info "Phase 3: GLib ecosystem"
 
 # glib2 – depends on pcre2 (LFS), libffi (LFS)
-build_pkg glib2 || log_warning "glib2 build failed"
+run_build required glib2
 
-# graphene – depends on glib2
-build_pkg graphene || log_warning "graphene build failed"
+# graphene – GTK 4 dependency
+run_build required graphene
 
 # harfbuzz – depends on glib2, freetype, fontconfig
-build_pkg harfbuzz || log_warning "harfbuzz build failed"
+run_build required harfbuzz
 
 # json-glib – depends on glib2
-build_pkg json-glib || log_warning "json-glib build failed"
+run_build required json-glib
 
 # libgee – depends on glib2
-build_pkg libgee || log_warning "libgee build failed"
+run_build required libgee
 
 log_info "Phase 4: Graphics and text"
 
 # pixman – depends on libpng
-build_pkg pixman || log_warning "pixman build failed"
+run_build required pixman
 
 # cairo – depends on glib2, pixman, fontconfig, freetype, libpng
-build_pkg cairo || log_warning "cairo build failed"
+run_build required cairo
 
 # fribidi – no dependencies
-build_pkg fribidi || log_warning "fribidi build failed"
+run_build required fribidi
 
 # pango – depends on glib2, cairo, harfbuzz, fontconfig, freetype, fribidi
-build_pkg pango || log_warning "pango build failed"
+run_build required pango
 
 log_info "Phase 5: D-Bus and accessibility"
 
 # dbus – depends on expat (blfs-base)
 if $HAVE_SYSTEMD; then
-    build_pkg dbus --with-systemdsystemunitdir=/usr/lib/systemd/system \
-        || log_warning "dbus build failed"
+    run_build required dbus --with-systemdsystemunitdir=/usr/lib/systemd/system
 else
-    build_pkg dbus --without-systemdsystemunitdir \
-        || log_warning "dbus build failed"
+    run_build required dbus --without-systemdsystemunitdir
 fi
 
 # dbus-glib – depends on dbus, glib2
-build_pkg dbus-glib || log_warning "dbus-glib build failed"
+run_build required dbus-glib
 
 # at-spi2-core – depends on glib2, dbus
-build_pkg at-spi2-core || log_warning "at-spi2-core build failed"
+run_build required at-spi2-core
 
 log_info "Phase 6: Image loading and MIME"
 
 # gdk-pixbuf – depends on glib2, libpng, libjpeg-turbo, tiff
-build_pkg gdk-pixbuf || log_warning "gdk-pixbuf build failed"
+run_build required gdk-pixbuf
 
 # shared-mime-info – depends on glib2, libxml2
-build_pkg shared-mime-info || log_warning "shared-mime-info build failed"
+run_build required shared-mime-info
 
 # hicolor-icon-theme – no build, just directory structure
-build_pkg hicolor-icon-theme || log_warning "hicolor-icon-theme build failed"
+if ! is_installed hicolor-icon-theme; then
+    if ! build_hicolor; then
+        log_error "Required package hicolor-icon-theme failed – aborting stage"
+        exit 1
+    fi
+fi
 
 log_info "Phase 7: Development tools"
 
 # libxslt – depends on libxml2 (blfs-base)
-build_pkg libxslt || log_warning "libxslt build failed"
+run_build required libxslt
 
 # vala – depends on glib2
-build_pkg vala || log_warning "vala build failed"
+run_build required vala
 
 # gobject-introspection – depends on glib2, python3
-build_pkg gobject-introspection || log_warning "gobject-introspection build failed"
+run_build required gobject-introspection
 
 log_info "Phase 8: Application-specific dependencies"
 
-# hunspell – spell checker for LibreOffice
-build_pkg hunspell || log_warning "hunspell build failed"
+# hunspell – spell checker (LibreOffice)
+run_build optional hunspell
 
-# poppler – PDF rendering for LibreOffice
-build_pkg poppler || log_warning "poppler build failed"
+# poppler – PDF rendering (LibreOffice)
+run_build optional poppler
 
-# babl – pixel format translation for GIMP
-build_pkg babl || log_warning "babl build failed"
+# babl – pixel format translation (GIMP)
+run_build optional babl
 
-# gegl – Generic Graphics Library for GIMP
-build_pkg gegl || log_warning "gegl build failed"
+# gegl – Generic Graphics Library (GIMP)
+run_build optional gegl
 
-# taglib – audio metadata for VLC
-build_pkg taglib || log_warning "taglib build failed"
+# taglib – audio metadata (VLC)
+run_build optional taglib
 
-# libebml – Extensible Binary Meta Language for VLC
-build_pkg libebml || log_warning "libebml build failed"
+# libebml – Extensible Binary Meta Language (VLC)
+run_build optional libebml
 
-# libmatroska – Matroska container for VLC
-build_pkg libmatroska || log_warning "libmatroska build failed"
+# libmatroska – Matroska container (VLC)
+run_build optional libmatroska
 
 # icu – International Components for Unicode (Firefox dependency)
-build_pkg icu || log_warning "icu build failed"
+run_build required icu
 
 # nspr – Netscape Portable Runtime (Firefox dependency)
-build_pkg nspr || log_warning "nspr build failed"
+run_build required nspr
 
 # nss – Network Security Services (Firefox dependency)
-build_pkg nss || log_warning "nss build failed"
+run_build required nss
 
 log_info "Phase 9: Additional general libraries from BLFS"
 
 # libarchive – archive manipulation (tar, cpio, etc.)
-build_pkg libarchive || log_warning "libarchive build failed"
-
-# libxml2 – XML parsing (already in blfs-base, but verify)
-build_pkg libxml2 || log_warning "libxml2 build failed"
-
-# libxslt – XSLT processing (already in Phase 7)
-build_pkg libxslt || log_warning "libxslt build failed"
+run_build required libarchive
 
 # libyaml – YAML parsing
-build_pkg libyaml || log_warning "libyaml build failed"
+run_build required libyaml
 
 # libusb – USB library
-build_pkg libusb || log_warning "libusb build failed"
+run_build required libusb
 
-# libcap – POSIX capabilities
-build_pkg libcap || log_warning "libcap build failed"
+# libcap – POSIX capabilities (already in LFS, rebuild only if missing)
+run_build required libcap
 
 # libaio – asynchronous I/O
-build_pkg libaio || log_warning "libaio build failed"
+run_build optional libaio
 
 # lm-sensors – hardware monitoring
-build_pkg lm-sensors || log_warning "lm-sensors build failed"
+run_build optional lm-sensors
 
 # pciutils – PCI utilities
-build_pkg pciutils || log_warning "pciutils build failed"
+run_build required pciutils
 
 # usbutils – USB utilities
-build_pkg usbutils || log_warning "usbutils build failed"
+run_build required usbutils
 
-# libgpg-error – GPG error codes
-build_pkg libgpg-error || log_warning "libgpg-error build failed"
+# GnuPG support libraries
+run_build required libgpg-error
+run_build required libgcrypt
+run_build required libassuan
+run_build required libksba
+run_build required npth
 
-# libgcrypt – cryptographic library
-build_pkg libgcrypt || log_warning "libgcrypt build failed"
+# Crypto/IDN stack
+run_build required libtasn1
+run_build required nettle
+run_build required libunistring
+run_build required libidn2
+run_build optional libidn
 
-# libassuan – IPC library for GnuPG
-build_pkg libassuan || log_warning "libassuan build failed"
-
-# libksba – X.509 library
-build_pkg libksba || log_warning "libksba build failed"
-
-# npth – POSIX threads library
-build_pkg npth || log_warning "npth build failed"
-
-# libtasn1 – ASN.1 library
-build_pkg libtasn1 || log_warning "libtasn1 build failed"
-
-# nettle – cryptographic library
-build_pkg nettle || log_warning "nettle build failed"
-
-# libunistring – Unicode string library
-build_pkg libunistring || log_warning "libunistring build failed"
-
-# libidn2 – IDNA 2008 implementation
-build_pkg libidn2 || log_warning "libidn2 build failed"
-
-# libidn – Internationalized Domain Names
-build_pkg libidn || log_warning "libidn build failed"
-
-# pcre2 – Perl Compatible Regular Expressions (LFS, verify)
-build_pkg pcre2 || log_warning "pcre2 build failed"
+# pcre2 – already in LFS, rebuild only if missing
+run_build required pcre2
 
 # libseccomp – secure computing mode
-build_pkg libseccomp || log_warning "libseccomp build failed"
+run_build optional libseccomp
 
-# libelf – ELF library (part of LFS)
-build_pkg libelf || log_warning "libelf build failed"
-
-# libffi – Foreign Function Interface (LFS, verify)
-build_pkg libffi || log_warning "libffi build failed"
-
-# expat – XML parsing (blfs-base, verify)
-build_pkg expat || log_warning "expat build failed"
+# libelf / libffi / expat / libxml2 – already in LFS/blfs-base,
+# rebuild only if missing
+run_build required libelf
+run_build required libffi
+run_build required expat
+run_build required libxml2
 
 log_info "Phase 10: Optional dependencies for BLFS packages"
 
 # wxWidgets – GUI toolkit (for FileZilla, Audacity)
-build_pkg wxWidgets || log_warning "wxWidgets build failed"
+run_build optional wxWidgets
 
 # libnotify – desktop notifications
-build_pkg libnotify || log_warning "libnotify build failed"
+run_build optional libnotify
 
 # libsecret – password storage
-build_pkg libsecret || log_warning "libsecret build failed"
+run_build optional libsecret
 
 # libgudev – GObject wrapper for udev
-build_pkg libgudev || log_warning "libgudev build failed"
+run_build optional libgudev
 
-# libxkbcommon – keyboard handling library
-build_pkg libxkbcommon || log_warning "libxkbcommon build failed"
+# libxkbcommon – keyboard handling library (Wayland input)
+run_build required libxkbcommon
 
-# libinput – input device handling
-build_pkg libinput || log_warning "libinput build failed"
+# libinput – input device handling (Wayland)
+run_build required libinput
 
 # libwacom – tablet support
-build_pkg libwacom || log_warning "libwacom build failed"
+run_build optional libwacom
 
-# libevdev – evdev wrapper
-build_pkg libevdev || log_warning "libevdev build failed"
+# libevdev – evdev wrapper (libinput dependency)
+run_build required libevdev
 
-# libdrm – Direct Rendering Manager
-build_pkg libdrm || log_warning "libdrm build failed"
+# libdrm – Direct Rendering Manager (Mesa dependency)
+run_build required libdrm
 
 # mesa – 3D graphics library
-build_pkg mesa || log_warning "mesa build failed"
+run_build required mesa
 
 # libva – Video Acceleration API
-build_pkg libva || log_warning "libva build failed"
+run_build optional libva
 
 # libvdpau – VDPAU library
-build_pkg libvdpau || log_warning "libvdpau build failed"
+run_build optional libvdpau
 
 # libass – ASS/SSA subtitle renderer
-build_pkg libass || log_warning "libass build failed"
+run_build optional libass
 
 # libbluray – Blu-ray disc playback
-build_pkg libbluray || log_warning "libbluray build failed"
+run_build optional libbluray
 
 # libdvdnav – DVD navigation
-build_pkg libdvdnav || log_warning "libdvdnav build failed"
+run_build optional libdvdnav
 
 # libdvdread – DVD reading
-build_pkg libdvdread || log_warning "libdvdread build failed"
+run_build optional libdvdread
 
 # libcdio – CD-ROM access
-build_pkg libcdio || log_warning "libcdio build failed"
+run_build optional libcdio
 
 # libcddb – CDDB database access
-build_pkg libcddb || log_warning "libcddb build failed"
+run_build optional libcddb
 
 # libmodplug – Mod music playback
-build_pkg libmodplug || log_warning "libmodplug build failed"
+run_build optional libmodplug
 
-# libsidplay – SID music playback
-build_pkg libsidplay || log_warning "libsidplay build failed"
+# libsidplay – not in packages/stable sources; optional
+run_build optional libsidplay
 
 # libcue – CUE sheet parser
-build_pkg libcue || log_warning "libcue build failed"
+run_build optional libcue
 
-# libopenmpt – module music playback
-build_pkg libopenmpt || log_warning "libopenmpt build failed"
+# libopenmpt – not in packages/stable sources; optional
+run_build optional libopenmpt
 
 # libzip – ZIP file access
-build_pkg libzip || log_warning "libzip build failed"
-
-# libarchive – archive manipulation (already in Phase 9, verify)
-build_pkg libarchive || log_warning "libarchive build failed"
+run_build optional libzip
 
 # rust – Rust compiler (required to build modern Firefox)
 if ! have_cmd rustc; then
-    archive="$(find_archive rust)"
+    archive=""
+    for base in $(archive_names rust); do
+        archive="$(find_archive "$base")"
+        [ -n "$archive" ] && break
+    done
     if [ -n "$archive" ]; then
         log_info "Building rust from $archive"
         dir="$(extract_archive "$archive")"
         pushd "$dir" >/dev/null
         if [ -x ./install.sh ]; then
-            ./install.sh --prefix=/usr --disable-docs --disable-extended-yamlsamples
+            ./install.sh --prefix=/usr --disable-docs
         elif [ -x ./configure ] || [ -f configure ]; then
             ./configure --prefix=/usr
             make -j"$(jobs)"
             make install
         else
-            log_warning "rust: no recognised build system"
+            log_warning "[OPTIONAL] rust: no recognised build system"
         fi
         popd >/dev/null
         rm -rf "$dir"
         touch "$(marker_for rust)"
-        log_success "rust installed"
     else
-        log_warning "rust source archive missing; Firefox may not build"
+        log_warning "[OPTIONAL] rust source archive missing; Firefox may not build"
     fi
 else
     log_info "rust already installed; skipping"
@@ -565,7 +719,9 @@ log_success "BLFS core libraries build complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-blfs-libs.sh"
-run_privileged chroot "$LFS" /bin/bash -c \
-    "export INIT_SYSTEM=$INIT_SYSTEM; export LFS_CONFIG_DESKTOP_TYPE=$DESKTOP_TYPE; /build-blfs-libs.sh"
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    INIT_SYSTEM="$INIT_SYSTEM" LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    /bin/bash /build-blfs-libs.sh
 
 log_success "BLFS core libraries built successfully"

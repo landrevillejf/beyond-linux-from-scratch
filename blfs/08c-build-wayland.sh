@@ -2,11 +2,16 @@
 # 08c-build-wayland.sh
 # Build Wayland protocol, libraries, and optional compositor (weston).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -116,7 +121,10 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -140,6 +148,21 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 # Verify prerequisites (need Xorg for some Wayland features)
 verify_prerequisites() {
     local missing=() pc
@@ -159,21 +182,20 @@ verify_prerequisites
 log_info "Building Wayland protocol and libraries"
 
 # wayland-protocols: protocol definitions (no build, just install)
-build_pkg wayland-protocols || log_warning "wayland-protocols build failed"
+run_build required wayland-protocols
 
 # wayland: core library
-build_pkg wayland \
+run_build required wayland \
     -Ddocumentation=false \
-    -Dtests=false \
-    || log_warning "wayland build failed"
+    -Dtests=false
 
 # libxkbcommon: keyboard handling for Wayland
-build_pkg libxkbcommon \
-    -Denable-docs=false \
-    || log_warning "libxkbcommon build failed"
+run_build required libxkbcommon \
+    -Denable-docs=false
 
-# Weston: reference compositor (optional, used for testing Wayland)
-build_pkg weston \
+# Weston: reference compositor (optional, used for testing Wayland);
+# not present in packages/stable/12.4/sources.list
+run_build optional weston \
     -Dbackend-drm=true \
     -Dbackend-wayland=true \
     -Dbackend-x11=true \
@@ -181,14 +203,15 @@ build_pkg weston \
     -Dscreenshots=true \
     -Ddemo-clients=false \
     -Dsimple-clients=[] \
-    -Drenderer-gl=true \
-    || log_warning "weston build failed (optional reference compositor)"
+    -Drenderer-gl=true
 
 log_success "Wayland build complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-wayland.sh"
-run_privileged chroot "$LFS" /bin/bash -c \
-    "export LFS_CONFIG_DESKTOP_TYPE=$DESKTOP_TYPE; /build-wayland.sh"
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    /bin/bash /build-wayland.sh
 
 log_success "Wayland built successfully"

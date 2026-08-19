@@ -2,11 +2,16 @@
 # 09b-build-gnome.sh
 # Build GNOME desktop environment (called by 09-build-desktop.sh dispatcher).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -113,7 +118,7 @@ is_installed() {
         gnome-autoar)              have_pc gnome-autoar-0 ;;
         libgnomekbd)               have_pc libgnomekbd ;;
         gdm)                       have_cmd gdm ;;
-        mutter)                    have_pc libmutter-15 ;;
+        mutter)                    compgen -G '/usr/lib/pkgconfig/libmutter-*.pc' >/dev/null ;;
         gnome-shell)               have_cmd gnome-shell ;;
         gnome-session)             have_cmd gnome-session ;;
         gnome-settings-daemon)     have_cmd gnome-settings-daemon ;;
@@ -140,7 +145,18 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        case "$pkg" in
+            # libsoup 3 tarballs are named libsoup-3.x, and gcr 4 tarballs
+            # are named gcr-4.x (dot, not dash).
+            libsoup3) archive="$(find_archive libsoup)" ;;
+            gcr-4)    archive="$(compgen -G 'gcr-4.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
+        esac
+    fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -169,6 +185,21 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 verify_prerequisites() {
     local missing=() pc
     for pc in glib-2.0 gtk4 gtk+-3.0 pango cairo gdk-pixbuf-2.0 dbus-1 libsystemd wayland-client wayland-protocols libxkbcommon; do
@@ -183,47 +214,47 @@ verify_prerequisites() {
 verify_prerequisites
 
 log_info "Building GNOME foundation layer"
-build_pkg gsettings-desktop-schemas || log_warning "gsettings-desktop-schemas failed"
-build_pkg libnotify               || log_warning "libnotify failed"
-build_pkg dconf                    || log_warning "dconf failed"
-build_pkg gcr-4                    || log_warning "gcr-4 failed"
-build_pkg glib-networking          || log_warning "glib-networking failed"
-build_pkg libsoup3                || log_warning "libsoup3 failed"
-build_pkg libpeas                  || log_warning "libpeas failed"
-build_pkg gsound                   || log_warning "gsound failed"
-build_pkg gnome-autoar             || log_warning "gnome-autoar failed"
-build_pkg libgnomekbd              || log_warning "libgnomekbd failed"
-build_pkg libadwaita               || log_warning "libadwaita failed"
+run_build required gsettings-desktop-schemas
+run_build required libnotify
+run_build required dconf
+run_build required gcr-4
+run_build required glib-networking
+run_build required libsoup3
+run_build required libpeas
+run_build required gsound
+run_build required gnome-autoar
+# libgnomekbd is not in packages/stable/12.4/sources.list
+run_build optional libgnomekbd
+run_build required libadwaita
 
 log_info "Building GNOME core"
-build_pkg gnome-menus              || log_warning "gnome-menus failed"
-build_pkg gnome-backgrounds        || log_warning "gnome-backgrounds failed"
-build_pkg adwaita-icon-theme       || log_warning "adwaita-icon-theme failed"
-build_pkg gnome-keyring            || log_warning "gnome-keyring failed"
-build_pkg gnome-online-accounts    || log_warning "gnome-online-accounts failed"
-build_pkg gnome-settings-daemon    || log_warning "gnome-settings-daemon failed"
-build_pkg mutter \
+run_build required gnome-menus
+run_build required gnome-backgrounds
+run_build required adwaita-icon-theme
+run_build required gnome-keyring
+run_build required gnome-online-accounts
+run_build required gnome-settings-daemon
+run_build required mutter \
     -Dtests=false \
     -Dwayland=true \
     -Dx11=true \
-    -Dnative_backend=true \
-    || log_warning "mutter failed"
-build_pkg gnome-shell              || log_warning "gnome-shell failed"
-build_pkg gnome-session            || log_warning "gnome-session failed"
-build_pkg gnome-control-center    || log_warning "gnome-control-center failed"
-build_pkg gdm \
-    -Dplymouth=disabled \
-    || log_warning "gdm failed"
+    -Dnative_backend=true
+run_build required gnome-shell
+run_build required gnome-session
+run_build required gnome-control-center
+run_build required gdm \
+    -Dplymouth=disabled
 
 log_info "Building GNOME applications"
-build_pkg nautilus                 || log_warning "nautilus failed"
-build_pkg gnome-terminal           || log_warning "gnome-terminal failed"
-build_pkg gedit                    || log_warning "gedit failed"
-build_pkg gnome-system-monitor     || log_warning "gnome-system-monitor failed"
-build_pkg gnome-screenshot         || log_warning "gnome-screenshot failed"
-build_pkg yelp                     || log_warning "yelp failed"
-build_pkg gnome-calculator         || log_warning "gnome-calculator failed"
-build_pkg gnome-logs               || log_warning "gnome-logs failed"
+run_build required nautilus
+run_build required gnome-terminal
+run_build required gedit
+run_build required gnome-system-monitor
+run_build required gnome-screenshot
+run_build required yelp
+run_build required gnome-calculator
+# gnome-logs is not in packages/stable/12.4/sources.list
+run_build optional gnome-logs
 
 # Install GNOME session files
 cat > /usr/share/xsessions/gnome.desktop <<'EOF'
@@ -255,7 +286,8 @@ AutomaticLoginEnable=true
 GDMCONF
     # Enable gdm service
     if have_cmd systemctl; then
-        systemctl enable gdm 2>/dev/null || true
+        systemctl enable gdm 2>/dev/null \
+            || log_warning "Could not enable gdm via systemctl"
     fi
 fi
 
@@ -276,12 +308,15 @@ GCONF
 
 # Compile dconf database
 if have_cmd dconf; then
-    dconf update 2>/dev/null || true
+    dconf update 2>/dev/null \
+        || log_warning "dconf update failed (database will refresh on demand)"
 fi
 
 log_success "GNOME desktop installation complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-gnome.sh"
-run_privileged chroot "$LFS" /bin/bash /build-gnome.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-gnome.sh
 log_success "GNOME desktop environment installed successfully"

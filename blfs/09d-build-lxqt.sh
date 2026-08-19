@@ -2,11 +2,16 @@
 # 09d-build-lxqt.sh
 # Build LXQt desktop environment (called by 09-build-desktop.sh dispatcher).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -130,7 +135,10 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -157,6 +165,21 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 verify_prerequisites() {
     local missing=() pc
     for pc in glib-2.0 gtk+-3.0 cairo pango gdk-pixbuf-2.0 dbus-1 Qt6Core Qt6Widgets Qt6WaylandClient; do
@@ -174,35 +197,36 @@ verify_prerequisites() {
 verify_prerequisites
 
 log_info "Building LXQt build tools and libraries"
-build_pkg lxqt-build-tools        || log_warning "lxqt-build-tools failed"
-build_pkg libqtxdg               || log_warning "libqtxdg failed"
-build_pkg liblxqt                || log_warning "liblxqt failed"
-build_pkg libsysstat             || log_warning "libsysstat failed"
-build_pkg menu-cache             || log_warning "menu-cache failed"
-build_pkg libfm-qt               || log_warning "libfm-qt failed"
+run_build required lxqt-build-tools
+run_build required libqtxdg
+run_build required liblxqt
+run_build required libsysstat
+run_build required menu-cache
+run_build required libfm-qt
 
 log_info "Building LXQt core components"
-build_pkg lxqt-themes            || log_warning "lxqt-themes failed"
-build_pkg lxqt-qtplugin          || log_warning "lxqt-qtplugin failed"
-build_pkg lxqt-globalkeys        || log_warning "lxqt-globalkeys failed"
-build_pkg lxqt-notificationd     || log_warning "lxqt-notificationd failed"
-build_pkg lxqt-powermanagement   || log_warning "lxqt-powermanagement failed"
-build_pkg lxqt-policykit         || log_warning "lxqt-policykit failed"
-build_pkg lxqt-openssh-askpass   || log_warning "lxqt-openssh-askpass failed"
-build_pkg lxqt-sudo              || log_warning "lxqt-sudo failed"
-build_pkg lxqt-admin             || log_warning "lxqt-admin failed"
-build_pkg lxqt-wallet            || log_warning "lxqt-wallet failed"
-build_pkg lxqt-runner            || log_warning "lxqt-runner failed"
+run_build required lxqt-themes
+run_build required lxqt-qtplugin
+run_build required lxqt-globalkeys
+run_build required lxqt-notificationd
+run_build required lxqt-powermanagement
+run_build required lxqt-policykit
+run_build required lxqt-openssh-askpass
+run_build required lxqt-sudo
+run_build required lxqt-admin
+# lxqt-wallet is not in packages/stable/12.4/sources.list
+run_build optional lxqt-wallet
+run_build required lxqt-runner
 
 log_info "Building LXQt applications"
-build_pkg pcmanfm-qt             || log_warning "pcmanfm-qt failed"
-build_pkg lxqt-panel              || log_warning "lxqt-panel failed"
-build_pkg lxqt-session            || log_warning "lxqt-session failed"
-build_pkg lxqt-config             || log_warning "lxqt-config failed"
+run_build required pcmanfm-qt
+run_build required lxqt-panel
+run_build required lxqt-session
+run_build required lxqt-config
 
 log_info "Building window manager (OpenBox)"
-build_pkg openbox                || log_warning "openbox failed"
-build_pkg obconf-qt              || log_warning "obconf-qt failed"
+run_build required openbox
+run_build required obconf-qt
 
 # Install LXQt session files
 cat > /usr/share/xsessions/lxqt.desktop <<'EOF'
@@ -233,9 +257,12 @@ AUTOSTART
 
 # Configure display manager (LightDM) for LXQt
 if [ -f /etc/lightdm/lightdm.conf ]; then
-    sed -i 's/^user-session=.*/user-session=lxqt/' /etc/lightdm/lightdm.conf 2>/dev/null || true
-    sed -i 's/^autologin-session=.*/autologin-session=lxqt/' /etc/lightdm/lightdm.conf 2>/dev/null || true
-    sed -i 's/^session-wrapper=.*/session-wrapper=\/usr\/bin\/lxqt-session/' /etc/lightdm/lightdm.conf 2>/dev/null || true
+    sed -i 's/^user-session=.*/user-session=lxqt/' /etc/lightdm/lightdm.conf \
+        || log_warning "Could not set user-session in lightdm.conf"
+    sed -i 's/^autologin-session=.*/autologin-session=lxqt/' /etc/lightdm/lightdm.conf \
+        || log_warning "Could not set autologin-session in lightdm.conf"
+    sed -i 's|^session-wrapper=.*|session-wrapper=/usr/bin/lxqt-session|' /etc/lightdm/lightdm.conf \
+        || log_warning "Could not set session-wrapper in lightdm.conf"
 fi
 
 # Set up environment variables
@@ -249,5 +276,7 @@ log_success "LXQt desktop installation complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-lxqt.sh"
-run_privileged chroot "$LFS" /bin/bash /build-lxqt.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-lxqt.sh
 log_success "LXQt desktop environment installed successfully"

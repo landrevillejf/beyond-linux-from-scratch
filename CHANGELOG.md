@@ -29,6 +29,32 @@
     (`tests/test_acceptance_shell.py::TestLFSComplianceGuardrails`),
     `tests/test_lfs_system_bootstrap.py` updated for the new 05b
 
+- **LFS/BLFS book compliance remediation, wave 2** (`docs/LFS_COMPLIANCE_AUDIT.md`)
+  - Strict error policy across all 12 remaining BLFS stages (`blfs/08a`,
+    `08b`, `08c`, `08d`, `09a`, `09b`, `09c`, `09d`, `23`, `24`, `25`,
+    `26`): every package now goes through a `run_build required|optional`
+    wrapper — a required failure aborts the stage, and a package may only
+    be optional when its tarball is absent from
+    `packages/stable/12.4/sources.list`; the old `|| log_warning` and
+    silent missing-source skips are gone
+  - Honest required/optional classification driven by the source list:
+    08a libyaml/glib2/icu/rust aliases, 08b gtk3/gtk4 major-version
+    glob pinning, 09b libsoup3/gcr-4 aliases, 09c Qt6 built from the
+    monolithic `qt-everywhere-src` tarball per the BLFS page, 25 apache
+    resolves to the `httpd` tarball
+  - All chroot executions now use a clean environment
+    (`chroot "$LFS" /usr/bin/env -i HOME=/root TERM=... PATH=...`)
+  - `packages/stable/12.4/sources.list`: added the 18 Xorg client
+    libraries (libX11, libXext, libXrender, libXfixes, libXi, libXrandr,
+    libXcursor, libXinerama, libXcomposite, libXdamage, libfontenc,
+    libxkbfile, libXtst, libXScrnSaver, libXv, libXxf86vm, libXres,
+    libXpm), the 5 xcb-util-* modules, gtk-4.18.6 and gcr-4.4.0.1
+  - Tests: 5 new guardrail tests
+    (`tests/test_acceptance_shell.py::TestBLFSErrorPolicyGuardrails`)
+    covering the run_build policy, masking absence, clean-env chroot,
+    required-package source resolution and shellcheck (outer + inner
+    heredoc) on all 12 scripts
+
 ### Added
 
 - **Production-ready first-boot service** (`blfs/17-first-boot-service.sh`)

@@ -2,11 +2,15 @@
 # 08d-build-display-manager.sh
 # Build LightDM display manager and GTK greeter.
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -118,7 +122,10 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -147,6 +154,21 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 # Verify prerequisites
 verify_prerequisites() {
     local missing=() pc
@@ -171,17 +193,15 @@ fi
 
 log_info "Building polkit (PolicyKit)"
 # polkit: depends on glib2, dbus, js78/mozjs (use --disable-polkitd for minimal)
-build_pkg polkit \
+run_build required polkit \
     --disable-polkitd \
-    --with-polkitd-user=polkitd \
-    || log_warning "polkit build failed (optional)"
+    --with-polkitd-user=polkitd
 
 log_info "Building accountsservice"
 # accountsservice: depends on glib2, dbus, polkit
-build_pkg accountsservice \
+run_build required accountsservice \
     -Dadmin_group=wheel \
-    -Dsystemdsystemunitdir=/usr/lib/systemd/system \
-    || log_warning "accountsservice build failed (optional)"
+    -Dsystemdsystemunitdir=/usr/lib/systemd/system
 
 log_info "Building LightDM"
 # LightDM: depends on glib2, dbus, Xorg, gtk3
@@ -189,16 +209,15 @@ LIGHTDM_OPTS=""
 if $HAVE_SYSTEMD; then
     LIGHTDM_OPTS="--with-systemdsystemunitdir=/usr/lib/systemd/system"
 fi
-build_pkg lightdm \
+# shellcheck disable=SC2086  # LIGHTDM_OPTS is empty or one configure flag
+run_build required lightdm \
     --disable-static \
     --disable-tests \
-    $LIGHTDM_OPTS \
-    || log_warning "lightdm build failed"
+    $LIGHTDM_OPTS
 
 log_info "Building LightDM GTK greeter"
-build_pkg lightdm-gtk-greeter \
-    --disable-static \
-    || log_warning "lightdm-gtk-greeter build failed"
+run_build required lightdm-gtk-greeter \
+    --disable-static
 
 # Configure LightDM
 log_info "Configuring LightDM"
@@ -217,15 +236,18 @@ autologin-user-timeout=0
 autologin-session=xfce
 LDMCONF
 
-# Create lightdm group and user if not present
+# Create lightdm group and user if not present; failures are tolerated
+# because some hosts run without useradd in the early build stages.
 if ! getent group lightdm >/dev/null 2>&1; then
-    groupadd -r lightdm 2>/dev/null || true
+    groupadd -r lightdm 2>/dev/null || log_warning "Could not create lightdm group"
 fi
 if ! getent passwd lightdm >/dev/null 2>&1; then
-    useradd -r -g lightdm -d /var/lib/lightdm -s /sbin/nologin lightdm 2>/dev/null || true
+    useradd -r -g lightdm -d /var/lib/lightdm -s /sbin/nologin lightdm 2>/dev/null \
+        || log_warning "Could not create lightdm user"
 fi
 mkdir -p /var/lib/lightdm /var/cache/lightdm
-chown -R lightdm:lightdm /var/lib/lightdm /var/cache/lightdm 2>/dev/null || true
+chown -R lightdm:lightdm /var/lib/lightdm /var/cache/lightdm 2>/dev/null \
+    || log_warning "Could not chown lightdm directories"
 
 # Configure PAM for lightdm if PAM is available
 if [ -d /etc/pam.d ]; then
@@ -245,7 +267,8 @@ fi
 
 # Enable lightdm service based on init system
 if $HAVE_SYSTEMD; then
-    systemctl enable lightdm.service 2>/dev/null || true
+    systemctl enable lightdm.service 2>/dev/null \
+        || log_warning "Could not enable lightdm.service via systemctl"
 elif [ "$INIT_SYSTEM" = "sysvinit" ]; then
     # Create sysvinit service script
     cat > /etc/init.d/lightdm <<'SYSV'
@@ -268,14 +291,17 @@ case "$1" in
 esac
 SYSV
     chmod 0755 /etc/init.d/lightdm
-    ln -sf /etc/init.d/lightdm /etc/rc.d/rc5.d/S90lightdm 2>/dev/null || true
+    ln -sf /etc/init.d/lightdm /etc/rc.d/rc5.d/S90lightdm 2>/dev/null \
+        || log_warning "Could not link lightdm into rc5.d"
 fi
 
 log_success "Display manager (LightDM) build and configuration complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-display-manager.sh"
-run_privileged chroot "$LFS" /bin/bash -c \
-    "export INIT_SYSTEM=$INIT_SYSTEM; export LFS_CONFIG_DESKTOP_TYPE=$DESKTOP_TYPE; /build-display-manager.sh"
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    INIT_SYSTEM="$INIT_SYSTEM" LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    /bin/bash /build-display-manager.sh
 
 log_success "Display manager built successfully"

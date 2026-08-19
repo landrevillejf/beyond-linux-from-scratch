@@ -505,3 +505,161 @@ class TestLFSComplianceGuardrails:
             )
             assert result.returncode == 0, \
                 f"shellcheck failed on {script}:\n{result.stdout}"
+
+
+class TestBLFSErrorPolicyGuardrails:
+    """Wave 2 guardrails (audit finding F-07).
+
+    Every BLFS stage must classify packages with run_build
+    required/optional instead of masking failures, run the chroot
+    with a clean environment, and stay shellcheck clean on both the
+    outer script and the inner heredoc payload.
+    """
+
+    WAVE2_SCRIPTS = [
+        'blfs/08a-build-blfs-libs.sh',
+        'blfs/08b-build-xorg.sh',
+        'blfs/08c-build-wayland.sh',
+        'blfs/08d-build-display-manager.sh',
+        'blfs/09a-build-xfce.sh',
+        'blfs/09b-build-gnome.sh',
+        'blfs/09c-build-kde.sh',
+        'blfs/09d-build-lxqt.sh',
+        'blfs/23-basic-networking.sh',
+        'blfs/24-multimedia.sh',
+        'blfs/25-server.sh',
+        'blfs/26-printing-scanning.sh',
+    ]
+
+    # Tarball base names that differ from the script package name.
+    ALIASES = {
+        'glib2': ['glib'],
+        'icu': ['icu4c'],
+        'libelf': ['elfutils'],
+        'libyaml': ['yaml'],
+        'lm-sensors': ['lm_sensors'],
+        'wxWidgets': ['wxWidgets', 'wxwidgets'],
+        'rust': ['rustc'],
+        'mesa': ['Mesa', 'mesa'],
+        'gtk3': ['gtk-3'],
+        'gtk4': ['gtk-4'],
+        'libsoup3': ['libsoup'],
+        'apache': ['httpd'],
+        'qt6': ['qt-everywhere-src'],
+    }
+
+    # Packages provided by another stage or by the LFS base system.
+    PROVIDED_ELSEWHERE = {
+        'sqlite',  # LFS chapter 8
+        'curl',    # blfs/08-build-blfs-base.sh
+    }
+
+    def test_blfs_stages_define_error_policy(self):
+        """Every wave 2 stage defines run_build and uses it."""
+        for script in self.WAVE2_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'run_build()' in content, \
+                f"{script} must define the run_build policy wrapper"
+            assert 'aborting stage' in content, \
+                f"{script} must abort on required package failure"
+            assert 'run_build required' in content, \
+                f"{script} must classify required packages"
+
+    def test_blfs_stages_have_no_build_masking(self):
+        """No build_pkg call may be masked with '|| log_warning'
+        and a missing source archive must fail the build."""
+        import re
+
+        masked_re = re.compile(
+            r'build_(?:xfce_)?pkg\s[^\n]*\|\|')
+        for script in self.WAVE2_SCRIPTS:
+            content = Path(script).read_text()
+            assert not masked_re.search(content), \
+                f"{script} masks package build failures"
+            assert 'Source archive missing for $pkg; skipping' \
+                not in content, \
+                f"{script} silently skips missing source archives"
+
+    def test_blfs_stages_run_chroot_with_clean_env(self):
+        """The chroot invocation must wipe the host environment."""
+        for script in self.WAVE2_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'chroot "$LFS" /usr/bin/env -i' in content, \
+                f"{script} must run the inner script with env -i"
+
+    def test_required_packages_have_sources(self):
+        """Every required package must resolve to a tarball listed in
+        packages/stable/12.4/sources.list."""
+        import re
+
+        sources = Path('packages/stable/12.4/sources.list').read_text()
+        call_re = re.compile(r'run_build\s+required\s+(\S+)')
+        loop_re = re.compile(
+            r'for pkg in ([^;\n]+); do\n\s*run_build required "\$pkg"')
+
+        for script in self.WAVE2_SCRIPTS:
+            content = Path(script).read_text()
+            required = set()
+            for pkg in call_re.findall(content):
+                if pkg.startswith('"$'):
+                    # Loop variable: resolve the literal package list.
+                    loop_match = loop_re.search(content)
+                    assert loop_match, \
+                        f"{script}: required {pkg} outside a resolvable " \
+                        "loop"
+                    required.update(loop_match.group(1).split())
+                else:
+                    required.add(pkg.strip('"'))
+            for pkg in required:
+                if pkg in self.PROVIDED_ELSEWHERE:
+                    continue
+                bases = self.ALIASES.get(pkg, [pkg])
+                found = any(
+                    f"/{base}-" in sources or f"/{base}." in sources
+                    for base in bases)
+                assert found, \
+                    f"{script}: required package {pkg} has no source " \
+                    f"in packages/stable/12.4/sources.list"
+
+    def test_shellcheck_on_wave2_scripts(self):
+        """shellcheck must be clean on the outer scripts and on the
+        inner heredoc payloads of every wave 2 stage."""
+        import re
+
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip("shellcheck not installed")
+
+        inner_re = re.compile(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            re.DOTALL | re.MULTILINE)
+
+        for script in self.WAVE2_SCRIPTS:
+            result = subprocess.run(
+                ['shellcheck', script],
+                capture_output=True,
+                text=True
+            )
+            assert result.returncode == 0, \
+                f"shellcheck failed on {script}:\n{result.stdout}"
+
+            content = Path(script).read_text()
+            match = inner_re.search(content)
+            assert match, f"{script} has no INNEREOF heredoc"
+            with tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.sh', delete=False) as tmp:
+                tmp.write(match.group(1))
+                tmp_path = tmp.name
+            try:
+                result = subprocess.run(
+                    ['shellcheck', tmp_path],
+                    capture_output=True,
+                    text=True
+                )
+                assert result.returncode == 0, \
+                    f"shellcheck failed on inner payload of " \
+                    f"{script}:\n{result.stdout}"
+            finally:
+                os.unlink(tmp_path)

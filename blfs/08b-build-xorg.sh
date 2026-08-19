@@ -8,6 +8,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -170,31 +171,18 @@ build_pkg() {
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         case "$pkg" in
-            util-macros)     archive="$(find_archive util-macros)" ;;
-            xorgproto)       archive="$(find_archive xorgproto) || archive=$(find_archive xproto-xorgproto)" ;;
-            libXau)          archive="$(find_archive libXau)" ;;
-            libXScrnSaver)   archive="$(find_archive libXScrnSaver)" ;;
-            xcb-proto)       archive="$(find_archive xcb-proto)" ;;
-            xkeyboard-config) archive="$(find_archive xkeyboard-config)" ;;
-            xf86-input-libinput) archive="$(find_archive xf86-input-libinput)" ;;
-            xf86-video-amdgpu) archive="$(find_archive xf86-video-amdgpu)" ;;
-            xf86-video-ati)    archive="$(find_archive xf86-video-ati)" ;;
-            xf86-video-fbdev)  archive="$(find_archive xf86-video-fbdev)" ;;
-            xf86-video-vesa)   archive="$(find_archive xf86-video-vesa)" ;;
-            xf86-video-vmware) archive="$(find_archive xf86-video-vmware)" ;;
-            xorg-server)     archive="$(find_archive xorg-server)" ;;
-            xinit)           archive="$(find_archive xinit)" ;;
-            twm)             archive="$(find_archive twm)" ;;
-            xterm)           archive="$(find_archive xterm)" ;;
-            xclock)          archive="$(find_archive xclock)" ;;
-            xeyes)           archive="$(find_archive xeyes)" ;;
-            libepoxy)        archive="$(find_archive libepoxy)" ;;
-            gtk3)            archive="$(find_archive gtk+-3) || archive=$(find_archive gtk+)" ;;
-            gtk4)            archive="$(find_archive gtk-4) || archive=$(find_archive gtk4)" ;;
-            mesa)            archive="$(find_archive mesa) || archive=$(find_archive Mesa)" ;;
+            # gtk tarballs are named gtk-<version>, not gtk3-<version>.
+            # Pin the major version so gtk3 and gtk4 cannot resolve to
+            # each other's tarball.
+            gtk3) archive="$(compgen -G 'gtk-3.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
+            gtk4) archive="$(compgen -G 'gtk-4.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
+            mesa) archive="$(find_archive Mesa)" ;;
         esac
     fi
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -210,6 +198,7 @@ build_pkg() {
         make -j"$(jobs)"
         make install
     elif [ -f CMakeLists.txt ]; then
+        # shellcheck disable=SC2086
         cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts
         cmake --build builddir -j"$(jobs)"
         cmake --install builddir
@@ -232,6 +221,23 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues; used for
+# packages not present in packages/stable/12.4/sources.list and for
+# hardware-specific drivers.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 # Verify BLFS libs prerequisites
 verify_prerequisites() {
     local missing=() pc
@@ -252,53 +258,54 @@ verify_prerequisites
 # Phase 1: Xorg protocol headers and build macros
 # ======================================================================
 log_info "Phase 1: Protocol headers and macros"
-build_pkg util-macros || log_warning "util-macros build failed"
-build_pkg xorgproto || log_warning "xorgproto build failed"
+run_build required util-macros
+run_build required xorgproto
 
 # ======================================================================
 # Phase 2: Core Xorg libraries (strict dependency order)
 # ======================================================================
 log_info "Phase 2: Core X libraries"
-build_pkg libXau || log_warning "libXau build failed"
-build_pkg libXdmcp || log_warning "libXdmcp build failed"
-build_pkg xcb-proto || log_warning "xcb-proto build failed"
-build_pkg libxcb || log_warning "libxcb build failed"
-build_pkg libX11 || log_warning "libX11 build failed"
+run_build required libXau
+run_build required libXdmcp
+run_build required xcb-proto
+run_build required libxcb
+run_build required libX11
 
 # ======================================================================
 # Phase 3: Extension libraries
 # ======================================================================
 log_info "Phase 3: Extension libraries"
-build_pkg libXext || log_warning "libXext build failed"
-build_pkg libXrender || log_warning "libXrender build failed"
-build_pkg libXfixes || log_warning "libXfixes build failed"
-build_pkg libXi || log_warning "libXi build failed"
-build_pkg libXrandr || log_warning "libXrandr build failed"
-build_pkg libXcursor || log_warning "libXcursor build failed"
-build_pkg libXinerama || log_warning "libXinerama build failed"
-build_pkg libXcomposite || log_warning "libXcomposite build failed"
-build_pkg libXdamage || log_warning "libXdamage build failed"
-build_pkg libfontenc || log_warning "libfontenc build failed"
-build_pkg libxkbfile || log_warning "libxkbfile build failed"
-build_pkg libXtst || log_warning "libXtst build failed"
-build_pkg libXScrnSaver || log_warning "libXScrnSaver build failed"
-build_pkg libXv || log_warning "libXv build failed"
-build_pkg libXvMC || log_warning "libXvMC build failed"
-build_pkg libXxf86vm || log_warning "libXxf86vm build failed"
-build_pkg libXres || log_warning "libXres build failed"
-build_pkg libXpm || log_warning "libXpm build failed"
+run_build required libXext
+run_build required libXrender
+run_build required libXfixes
+run_build required libXi
+run_build required libXrandr
+run_build required libXcursor
+run_build required libXinerama
+run_build required libXcomposite
+run_build required libXdamage
+run_build required libfontenc
+run_build required libxkbfile
+run_build required libXtst
+run_build required libXScrnSaver
+run_build required libXv
+# libXvMC is not in the BLFS wget-list; legacy, optional
+run_build optional libXvMC
+run_build required libXxf86vm
+run_build required libXres
+run_build required libXpm
 
 # ======================================================================
 # Phase 4: DRM, Mesa (GL), and XCB utilities
 # ======================================================================
 log_info "Phase 4: DRM and Mesa"
 
-build_pkg libpciaccess || log_warning "libpciaccess build failed"
-build_pkg libdrm || log_warning "libdrm build failed"
+run_build required libpciaccess
+run_build required libdrm
 
 # Mesa: build with software rendering (swrast) as a safe default.
 # Hardware drivers requiring LLVM are optional and can be added later.
-build_pkg mesa \
+run_build required mesa \
     -Dgallium-drivers=swrast,zink \
     -Dvulkan-drivers=auto \
     -Ddri3=enabled \
@@ -306,58 +313,58 @@ build_pkg mesa \
     -Dgles2=enabled \
     -Dglx=dri \
     -Dllvm=disabled \
-    -Dosmesa=true \
-    || log_warning "mesa build failed (system will use software rendering)"
+    -Dosmesa=true
 
 # XCB utility libraries
 log_info "Phase 5: XCB utilities"
-build_pkg xcb-util || log_warning "xcb-util build failed"
-build_pkg xcb-util-image || log_warning "xcb-util-image build failed"
-build_pkg xcb-util-keysyms || log_warning "xcb-util-keysyms build failed"
-build_pkg xcb-util-renderutil || log_warning "xcb-util-renderutil build failed"
-build_pkg xcb-util-wm || log_warning "xcb-util-wm build failed"
-build_pkg xcb-util-cursor || log_warning "xcb-util-cursor build failed"
+run_build required xcb-util
+run_build required xcb-util-image
+run_build required xcb-util-keysyms
+run_build required xcb-util-renderutil
+run_build required xcb-util-wm
+run_build required xcb-util-cursor
 
 # ======================================================================
 # Phase 6: Xorg server and drivers
 # ======================================================================
 log_info "Phase 6: Xorg server and drivers"
 
-build_pkg xkeyboard-config || log_warning "xkeyboard-config build failed"
+run_build required xkeyboard-config
 
 # Xorg server: build with DRI3, systemd optional
 XORG_OPTS=""
 if [ -d /usr/lib/systemd/system ]; then
     XORG_OPTS="-Dsystemd_logind=true"
 fi
-build_pkg xorg-server \
+# shellcheck disable=SC2086  # XORG_OPTS is empty or one meson flag
+run_build required xorg-server \
     -Dxorg=true \
     -Dxwayland=true \
     -Dglamor=true \
     -Dxvfb=true \
     -Dunitdir=/usr/lib/systemd/system \
-    $XORG_OPTS \
-    || log_warning "xorg-server build failed"
+    $XORG_OPTS
 
 # Input driver
-build_pkg xf86-input-libinput || log_warning "xf86-input-libinput build failed"
+run_build required xf86-input-libinput
 
-# Video drivers (all optional, build what's available)
-build_pkg xf86-video-amdgpu || log_warning "xf86-video-amdgpu not built (optional)"
-build_pkg xf86-video-ati || log_warning "xf86-video-ati not built (optional)"
-build_pkg xf86-video-fbdev || log_warning "xf86-video-fbdev not built (optional)"
-build_pkg xf86-video-vesa || log_warning "xf86-video-vesa not built (optional)"
-build_pkg xf86-video-vmware || log_warning "xf86-video-vmware not built (optional)"
+# Video drivers: hardware specific, not in the BLFS wget-list; optional
+run_build optional xf86-video-amdgpu
+run_build optional xf86-video-ati
+run_build optional xf86-video-fbdev
+run_build optional xf86-video-vesa
+run_build optional xf86-video-vmware
 
 # ======================================================================
 # Phase 7: Xorg applications
 # ======================================================================
 log_info "Phase 7: Xorg applications"
-build_pkg xinit || log_warning "xinit build failed"
-build_pkg twm || log_warning "twm build failed"
-build_pkg xterm || log_warning "xterm build failed"
-build_pkg xclock || log_warning "xclock build failed"
-build_pkg xeyes || log_warning "xeyes build failed"
+run_build required xinit
+# twm/xterm/xclock/xeyes are book test clients, not desktop requirements
+run_build optional twm
+run_build optional xterm
+run_build optional xclock
+run_build optional xeyes
 
 # ======================================================================
 # Phase 8: GL-dependent libraries (libepoxy, GTK+3, GTK4)
@@ -365,28 +372,29 @@ build_pkg xeyes || log_warning "xeyes build failed"
 # ======================================================================
 log_info "Phase 8: GL-dependent libraries (libepoxy, GTK)"
 
-build_pkg libepoxy || log_warning "libepoxy build failed"
+run_build required libepoxy
 
 # GTK+3: requires glib2, cairo, pango, at-spi2-core, gdk-pixbuf, libepoxy,
 # and X11 libraries (all built above).
-build_pkg gtk3 \
+run_build required gtk3 \
     -Dbroadway_backend=false \
     -Dx11_backend=true \
-    -Dwayland_backend=false \
-    || log_warning "gtk3 build failed"
+    -Dwayland_backend=false
 
 # GTK4: requires glib2, cairo, pango, graphene, gdk-pixbuf, libepoxy.
-build_pkg gtk4 \
+# Required by the GNOME stack (09b); gtk-4.18 is in the source list.
+run_build required gtk4 \
     -Dbroadway_backend=false \
     -Dx11_backend=true \
-    -Dwayland_backend=false \
-    || log_warning "gtk4 build failed"
+    -Dwayland_backend=false
 
 log_success "Xorg display server and libraries build complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-xorg.sh"
-run_privileged chroot "$LFS" /bin/bash -c \
-    "export LFS_CONFIG_DESKTOP_TYPE=$DESKTOP_TYPE; /build-xorg.sh"
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    /bin/bash /build-xorg.sh
 
 log_success "Xorg display server built successfully"

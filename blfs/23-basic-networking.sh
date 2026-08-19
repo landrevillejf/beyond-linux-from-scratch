@@ -2,11 +2,16 @@
 # 13-basic-networking.sh
 # Build BLFS Basic Networking packages (Part IV of BLFS book)
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -56,11 +61,11 @@ mount_chroot_fs() {
     run_privileged mountpoint -q "$LFS/run" || run_privileged mount -t tmpfs tmpfs "$LFS/run"
 }
 cleanup() {
-    run_privileged umount "$LFS/dev/pts" 2>/dev/null || true
-    run_privileged umount "$LFS/dev" 2>/dev/null || true
-    run_privileged umount "$LFS/proc" 2>/dev/null || true
-    run_privileged umount "$LFS/sys" 2>/dev/null || true
-    run_privileged umount "$LFS/run" 2>/dev/null || true
+    run_privileged umount "$LFS/dev/pts" 2>/dev/null || log_warning "Could not unmount $LFS/dev/pts"
+    run_privileged umount "$LFS/dev" 2>/dev/null || log_warning "Could not unmount $LFS/dev"
+    run_privileged umount "$LFS/proc" 2>/dev/null || log_warning "Could not unmount $LFS/proc"
+    run_privileged umount "$LFS/sys" 2>/dev/null || log_warning "Could not unmount $LFS/sys"
+    run_privileged umount "$LFS/run" 2>/dev/null || log_warning "Could not unmount $LFS/run"
 }
 trap cleanup EXIT
 mount_chroot_fs
@@ -70,7 +75,7 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     log_info "Copying sources from $SOURCES_HOST to $LFS/sources"
     run_privileged mkdir -p "$LFS/sources"
     run_privileged cp -rv "$SOURCES_HOST"/* "$LFS/sources/"
-    run_privileged chown -R lfs:lfs "$LFS/sources" 2>/dev/null || true
+    if ! run_privileged chown -R lfs:lfs "$LFS/sources" 2>/dev/null; then log_warning "Could not chown $LFS/sources to lfs:lfs"; fi
 fi
 
 cat <<'INNEREOF' | run_privileged tee "$LFS/build-networking.sh" >/dev/null
@@ -124,16 +129,21 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
     if [ -f meson.build ]; then
         rm -rf builddir
+        # shellcheck disable=SC2086
         meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts
         ninja -C builddir
         ninja -C builddir install
     elif [ -x ./configure ] || [ -f configure ]; then
+        # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
         make -j"$(jobs)"
         make install
@@ -149,58 +159,75 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    if build_pkg "$pkg" "$@"; then
+        return 0
+    fi
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 log_info "Phase 1: Network utilities"
 
 # curl – command line tool for transferring data with URL syntax
-build_pkg curl || log_warning "curl build failed"
+run_build required curl
 
 # wget – network utility to retrieve files from the Web
-build_pkg wget || log_warning "wget build failed"
+run_build required wget
 
 log_info "Phase 2: Network libraries"
 
 # libevent – event notification library
-build_pkg libevent || log_warning "libevent build failed"
+run_build required libevent
 
 # libnl – netlink protocol library suite
-build_pkg libnl || log_warning "libnl build failed"
+run_build required libnl
 
 # libmnl – minimalistic user-space library for netlink
-build_pkg libmnl || log_warning "libmnl build failed"
+run_build required libmnl
 
 # nghttp2 – HTTP/2 library
-build_pkg nghttp2 || log_warning "nghttp2 build failed"
+run_build required nghttp2
 
 log_info "Phase 3: Network tools"
 
 # nmap – network exploration tool and security/port scanner
-build_pkg nmap || log_warning "nmap build failed"
+run_build required nmap
 
-# lynx – text-based web browser
-build_pkg lynx || log_warning "lynx build failed"
+# lynx – text-based web browser; not in packages/stable/12.4/sources.list
+run_build optional lynx
 
 log_info "Phase 4: Time synchronization"
 
 # ntp – Network Time Protocol daemon and utilities
-build_pkg ntp || log_warning "ntp build failed"
+run_build required ntp
 
 log_info "Phase 5: Network file systems"
 
 # nfs-utils – NFS server and client tools
-build_pkg nfs-utils || log_warning "nfs-utils build failed"
+run_build required nfs-utils
 
 log_info "Phase 6: Wireless networking"
 
 # wireless_tools – tools for manipulating Linux Wireless Extensions
-build_pkg wireless_tools || log_warning "wireless_tools build failed"
+run_build required wireless_tools
 
 # wpa_supplicant – WPA/WPA2/EAP Authenticator and Supplicant
-build_pkg wpa_supplicant || log_warning "wpa_supplicant build failed"
+run_build required wpa_supplicant
 
 log_success "BLFS Basic Networking build complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-networking.sh"
-run_privileged chroot "$LFS" /bin/bash /build-networking.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-networking.sh
 
 log_success "BLFS Basic Networking built successfully"

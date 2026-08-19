@@ -2,11 +2,16 @@
 # 09c-build-kde.sh
 # Build KDE Plasma desktop environment (called by 09-build-desktop.sh dispatcher).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (missing from
+# packages/stable/12.4/sources.list) may fail with a warning.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -105,6 +110,7 @@ is_installed() {
     local pkg="$1"
     [ -f "$(marker_for "$pkg")" ] && return 0
     case "$pkg" in
+        qt6)                 have_pc Qt6Core ;;
         extra-cmake-modules) have_cmd cmake && [ -d /usr/share/ECM ] ;;
         qt6-qtbase)          have_pc Qt6Core ;;
         qt6-qttools)         have_pc Qt6Linguist ;;
@@ -160,7 +166,10 @@ build_pkg() {
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then log_warning "Source archive missing for $pkg; skipping"; return 0; fi
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for $pkg"
+        return 1
+    fi
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
@@ -193,6 +202,50 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# Qt6 is shipped as a single qt-everywhere-src tarball and built in one
+# CMake pass (BLFS Qt6 page), not as per-module tarballs.
+build_qt6() {
+    local archive dir
+    if have_pc Qt6Core; then log_info "qt6 already installed; skipping"; return 0; fi
+    archive="$(find_archive qt-everywhere-src)"
+    if [ -z "$archive" ]; then
+        log_error "Source archive missing for qt6 (qt-everywhere-src)"
+        return 1
+    fi
+    log_info "Building qt6 from $archive"
+    dir="$(extract_archive "$archive")"
+    pushd "$dir" >/dev/null
+    mkdir -p build
+    cd build
+    cmake -DCMAKE_INSTALL_PREFIX=/usr \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DQT_BUILD_EXAMPLES=OFF \
+          -DQT_BUILD_TESTS=OFF \
+          ..
+    make -j"$JOBS"
+    make install
+    cd ..
+    popd >/dev/null
+    rm -rf "$dir"
+    log_success "qt6 installed"
+}
+
+# Policy wrapper (audit finding F-07).  required: any failure aborts the
+# stage.  optional: failures are logged and the build continues.
+run_build() {
+    local mode="$1" pkg="$2"
+    shift 2
+    case "$pkg" in
+        qt6) build_qt6 && return 0 ;;
+        *)   build_pkg "$pkg" "$@" && return 0 ;;
+    esac
+    if [ "$mode" = "required" ]; then
+        log_error "Required package $pkg failed – aborting stage"
+        exit 1
+    fi
+    log_warning "[OPTIONAL] $pkg failed or is missing – continuing"
+}
+
 verify_prerequisites() {
     local missing=() pc
     for pc in glib-2.0 gtk+-3.0 cairo pango gdk-pixbuf-2.0 dbus-1 wayland-client libxkbcommon libdrm xkbcommon; do
@@ -213,76 +266,69 @@ verify_prerequisites() {
 verify_prerequisites
 
 log_info "Building Qt6 layer"
-build_pkg extra-cmake-modules   || log_warning "extra-cmake-modules failed"
-build_pkg qt6-qtbase \
-    -DQT_BUILD_TESTS=OFF \
-    -DBUILD_SHARED_LIBS=ON \
-    || log_warning "qt6-qtbase failed"
-build_pkg qt6-qttools            || log_warning "qt6-qttools failed"
-build_pkg qt6-qtdeclarative     || log_warning "qt6-qtdeclarative failed"
-build_pkg qt6-qtsvg             || log_warning "qt6-qtsvg failed"
-build_pkg qt6-qtwayland         || log_warning "qt6-qtwayland failed"
+run_build required qt6
+run_build required extra-cmake-modules
 
 log_info "Building KDE Frameworks (Tier 1)"
-build_pkg attica                || log_warning "attica failed"
-build_pkg karchive              || log_warning "karchive failed"
-build_pkg kcodecs               || log_warning "kcodecs failed"
-build_pkg kconfig               || log_warning "kconfig failed"
-build_pkg kcoreaddons           || log_warning "kcoreaddons failed"
-build_pkg kdbusaddons           || log_warning "kdbusaddons failed"
-build_pkg kguiaddons            || log_warning "kguiaddons failed"
-build_pkg ki18n                 || log_warning "ki18n failed"
-build_pkg kitemmodels           || log_warning "kitemmodels failed"
-build_pkg kitemviews            || log_warning "kitemviews failed"
-build_pkg kwidgetsaddons        || log_warning "kwidgetsaddons failed"
-build_pkg kwindowsystem         || log_warning "kwindowsystem failed"
-build_pkg solid                 || log_warning "solid failed"
-build_pkg sonnet                || log_warning "sonnet failed"
+# Only kconfig, kwindowsystem and solid are in the source list; the rest
+# is kept optional until the KF6 set is added to sources.list.
+run_build optional attica
+run_build optional karchive
+run_build optional kcodecs
+run_build required kconfig
+run_build optional kcoreaddons
+run_build optional kdbusaddons
+run_build optional kguiaddons
+run_build optional ki18n
+run_build optional kitemmodels
+run_build optional kitemviews
+run_build optional kwidgetsaddons
+run_build required kwindowsystem
+run_build required solid
+run_build optional sonnet
 
 log_info "Building KDE Frameworks (Tier 2-3)"
-build_pkg kconfigwidgets        || log_warning "kconfigwidgets failed"
-build_pkg kcompletion           || log_warning "kcompletion failed"
-build_pkg kcrash                || log_warning "kcrash failed"
-build_pkg kglobalaccel          || log_warning "kglobalaccel failed"
-build_pkg kiconthemes           || log_warning "kiconthemes failed"
-build_pkg kjobwidgets           || log_warning "kjobwidgets failed"
-build_pkg knotifications        || log_warning "knotifications failed"
-build_pkg kservice              || log_warning "kservice failed"
-build_pkg ktextwidgets          || log_warning "ktextwidgets failed"
-build_pkg kxmlgui               || log_warning "kxmlgui failed"
-build_pkg kbookmarks            || log_warning "kbookmarks failed"
-build_pkg kio                   || log_warning "kio failed"
-build_pkg kinit                 || log_warning "kinit failed"
-build_pkg kirigami              || log_warning "kirigami failed"
+run_build optional kconfigwidgets
+run_build optional kcompletion
+run_build optional kcrash
+run_build optional kglobalaccel
+run_build optional kiconthemes
+run_build optional kjobwidgets
+run_build optional knotifications
+run_build optional kservice
+run_build optional ktextwidgets
+run_build optional kxmlgui
+run_build optional kbookmarks
+run_build optional kio
+run_build optional kinit
+run_build optional kirigami
 
 log_info "Building Plasma"
-build_pkg kwayland              || log_warning "kwayland failed"
-build_pkg libksysguard          || log_warning "libksysguard failed"
-build_pkg libkscreen            || log_warning "libkscreen failed"
-build_pkg kscreenlocker         || log_warning "kscreenlocker failed"
-build_pkg breeze                || log_warning "breeze failed"
-build_pkg kde-gtk-config        || log_warning "kde-gtk-config failed"
-build_pkg kactivitymanagerd     || log_warning "kactivitymanagerd failed"
-build_pkg kwin \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    || log_warning "kwin failed"
-build_pkg plasma-workspace      || log_warning "plasma-workspace failed"
-build_pkg plasma-desktop        || log_warning "plasma-desktop failed"
-build_pkg plasma-nm             || log_warning "plasma-nm failed"
-build_pkg plasma-pa             || log_warning "plasma-pa failed"
-build_pkg powerdevil            || log_warning "powerdevil failed"
-build_pkg sddm \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    || log_warning "sddm failed"
-build_pkg sddm-kcm              || log_warning "sddm-kcm failed"
-build_pkg systemsettings        || log_warning "systemsettings failed"
+run_build required kwayland
+run_build optional libksysguard
+run_build required libkscreen
+run_build optional kscreenlocker
+run_build optional breeze
+run_build optional kde-gtk-config
+run_build optional kactivitymanagerd
+run_build optional kwin \
+    -DCMAKE_INSTALL_PREFIX=/usr
+run_build optional plasma-workspace
+run_build optional plasma-desktop
+run_build optional plasma-nm
+run_build optional plasma-pa
+run_build optional powerdevil
+run_build optional sddm \
+    -DCMAKE_INSTALL_PREFIX=/usr
+run_build optional sddm-kcm
+run_build optional systemsettings
 
 log_info "Building KDE applications"
-build_pkg dolphin               || log_warning "dolphin failed"
-build_pkg konsole               || log_warning "konsole failed"
-build_pkg kate                  || log_warning "kate failed"
-build_pkg kcalc                 || log_warning "kcalc failed"
-build_pkg okular                || log_warning "okular failed"
+run_build required dolphin
+run_build required konsole
+run_build required kate
+run_build optional kcalc
+run_build required okular
 
 # Install KDE session files
 cat > /usr/share/xsessions/plasma.desktop <<'EOF'
@@ -316,13 +362,17 @@ Session=plasma
 SDDMCONF
     # Enable sddm service
     if have_cmd systemctl; then
-        systemctl enable sddm 2>/dev/null || true
+        systemctl enable sddm 2>/dev/null \
+            || log_warning "Could not enable sddm via systemctl"
     fi
     # Create sddm user/group
-    getent group sddm >/dev/null 2>&1 || groupadd -r sddm 2>/dev/null || true
-    getent passwd sddm >/dev/null 2>&1 || useradd -r -g sddm -d /var/lib/sddm -s /sbin/nologin sddm 2>/dev/null || true
+    getent group sddm >/dev/null 2>&1 || groupadd -r sddm 2>/dev/null \
+        || log_warning "Could not create sddm group"
+    getent passwd sddm >/dev/null 2>&1 || useradd -r -g sddm -d /var/lib/sddm -s /sbin/nologin sddm 2>/dev/null \
+        || log_warning "Could not create sddm user"
     mkdir -p /var/lib/sddm /var/lib/sddm/.config
-    chown -R sddm:sddm /var/lib/sddm 2>/dev/null || true
+    chown -R sddm:sddm /var/lib/sddm 2>/dev/null \
+        || log_warning "Could not chown /var/lib/sddm"
 fi
 
 # Set up environment variables
@@ -337,5 +387,7 @@ log_success "KDE Plasma desktop installation complete"
 INNEREOF
 
 run_privileged chmod +x "$LFS/build-kde.sh"
-run_privileged chroot "$LFS" /bin/bash /build-kde.sh
+run_privileged chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
+    /bin/bash /build-kde.sh
 log_success "KDE Plasma desktop environment installed successfully"
