@@ -169,7 +169,7 @@ build_toolchain() {
     done
 
     # ==============================================================
-    # 1. BUILD BINUTILS (pass 1)
+    # 1. BUILD BINUTILS (pass 1) - LFS 5.3
     # ==============================================================
     log_info "Building binutils (pass 1)"
     BINUTILS_TAR=$(find . -maxdepth 1 -name "binutils-*.tar.xz" -print -quit)
@@ -192,7 +192,7 @@ build_toolchain() {
     log_success "binutils (pass 1) done"
 
     # ==============================================================
-    # 2. BUILD GCC (pass 1)
+    # 2. BUILD GCC (pass 1) - LFS 5.4
     # ==============================================================
     log_info "Building GCC (pass 1)"
     GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
@@ -247,7 +247,7 @@ build_toolchain() {
     log_success "GCC (pass 1) done"
 
     # ==============================================================
-    # 3. LINUX API HEADERS
+    # 3. LINUX API HEADERS - LFS 5.5
     # ==============================================================
     log_info "Installing Linux API headers"
 
@@ -352,7 +352,7 @@ build_toolchain() {
     log_success "Linux headers installed"
 
     # ==============================================================
-    # 4. GLIBC
+    # 4. GLIBC - LFS 5.6
     # ==============================================================
     log_info "Building glibc"
     GLIBC_TAR=$(find . -maxdepth 1 -name "glibc-*.tar.xz" -print -quit)
@@ -377,7 +377,7 @@ build_toolchain() {
     log_success "glibc done"
 
     # ==============================================================
-    # 5. LIBSTDC++ (part of GCC pass 2 but we build it now)
+    # 5. LIBSTDC++ - LFS 5.7
     # ==============================================================
     log_info "Building libstdc++"
     tar -xf "$GCC_TAR"
@@ -399,7 +399,7 @@ build_toolchain() {
     log_success "libstdc++ done"
 
     # ==============================================================
-    # 6. BINUTILS (pass 2)
+    # 6. BINUTILS (pass 2) - LFS 6.10
     # ==============================================================
     log_info "Building Binutils (pass 2)"
     tar -xf "$BINUTILS_TAR"
@@ -426,7 +426,7 @@ build_toolchain() {
     log_success "Binutils (pass 2) done"
 
     # ==============================================================
-    # 7. GCC (pass 2)
+    # 7. GCC (pass 2) - LFS 6.11
     # ==============================================================
     log_info "Building GCC (pass 2)"
     tar -xf "$GCC_TAR"
@@ -442,7 +442,6 @@ build_toolchain() {
             tar -xf "$LIB_TAR"
             LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
             if [ -d "$LIB_DIR" ]; then
-                # Correction : on est déjà dans le répertoire GCC, on déplace dans le répertoire courant
                 mv -v "$LIB_DIR" "$lib"
             else
                 log_error "Could not find extracted directory for $lib"
@@ -477,8 +476,7 @@ build_toolchain() {
         --disable-libsanitizer \
         --disable-libssp \
         --disable-libvtv \
-        --enable-languages=c,c++ \
-        LDFLAGS_FOR_TARGET=-L$PWD/$LFS_TGT/libgcc
+        --enable-languages=c,c++
     make -j"$NUM_JOBS"
     make DESTDIR="$LFS" install
     cd "$LFS/sources"
@@ -486,7 +484,7 @@ build_toolchain() {
     log_success "GCC (pass 2) done"
 
     # ==============================================================
-    # 8. CROSS-COMPILE CACHE
+    # 8. CROSS-COMPILE CACHE (for later tools)
     # ==============================================================
     CROSS_CACHE_TMPL="$LFS/sources/.cross-compile-cache"
     cat >"$CROSS_CACHE_TMPL" <<'CROSS_CACHE_EOF'
@@ -510,7 +508,7 @@ gl_cv_func_memmem_works=yes
 CROSS_CACHE_EOF
 
     # ==============================================================
-    # 9. BUILD ESSENTIAL TOOLS
+    # 9. BUILD ESSENTIAL TOOLS - LFS 6.12 to 6.35
     # ==============================================================
     log_info "Building essential tools for /tools"
     for pkg in m4 xz ncurses coreutils bash grep sed gawk findutils tar gzip bzip2 diffutils patch file; do
