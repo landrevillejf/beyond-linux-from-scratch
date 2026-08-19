@@ -509,7 +509,7 @@ https://astron.com/pub/file/file-5.46.tar.gz
 https://ftpmirror.gnu.org/findutils/findutils-4.10.0.tar.xz
 https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
 https://pypi.org/packages/source/f/flit-core/flit_core-3.12.0.tar.gz
-https://ftpmirror.gnu.org/gawk/gawk-5.3.2.tar.xz
+
 https://ftpmirror.gnu.org/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
 https://ftpmirror.gnu.org/gdbm/gdbm-1.26.tar.gz
 https://ftpmirror.gnu.org/gettext/gettext-0.26.tar.xz
@@ -587,7 +587,6 @@ https://libzip.org/download/libzip-1.10.1.tar.xz
 
 # Additional X applications
 https://github.com/audacity/audacity/archive/refs/tags/Audacity-3.7.8.tar.gz
-https://github.com/mumble-voip/mumble/releases/download/1.4.416/mumble-1.4.416.tar.gz
 https://github.com/hexchat/hexchat/releases/download/v2.16.2/hexchat-2.16.2.tar.xz
 https://sourceforge.net/projects/pidgin/files/Pidgin/2.14.13/pidgin-2.14.13.tar.bz2
 https://github.com/obsidianmd/obsidian-releases/archive/refs/tags/v1.13.7.tar.gz
@@ -601,8 +600,6 @@ https://www.linuxfromscratch.org/patches/lfs/12.4/expect-5.45.4-gcc15-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/glibc-2.42-fhs-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/kbd-2.8.0-backspace-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/sysvinit-3.14-consolidated-1.patch
-
-https://github.com/mumble-voip/mumble/archive/refs/tags/v1.5.915.tar.gz
 
 # Optional BLFS dependencies ClamAV LTS
 https://www.clamav.net/downloads/production/clamav-1.4.6.tar.gz
