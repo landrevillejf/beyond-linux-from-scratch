@@ -6,6 +6,10 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
+#
+# Book compliance (audit finding F-07, wave 3): every package gets a
+# dedicated build_<name> function reproducing its docs/books (basicnet
+# chapter) page.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,7 +94,7 @@ log_success() { echo "[SUCCESS] $*"; }
 cd /sources
 mkdir -p /var/lib/lfs-builder/networking
 
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
 marker_for() { echo "/var/lib/lfs-builder/networking/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -123,19 +127,50 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS and
+# dir are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page.
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
@@ -145,10 +180,10 @@ build_pkg() {
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     elif [ -f Makefile ]; then
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
@@ -159,13 +194,197 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# ======================================================================
+# Per-package BLFS book commands (wave 3, basicnet chapter).
+# ======================================================================
+
+# BLFS basicnet/curl
+build_curl() { book_install curl build_commands_curl; }
+build_commands_curl() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --with-openssl   \
+                --with-ca-path=/etc/ssl/certs &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/wget
+build_wget() { book_install wget build_commands_wget; }
+build_commands_wget() {
+    ./configure --prefix=/usr      \
+                --sysconfdir=/etc  \
+                --with-ssl=openssl &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/libevent
+build_libevent() { book_install libevent build_commands_libevent; }
+build_commands_libevent() {
+    if [ -f event_rpcgen.py ]; then
+        sed -i 's/python/&3/' event_rpcgen.py
+    fi
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/libnl
+build_libnl() { book_install libnl build_commands_libnl; }
+build_commands_libnl() {
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --disable-static  &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/libmnl
+build_libmnl() { book_install libmnl build_commands_libmnl; }
+build_commands_libmnl() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/nghttp2
+build_nghttp2() { book_install nghttp2 build_commands_nghttp2; }
+build_commands_nghttp2() {
+    ./configure --prefix=/usr     \
+                --disable-static  \
+                --enable-lib-only \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/nmap – the python packaging seds come from the book
+build_nmap() { book_install nmap build_commands_nmap; }
+build_commands_nmap() {
+    if [ -f Makefile.in ]; then
+        sed -ri Makefile.in \
+            -e 's#-m build#& --no-isolation#'  \
+            -e '/pip install/s#(ZENMAP|NDIFF)DIR\)/#&dist/*.whl#'
+    fi
+    if [ -f zenmap/pyproject.toml ]; then
+        sed 's/, "setuptools-gettext"//' -i zenmap/pyproject.toml
+    fi
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/lynx
+build_lynx() { book_install lynx build_commands_lynx; }
+build_commands_lynx() {
+    ./configure --prefix=/usr           \
+                --sysconfdir=/etc/lynx  \
+                --with-zlib             \
+                --with-bzlib            \
+                --with-ssl              \
+                --with-screen=ncursesw  \
+                --enable-locale-charset \
+                --datadir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/ntp
+build_ntp() { book_install ntp build_commands_ntp; }
+build_commands_ntp() {
+    sed -e "s;pthread_detach(NULL);pthread_detach(0);" -i configure
+    if [ -f sntp/configure ]; then
+        sed -e "s;pthread_detach(NULL);pthread_detach(0);" -i sntp/configure
+    fi
+    ./configure --prefix=/usr      \
+                --bindir=/usr/sbin \
+                --sysconfdir=/etc  \
+                --enable-linuxcaps \
+                --with-lineeditlibs=readline \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/nfs-utils
+build_nfs_utils() { book_install nfs-utils build_commands_nfs_utils; }
+build_commands_nfs_utils() {
+    ./configure --prefix=/usr       \
+                --sysconfdir=/etc   \
+                --sbindir=/usr/sbin \
+                --disable-nfsv4     \
+                --disable-gss       \
+                LIBS="-lsqlite3 -levent_core" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/wireless_tools – no configure, plain make; the patch is
+# applied only when shipped in the sources.
+build_wireless_tools() { book_install wireless_tools build_commands_wireless_tools; }
+build_commands_wireless_tools() {
+    local p
+    for p in ../wireless_tools-*-fix_iwlist_scanning-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    make -j"$JOBS"
+    make PREFIX=/usr INSTALL_MAN=/usr/share/man install
+}
+
+# BLFS basicnet/wpa_supplicant – .config creation, make with BINDIR/
+# LIBDIR, then the book root install commands.
+build_wpa_supplicant() { book_install wpa_supplicant build_commands_wpa_supplicant; }
+build_commands_wpa_supplicant() {
+    cat > wpa_supplicant/.config <<'EOF'
+CONFIG_BACKEND=file
+CONFIG_CTRL_IFACE=y
+CONFIG_DEBUG_FILE=y
+CONFIG_DEBUG_SYSLOG=y
+CONFIG_DEBUG_SYSLOG_FACILITY=LOG_DAEMON
+CONFIG_DRIVER_NL80211=y
+CONFIG_DRIVER_WEXT=y
+CONFIG_DRIVER_WIRED=y
+CONFIG_EAP_GTC=y
+CONFIG_EAP_LEAP=y
+CONFIG_EAP_MD5=y
+CONFIG_EAP_MSCHAPV2=y
+CONFIG_EAP_OTP=y
+CONFIG_EAP_PEAP=y
+CONFIG_EAP_TLS=y
+CONFIG_EAP_TTLS=y
+CONFIG_IEEE8021X_EAPOL=y
+CONFIG_IPV6=y
+CONFIG_LIBNL32=y
+CONFIG_PEERKEY=y
+CONFIG_PKCS12=y
+CONFIG_READLINE=y
+CONFIG_SMARTCARD=y
+CONFIG_WPS=y
+CFLAGS += -I/usr/include/libnl3
+EOF
+    cat >> wpa_supplicant/.config <<'EOF'
+CONFIG_CTRL_IFACE_DBUS=y
+CONFIG_CTRL_IFACE_DBUS_NEW=y
+CONFIG_CTRL_IFACE_DBUS_INTRO=y
+EOF
+    mkdir -p /usr/share/dbus-1/system.d
+    cd wpa_supplicant &&
+    make BINDIR=/usr/sbin LIBDIR=/usr/lib &&
+    install -m755 wpa_cli wpa_passphrase wpa_supplicant /usr/sbin/ &&
+    install -m644 doc/docbook/wpa_supplicant.conf.5 /usr/share/man/man5/ &&
+    install -m644 doc/docbook/wpa_cli.8 doc/docbook/wpa_passphrase.8 doc/docbook/wpa_supplicant.8 /usr/share/man/man8/
+    if [ -f dbus-freedesktop/dbus-wpa_supplicant.conf ]; then
+        install -m644 dbus-freedesktop/dbus-wpa_supplicant.conf /usr/share/dbus-1/system.d/ || return 1
+    fi
+}
+
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
+# Packages without a BLFS book page would use the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then
+            return 0
+        fi
+    else
+        if build_pkg "$pkg" "$@"; then
+            return 0
+        fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"

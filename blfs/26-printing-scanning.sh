@@ -6,6 +6,12 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
+#
+# Book compliance (audit finding F-07, wave 3): cups, cups-filters,
+# ghostscript (pst/gs), gutenprint and sane-backends (pst/sane) are
+# built with the commands of their docs/books pages.  gsfonts, hplip
+# and sane-frontends have no book page and use the generic build_pkg
+# fallback.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -90,7 +96,7 @@ log_success() { echo "[SUCCESS] $*"; }
 cd /sources
 mkdir -p /var/lib/lfs-builder/printing
 
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
 marker_for() { echo "/var/lib/lfs-builder/printing/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -119,19 +125,51 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS and
+# dir are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page
+# (gsfonts, hplip, sane-frontends).
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
@@ -141,10 +179,10 @@ build_pkg() {
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     elif [ -f Makefile ]; then
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
@@ -155,13 +193,104 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# ======================================================================
+# Per-package BLFS book commands (wave 3, pst chapter).
+# ======================================================================
+
+# BLFS pst/cups
+build_cups() { book_install cups build_commands_cups; }
+build_commands_cups() {
+    if [ -f desktop/cups.desktop.in ]; then
+        sed -i 's#@CUPS_HTMLVIEW@#firefox#' desktop/cups.desktop.in
+    fi
+    ./configure --libdir=/usr/lib            \
+                --with-rcdir=/tmp/cupsinit   \
+                --with-rundir=/run/cups      \
+                --with-system-groups=lpadmin \
+                --with-docdir="/usr/share/cups/doc-${dir#cups-}" &&
+    make -j"$JOBS" && make install || return 1
+    if have_cmd gtk-update-icon-cache; then
+        gtk-update-icon-cache -qtf /usr/share/icons/hicolor || return 1
+    fi
+}
+
+# BLFS pst/cups-filters
+build_cups_filters() { book_install cups-filters build_commands_cups_filters; }
+build_commands_cups_filters() {
+    if [ -f filter/foomatic-rip/process.h ]; then
+        sed -i '/proc_func)()/s/()/(FILE*, FILE*, void*)/' filter/foomatic-rip/process.h
+    fi
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS pst/gs – bundled libraries are removed in favour of the system
+# ones; the gcc15 patch is applied only when shipped.
+build_ghostscript() { book_install ghostscript build_commands_ghostscript; }
+build_commands_ghostscript() {
+    local p
+    rm -rf freetype lcms2mt jpeg libpng openjpeg
+    for p in ../ghostscript-*-gcc15_fixes-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    rm -rf zlib &&
+    ./configure --prefix=/usr           \
+                --disable-compile-inits \
+                --with-system-libtiff   &&
+    make -j"$JOBS" && make so &&
+    make install && make soinstall
+}
+
+# BLFS pst/gutenprint
+build_gutenprint() { book_install gutenprint build_commands_gutenprint; }
+build_commands_gutenprint() {
+    # shellcheck disable=SC2016
+    sed -i 's|$(PACKAGE)/doc|doc/$(PACKAGE)-$(VERSION)|' \
+           {,doc/,doc/developer/}Makefile.in &&
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --without-gimp2  \
+                --without-gimp2-as-gutenprint &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS pst/sane – the book runs configure inside sg scanner; fall back
+# to the current user when the scanner group does not exist yet.
+build_sane_backends() { book_install sane-backends build_commands_sane_backends; }
+build_commands_sane_backends() {
+    local cfg
+    cfg="PYTHON=python3 ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --with-lockdir=/run/lock --docdir=/usr/share/doc/$dir"
+    if getent group scanner >/dev/null 2>&1 && have_cmd sg; then
+        sg scanner -c "$cfg" || return 1
+    else
+        PYTHON=python3 ./configure --prefix=/usr        \
+                                   --sysconfdir=/etc    \
+                                   --localstatedir=/var \
+                                   --with-lockdir=/run/lock \
+                                   --docdir="/usr/share/doc/$dir" || return 1
+    fi
+    make -j"$JOBS" && make install
+}
+
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
+# Printing packages get their book commands; packages without a BLFS
+# book page (gsfonts, hplip, sane-frontends) use the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then
+            return 0
+        fi
+    else
+        if build_pkg "$pkg" "$@"; then
+            return 0
+        fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"

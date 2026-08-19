@@ -1,9 +1,19 @@
 #!/bin/bash
+set -euo pipefail
 # 08b-build-xorg.sh
 # Build Xorg display server, libraries, drivers, and GTK+3/GTK4.
 # Follows BLFS Chapter 24 build order.
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-set -euo pipefail
+#
+# Error policy (audit finding F-07): a required package failure aborts the
+# stage.  Only packages that are explicitly optional (hardware-specific
+# drivers or packages missing from packages/stable/12.4/sources.list) are
+# allowed to fail with a warning.
+#
+# Book compliance (audit finding F-07, wave 3): the Xorg libraries are
+# built with the commands of the BLFS x/x7lib chapter loop, and every
+# package that has its own page in docs/books gets a dedicated
+# build_<name> function reproducing that page.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -91,7 +101,8 @@ cd /sources
 mkdir -p /var/lib/lfs-builder/xorg /usr/lib/xorg/modules /etc/X11/xorg.conf.d \
     /usr/share/X11/xkb /usr/share/X11/xkb/rules /usr/share/pixmaps
 
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
+HAVE_SYSTEMD=false
 marker_for() { echo "/var/lib/lfs-builder/xorg/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -144,6 +155,7 @@ is_installed() {
         xcb-util-cursor)   have_pc xcb-cursor ;;
         xkeyboard-config)   [ -d /usr/share/X11/xkb/rules/evdev ] || [ -f /usr/share/X11/xkb/rules/evdev.lst ] ;;
         xorg-server)        [ -x /usr/bin/Xorg ] || [ -x /usr/lib/Xorg ] ;;
+        xwayland)           [ -x /usr/bin/Xwayland ] ;;
         xf86-input-libinput) [ -f /usr/lib/xorg/modules/input/libinput_drv.so ] ;;
         xf86-video-amdgpu)  [ -f /usr/lib/xorg/modules/drivers/amdgpu_drv.so ] ;;
         xf86-video-ati)     [ -f /usr/lib/xorg/modules/drivers/radeon_drv.so ] ;;
@@ -162,30 +174,57 @@ is_installed() {
     esac
 }
 
-# Generic package builder: meson, autotools, or cmake
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
-    archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then
-        case "$pkg" in
-            # gtk tarballs are named gtk-<version>, not gtk3-<version>.
-            # Pin the major version so gtk3 and gtk4 cannot resolve to
-            # each other's tarball.
-            gtk3) archive="$(compgen -G 'gtk-3.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
-            gtk4) archive="$(compgen -G 'gtk-4.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
-            mesa) archive="$(find_archive Mesa)" ;;
-        esac
-    fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.  gtk tarballs are named gtk-<major>.<...>,
+# so the major version is pinned to keep gtk3 and gtk4 apart.
+prep_src() {
+    local pkg="$1" archive=""
+    case "$pkg" in
+        gtk3) archive="$(compgen -G 'gtk-3.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
+        gtk4) archive="$(compgen -G 'gtk-4.*.tar.*' 2>/dev/null | sort -V | tail -n 1)" ;;
+        mesa) archive="$(find_archive mesa)"; [ -n "$archive" ] || archive="$(find_archive Mesa)" ;;
+        *)    archive="$(find_archive "$pkg")" ;;
+    esac
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS,
+# dir and HAVE_SYSTEMD are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" HAVE_SYSTEMD="$HAVE_SYSTEMD" pkg="$pkg" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page:
+# auto-detect meson vs autotools vs cmake.
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
@@ -195,25 +234,15 @@ build_pkg() {
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     elif [ -f CMakeLists.txt ]; then
         # shellcheck disable=SC2086
         cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts
-        cmake --build builddir -j"$(jobs)"
+        cmake --build builddir -j"$JOBS"
         cmake --install builddir
     else
-        # Some packages are just installed with make install and no configure
-        if [ -f Makefile ] || [ -x ./autogen.sh ]; then
-            if [ -x ./autogen.sh ]; then
-                # shellcheck disable=SC2086
-                ./autogen.sh --prefix=/usr --sysconfdir=/etc $extra_opts
-            fi
-            make -j"$(jobs)"
-            make install
-        else
-            log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
-        fi
+        log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
     rm -rf "$dir"
@@ -221,15 +250,266 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
-# Policy wrapper (audit finding F-07).  required: any failure aborts the
-# stage.  optional: failures are logged and the build continues; used for
-# packages not present in packages/stable/12.4/sources.list and for
-# hardware-specific drivers.
+# ======================================================================
+# Per-package BLFS book commands (wave 3).
+# ======================================================================
+
+# Xorg libraries of the BLFS x/x7lib chapter: all of them are built
+# with the loop command "./configure $XORG_CONFIG --docdir=... && make
+# && make install" plus the case variants of the book loop.
+build_commands_xorg_lib() {
+    case "$pkg" in
+        libXpm)
+            ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+                --disable-static --docdir="/usr/share/doc/$dir" \
+                --disable-open-zfile ;;
+        libXt)
+            ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+                --disable-static --docdir="/usr/share/doc/$dir" \
+                --with-appdefaultdir=/etc/X11/app-defaults ;;
+        libXfont2)
+            ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+                --disable-static --docdir="/usr/share/doc/$dir" \
+                --disable-devel-docs ;;
+        *)
+            ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+                --disable-static --docdir="/usr/share/doc/$dir" ;;
+    esac
+    make -j"$JOBS"
+    make install
+}
+build_xorg_lib() {
+    book_install "$1" build_commands_xorg_lib
+}
+
+# BLFS x/util-macros – configure only, no compilation
+build_util_macros() { book_install util-macros build_commands_util_macros; }
+build_commands_util_macros() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static
+    make install
+}
+
+# BLFS x/xorgproto – meson without --buildtype, as in the book
+build_xorgproto() { book_install xorgproto build_commands_xorgproto; }
+build_commands_xorgproto() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr .. &&
+    ninja && ninja install
+}
+
+# BLFS x/xcb-proto – needs PYTHON set explicitly
+build_xcb_proto() { book_install xcb-proto build_commands_xcb_proto; }
+build_commands_xcb_proto() {
+    PYTHON=python3 ./configure --prefix=/usr --sysconfdir=/etc \
+        --localstatedir=/var --disable-static
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/libxcb – doxygen disabled, UTF-8 locale for make
+build_libxcb() { book_install libxcb build_commands_libxcb; }
+build_commands_libxcb() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+        --disable-static \
+        --without-doxygen \
+        --docdir="/usr/share/doc/$dir"
+    LC_ALL=en_US.UTF-8 make -j"$JOBS"
+    make install
+}
+
+# BLFS x/x7lib loop case for libpciaccess – meson build
+build_libpciaccess() { book_install libpciaccess build_commands_libpciaccess; }
+build_commands_libpciaccess() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS x/libdrm
+build_libdrm() { book_install libdrm build_commands_libdrm; }
+build_commands_libdrm() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr \
+                --buildtype=release \
+                -D udev=true \
+                -D valgrind=disabled \
+                .. &&
+    ninja && ninja install
+}
+
+# BLFS x/mesa
+build_mesa() { book_install mesa build_commands_mesa; }
+build_commands_mesa() {
+    for p in ../mesa-add_xdemos-*.patch; do
+        [ -f "$p" ] && patch -Np1 -i "$p"
+    done
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D platforms=x11,wayland \
+          -D gallium-drivers=auto \
+          -D vulkan-drivers=auto \
+          -D valgrind=disabled \
+          -D video-codecs=all \
+          -D libunwind=disabled &&
+    ninja && ninja install
+}
+
+# BLFS x/xkeyboard-config
+build_xkeyboard_config() { book_install xkeyboard-config build_commands_xkeyboard_config; }
+build_commands_xkeyboard_config() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS x/xorg-server – tearfree patch applied only when shipped;
+# systemd_logind follows the detected init system.
+build_xorg_server() { book_install xorg-server build_commands_xorg_server; }
+build_commands_xorg_server() {
+    for p in ../xorg-server-*-tearfree_backport-*.patch; do
+        [ -f "$p" ] && patch -Np1 -i "$p"
+    done
+    logind=false
+    [ "$HAVE_SYSTEMD" = true ] && logind=true
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --localstatedir=/var \
+          -D glamor=true \
+          -D systemd_logind="$logind" \
+          -D xkb_output_dir=/var/lib/xkb &&
+    ninja && ninja install
+}
+
+# BLFS x/xwayland – standalone since xorg-server 21.1
+build_xwayland() { book_install xwayland build_commands_xwayland; }
+build_commands_xwayland() {
+    sed -i '/install_man/,$d' meson.build
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D xkb_output_dir=/var/lib/xkb &&
+    ninja && ninja install
+}
+
+# BLFS x/x7driver – xf86-input-libinput
+build_xf86_input_libinput() { book_install xf86-input-libinput build_commands_xf86_input_libinput; }
+build_commands_xf86_input_libinput() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/xinit – plus the book sed on startx
+build_xinit() { book_install xinit build_commands_xinit; }
+build_commands_xinit() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+        --disable-static --with-xinitdir=/etc/X11/app-defaults
+    make -j"$JOBS"
+    make install
+    # shellcheck disable=SC2016  # $serverargs must stay literal in startx
+    sed -i '/\$serverargs \$vtarg/ s/serverargs/: #&/' /usr/bin/startx
+}
+
+# BLFS x/twm
+build_twm() { book_install twm build_commands_twm; }
+build_commands_twm() {
+    sed -i -e '/^rcdir =/s,^\(rcdir = \).*,\1/etc/X11/app-defaults,' src/Makefile.in
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/xterm
+build_xterm() { book_install xterm build_commands_xterm; }
+build_commands_xterm() {
+    sed -i '/v0/{n;s/new:/new:kb=^?:/}' termcap
+    printf '\tkbs=\\177,\n' >> terminfo
+    TERMINFO=/usr/share/terminfo \
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+        --disable-static \
+        --with-app-defaults=/etc/X11/app-defaults
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/xclock
+build_xclock() { book_install xclock build_commands_xclock; }
+build_commands_xclock() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/libepoxy
+build_libepoxy() { book_install libepoxy build_commands_libepoxy; }
+build_commands_libepoxy() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS x/gtk3 – the wayland backend is only enabled when the wayland
+# stack already exists (this stage may run before 08c).
+build_gtk3() { book_install gtk3 build_commands_gtk3; }
+build_commands_gtk3() {
+    wayland=false
+    pkg-config --exists wayland-client 2>/dev/null && wayland=true
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D man=true \
+          -D broadway_backend=true \
+          -D wayland_backend="$wayland" &&
+    ninja && ninja install
+}
+
+# BLFS x/gtk4 – the book seds fix a 4.18 build error; vulkan and
+# introspection follow the available dependencies.
+build_gtk4() { book_install gtk4 build_commands_gtk4; }
+build_commands_gtk4() {
+    sed -e '939 s/= { 0, }//' \
+        -e '940 a memset (&transform, 0, sizeof(GtkCssTransform));' \
+        -i gtk/gtkcsstransformvalue.c
+    wayland=false
+    pkg-config --exists wayland-client 2>/dev/null && wayland=true
+    vulkan=disabled
+    pkg-config --exists vulkan 2>/dev/null && vulkan=enabled
+    intro=disabled
+    pkg-config --exists gobject-introspection-1.0 2>/dev/null && intro=enabled
+    mkdir build && cd build &&
+    meson setup --prefix=/usr \
+                --buildtype=release \
+                -D broadway-backend=true \
+                -D wayland-backend="$wayland" \
+                -D introspection="$intro" \
+                -D vulkan="$vulkan" \
+                .. &&
+    ninja && ninja install
+}
+
+# Policy wrapper (audit finding F-07): a required package failure
+# aborts the stage; optional failures are logged and the build
+# continues.  The Xorg libraries of the x7lib chapter all use
+# build_xorg_lib; packages with a dedicated page use their build_<name>
+# function; everything else falls back to the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then return 0; fi
+    else
+        case "$pkg" in
+            libX*|libfontenc|libxkbfile|xcb-util*|xeyes)
+                if build_xorg_lib "$pkg" "$@"; then return 0; fi ;;
+            *)
+                if build_pkg "$pkg" "$@"; then return 0; fi ;;
+        esac
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"
@@ -253,6 +533,12 @@ verify_prerequisites() {
     fi
 }
 verify_prerequisites
+
+# Detect if systemd is installed (for xorg-server meson options)
+if [ -x /usr/lib/systemd/systemd ] || [ -d /usr/lib/systemd/system ]; then
+    HAVE_SYSTEMD=true
+fi
+log_info "systemd detected: $HAVE_SYSTEMD"
 
 # ======================================================================
 # Phase 1: Xorg protocol headers and build macros
@@ -303,17 +589,9 @@ log_info "Phase 4: DRM and Mesa"
 run_build required libpciaccess
 run_build required libdrm
 
-# Mesa: build with software rendering (swrast) as a safe default.
-# Hardware drivers requiring LLVM are optional and can be added later.
-run_build required mesa \
-    -Dgallium-drivers=swrast,zink \
-    -Dvulkan-drivers=auto \
-    -Ddri3=enabled \
-    -Degl=enabled \
-    -Dgles2=enabled \
-    -Dglx=dri \
-    -Dllvm=disabled \
-    -Dosmesa=true
+# Mesa follows the book flags (auto drivers); already built by 08a in
+# most configurations and skipped through is_installed.
+run_build required mesa
 
 # XCB utility libraries
 log_info "Phase 5: XCB utilities"
@@ -331,19 +609,11 @@ log_info "Phase 6: Xorg server and drivers"
 
 run_build required xkeyboard-config
 
-# Xorg server: build with DRI3, systemd optional
-XORG_OPTS=""
-if [ -d /usr/lib/systemd/system ]; then
-    XORG_OPTS="-Dsystemd_logind=true"
-fi
-# shellcheck disable=SC2086  # XORG_OPTS is empty or one meson flag
-run_build required xorg-server \
-    -Dxorg=true \
-    -Dxwayland=true \
-    -Dglamor=true \
-    -Dxvfb=true \
-    -Dunitdir=/usr/lib/systemd/system \
-    $XORG_OPTS
+# Xorg server with the book meson flags
+run_build required xorg-server
+
+# Standalone Xwayland (split from xorg-server since 21.1)
+run_build required xwayland
 
 # Input driver
 run_build required xf86-input-libinput
@@ -376,17 +646,11 @@ run_build required libepoxy
 
 # GTK+3: requires glib2, cairo, pango, at-spi2-core, gdk-pixbuf, libepoxy,
 # and X11 libraries (all built above).
-run_build required gtk3 \
-    -Dbroadway_backend=false \
-    -Dx11_backend=true \
-    -Dwayland_backend=false
+run_build required gtk3
 
 # GTK4: requires glib2, cairo, pango, graphene, gdk-pixbuf, libepoxy.
 # Required by the GNOME stack (09b); gtk-4.18 is in the source list.
-run_build required gtk4 \
-    -Dbroadway_backend=false \
-    -Dx11_backend=true \
-    -Dwayland_backend=false
+run_build required gtk4
 
 log_success "Xorg display server and libraries build complete"
 INNEREOF

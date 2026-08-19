@@ -663,3 +663,176 @@ class TestBLFSErrorPolicyGuardrails:
                     f"{script}:\n{result.stdout}"
             finally:
                 os.unlink(tmp_path)
+
+
+class TestBLFSBookCommandGuardrails:
+    """Wave 3 guardrails (audit finding F-07).
+
+    Every package-building BLFS stage must use per-package BLFS book
+    commands (build_<name>/build_commands_<name> dispatched by
+    run_build) instead of relying solely on the generic meson/
+    autotools/cmake auto-detection.  The generic build_pkg remains as
+    a documented fallback for packages without a book page.
+    """
+
+    WAVE3_SCRIPTS = [
+        'blfs/08a-build-blfs-libs.sh',
+        'blfs/08b-build-xorg.sh',
+        'blfs/08c-build-wayland.sh',
+        'blfs/08d-build-display-manager.sh',
+        'blfs/09a-build-xfce.sh',
+        'blfs/09b-build-gnome.sh',
+        'blfs/09c-build-kde.sh',
+        'blfs/09d-build-lxqt.sh',
+        'blfs/23-basic-networking.sh',
+        'blfs/24-multimedia.sh',
+        'blfs/25-server.sh',
+        'blfs/26-printing-scanning.sh',
+    ]
+
+    def test_wave3_scripts_use_book_commands(self):
+        """Every stage defines book_install, per-package book command
+        functions, and dispatches them through run_build."""
+        import re
+
+        for script in self.WAVE3_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'book_install()' in content, \
+                f"{script} must define the book_install runner"
+            assert re.search(r'^build_commands_\w+\(\)', content,
+                             re.MULTILINE), \
+                f"{script} has no per-package book command functions"
+            assert 'declare -F "$fn"' in content, \
+                f"{script} run_build must dispatch book functions"
+
+    def test_wave3_scripts_keep_generic_fallback(self):
+        """Packages without a book page must fall back to the generic
+        build_pkg, which stays defined in every stage."""
+        for script in self.WAVE3_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'build_pkg()' in content, \
+                f"{script} must keep the generic build_pkg fallback"
+
+
+class TestInitSystemErrorPolicyGuardrails:
+    """Guardrail tests for the wave 4 init-system remediation.
+
+    The init stages (lfs/06a..06e) must follow the same strict error
+    policy as the BLFS stages: a run_build wrapper that aborts on a
+    required failure, no host-tool imports, a clean chroot environment,
+    and required packages that resolve to a listed source tarball.
+    """
+
+    # Scripts that actually build packages (have an INNEREOF payload).
+    BUILD_SCRIPTS = [
+        'lfs/06a-init-system.sh',
+        'lfs/06c-init-openrc.sh',
+        'lfs/06d-init-runit.sh',
+        'lfs/06e-init-s6.sh',
+    ]
+
+    # Every init-stage script, including the service abstraction layer.
+    ALL_SCRIPTS = BUILD_SCRIPTS + ['lfs/06b-service-management.sh']
+
+    def test_init_stages_define_error_policy(self):
+        """Every init build stage defines and uses run_build."""
+        for script in self.BUILD_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'run_build()' in content, \
+                f"{script} must define the run_build policy wrapper"
+            assert 'aborting stage' in content, \
+                f"{script} must abort on required package failure"
+            assert ('run_build required' in content or
+                    'run_build optional' in content), \
+                f"{script} must classify packages via run_build"
+
+    def test_init_stages_have_no_build_masking(self):
+        """No build_pkg call may be masked and missing sources must
+        fail the build."""
+        import re
+
+        masked_re = re.compile(r'build_pkg\s[^\n]*\|\|')
+        for script in self.BUILD_SCRIPTS:
+            content = Path(script).read_text()
+            assert not masked_re.search(content), \
+                f"{script} masks package build failures"
+            assert 'Source archive missing for $pkg; skipping' \
+                not in content, \
+                f"{script} silently skips missing source archives"
+
+    def test_init_stages_do_not_import_host_tools(self):
+        """Init stages must not copy host binaries into the target
+        (audit finding F-05)."""
+        for script in self.ALL_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'copy_tool_with_libs' not in content, \
+                f"{script} still imports host tools"
+            assert '/tools/bin' not in content, \
+                f"{script} still references the removed /tools tree"
+
+    def test_init_stages_run_chroot_with_clean_env(self):
+        """The chroot invocation must wipe the host environment."""
+        for script in self.ALL_SCRIPTS:
+            content = Path(script).read_text()
+            assert 'chroot "$LFS" /usr/bin/env -i' in content, \
+                f"{script} must run the inner script with env -i"
+
+    def test_init_required_packages_have_sources(self):
+        """Every required init package must resolve to a tarball listed
+        in packages/stable/12.4/sources.list."""
+        import re
+
+        sources = Path('packages/stable/12.4/sources.list').read_text()
+        call_re = re.compile(r'run_build\s+required\s+(\S+)')
+
+        for script in self.BUILD_SCRIPTS:
+            content = Path(script).read_text()
+            for pkg in set(call_re.findall(content)):
+                found = (f"/{pkg}-" in sources or f"/{pkg}." in sources)
+                assert found, \
+                    f"{script}: required package {pkg} has no source " \
+                    f"in packages/stable/12.4/sources.list"
+
+    def test_shellcheck_on_init_scripts(self):
+        """shellcheck must be clean on the outer scripts and on the
+        inner heredoc payloads of every init build stage."""
+        import re
+
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip("shellcheck not installed")
+
+        inner_re = re.compile(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            re.DOTALL | re.MULTILINE)
+
+        for script in self.ALL_SCRIPTS:
+            result = subprocess.run(
+                ['shellcheck', script],
+                capture_output=True,
+                text=True
+            )
+            assert result.returncode == 0, \
+                f"shellcheck failed on {script}:\n{result.stdout}"
+
+        for script in self.BUILD_SCRIPTS:
+            content = Path(script).read_text()
+            match = inner_re.search(content)
+            assert match, f"{script} has no INNEREOF heredoc"
+            with tempfile.NamedTemporaryFile(
+                    mode='w', suffix='.sh', delete=False) as tmp:
+                tmp.write(match.group(1))
+                tmp_path = tmp.name
+            try:
+                result = subprocess.run(
+                    ['shellcheck', tmp_path],
+                    capture_output=True,
+                    text=True
+                )
+                assert result.returncode == 0, \
+                    f"shellcheck failed on inner payload of " \
+                    f"{script}:\n{result.stdout}"
+            finally:
+                os.unlink(tmp_path)

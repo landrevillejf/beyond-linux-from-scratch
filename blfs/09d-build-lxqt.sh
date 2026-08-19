@@ -6,6 +6,12 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
+#
+# Book compliance (audit finding F-07, wave 3): LXQt packages are built
+# with the cmake command of their docs/books (lxqt chapter) pages;
+# menu-cache, lxqt-session and openbox get dedicated functions for
+# their page-specific steps.  lxqt-wallet has no book page and uses the
+# generic build_pkg fallback.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -129,19 +135,51 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS and
+# dir are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page
+# (lxqt-wallet).
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f CMakeLists.txt ]; then
         mkdir -p build
         cd build
@@ -165,13 +203,82 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
+# ======================================================================
+# Per-package BLFS book commands (wave 3, lxqt chapter).
+# ======================================================================
+
+# Every LXQt package of the book chapter is built with this identical
+# cmake command.
+build_commands_lxqt() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr \
+          -D CMAKE_BUILD_TYPE=Release  \
+          ..                           &&
+    make -j"$JOBS" && make install
+}
+build_lxqt_pkg() { book_install "$1" build_commands_lxqt; }
+
+# BLFS lxqt/menu-cache – autotools via autogen.sh
+build_menu_cache() { book_install menu-cache build_commands_menu_cache; }
+build_commands_menu_cache() {
+    sh autogen.sh                              &&
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS lxqt/lxqt-session – desktop file fix before the cmake command
+build_lxqt_session() { book_install lxqt-session build_commands_lxqt_session; }
+build_commands_lxqt_session() {
+    sed -e '/TryExec/s|=|=/usr/bin/|' \
+        -i xsession/lxqt.desktop.in &&
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr \
+          -D CMAKE_BUILD_TYPE=Release  \
+          ..                           &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS x/openbox – autoreconf + configure; the py3 patch is applied
+# only when shipped in the sources.
+build_openbox() { book_install openbox build_commands_openbox; }
+build_commands_openbox() {
+    local p
+    for p in ../openbox-*-py3-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    autoreconf -fi &&
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --disable-static  \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
+# LXQt packages get the book chapter cmake command; packages without a
+# BLFS book page (lxqt-wallet) use the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn=""
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if ! declare -F "$fn" >/dev/null; then
+        case "$pkg" in
+            lxqt-build-tools|libqtxdg|liblxqt|libsysstat|libfm-qt|lxqt-themes|lxqt-qtplugin|lxqt-globalkeys|lxqt-notificationd|lxqt-powermanagement|lxqt-policykit|lxqt-openssh-askpass|lxqt-sudo|lxqt-admin|lxqt-runner|pcmanfm-qt|lxqt-panel|lxqt-config|obconf-qt)
+                fn=build_lxqt_pkg ;;
+            *)
+                fn="" ;;
+        esac
+    fi
+    if [ -n "$fn" ]; then
+        if "$fn" "$pkg" "$@"; then
+            return 0
+        fi
+    else
+        if build_pkg "$pkg" "$@"; then
+            return 0
+        fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"

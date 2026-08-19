@@ -90,7 +90,7 @@ log_success() { echo "[SUCCESS] $*"; }
 cd /sources
 mkdir -p /var/lib/lfs-builder/wayland
 
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
 marker_for() { echo "/var/lib/lfs-builder/wayland/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -115,19 +115,50 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS and
+# dir are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page.
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
@@ -137,7 +168,7 @@ build_pkg() {
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
@@ -148,13 +179,52 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
-# Policy wrapper (audit finding F-07).  required: any failure aborts the
-# stage.  optional: failures are logged and the build continues.
+# ======================================================================
+# Per-package BLFS book commands (wave 3).
+# ======================================================================
+
+# BLFS general/wayland-protocols – data only, nothing to compile
+build_wayland_protocols() { book_install wayland-protocols build_commands_wayland_protocols; }
+build_commands_wayland_protocols() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS general/wayland
+build_wayland() { book_install wayland build_commands_wayland; }
+build_commands_wayland() {
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D documentation=false &&
+    ninja && ninja install
+}
+
+# BLFS general/libxkbcommon
+build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
+build_commands_libxkbcommon() {
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D enable-docs=false &&
+    ninja && ninja install
+}
+
+# Policy wrapper (audit finding F-07): a required package failure
+# aborts the stage; optional failures are logged and the build
+# continues.  Packages without a BLFS book page (weston) use the
+# generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then return 0; fi
+    else
+        if build_pkg "$pkg" "$@"; then return 0; fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"
@@ -185,25 +255,14 @@ log_info "Building Wayland protocol and libraries"
 run_build required wayland-protocols
 
 # wayland: core library
-run_build required wayland \
-    -Ddocumentation=false \
-    -Dtests=false
+run_build required wayland
 
 # libxkbcommon: keyboard handling for Wayland
-run_build required libxkbcommon \
-    -Denable-docs=false
+run_build required libxkbcommon
 
 # Weston: reference compositor (optional, used for testing Wayland);
-# not present in packages/stable/12.4/sources.list
-run_build optional weston \
-    -Dbackend-drm=true \
-    -Dbackend-wayland=true \
-    -Dbackend-x11=true \
-    -Dbackend-headless=true \
-    -Dscreenshots=true \
-    -Ddemo-clients=false \
-    -Dsimple-clients=[] \
-    -Drenderer-gl=true
+# not present in packages/stable/12.4/sources.list and no BLFS page
+run_build optional weston
 
 log_success "Wayland build complete"
 INNEREOF

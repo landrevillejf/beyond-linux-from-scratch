@@ -55,6 +55,55 @@
     required-package source resolution and shellcheck (outer + inner
     heredoc) on all 12 scripts
 
+- **LFS/BLFS book compliance remediation, wave 3** (`docs/LFS_COMPLIANCE_AUDIT.md`)
+  - Per-package BLFS book commands across all 12 package-building
+    stages (`blfs/08a`, `08b`, `08c`, `08d`, `09a`, `09b`, `09c`,
+    `09d`, `23`, `24`, `25`, `26`): the generic meson/autotools/cmake
+    auto-detection is now only a fallback — every package with a
+    `docs/books` page is built with its exact book commands through a
+    `book_install` runner (`build_<name>`/`build_commands_<name>`
+    functions dispatched by `run_build`), including book patches,
+    seds, docdirs and post-install steps; patches and companion
+    tarballs stay guarded on their presence in the sources
+  - Book sysvinit-variant flags (`--without-systemd`,
+    `--with-systemd=no`, SDDM elogind switches, thunar/notifyd
+    systemd flags) are applied conditionally via `HAVE_SYSTEMD`
+  - Group loops kept where the book uses one command for a family:
+    KF6 frameworks and Plasma (09c), LXQt (09d), Xorg protocol/proto
+    batches (08b)
+  - Book deviations documented in each script header (Qt6/KF6
+    prefixes adapted from `/opt` to `/usr`, ffmpeg codec backends
+    enabled only when the dev library is available)
+  - Packages without a book page (picom, libgnomekbd, gnome-logs,
+    kate/kcalc/kinit, lxqt-wallet, libtheora, mplayer, vsftpd,
+    gsfonts, hplip, sane-frontends) keep the generic `build_pkg`
+  - Tests: 2 new guardrail tests
+    (`tests/test_acceptance_shell.py::TestBLFSBookCommandGuardrails`)
+    covering book_install/build_commands dispatch and the generic
+    fallback on all 12 scripts
+
+- **LFS/BLFS book compliance remediation, wave 4** (`docs/LFS_COMPLIANCE_AUDIT.md`)
+  - Init-system stages hardened (`lfs/06a-init-system.sh`,
+    `06b-service-management.sh`, `06c-init-openrc.sh`,
+    `06d-init-runit.sh`, `06e-init-s6.sh`):
+    - Removed the `copy_tool_with_libs()` host-tool import in `06a`
+      (audit F-05); chapter 8 coreutils already provide every build
+      utility inside the chroot.
+    - Added the strict `run_build required|optional` policy; missing
+      source archives now fail the package instead of being skipped.
+      sysvinit/lfs-bootscripts/libgpg-error/libgcrypt/libseccomp/kmod/
+      systemd are required; openrc, runit and the s6/skalibs stack stay
+      optional (not LFS/BLFS book packages, not yet in sources.list).
+    - Fixed the systemd `extract_archive "systemd"` literal-string bug.
+    - Every chroot now runs under a clean environment
+      (`chroot "$LFS" /usr/bin/env -i HOME=/root TERM=... PATH=...`);
+      `/tools/bin` no longer appears in any inner PATH.
+    - Replaced `umount || true`, `chown || true` and the `06b`
+      compatibility-link masking with specific `log_warning` messages;
+      mounts guarded with `mountpoint -q`.
+  - Tests: 6 new guardrail tests
+    (`tests/test_acceptance_shell.py::TestInitSystemErrorPolicyGuardrails`)
+
 ### Added
 
 - **Production-ready first-boot service** (`blfs/17-first-boot-service.sh`)

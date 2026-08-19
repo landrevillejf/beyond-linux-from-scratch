@@ -2,11 +2,12 @@
 # Service management abstraction layer - supports sysvinit, systemd, openrc, runit, s6
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 # 06b-service-management.sh
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -68,20 +69,20 @@ log_info "Native mode - installing full service management"
 
 # Monter les FS si nécessaire
 cleanup_mounts() {
-    run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
-    run_privileged umount "$LFS"/dev 2>/dev/null || true
-    run_privileged umount "$LFS"/proc 2>/dev/null || true
-    run_privileged umount "$LFS"/sys 2>/dev/null || true
-    run_privileged umount "$LFS"/run 2>/dev/null || true
+    run_privileged umount "$LFS/dev/pts" 2>/dev/null || log_warning "Could not unmount $LFS/dev/pts"
+    run_privileged umount "$LFS/dev" 2>/dev/null || log_warning "Could not unmount $LFS/dev"
+    run_privileged umount "$LFS/proc" 2>/dev/null || log_warning "Could not unmount $LFS/proc"
+    run_privileged umount "$LFS/sys" 2>/dev/null || log_warning "Could not unmount $LFS/sys"
+    run_privileged umount "$LFS/run" 2>/dev/null || log_warning "Could not unmount $LFS/run"
 }
 trap cleanup_mounts EXIT
 
-run_privileged mkdir -p "$LFS"/dev/pts "$LFS"/run
-run_privileged mount --bind /dev "$LFS"/dev 2>/dev/null || true
-run_privileged mount -t devpts devpts "$LFS"/dev/pts 2>/dev/null || true
-run_privileged mount -t proc proc "$LFS"/proc 2>/dev/null || true
-run_privileged mount -t sysfs sysfs "$LFS"/sys 2>/dev/null || true
-run_privileged mount -t tmpfs tmpfs "$LFS"/run 2>/dev/null || true
+run_privileged mkdir -p "$LFS"/{dev,dev/pts,proc,sys,run}
+run_privileged mountpoint -q "$LFS/dev" || run_privileged mount --bind /dev "$LFS/dev"
+run_privileged mountpoint -q "$LFS/dev/pts" || run_privileged mount -t devpts devpts "$LFS/dev/pts"
+run_privileged mountpoint -q "$LFS/proc" || run_privileged mount -t proc proc "$LFS/proc"
+run_privileged mountpoint -q "$LFS/sys" || run_privileged mount -t sysfs sysfs "$LFS/sys"
+run_privileged mountpoint -q "$LFS/run" || run_privileged mount -t tmpfs tmpfs "$LFS/run"
 
 # Créer le répertoire profile.d dans le chroot
 run_privileged mkdir -p "$LFS/etc/profile.d"
@@ -179,32 +180,45 @@ run_privileged chmod +x "$LFS/etc/profile.d/svc-aliases.sh"
 # Si systemd, créer les liens symboliques pour les commandes legacy
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     log_info "Creating legacy symlinks for systemd"
-    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /usr/lib/systemd/systemd /sbin/init 2>/dev/null || true; ln -sf /usr/bin/systemctl /sbin/service 2>/dev/null || true'
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /usr/lib/systemd/systemd /sbin/init; then
+        log_warning "Could not link /sbin/init to systemd"
+    fi
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /usr/bin/systemctl /sbin/service; then
+        log_warning "Could not link /sbin/service to systemctl"
+    fi
 fi
 
 # Si openrc, créer un lien symlink pour rc-service -> /sbin/rc-service si besoin
 if [ "$INIT_SYSTEM" = "openrc" ]; then
     log_info "Creating openrc compatibility links"
-    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/rc-service /usr/bin/rc-service 2>/dev/null || true'
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /sbin/rc-service /usr/bin/rc-service; then
+        log_warning "Could not link /usr/bin/rc-service"
+    fi
 fi
 
 # Si runit, créer les liens de compatibilité
 if [ "$INIT_SYSTEM" = "runit" ]; then
     log_info "Creating runit compatibility links"
-    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/runit /sbin/runit-init 2>/dev/null || true; ln -sf /sbin/runit /sbin/runit-init 2>/dev/null || true'
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /sbin/runit /sbin/runit-init; then
+        log_warning "Could not link /sbin/runit-init"
+    fi
 fi
 
 # Si s6, créer les liens de compatibilité
 if [ "$INIT_SYSTEM" = "s6" ]; then
     log_info "Creating s6 compatibility links"
-    run_privileged chroot "$LFS" /bin/bash -c 'ln -sf /sbin/s6-init /sbin/init 2>/dev/null || true; ln -sf /sbin/s6-shutdown /sbin/shutdown 2>/dev/null || true'
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /sbin/s6-init /sbin/init; then
+        log_warning "Could not link /sbin/init to s6-init"
+    fi
+    if ! run_privileged chroot "$LFS" /usr/bin/env -i PATH=/usr/bin:/usr/sbin \
+        ln -sf /sbin/s6-shutdown /sbin/shutdown; then
+        log_warning "Could not link /sbin/shutdown to s6-shutdown"
+    fi
 fi
-
-# Nettoyer les montages
-run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
-run_privileged umount "$LFS"/dev 2>/dev/null || true
-run_privileged umount "$LFS"/proc 2>/dev/null || true
-run_privileged umount "$LFS"/sys 2>/dev/null || true
-run_privileged umount "$LFS"/run 2>/dev/null || true
 
 log_success "Service management abstraction layer installed"

@@ -6,6 +6,11 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
+#
+# Book compliance (audit finding F-07, wave 3): every package that has a
+# page in docs/books (xfce chapter) gets a dedicated build_<name>
+# function reproducing that page; picom has no book page and uses the
+# generic build_pkg fallback.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -196,7 +201,8 @@ log_warning() { echo "[WARNING] $*"; }
 log_success() { echo "[SUCCESS] $*"; }
 cd /sources
 mkdir -p /var/lib/lfs-builder/desktop /usr/share/xsessions /etc/X11 /etc/xdg/xfce4/xfconf/xfce-perchannel-xml
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
+HAVE_SYSTEMD=false
 marker_for() { echo "/var/lib/lfs-builder/desktop/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() { local archive="$1" dir; dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"; rm -rf "$dir"; tar -xf "$archive"; printf '%s\n' "$dir"; }
@@ -235,36 +241,223 @@ verify_prerequisites() {
         exit 1
     fi
 }
-build_xfce_pkg() {
-    local pkg="$1" archive dir version docdir
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"; version="${dir#"$pkg"-}"; docdir="/usr/share/doc/${pkg}-${version}"
-    pushd "$dir" >/dev/null
-    if [ -f meson.build ]; then
-        rm -rf build; meson setup build --prefix=/usr --buildtype=release --sysconfdir=/etc; ninja -C build; ninja -C build install
-    elif [ -x ./configure ] || [ -f configure ]; then
-        ./configure --prefix=/usr --sysconfdir=/etc --docdir="$docdir"; make -j"$(jobs)"; make install
-    elif [ -x ./autogen.sh ]; then
-        ./autogen.sh --prefix=/usr --sysconfdir=/etc --docdir="$docdir"; make -j"$(jobs)"; make install
-    else
-        log_error "$pkg has neither meson.build nor configure/autogen.sh"; exit 1
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS,
+# dir and HAVE_SYSTEMD are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
     fi
-    popd >/dev/null; rm -rf "$dir"; touch "$(marker_for "$pkg")"; log_success "$pkg installed"
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" HAVE_SYSTEMD="$HAVE_SYSTEMD" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page (picom).
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if [ -f meson.build ]; then
+        rm -rf builddir
+        # shellcheck disable=SC2086
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc $extra_opts
+        ninja -C builddir
+        ninja -C builddir install
+    elif [ -x ./configure ] || [ -f configure ]; then
+        # shellcheck disable=SC2086
+        ./configure --prefix=/usr --sysconfdir=/etc --disable-static $extra_opts
+        make -j"$JOBS"
+        make install
+    else
+        log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# ======================================================================
+# Per-package BLFS book commands (wave 3, xfce chapter).
+# ======================================================================
+
+build_xfce4_dev_tools() { book_install xfce4-dev-tools build_commands_xfce4_dev_tools; }
+build_commands_xfce4_dev_tools() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_libxfce4util() { book_install libxfce4util build_commands_libxfce4util; }
+build_commands_libxfce4util() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_xfconf() { book_install xfconf build_commands_xfconf; }
+build_commands_xfconf() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_libxfce4ui() { book_install libxfce4ui build_commands_libxfce4ui; }
+build_commands_libxfce4ui() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+build_libxfce4windowing() { book_install libxfce4windowing build_commands_libxfce4windowing; }
+build_commands_libxfce4windowing() {
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --enable-x11      \
+                --disable-debug   &&
+    make -j"$JOBS" && make install
+}
+
+build_garcon() { book_install garcon build_commands_garcon; }
+build_commands_garcon() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+build_exo() { book_install exo build_commands_exo; }
+build_commands_exo() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+build_tumbler() { book_install tumbler build_commands_tumbler; }
+build_commands_tumbler() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_panel() { book_install xfce4-panel build_commands_xfce4_panel; }
+build_commands_xfce4_panel() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS xfce/thunar – the Makefile.in sed only applies on non-systemd
+# builds (it drops an unneeded systemd user unit).
+build_thunar() { book_install thunar build_commands_thunar; }
+build_commands_thunar() {
+    if [ "$HAVE_SYSTEMD" != true ]; then
+        sed -i 's/\tinstall-systemd_userDATA/\t/' Makefile.in
+    fi
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+build_thunar_volman() { book_install thunar-volman build_commands_thunar_volman; }
+build_commands_thunar_volman() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_xfwm4() { book_install xfwm4 build_commands_xfwm4; }
+build_commands_xfwm4() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_session() { book_install xfce4-session build_commands_xfce4_session; }
+build_commands_xfce4_session() {
+    ./configure --prefix=/usr       \
+                --sysconfdir=/etc   \
+                --disable-legacy-sm &&
+    make -j"$JOBS" && make install
+}
+
+build_xfdesktop() { book_install xfdesktop build_commands_xfdesktop; }
+build_commands_xfdesktop() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_settings() { book_install xfce4-settings build_commands_xfce4_settings; }
+build_commands_xfce4_settings() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_appfinder() { book_install xfce4-appfinder build_commands_xfce4_appfinder; }
+build_commands_xfce4_appfinder() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_terminal() { book_install xfce4-terminal build_commands_xfce4_terminal; }
+build_commands_xfce4_terminal() {
+    mkdir build && cd build &&
+    meson setup ..      \
+          --prefix=/usr \
+          --buildtype=release &&
+    ninja && ninja install
+}
+
+# BLFS xfce/xfce4-notifyd – --disable-systemd is the book (sysvinit)
+# variant; it is dropped when systemd is installed.
+build_xfce4_notifyd() { book_install xfce4-notifyd build_commands_xfce4_notifyd; }
+build_commands_xfce4_notifyd() {
+    sd_opts=""
+    [ "$HAVE_SYSTEMD" != true ] && sd_opts="--disable-systemd"
+    # shellcheck disable=SC2086
+    ./configure --prefix=/usr --sysconfdir=/etc $sd_opts &&
+    make -j"$JOBS" && make install
+}
+
+build_xfce4_power_manager() { book_install xfce4-power-manager build_commands_xfce4_power_manager; }
+build_commands_xfce4_power_manager() {
+    ./configure --prefix=/usr --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
 }
 
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
+# Packages without a BLFS book page (picom) use the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_xfce_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then
+            return 0
+        fi
+    else
+        if build_pkg "$pkg" "$@"; then
+            return 0
+        fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"
@@ -297,6 +490,13 @@ EOF
     fi
 }
 verify_prerequisites
+
+# Detect if systemd is installed (for thunar/notifyd book variants)
+if [ -x /usr/lib/systemd/systemd ] || [ -d /usr/lib/systemd/system ]; then
+    HAVE_SYSTEMD=true
+fi
+log_info "systemd detected: $HAVE_SYSTEMD"
+
 log_info "Building XFCE 4.20 core in dependency order"
 for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
     run_build required "$pkg"

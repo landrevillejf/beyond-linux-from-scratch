@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 # 09c-build-kde.sh
 # Build KDE Plasma desktop environment (called by 09-build-desktop.sh dispatcher).
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
@@ -6,7 +7,14 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
-set -euo pipefail
+#
+# Book compliance (audit finding F-07, wave 3): qt6, extra-cmake-modules,
+# sddm, konsole, dolphin and okular get dedicated build functions
+# reproducing their docs/books pages; KDE Frameworks and Plasma packages
+# use the cmake commands of the book frameworks6/plasma-all chapter
+# loops.  The book installs Qt6/KF6 into /opt; here everything goes to
+# /usr to match the rest of the built system.  Packages without a book
+# page (kate, kcalc, kinit) use the generic build_pkg fallback.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -96,6 +104,7 @@ log_success() { echo "[SUCCESS] $*"; }
 cd /sources
 mkdir -p /var/lib/lfs-builder/desktop-kde /usr/share/xsessions /usr/share/wayland-sessions /usr/share/plasma
 JOBS="$(nproc 2>/dev/null || echo 1)"
+HAVE_SYSTEMD=false
 marker_for() { echo "/var/lib/lfs-builder/desktop-kde/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -160,25 +169,57 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS,
+# dir and HAVE_SYSTEMD are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" HAVE_SYSTEMD="$HAVE_SYSTEMD" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page
+# (kate, kcalc, kinit).
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f CMakeLists.txt ]; then
         mkdir -p build
         cd build
         # shellcheck disable=SC2086
         cmake .. -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_TESTING=OFF -DKF6_BUILD_DOCS=OFF $extra_opts
+            -DBUILD_TESTING=OFF $extra_opts
         make -j"$JOBS"
         make install
         cd ..
@@ -202,8 +243,12 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
-# Qt6 is shipped as a single qt-everywhere-src tarball and built in one
-# CMake pass (BLFS Qt6 page), not as per-module tarballs.
+# ======================================================================
+# Per-package BLFS book commands (wave 3, kde chapter).
+# ======================================================================
+
+# BLFS x/qt6 – shipped as a single qt-everywhere-src tarball.  The book
+# installs into /opt/qt6; here the prefix is /usr.
 build_qt6() {
     local archive dir
     if have_pc Qt6Core; then log_info "qt6 already installed; skipping"; return 0; fi
@@ -214,31 +259,174 @@ build_qt6() {
     fi
     log_info "Building qt6 from $archive"
     dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
-    mkdir -p build
-    cd build
-    cmake -DCMAKE_INSTALL_PREFIX=/usr \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DQT_BUILD_EXAMPLES=OFF \
-          -DQT_BUILD_TESTS=OFF \
-          ..
-    make -j"$JOBS"
-    make install
-    cd ..
+    pushd "$dir" >/dev/null || return 1
+    if [ "$(uname -m)" = "i686" ]; then
+        sed -e "/^#elif defined(Q_CC_GNU_ONLY)/s/.*/& \&\& 0/" \
+             -i qtbase/src/corelib/global/qtypes.h
+        CXXFLAGS="${CXXFLAGS:-} -DDISABLE_SIMD -DPFFFT_SIMD_DISABLE"
+        export CXXFLAGS
+    fi
+    ./configure -prefix /usr              \
+                -sysconfdir /etc/xdg      \
+                -dbus-linked              \
+                -openssl-linked           \
+                -system-sqlite            \
+                -nomake examples          \
+                -no-rpath                 \
+                -no-sbom                  \
+                -syslog                   \
+                -skip qt3d                \
+                -skip qtquick3dphysics    \
+                -skip qtwebengine         &&
+    ninja &&
+    ninja install &&
+    find /usr/ -name '*.prl' -exec sed -i -e '/^QMAKE_PRL_BUILD_DIR/d' {} \;
     popd >/dev/null
     rm -rf "$dir"
+    touch "$(marker_for qt6)"
     log_success "qt6 installed"
+}
+
+# BLFS kde/extra-cmake-modules
+build_extra_cmake_modules() { book_install extra-cmake-modules build_commands_extra_cmake_modules; }
+build_commands_extra_cmake_modules() {
+    local p
+    for p in ../extra-cmake-modules-*-upstream_fix-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    # shellcheck disable=SC2016
+    sed -i '/"lib64"/s/64//' kde-modules/KDEInstallDirsCommon.cmake &&
+    sed -e '/PACKAGE_INIT/i set(SAVE_PACKAGE_PREFIX_DIR "${PACKAGE_PREFIX_DIR}")' \
+        -e '/^include/a set(PACKAGE_PREFIX_DIR "${SAVE_PACKAGE_PREFIX_DIR}")' \
+        -i ECMConfig.cmake.in &&
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr -D BUILD_WITH_QT6=ON .. &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS kde/frameworks6 chapter loop: every KDE Frameworks package is
+# built with the same cmake command.
+build_commands_kf6() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr        \
+          -D CMAKE_INSTALL_LIBEXECDIR=libexec \
+          -D CMAKE_SKIP_INSTALL_RPATH=ON      \
+          -D CMAKE_BUILD_TYPE=Release         \
+          -D BUILD_TESTING=OFF                \
+          -D BUILD_PYTHON_BINDINGS=OFF        \
+          -W no-dev .. &&
+    make -j"$JOBS" && make install
+}
+build_kf6_pkg() { book_install "$1" build_commands_kf6; }
+
+# BLFS kde/plasma-all chapter loop: every Plasma package is built with
+# the same cmake command.
+build_commands_plasma() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr        \
+          -D CMAKE_INSTALL_LIBEXECDIR=libexec \
+          -D CMAKE_BUILD_TYPE=Release         \
+          -D BUILD_QT5=OFF                    \
+          -D BUILD_TESTING=OFF                \
+          -W no-dev .. &&
+    make -j"$JOBS" && make install
+}
+build_plasma_pkg() { book_install "$1" build_commands_plasma; }
+
+# BLFS x/sddm – elogind flags are the book sysvinit variant; systemd
+# builds flip them.  The sddm.conf tweak comes from the book root cmds.
+build_sddm() { book_install sddm build_commands_sddm || return 1; sddm_post_install; }
+build_commands_sddm() {
+    local sd_opts="-D NO_SYSTEMD=ON -D ENABLE_JOURNALD=OFF -D USE_ELOGIND=ON"
+    [ "$HAVE_SYSTEMD" = true ] && sd_opts="-D NO_SYSTEMD=OFF -D ENABLE_JOURNALD=ON -D USE_ELOGIND=OFF"
+    mkdir build && cd build
+    # shellcheck disable=SC2086
+    cmake -D CMAKE_INSTALL_PREFIX=/usr        \
+          -D CMAKE_BUILD_TYPE=Release         \
+          -D CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+          $sd_opts                            \
+          -D RUNTIME_DIR=/run/sddm            \
+          -D BUILD_MAN_PAGES=ON               \
+          -D BUILD_WITH_QT6=ON                \
+          -D DATA_INSTALL_DIR=/usr/share/sddm \
+          -D DBUS_CONFIG_FILENAME=sddm_org.freedesktop.DisplayManager.conf \
+          .. &&
+    make -j"$JOBS" && make install
+}
+sddm_post_install() {
+    if [ -f /etc/sddm.conf ]; then
+        sed -i 's/-nolisten tcp//' /etc/sddm.conf
+    fi
+}
+
+# BLFS kde/konsole
+build_konsole() { book_install konsole build_commands_konsole; }
+build_commands_konsole() {
+    local p
+    for p in ../konsole-adjust_scrollbar-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr \
+          -D CMAKE_BUILD_TYPE=Release  \
+          -D BUILD_TESTING=OFF         \
+          -W no-dev .. &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS kde/dolphin
+build_dolphin() { book_install dolphin build_commands_dolphin; }
+build_commands_dolphin() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr \
+          -D CMAKE_BUILD_TYPE=Release  \
+          -D BUILD_TESTING=OFF         \
+          -W no-dev .. &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS kde/okular
+build_okular() { book_install okular build_commands_okular; }
+build_commands_okular() {
+    local skip_optional='Discount;DjVuLibre;EPub;LibSpectre;LibZip'
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr \
+          -D CMAKE_BUILD_TYPE=Release  \
+          -D BUILD_TESTING=OFF         \
+          -D FORCE_NOT_REQUIRED_DEPENDENCIES="$skip_optional" \
+          -W no-dev .. &&
+    make -j"$JOBS" && make install
 }
 
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
+# KDE Frameworks and Plasma packages get the book chapter loop commands;
+# packages without a BLFS book page use the generic build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn=""
     shift 2
-    case "$pkg" in
-        qt6) build_qt6 && return 0 ;;
-        *)   build_pkg "$pkg" "$@" && return 0 ;;
-    esac
+    fn="build_${pkg//-/_}"
+    if ! declare -F "$fn" >/dev/null; then
+        case "$pkg" in
+            attica|karchive|kcodecs|kconfig|kcoreaddons|kdbusaddons|kguiaddons|ki18n|kitemmodels|kitemviews|kwidgetsaddons|kwindowsystem|solid|sonnet|kconfigwidgets|kcompletion|kcrash|kglobalaccel|kiconthemes|kjobwidgets|knotifications|kservice|ktextwidgets|kxmlgui|kbookmarks|kio|kirigami)
+                fn=build_kf6_pkg ;;
+            kwayland|libksysguard|libkscreen|kscreenlocker|breeze|kde-gtk-config|kactivitymanagerd|kwin|plasma-workspace|plasma-desktop|plasma-nm|plasma-pa|powerdevil|sddm-kcm|systemsettings)
+                fn=build_plasma_pkg ;;
+            *)
+                fn="" ;;
+        esac
+    fi
+    if [ -n "$fn" ]; then
+        if "$fn" "$pkg" "$@"; then
+            return 0
+        fi
+    else
+        if build_pkg "$pkg" "$@"; then
+            return 0
+        fi
+    fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"
         exit 1
@@ -264,6 +452,12 @@ verify_prerequisites() {
     fi
 }
 verify_prerequisites
+
+# Detect if systemd is installed (for sddm book sysvinit/systemd variants)
+if [ -x /usr/lib/systemd/systemd ] || [ -d /usr/lib/systemd/system ]; then
+    HAVE_SYSTEMD=true
+fi
+log_info "systemd detected: $HAVE_SYSTEMD"
 
 log_info "Building Qt6 layer"
 run_build required qt6
@@ -311,15 +505,13 @@ run_build optional kscreenlocker
 run_build optional breeze
 run_build optional kde-gtk-config
 run_build optional kactivitymanagerd
-run_build optional kwin \
-    -DCMAKE_INSTALL_PREFIX=/usr
+run_build optional kwin
 run_build optional plasma-workspace
 run_build optional plasma-desktop
 run_build optional plasma-nm
 run_build optional plasma-pa
 run_build optional powerdevil
-run_build optional sddm \
-    -DCMAKE_INSTALL_PREFIX=/usr
+run_build optional sddm
 run_build optional sddm-kcm
 run_build optional systemsettings
 

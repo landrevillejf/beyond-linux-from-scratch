@@ -91,7 +91,8 @@ cd /sources
 mkdir -p /var/lib/lfs-builder/display-manager /etc/lightdm /usr/share/xsessions \
     /usr/share/wayland-sessions
 
-jobs() { nproc 2>/dev/null || echo 1; }
+JOBS="$(nproc 2>/dev/null || echo 1)"
+HAVE_SYSTEMD=false
 marker_for() { echo "/var/lib/lfs-builder/display-manager/$1.done"; }
 find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
 extract_archive() {
@@ -116,19 +117,50 @@ is_installed() {
     esac
 }
 
-build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
-    shift
-    extra_opts="$*"
-    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+# Find and extract the source archive of a package, printing the
+# extracted directory name.
+prep_src() {
+    local pkg="$1" archive=""
     archive="$(find_archive "$pkg")"
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
     fi
     log_info "Building $pkg from $archive"
-    dir="$(extract_archive "$archive")"
-    pushd "$dir" >/dev/null
+    extract_archive "$archive"
+}
+
+# Run the BLFS book commands of one package inside its freshly
+# extracted source tree.  The second argument is the name of the
+# build_commands_<name> function holding the book commands; JOBS,
+# dir and HAVE_SYSTEMD are exported.
+book_install() {
+    local pkg="$1" build_cmds dir
+    build_cmds="$2"
+    if is_installed "$pkg"; then
+        log_info "$pkg already installed; skipping"
+        return 0
+    fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if ! JOBS="$JOBS" dir="$dir" HAVE_SYSTEMD="$HAVE_SYSTEMD" "$build_cmds"; then
+        popd >/dev/null
+        return 1
+    fi
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+# Generic fallback for packages that have no BLFS book page.
+build_pkg() {
+    local pkg="$1" dir extra_opts=""
+    shift
+    extra_opts="$*"
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
@@ -138,12 +170,12 @@ build_pkg() {
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
         ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     elif [ -x ./autogen.sh ]; then
         # shellcheck disable=SC2086
         ./autogen.sh --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$(jobs)"
+        make -j"$JOBS"
         make install
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
@@ -154,13 +186,106 @@ build_pkg() {
     log_success "$pkg installed"
 }
 
-# Policy wrapper (audit finding F-07).  required: any failure aborts the
-# stage.  optional: failures are logged and the build continues.
+# ======================================================================
+# Per-package BLFS book commands (wave 3).
+# ======================================================================
+
+# BLFS postlfs/polkit – session tracking follows the available session
+# manager; the sysvinit book variant redirects the unit dir to /tmp.
+build_polkit() { book_install polkit build_commands_polkit; }
+build_commands_polkit() {
+    tracking=none
+    pkg-config --exists elogind 2>/dev/null && tracking=elogind
+    pkg-config --exists libsystemd 2>/dev/null && tracking=elogind
+    if [ "$HAVE_SYSTEMD" = true ]; then
+        unitdir=/usr/lib/systemd/system
+    else
+        unitdir=/tmp
+    fi
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D man=true \
+          -D session_tracking="$tracking" \
+          -D systemdsystemunitdir="$unitdir" &&
+    ninja && ninja install
+}
+
+# BLFS general/accountsservice – test-only seds skipped
+build_accountsservice() { book_install accountsservice build_commands_accountsservice; }
+build_commands_accountsservice() {
+    elogind=false
+    pkg-config --exists elogind 2>/dev/null && elogind=true
+    if [ "$HAVE_SYSTEMD" = true ]; then
+        unitdir=/usr/lib/systemd/system
+    else
+        unitdir=no
+    fi
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D admin_group=adm \
+          -D elogind="$elogind" \
+          -D systemdsystemunitdir="$unitdir" &&
+    ninja && ninja install
+}
+
+# BLFS x/lightdm – the pam sed of the sysvinit page only applies when
+# systemd is not the init system.
+build_lightdm() { book_install lightdm build_commands_lightdm; }
+build_commands_lightdm() {
+    if [ "$HAVE_SYSTEMD" != true ]; then
+        sed -i s/systemd/elogind/ data/pam/*
+    fi
+    ./configure --prefix=/usr \
+                --libexecdir=/usr/lib/lightdm \
+                --localstatedir=/var \
+                --sbindir=/usr/bin \
+                --sysconfdir=/etc \
+                --disable-static \
+                --disable-tests \
+                --with-greeter-user=lightdm \
+                --with-greeter-session=lightdm-gtk-greeter \
+                --docdir="/usr/share/doc/$dir"
+    make -j"$JOBS"
+    make install
+}
+
+# BLFS x/lightdm (greeter section)
+build_lightdm_gtk_greeter() { book_install lightdm-gtk-greeter build_commands_lightdm_gtk_greeter; }
+build_commands_lightdm_gtk_greeter() {
+    xklavier=""
+    pkg-config --exists libxklavier 2>/dev/null && xklavier=--with-libxklavier
+    # shellcheck disable=SC2086  # xklavier is empty or one configure flag
+    ./configure --prefix=/usr \
+                --libexecdir=/usr/lib/lightdm \
+                --sbindir=/usr/bin \
+                --sysconfdir=/etc \
+                $xklavier \
+                --enable-kill-on-sigterm \
+                --disable-libido \
+                --disable-libindicator \
+                --disable-static \
+                --disable-maintainer-mode \
+                --docdir="/usr/share/doc/$dir"
+    make -j"$JOBS"
+    make install
+}
+
+# Policy wrapper (audit finding F-07): a required package failure
+# aborts the stage; optional failures are logged and the build
+# continues.  Packages without a BLFS book page use the generic
+# build_pkg.
 run_build() {
-    local mode="$1" pkg="$2"
+    local mode="$1" pkg="$2" fn
     shift 2
-    if build_pkg "$pkg" "$@"; then
-        return 0
+    fn="build_${pkg//-/_}"
+    if declare -F "$fn" >/dev/null; then
+        if "$fn" "$@"; then return 0; fi
+    else
+        if build_pkg "$pkg" "$@"; then return 0; fi
     fi
     if [ "$mode" = "required" ]; then
         log_error "Required package $pkg failed – aborting stage"
@@ -192,32 +317,19 @@ if [ -d /usr/lib/systemd/system ]; then
 fi
 
 log_info "Building polkit (PolicyKit)"
-# polkit: depends on glib2, dbus, js78/mozjs (use --disable-polkitd for minimal)
-run_build required polkit \
-    --disable-polkitd \
-    --with-polkitd-user=polkitd
+# polkit: depends on glib2, dbus; meson flags follow the book page
+run_build required polkit
 
 log_info "Building accountsservice"
 # accountsservice: depends on glib2, dbus, polkit
-run_build required accountsservice \
-    -Dadmin_group=wheel \
-    -Dsystemdsystemunitdir=/usr/lib/systemd/system
+run_build required accountsservice
 
 log_info "Building LightDM"
 # LightDM: depends on glib2, dbus, Xorg, gtk3
-LIGHTDM_OPTS=""
-if $HAVE_SYSTEMD; then
-    LIGHTDM_OPTS="--with-systemdsystemunitdir=/usr/lib/systemd/system"
-fi
-# shellcheck disable=SC2086  # LIGHTDM_OPTS is empty or one configure flag
-run_build required lightdm \
-    --disable-static \
-    --disable-tests \
-    $LIGHTDM_OPTS
+run_build required lightdm
 
 log_info "Building LightDM GTK greeter"
-run_build required lightdm-gtk-greeter \
-    --disable-static
+run_build required lightdm-gtk-greeter
 
 # Configure LightDM
 log_info "Configuring LightDM"
