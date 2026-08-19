@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ -f "$SCRIPT_DIR/../common/utils.sh" ]; then
+    # shellcheck source=/dev/null
     source "$SCRIPT_DIR/../common/utils.sh"
 else
     log_info() { echo "[INFO] $*"; }
@@ -20,6 +21,7 @@ KERNEL_TYPE=${KERNEL_TYPE:-linux}
 
 detect_distro() {
     if [ -f /etc/os-release ]; then
+        # shellcheck disable=SC1091
         . /etc/os-release
         echo "$ID"
     elif [ -f /etc/debian_version ]; then
@@ -128,8 +130,11 @@ mkdir -p "$LFS_HOME"
     echo "umask 022"
     printf 'LFS=%q\n' "$LFS"
     echo "LC_ALL=POSIX"
-    echo 'LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}'
-    echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
+    # shellcheck disable=SC2016
+    {
+        echo 'LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}'
+        echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
+    }
     echo "export LFS LC_ALL LFS_TGT PATH"
 } >"$LFS_HOME/.bashrc"
 cat >"$LFS_HOME/.bash_profile" <<'EOF'
@@ -168,8 +173,23 @@ build_toolchain() {
         fi
     done
 
+    # --------------------------------------------------------------
+    # LFS 12.4 section 4.2: limited directory layout. Packages built
+    # with DESTDIR=$LFS land under $LFS/usr, reached through the
+    # usr-merge symlinks.
+    # --------------------------------------------------------------
+    mkdir -pv "$LFS"/{etc,var} "$LFS"/usr/{bin,lib,sbin}
+    for dir in bin lib sbin; do
+        if [ ! -e "$LFS/$dir" ]; then
+            ln -sv "usr/$dir" "$LFS/$dir"
+        fi
+    done
+    case $(uname -m) in
+        x86_64) mkdir -pv "$LFS/lib64" ;;
+    esac
+
     # ==============================================================
-    # 1. BUILD BINUTILS (pass 1) - LFS 5.3
+    # 1. BUILD BINUTILS (pass 1) - LFS 12.4 section 5.2
     # ==============================================================
     log_info "Building binutils (pass 1)"
     BINUTILS_TAR=$(find . -maxdepth 1 -name "binutils-*.tar.xz" -print -quit)
@@ -178,13 +198,14 @@ build_toolchain() {
     cd "$BINUTILS_DIR"
     mkdir -v build
     cd build
-    ../configure --target="$LFS_TGT" \
-        --prefix="$LFS/tools" \
+    ../configure --prefix="$LFS/tools" \
         --with-sysroot="$LFS" \
+        --target="$LFS_TGT" \
         --disable-nls \
+        --enable-gprofng=no \
         --disable-werror \
-        --disable-multilib \
-        --without-zstd
+        --enable-new-dtags \
+        --enable-default-hash-style=gnu
     make -j"$NUM_JOBS"
     make install
     cd "$LFS/sources"
@@ -192,34 +213,39 @@ build_toolchain() {
     log_success "binutils (pass 1) done"
 
     # ==============================================================
-    # 2. BUILD GCC (pass 1) - LFS 5.4
+    # 2. BUILD GCC (pass 1) - LFS 12.4 section 5.3
     # ==============================================================
     log_info "Building GCC (pass 1)"
     GCC_TAR=$(find . -maxdepth 1 -name "gcc-*.tar.xz" -print -quit)
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
+    cd "$GCC_DIR"
     for lib in gmp mpfr mpc; do
-        LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
-        if [ -n "$LIB_TAR" ]; then
-            tar -xf "$LIB_TAR"
-            LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
-            if [ -d "$LIB_DIR" ]; then
-                mv -v "$LIB_DIR" "$GCC_DIR/$lib"
-            else
-                echo "ERROR: Could not find extracted directory for $lib"
-                exit 1
-            fi
+        LIB_TAR=$(find . -maxdepth 1 -name "${lib}-*.tar.*" -print -quit)
+        if [ -z "$LIB_TAR" ]; then
+            log_error "Tarball for $lib not found"
+            exit 1
+        fi
+        tar -xf "$LIB_TAR"
+        LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
+        if [ -d "$LIB_DIR" ]; then
+            mv -v "$LIB_DIR" "$lib"
         else
-            echo "ERROR: Tarball for $lib not found"
+            log_error "Could not find extracted directory for $lib"
             exit 1
         fi
     done
-    cd "$GCC_DIR"
+    # Use lib instead of lib64 as default directory for 64-bit libs.
+    case $(uname -m) in
+        x86_64)
+            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+    esac
     mkdir -v build
     cd build
     ../configure --target="$LFS_TGT" \
         --prefix="$LFS/tools" \
-        --with-glibc-version=2.38 \
+        --with-glibc-version=2.42 \
         --with-sysroot="$LFS" \
         --with-newlib \
         --without-headers \
@@ -235,19 +261,20 @@ build_toolchain() {
         --disable-libssp \
         --disable-libvtv \
         --disable-libstdcxx \
-        --enable-languages=c,c++ \
-        --without-zstd
+        --enable-languages=c,c++
     make -j"$NUM_JOBS"
     make install
-    if [ ! -f "$LFS/tools/bin/cc" ]; then
-        ln -sfv "$LFS_TGT-gcc" "$LFS/tools/bin/cc"
-    fi
+    cd ..
+    # Rebuild the full internal limits.h exactly like the GCC build
+    # system would (LFS 12.4 section 5.3).
+    cat gcc/limitx.h gcc/glimits.h gcc/limity.h > \
+        "$(dirname "$("${LFS_TGT}-gcc" -print-libgcc-file-name)")/include/limits.h"
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
     log_success "GCC (pass 1) done"
 
     # ==============================================================
-    # 3. LINUX API HEADERS - LFS 5.5
+    # 3. LINUX API HEADERS - LFS 12.4 section 5.4
     # ==============================================================
     log_info "Installing Linux API headers"
 
@@ -343,8 +370,7 @@ build_toolchain() {
     cd "$LINUX_DIR"
     make mrproper
     make ARCH="$ARCH" headers
-    find usr/include -name '.*' -delete
-    rm -f usr/include/Makefile
+    find usr/include -type f ! -name '*.h' -delete
     mkdir -p "$LFS/usr"
     cp -rv usr/include "$LFS/usr"
     cd "$LFS/sources"
@@ -352,23 +378,38 @@ build_toolchain() {
     log_success "Linux headers installed"
 
     # ==============================================================
-    # 4. GLIBC - LFS 5.6
+    # 4. GLIBC - LFS 12.4 section 5.5
     # ==============================================================
     log_info "Building glibc"
+    # LSB compliance symlink, plus the x86_64 loader compatibility
+    # symlink required by the dynamic library loader (LFS 5.5).
+    case $(uname -m) in
+        i?86) ln -sfv ld-linux.so.2 "$LFS/lib/ld-lsb.so.3" ;;
+        x86_64)
+            ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64"
+            ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64/ld-lsb-x86-64.so.3"
+            ;;
+    esac
     GLIBC_TAR=$(find . -maxdepth 1 -name "glibc-*.tar.xz" -print -quit)
     tar -xf "$GLIBC_TAR"
     GLIBC_DIR=$(find . -maxdepth 1 -type d -name "glibc-*" -print -quit | sed 's|^\./||')
     cd "$GLIBC_DIR"
+    # Make glibc programs store runtime data in FHS-compliant places.
+    GLIBC_FHS_PATCH=$(find "$LFS/sources" -maxdepth 1 -name "glibc-*-fhs-*.patch" -print -quit)
+    if [ -n "$GLIBC_FHS_PATCH" ]; then
+        patch -Np1 -i "$GLIBC_FHS_PATCH"
+    else
+        log_warning "glibc FHS patch not found, continuing without it"
+    fi
     mkdir -v build
     cd build
+    echo "rootsbindir=/usr/sbin" > configparms
     ../configure --prefix=/usr \
         --host="$LFS_TGT" \
         --build="$(../scripts/config.guess)" \
-        --enable-kernel=4.14 \
-        --with-headers="$LFS/usr/include" \
         --disable-nscd \
         libc_cv_slibdir=/usr/lib \
-        libc_cv_forced_unwind=yes
+        --enable-kernel=5.4
     make -j"$NUM_JOBS"
     make DESTDIR="$LFS" install
     sed '/RTLDLIST=/s@/usr@@g' -i "$LFS/usr/bin/ldd"
@@ -377,7 +418,7 @@ build_toolchain() {
     log_success "glibc done"
 
     # ==============================================================
-    # 5. LIBSTDC++ - LFS 5.7
+    # 5. LIBSTDC++ - LFS 12.4 section 5.6
     # ==============================================================
     log_info "Building libstdc++"
     tar -xf "$GCC_TAR"
@@ -385,31 +426,45 @@ build_toolchain() {
     cd "$GCC_DIR"
     mkdir -v build-libstdc++
     cd build-libstdc++
+    # Install into the final location ($LFS/usr/lib through DESTDIR):
+    # that is where the pass 1 cross compiler looks for it through its
+    # sysroot.  A /tools prefix puts the library in a directory the
+    # cross compiler does not search.
     ../libstdc++-v3/configure --host="$LFS_TGT" \
         --build="$(../config.guess)" \
-        --prefix="$LFS/tools" \
+        --prefix=/usr \
         --disable-multilib \
         --disable-nls \
         --disable-libstdcxx-pch \
-        --with-gxx-include-dir="$LFS/tools/$LFS_TGT/include/c++/$(cat ../gcc/BASE-VER)"
+        --with-gxx-include-dir=/tools/"$LFS_TGT"/include/c++/"$(cat ../gcc/BASE-VER)"
     make -j"$NUM_JOBS"
-    make install
+    make DESTDIR="$LFS" install
+    # Libtool archives are harmful for cross compilation (LFS 5.6).
+    rm -fv "$LFS"/usr/lib/lib{stdc++{,exp,fs},supc++}.la
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
     log_success "libstdc++ done"
 
     # ==============================================================
-    # 6. BINUTILS (pass 2) - LFS 6.10
+    # 6. BINUTILS (pass 2) - LFS 12.4 section 6.17
+    #
+    # Note on ordering: the book builds the Chapter 6 temporary tools
+    # first, then Binutils/GCC pass 2 into their final locations.
+    # Here pass 2 must come BEFORE the /tools loop because the tools
+    # loop installs target binaries into $LFS/tools/bin, which sits
+    # first in PATH and cannot execute on the host.
     # ==============================================================
     log_info "Building Binutils (pass 2)"
     tar -xf "$BINUTILS_TAR"
     BINUTILS_DIR=$(find . -maxdepth 1 -type d -name "binutils-*" -print -quit | sed 's|^\./||')
     cd "$BINUTILS_DIR"
-    sed '6009s/$add_dir//' -i ltmain.sh
+    # Prevent stale -lpthread linkage (LFS 12.4, binutils-2.45).
+    # shellcheck disable=SC2016
+    sed '6031s/$add_dir//' -i ltmain.sh
     mkdir -v build
     cd build
     ../configure --prefix=/usr \
-        --build=$(../config.guess) \
+        --build="$(../config.guess)" \
         --host="$LFS_TGT" \
         --disable-nls \
         --enable-shared \
@@ -426,7 +481,9 @@ build_toolchain() {
     log_success "Binutils (pass 2) done"
 
     # ==============================================================
-    # 7. GCC (pass 2) - LFS 6.11
+    # 7. GCC (pass 2) - LFS 12.4 section 6.18
+    #
+    # Same ordering note as Binutils pass 2 above.
     # ==============================================================
     log_info "Building GCC (pass 2)"
     tar -xf "$GCC_TAR"
@@ -461,7 +518,7 @@ build_toolchain() {
         -i libgcc/Makefile.in libstdc++-v3/include/Makefile.in
     mkdir -v build
     cd build
-    ../configure --build=$(../config.guess) \
+    ../configure --build="$(../config.guess)" \
         --host="$LFS_TGT" \
         --target="$LFS_TGT" \
         --prefix=/usr \
@@ -476,42 +533,27 @@ build_toolchain() {
         --disable-libsanitizer \
         --disable-libssp \
         --disable-libvtv \
-        --enable-languages=c,c++
+        --enable-languages=c,c++ \
+        LDFLAGS_FOR_TARGET=-L"$PWD"/"$LFS_TGT"/libgcc
     make -j"$NUM_JOBS"
     make DESTDIR="$LFS" install
+    # Finishing touch from LFS 12.4 section 6.18: generic cc symlink.
+    ln -sv gcc "$LFS/usr/bin/cc"
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
     log_success "GCC (pass 2) done"
 
     # ==============================================================
-    # 8. CROSS-COMPILE CACHE (for later tools)
+    # 8. BUILD TEMPORARY TOOLS - LFS 12.4 sections 6.2 to 6.16
+    #
+    # Same package list and configure flags as Chapter 6 of the book,
+    # installed under $LFS/tools instead of the final locations
+    # because the later stages (05a/05b) expect a self-contained
+    # /tools userspace.  bison and bzip2 are project additions
+    # required by those stages.
     # ==============================================================
-    CROSS_CACHE_TMPL="$LFS/sources/.cross-compile-cache"
-    cat >"$CROSS_CACHE_TMPL" <<'CROSS_CACHE_EOF'
-# Autoconf/gnulib cache values for cross-compilation
-ac_cv_func_strcasecmp=yes
-ac_cv_func_strncasecmp=yes
-gl_cv_func_strcasecmp_works=yes
-gl_cv_func_strncasecmp_works=yes
-ac_cv_func_strnlen_works=yes
-gl_cv_func_strnlen_works=yes
-gl_cv_func_mknod_works=yes
-gl_cv_func_lstat_dereferences_slashed_symlink=yes
-gl_cv_func_stat_dir_slash=yes
-gl_cv_func_stat_file_slash=yes
-gl_cv_func_working_mktime=yes
-gl_cv_func_utimes_works=yes
-gl_cv_func_fflush_stdin=yes
-gl_cv_func_printf_directive_n=yes
-gl_cv_func_getgroups_works=yes
-gl_cv_func_memmem_works=yes
-CROSS_CACHE_EOF
-
-    # ==============================================================
-    # 9. BUILD ESSENTIAL TOOLS - LFS 6.12 to 6.35
-    # ==============================================================
-    log_info "Building essential tools for /tools"
-    for pkg in m4 xz ncurses coreutils bash grep sed gawk findutils tar gzip bzip2 diffutils patch file; do
+    log_info "Building temporary tools (LFS Chapter 6)"
+    for pkg in m4 ncurses bash coreutils diffutils file findutils gawk grep gzip make patch sed tar xz bison bzip2; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
         elif [ "$pkg" = "file" ]; then
@@ -528,174 +570,122 @@ CROSS_CACHE_EOF
         tar -xf "$archive"
         cd "$dir"
 
-        if [ "$pkg" = "findutils" ]; then
-            if grep -q "ctl->posix_arg_size_min = _POSIX_ARG_MAX;" lib/buildcmd.c 2>/dev/null &&
-                ! grep -q "#ifdef _POSIX_ARG_MAX" lib/buildcmd.c 2>/dev/null; then
-                sed -i 's/  ctl->posix_arg_size_min = _POSIX_ARG_MAX;/#ifdef _POSIX_ARG_MAX\n  ctl->posix_arg_size_min = _POSIX_ARG_MAX;\n#else\n  ctl->posix_arg_size_min = 4096;\n#endif/' lib/buildcmd.c
-            fi
-        fi
+        # ----------------------------------------------------------
+        # Per-package settings follow the matching LFS 12.4 Chapter 6
+        # section.  The cross compiler is picked up from PATH
+        # ($LFS_TGT-gcc) by autoconf, so no explicit CC is set.
+        # ----------------------------------------------------------
+        extra_flags=""
+        build_flag=""
 
-        if [ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]; then
-            if grep -q "PATH_MAX" lib/stackvma.c 2>/dev/null &&
-                ! grep -q "#include <limits.h>" lib/stackvma.c 2>/dev/null; then
-                sed -i '1s/^/#include <limits.h>\n/' lib/stackvma.c
-            fi
-        fi
-
-        CFLAGS=""
-        if [ "$pkg" = "coreutils" ]; then
-            CFLAGS="-DMB_LEN_MAX=16 -D_GNU_SOURCE -DPATH_MAX=4096"
-        elif [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ] || [ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]; then
-            CFLAGS="-D_GNU_SOURCE -DPATH_MAX=4096"
-        fi
-
-        if [ "$pkg" = "bzip2" ]; then
-            make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
-                -j"$NUM_JOBS"
-            make CC="$LFS_TGT-gcc" AR="$LFS_TGT-ar" RANLIB="$LFS_TGT-ranlib" \
-                PREFIX="$LFS/tools" install
-
-        elif [ "$pkg" = "xz" ]; then
-            # Build xz natively for the host (used during build)
-            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
-            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="gcc" \
-                CXX="g++" \
-                AR="ar" \
-                RANLIB="ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --cache-file="$PKG_CACHE" \
-                    --disable-nls; then
-                log_error "Configure failed for $pkg"
-                exit 1
-            fi
-            rm -f "$PKG_CACHE"
+        case "$pkg" in
+        bzip2)
+            # Project addition (no configure script, plain Makefile).
             make -j"$NUM_JOBS"
-            make install
-
-        elif [ "$pkg" = "ncurses" ]; then
-            # Build ncurses following LFS methodology
-            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
-            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            # Build native tic for the host
+            make PREFIX="$LFS/tools" install
+            ;;
+        ncurses)
+            # LFS 12.4 section 6.3: a native tic is required because
+            # the target tic cannot run on the host during install.
             mkdir -v build
             pushd build
-            ../configure --cache-file="$PKG_CACHE"
+            ../configure --prefix="$LFS/tools" AWK=gawk
             make -C include
             make -C progs tic
             popd
-            # Cross-compile ncurses for target
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                    --cache-file="$PKG_CACHE" \
-                    --disable-nls \
-                    --with-shared \
-                    --without-normal \
-                    --with-cxx-shared \
-                    --without-debug \
-                    --without-ada \
-                    --disable-stripping; then
-                log_error "Configure failed for $pkg"
-                exit 1
-            fi
-            rm -f "$PKG_CACHE"
+            ./configure --prefix="$LFS/tools" \
+                --host="$LFS_TGT" \
+                --build="$(./config.guess)" \
+                --mandir="$LFS/tools/share/man" \
+                --with-manpage-format=normal \
+                --with-shared \
+                --without-normal \
+                --with-cxx-shared \
+                --without-debug \
+                --without-ada \
+                --disable-stripping \
+                AWK=gawk
             make -j"$NUM_JOBS"
-            make TIC_PATH=$(pwd)/build/progs/tic install
-            cd "$LFS/sources"
-            rm -rf "$dir"
-
-        elif [ "$pkg" = "bash" ]; then
-            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
-            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                    --cache-file="$PKG_CACHE" \
-                    --disable-nls \
-                    --without-bash-malloc; then
-                log_error "Configure failed for $pkg"
-                exit 1
-            fi
-            rm -f "$PKG_CACHE"
-            make -j"$NUM_JOBS"
-            make install
-
-        elif [ "$pkg" = "file" ]; then
-            # Build file following LFS methodology
-            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
-            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            # Build native file for the host
+            make TIC_PATH="$(pwd)/build/progs/tic" install
+            ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"
+            sed -e 's/^#if.*XOPEN.*$/#if 1/' \
+                -i "$LFS/tools/include/ncursesw/curses.h"
+            ;;
+        bash)
+            build_flag="--build=$(sh support/config.guess)"
+            extra_flags="--without-bash-malloc"
+            ;;
+        coreutils)
+            extra_flags="--enable-install-program=hostname --enable-no-install-program=kill,uptime"
+            ;;
+        diffutils)
+            build_flag="--build=$(./build-aux/config.guess)"
+            extra_flags="gl_cv_func_strcasecmp_works=y"
+            ;;
+        file)
+            # LFS 12.4 section 6.7: a native file binary is required
+            # while building the target libmagic.
             mkdir -v build
             pushd build
             ../configure --disable-bzlib \
                 --disable-libseccomp \
                 --disable-xzlib \
-                --disable-zlib \
-                --cache-file="$PKG_CACHE"
+                --disable-zlib
             make
             popd
-            # Cross-compile file for target
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                    --cache-file="$PKG_CACHE" \
-                    --disable-nls; then
-                log_error "Configure failed for $pkg"
-                exit 1
-            fi
-            rm -f "$PKG_CACHE"
-            make -j"$NUM_JOBS" FILE_COMPILE=$(pwd)/build/src/file
+            ./configure --prefix="$LFS/tools" \
+                --host="$LFS_TGT" \
+                --build="$(./config.guess)"
+            make -j"$NUM_JOBS" FILE_COMPILE="$(pwd)/build/src/file"
             make install
-            cd "$LFS/sources"
-            rm -rf "$dir"
-
-        else
-            # Cross-compile remaining tools for target
-            PKG_CACHE="$LFS/sources/.cc-${pkg}.cache"
-            cp "$CROSS_CACHE_TMPL" "$PKG_CACHE"
-            if ! CC="$LFS_TGT-gcc" \
-                CXX="$LFS_TGT-g++" \
-                AR="$LFS_TGT-ar" \
-                RANLIB="$LFS_TGT-ranlib" \
-                CFLAGS="$CFLAGS" \
-                ./configure --prefix="$LFS/tools" \
-                    --host="$LFS_TGT" \
-                    --build="$(uname -m)-linux-gnu" \
-                    --cache-file="$PKG_CACHE" \
-                    --disable-nls; then
-                log_error "Configure failed for $pkg"
-                exit 1
+            rm -fv "$LFS/tools/lib/libmagic.la"
+            ;;
+        findutils)
+            extra_flags="--localstatedir=$LFS/tools/var/lib/locate"
+            ;;
+        gawk)
+            # LFS 12.4 section 6.9: do not build the extras.
+            sed -i 's/extras//' Makefile.in
+            ;;
+        gzip)
+            # The book passes no --build flag for gzip.
+            build_flag="none"
+            ;;
+        xz)
+            extra_flags="--disable-static --docdir=$LFS/tools/share/doc/$dir"
+            ;;
+        *)
+            if [ -f build-aux/config.guess ]; then
+                build_flag="--build=$(build-aux/config.guess)"
             fi
-            rm -f "$PKG_CACHE"
+            ;;
+        esac
 
-            if [ "$pkg" = "coreutils" ] || [ "$pkg" = "grep" ] || [ "$pkg" = "sed" ] || [ "$pkg" = "findutils" ] || [ "$pkg" = "m4" ] || [ "$pkg" = "diffutils" ]; then
-                sed -i '/^SUBDIRS =/ s/ gnulib-tests//' Makefile 2>/dev/null || true
+        # Generic autotools path for every package that was not fully
+        # handled in its case arm above (bzip2, ncurses, file).
+        if [ "$pkg" != "bzip2" ] && [ "$pkg" != "ncurses" ] && [ "$pkg" != "file" ]; then
+            if [ "$build_flag" = "none" ]; then
+                build_flag=""
             fi
-
+            # shellcheck disable=SC2086
+            ./configure --prefix="$LFS/tools" \
+                --host="$LFS_TGT" \
+                $build_flag \
+                $extra_flags
             make -j"$NUM_JOBS"
             make install
+            if [ "$pkg" = "bash" ]; then
+                # LFS 12.4 section 6.4: /bin/sh compatibility symlink.
+                ln -sv bash "$LFS/tools/bin/sh"
+            elif [ "$pkg" = "xz" ]; then
+                # Libtool archives are harmful for cross compilation.
+                rm -fv "$LFS/tools/lib/liblzma.la"
+            fi
         fi
+
         cd "$LFS/sources"
         rm -rf "$dir"
     done
-    rm -f "$CROSS_CACHE_TMPL"
 
     mkdir -p "$LFS/var/log"
     touch "$LFS/var/log/toolchain-ready"
