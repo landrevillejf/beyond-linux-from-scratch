@@ -462,12 +462,11 @@ build_toolchain() {
         -i libgcc/Makefile.in libstdc++-v3/include/Makefile.in
     mkdir -v build
     cd build
-    ../configure \
-        --build=$(../config.guess) \
-        --host=$LFS_TGT \
-        --target=$LFS_TGT \
+    ../configure --build=$(../config.guess) \
+        --host="$LFS_TGT" \
+        --target="$LFS_TGT" \
         --prefix=/usr \
-        --with-build-sysroot=$LFS \
+        --with-build-sysroot="$LFS" \
         --enable-default-pie \
         --enable-default-ssp \
         --disable-nls \
