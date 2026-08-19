@@ -431,6 +431,10 @@ build_toolchain() {
     log_info "Building GCC (pass 2)"
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
+    if [ -z "$GCC_DIR" ] || [ ! -d "$GCC_DIR" ]; then
+        log_error "GCC directory not found after extraction"
+        exit 1
+    fi
     cd "$GCC_DIR"
     for lib in gmp mpfr mpc; do
         LIB_TAR=$(find "$LFS/sources" -maxdepth 1 -name "${lib}-*.tar.*" -print | head -1)
@@ -438,8 +442,15 @@ build_toolchain() {
             tar -xf "$LIB_TAR"
             LIB_DIR=$(tar -tf "$LIB_TAR" | head -1 | cut -d/ -f1)
             if [ -d "$LIB_DIR" ]; then
-                mv -v "$LIB_DIR" "$GCC_DIR/$lib"
+                # Correction : on est déjà dans le répertoire GCC, on déplace dans le répertoire courant
+                mv -v "$LIB_DIR" "$lib"
+            else
+                log_error "Could not find extracted directory for $lib"
+                exit 1
             fi
+        else
+            log_error "Tarball for $lib not found"
+            exit 1
         fi
     done
     case $(uname -m) in
