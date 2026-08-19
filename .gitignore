@@ -7,3 +7,4 @@ lfs-build/
 *.ppm.placeholder
 branding/installer/backgrounds/*.png
 .DS_Store
+/docs/books/
