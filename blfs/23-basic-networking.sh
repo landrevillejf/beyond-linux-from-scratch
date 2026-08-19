@@ -24,7 +24,13 @@ fi
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
 [ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
 
-run_privileged() { if [ "$(whoami)" = "root"; then "$@"; else sudo "$@"; fi; }
+run_privileged() {
+    if [ "$(whoami)" = "root" ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
 
 log_info "========================================="
 log_info "Building BLFS Basic Networking"

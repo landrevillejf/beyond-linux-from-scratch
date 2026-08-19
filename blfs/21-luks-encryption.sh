@@ -128,17 +128,15 @@ HELPER
 # 6. Ensure kernel config includes dm-crypt support
 # --------------------------------------------------------------------------
 echo "[INFO] Verifying kernel crypto modules are configured..."
-if [ -f "$LFS/boot/config-"* ]; then
-    config_file=$(ls "$LFS/boot/config-"* 2>/dev/null | head -1)
-    if [ -f "$config_file" ]; then
-        for opt in CONFIG_MD_CRYPT CONFIG_MD_DM CONFIG_CRYPTO_XTS CONFIG_CRYPTO_AES; do
-            if grep -q "${opt}=y\|${opt}=m" "$config_file" 2>/dev/null; then
-                echo "  [OK] $opt is enabled"
-            else
-                echo "  [WARN] $opt may not be enabled – LUKS might not work"
-            fi
-        done
-    fi
+config_file=$(find "$LFS/boot" -name "config-*" -type f 2>/dev/null | head -1)
+if [ -f "$config_file" ]; then
+    for opt in CONFIG_MD_CRYPT CONFIG_MD_DM CONFIG_CRYPTO_XTS CONFIG_CRYPTO_AES; do
+        if grep -q "${opt}=y\|${opt}=m" "$config_file" 2>/dev/null; then
+            echo "  [OK] $opt is enabled"
+        else
+            echo "  [WARN] $opt may not be enabled – LUKS might not work"
+        fi
+    done
 fi
 
 echo "[SUCCESS] LUKS encryption support configured"
