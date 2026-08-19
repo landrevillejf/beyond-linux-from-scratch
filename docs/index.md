@@ -40,16 +40,25 @@ This repository is designed for reproducible, profile‑driven builds and CI/CD 
 
 ## Features
 
-- **Profile‑based builds** – choose from 17 predefined profiles (minimal, full desktop, security‑hardened, ARM64, etc.).
+- **Profile-based builds** – choose from 17 predefined profiles (minimal, full desktop, security-hardened, audio production, ARM64, etc.).
 - **Flexible init systems** – sysvinit, systemd, OpenRC, runit, s6.
-- **Desktop environments** – XFCE, GNOME, KDE Plasma, LXQt, or no GUI.
-- **Cross‑compilation** – build for ARM64 (aarch64) on an x86_64 host using QEMU and cross‑toolchains.
-- **Cache support** – download a pre‑built root filesystem from a remote cache to skip compilation (useful for CI/CD).
-- **Live ISO generation** – produce a hybrid BIOS/UEFI ISO with a squashfs live system.
+- **Desktop environments** – XFCE, GNOME, KDE Plasma, LXQt, Phosh (mobile), or no GUI.
+- **Book compliance** – stages follow LFS 13.0 / BLFS 13.0: packages are built with the exact commands from the books, with the books' error policy enforced.
+- **Cross-compilation** – build for ARM64 (aarch64) on an x86_64 host using QEMU user emulation and cross-toolchains; target arch can be overridden with `--arch`.
+- **Cache support** – restore a pre-built root filesystem from a remote cache to skip compilation (`--use-cache`, `--cache-only`; useful for CI/CD).
+- **Live ISO generation** – produce a hybrid BIOS/UEFI ISO with a squashfs live system and persistence support.
+- **LUKS encryption** – full-disk encryption support via the `luks-encryption` stage.
+- **Calamares installer** – graphical system installer integration.
+- **Complete software stacks** – basic networking, multimedia (PipeWire/PulseAudio, GStreamer, ffmpeg, mpv, VLC), server packages (Apache, MariaDB, PostgreSQL, Samba, OpenSSH, ...), printing and scanning (CUPS, SANE, Gutenprint).
+- **Security and privacy** – kernel hardening, nftables firewall, fail2ban, auditing (AIDE), and privacy tools.
+- **Java development stack** – JDK, Maven, Gradle, Tomcat and containers tooling via the `java-dev` stage.
 - **USB writing** – write the ISO directly to a USB drive with partition unmounting.
-- **Parallel downloads** – fetch source tarballs concurrently.
+- **Parallel downloads** – fetch source tarballs concurrently, with configurable timeouts and retries.
 - **Resume capability** – restart from a failed stage without redoing previous work.
-- **Comprehensive logging** – detailed logs per stage, with last 50 lines displayed on failure.
+- **Build validation** – final `validate` stage checks the produced image before publication.
+- **Supply-chain artifacts** – GPG-sign the ISO (`--sign-iso`) and generate an SPDX SBOM (`--sbom`).
+- **Milestone naming** – tag ISO filenames with a milestone label (`--milestone alpha1`).
+- **Comprehensive logging** – detailed logs per stage, with last 150 lines displayed on failure.
 - **Professional branding** – custom themes, wallpapers, and GRUB backgrounds for the installer and live system (see [Branding](BRANDING.md)).
 
 ---
@@ -57,11 +66,13 @@ This repository is designed for reproducible, profile‑driven builds and CI/CD 
 ## Documentation pages
 
 - [Overview](content.md)
+- [Features](features.md)
 - [Stage Timings](stage-timings.md)
 - [Professional Branding System](BRANDING.md)
 - [Installer Branding](INSTALLER_BRANDING.md)
 - [Branding Visual Reference](branding-visual-mockup.html)
 - [LPM Package Manager](lpm.md)
+- [LPM Full Documentation](LPM_DOCUMENTATION.md)
 - [Troubleshooting](troubleshoot.md)
 - [Docker How-To](docker-howto.md)
 - [Release How-To](make-release-how-to.md)
@@ -126,7 +137,7 @@ graph LR
 flowchart TD
     A["Start builder.py"] --> B["Parse CLI arguments"]
     B --> C["Load config + profile"]
-    C --> D["Apply overrides (--init, --no-live, --kernel-type, --bootloader, --host-distro)"]
+    C --> D["Apply overrides (--init, --no-live, --kernel-type, --kernel-version, --bootloader, --host-distro, --arch)"]
     D --> E["Refresh script execution environment"]
     E --> F["Check prerequisites"]
     F --> G["Prepare output layout"]
@@ -138,34 +149,50 @@ flowchart TD
     L --> M["Optional USB write"]
 ```
 
-### Default stage order (xfce profile, live enabled)
+### Default stage order (`BUILD_STAGES` in `builder.py`)
+
+Profiles include or skip stages as needed (for example GUI stages are
+skipped for headless profiles, and `qemu-setup`/`uboot` only run for
+cross-compiled architectures). The master ordered list is:
 
 1. `host-check`
 2. `host-prepare`
 3. `disk-image`
 4. `toolchain`
-5. `lfs-basic`
-6. `lfs-system`
-7. `init-system`
-8. `service-abstraction`
-9. `configure-lfs`
-10. `blfs-base`
-11. `build-kernel`
-12. `desktop`
-13. `applications`
-14. `configure-desktop`
-15. `package-manager`
-16. `base-packages`
-17. `security`
-18. `branding`
-19. `first-boot`
-20. `system-updater`
-21. `package-updater`
-22. `lpm-advanced`
-23. `initramfs`
-24. `bootloader`
-25. `installer`
-26. `live-system` (when enabled)
+5. `qemu-setup` (cross-compile architectures)
+6. `uboot` (ARM bootloaders)
+7. `lfs-basic`
+8. `lfs-system`
+9. `init-system`
+10. `service-mgmt`
+11. `configure-lfs`
+12. `blfs-base`
+13. `blfs-libs`
+14. `xorg`
+15. `wayland`
+16. `display-manager`
+17. `desktop`
+18. `applications`
+19. `configure-desktop`
+20. `java-dev`
+21. `basic-networking`
+22. `multimedia`
+23. `server`
+24. `printing-scanning`
+25. `base-packages`
+26. `security`
+27. `privacy`
+28. `branding`
+29. `calamares`
+30. `first-boot`
+31. `system-updater`
+32. `lpm`
+33. `luks-encryption`
+34. `initramfs`
+35. `bootloader`
+36. `installer`
+37. `live-system` (when enabled)
+38. `validate`
 
 ---
 
@@ -184,6 +211,9 @@ flowchart TD
 |-- final/
 |-- packages/
 |-- profiles/
+|-- branding/
+|-- docs/
+|-- tools/
 |-- tests/
 |   |-- features/
 |   `-- ...
@@ -229,7 +259,7 @@ git clone https://github.com/landrevillejf/beyond-linux-from-scratch.git
 cd beyond-linux-from-scratch
 
 # Install Python test/build dependencies
-python3 -m pip install -r tests/requirements.txt
+python3 -m pip install -r tests/requirements-test.txt
 
 # List available profiles
 python3 builder.py --list-profiles
@@ -290,9 +320,13 @@ python3 builder.py --generate-sources-list
 | `--cache-only` | Require cache hit; fail otherwise |
 | `--cache-url` | Override cache metadata URL |
 | `--kernel-type` | Kernel type (`linux`, `linux-libre`, `gnu-hurd`, `freebsd`) |
-| `--kernel-version` | Version du noyau (ex: `6.16.1`, `6.12.20`) |
+| `--kernel-version` | Kernel version (e.g. `6.16.1`, `6.12.20`) |
 | `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
+| `--arch` | Target architecture override (`x86_64`, `aarch64`) |
+| `--sign-iso [GPG_KEY]` | Sign the generated ISO with GPG (optional key ID or email) |
+| `--sbom` | Generate an SPDX software bill of materials after the build |
+| `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`) |
 | `--generate-sources-list` | Generate `packages/sources.list` and exit |
 
 ---
@@ -428,22 +462,32 @@ You can add custom source URLs (e.g., for private mirrors or additional packages
 graph TD
     A["Cache workflows"] --> A1["xfce-sysvinit-x86_64-build-cache.yml"]
     A --> A2["xfce-systemd-x86_64-build-cache.yml"]
+    A --> A3["build-rootfs-cache.yml"]
+    A --> A4["cache-packages.yml"]
 
     B["ISO release workflows"] --> B1["xfce-live-boot-iso.yml"]
     B --> B2["release.yml"]
-    B --> B3["nightly.yml"]
+    B --> B3["release-multi-host.yml"]
+    B --> B4["nightly.yml"]
+    B --> B5["weekly-full.yml"]
+    B --> B6["arm64-xfce.yml"]
 
-    C["ISO from cache workflow"] --> C1["build-iso-from-cache.yml"]
+    C["Cache-driven builds"] --> C1["build-iso-from-cache.yml"]
+    C --> C2["use-cache.yml"]
 
-    D["CI and governance workflows"] --> D1["python-app.yml"]
+    D["CI and build verification"] --> D1["python-app.yml"]
     D --> D2["codeql.yml"]
     D --> D3["codacy-security-scan.yml"]
-    D --> D4["docs.yml"]
-    D --> D5["benchmark.yml"]
-    D --> D6["pr-labeler.yml"]
-    D --> D7["squash-pr.yml"]
-    D --> D8["cross-compile.yml"]
-    D --> D9["build.yml"]
+    D --> D4["validate-scripts.yml"]
+    D --> D5["cross-compile.yml"]
+    D --> D6["build.yml"]
+    D --> D7["benchmark.yml"]
+    D --> D8["lfs-build-recipes.yml"]
+
+    E["Governance and docs"] --> E1["pr-labeler.yml"]
+    E --> E2["squash-pr.yml"]
+    E --> E3["docs.yml"]
+    E --> E4["deploy-docs.yml"]
 ```
 
 ### Build and release workflow behavior
@@ -488,7 +532,7 @@ Current baseline in this repository:
 Run locally:
 
 ```bash
-python3 -m pip install -r tests/requirements.txt
+python3 -m pip install -r tests/requirements-test.txt
 python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 ```
 
@@ -508,7 +552,7 @@ python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 
 ### Kernel missing in output
 
-- Inspect `lfs/09-build-kernel.sh` stage log.
+- Inspect `lfs/08-build-kernel.sh` stage log.
 - Confirm `kernel.type` in config and source availability.
 
 ### Download errors

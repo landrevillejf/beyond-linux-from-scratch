@@ -2203,7 +2203,7 @@ Examples:
     parser.add_argument('--kernel-type',
                         choices=['linux', 'linux-libre', 'gnu-hurd', 'freebsd'],
                         default='linux',
-                        help='Type de noyau à utiliser (linux, linux-libre, gnu-hurd, freebsd)')
+                        help='Kernel type to use (linux, linux-libre, gnu-hurd, freebsd)')
 
     parser.add_argument('--host-distro', choices=['debian', 'fedora', 'arch', 'auto'], default='auto',
                         help='Override host distribution detection')
@@ -2217,7 +2217,7 @@ Examples:
                         help='Generate packages/sources.list from configured repositories and exit')
 
     parser.add_argument('--kernel-version',
-                        help='Version du noyau (ex: 6.16.1, 6.12.20, etc.)')
+                        help='Kernel version (e.g. 6.16.1, 6.12.20, etc.)')
 
     parser.add_argument('--download-timeout', type=int,
                         help='Timeout in seconds for each download (default: from config or 300)')
