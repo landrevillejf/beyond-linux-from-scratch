@@ -201,6 +201,31 @@
 
 ### Fixed
 
+- **Nightly #159 failures: aarch64 coreutils `make install` and xfce `xz: liblzma.so.5` missing** (`host/04-build-toolchain.sh`)
+  - arm64 job: the `toolchain` stage died in temporary coreutils
+    `make install` with `mv: '..._inst.451424_' ... are the same file`
+    right after qemu reported `aarch64-binfmt-P: Could not open
+    '/lib/ld-linux-aarch64.so.1'`. With `$LFS/tools/bin` leading PATH,
+    the install machinery resolved `cp`/`mv`/`basename`/... to the
+    freshly installed aarch64 binaries, which the x86_64 runner cannot
+    execute
+  - Fix: on cross builds (target triple keyed on `$LFS_TGT`) PATH now
+    puts the host directories first; the cross toolchain still
+    resolves since it only exists in `$LFS/tools/bin`. Native builds
+    keep the book order. `QEMU_LD_PREFIX=$LFS` is also exported so any
+    binfmt-mediated execution of target binaries resolves the loader
+    from the sysroot
+  - xfce x86_64 job: the `lfs-system` stage died on the first source
+    extraction (`xz: error while loading shared libraries:
+    liblzma.so.5`): the temporary tools link against the target glibc
+    whose loader only searches `/lib` and `/usr/lib` at runtime, so
+    `/tools/lib` is invisible inside the chapter 7/8 chroot
+  - Fix: every temporary tools configure call (generic loop, ncurses,
+    file) now passes `LDFLAGS="-Wl,-rpath,$LFS/tools/lib"`, keeping
+    the `/tools` userspace self-contained
+  - Regression tests: `test_toolchain_cross_builds_keep_host_utils_first`,
+    `test_temp_tools_carry_tools_lib_rpath`
+
 - **Nightly #158 toolchain failures: aarch64 `libgcc_s` location and coreutils help2man** (`host/04-build-toolchain.sh`)
   - arm64 job: the fail-fast guard from the previous fix tripped with
     `libgcc_s.so.1 missing from .../usr/lib after GCC pass 2` because GCC

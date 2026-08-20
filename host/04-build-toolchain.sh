@@ -111,7 +111,27 @@ fi
 
 LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}
 NUM_JOBS=${NUM_JOBS:-$(nproc 2>/dev/null || echo 4)}
-PATH="$LFS/tools/bin:/usr/bin:/bin"
+# Native builds keep the book order: the temporary tools shadow the
+# host utilities.  On cross builds $LFS/tools/bin progressively fills
+# with target binaries the host cannot execute; if it leads PATH, the
+# install machinery of later packages resolves cp/mv/basename/... to
+# them and breaks (e.g. coreutils "make install" failing with mv
+# "same file" errors under qemu binfmt).  Host directories first keep
+# those utilities on the host versions while the cross toolchain
+# ($LFS_TGT-*) still resolves from $LFS/tools/bin, the only place it
+# exists.
+case "$LFS_TGT" in
+    "$(uname -m)"*)
+        PATH="$LFS/tools/bin:/usr/bin:/bin"
+        ;;
+    *)
+        PATH="/usr/bin:/bin:$LFS/tools/bin"
+        # If the host executes target binaries through qemu-user
+        # (binfmt_misc), point it at the target sysroot so the ELF
+        # interpreter /lib/ld-*.so.1 resolves to $LFS/lib/ld-*.so.1.
+        export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-$LFS}"
+        ;;
+esac
 export LFS LFS_TGT LC_ALL=POSIX PATH
 
 log_info "LFS=$LFS, TARGET=$LFS_TGT, JOBS=$NUM_JOBS"
@@ -133,7 +153,8 @@ mkdir -p "$LFS_HOME"
     # shellcheck disable=SC2016
     {
         echo 'LFS_TGT=${LFS_TGT:-$(uname -m)-lfs-linux-gnu}'
-        echo 'PATH=$LFS/tools/bin:/usr/bin:/bin'
+        # Same PATH policy as the one computed above for this target.
+        printf 'PATH=%q\n' "$PATH"
     }
     echo "export LFS LC_ALL LFS_TGT PATH"
 } >"$LFS_HOME/.bashrc"
@@ -593,6 +614,11 @@ build_toolchain() {
     # required by those stages.
     # ==============================================================
     log_info "Building temporary tools (LFS Chapter 6)"
+    # The temporary tools link against the target glibc, whose loader
+    # searches only /lib and /usr/lib at runtime.  Give them an rpath
+    # toward $LFS/tools/lib so binaries such as /tools/bin/xz still
+    # find liblzma.so.5 when executed inside the chapter 7/8 chroot.
+    tools_rpath="-Wl,-rpath,$LFS/tools/lib"
     for pkg in m4 ncurses bash coreutils diffutils file findutils gawk grep gzip make patch sed tar xz bison bzip2; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)
@@ -654,7 +680,7 @@ build_toolchain() {
                 --disable-stripping \
                 AWK=gawk \
                 CFLAGS="-O2 -std=gnu17" \
-                LDFLAGS="-lgcc_s"
+                LDFLAGS="-lgcc_s $tools_rpath"
             make -j"$NUM_JOBS"
             make TIC_PATH="$(pwd)/build/progs/tic" install
             ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"
@@ -693,7 +719,8 @@ build_toolchain() {
             popd
             ./configure --prefix="$LFS/tools" \
                 --host="$LFS_TGT" \
-                --build="$(./config.guess)"
+                --build="$(./config.guess)" \
+                LDFLAGS="$tools_rpath"
             make -j"$NUM_JOBS" FILE_COMPILE="$(pwd)/build/src/file"
             make install
             rm -fv "$LFS/tools/lib/libmagic.la"
@@ -729,7 +756,8 @@ build_toolchain() {
             ./configure --prefix="$LFS/tools" \
                 --host="$LFS_TGT" \
                 $build_flag \
-                $extra_flags
+                $extra_flags \
+                LDFLAGS="$tools_rpath"
             # shellcheck disable=SC2086
             make -j"$NUM_JOBS" $make_flags
             make install

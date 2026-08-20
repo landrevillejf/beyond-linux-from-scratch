@@ -523,7 +523,7 @@ class TestLFSComplianceGuardrails:
         # libgcc instead of the hidden static ones.
         ncurses_pos = content.find('ncurses)')
         assert ncurses_pos != -1
-        assert content.find('LDFLAGS="-lgcc_s"', ncurses_pos) > \
+        assert content.find('LDFLAGS="-lgcc_s ', ncurses_pos) > \
             ncurses_pos, "Temporary ncurses must link with -lgcc_s"
 
     def test_toolchain_normalizes_lib64_for_all_targets(self):
@@ -547,7 +547,7 @@ class TestLFSComplianceGuardrails:
 
         # Keyed on the target triple so cross builds are covered;
         # no target-layout decision may key on the host uname -m.
-        assert content.count('case "$LFS_TGT" in') == 5
+        assert content.count('case "$LFS_TGT" in') == 6
         assert 'case $(uname -m) in' not in content
 
     def test_temp_coreutils_uses_dummy_man_for_man_pages(self):
@@ -568,6 +568,57 @@ class TestLFSComplianceGuardrails:
                             coreutils_pos) > coreutils_pos, \
             "Temporary coreutils must force dummy-man for man pages"
         assert 'make -j"$NUM_JOBS" $make_flags' in content
+
+    def test_toolchain_cross_builds_keep_host_utils_first(self):
+        """Cross builds must not let $LFS/tools/bin shadow host
+        utilities.
+
+        The nightly aarch64 run died in coreutils "make install" with
+        mv "'_inst.451424_' ... are the same file" right after qemu
+        reported "aarch64-binfmt-P: Could not open
+        '/lib/ld-linux-aarch64.so.1'": with $LFS/tools/bin leading
+        PATH, the install machinery resolved cp/mv/basename/... to
+        freshly installed aarch64 binaries the host cannot execute.
+        Native builds keep the book order; cross builds put the host
+        directories first (the cross toolchain only exists in
+        $LFS/tools/bin, so it still resolves) and export
+        QEMU_LD_PREFIX so any binfmt-mediated execution of target
+        binaries resolves the loader from the sysroot.
+        """
+        content = Path('host/04-build-toolchain.sh').read_text()
+        assert 'PATH="$LFS/tools/bin:/usr/bin:/bin"' in content, \
+            "Native builds must keep the book PATH order"
+        assert 'PATH="/usr/bin:/bin:$LFS/tools/bin"' in content, \
+            "Cross builds must put host directories first in PATH"
+        assert 'export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-$LFS}"' \
+            in content, "Cross builds must export QEMU_LD_PREFIX"
+        # The PATH policy keys on the target triple, and the host-first
+        # branch sits before the PATH export.
+        case_pos = content.find('"$(uname -m)"*)')
+        host_first_pos = content.find(
+            'PATH="/usr/bin:/bin:$LFS/tools/bin"')
+        export_pos = content.find(
+            'export LFS LFS_TGT LC_ALL=POSIX PATH')
+        assert -1 not in (case_pos, host_first_pos, export_pos)
+        assert case_pos < host_first_pos < export_pos
+
+    def test_temp_tools_carry_tools_lib_rpath(self):
+        """Temporary tools must carry an rpath toward $LFS/tools/lib.
+
+        The nightly xfce lfs-system run died on the very first source
+        extraction: tar invoked /tools/bin/xz, which failed with
+        "error while loading shared libraries: liblzma.so.5". The
+        temporary tools link against the target glibc whose loader
+        only searches /lib and /usr/lib at runtime, so /tools/lib is
+        invisible inside the chapter 7/8 chroot. Every temporary tools
+        configure call must therefore pass an rpath LDFLAGS.
+        """
+        content = Path('host/04-build-toolchain.sh').read_text()
+        assert 'tools_rpath="-Wl,-rpath,$LFS/tools/lib"' in content
+        # Generic loop configure plus the file branch pass the rpath;
+        # ncurses merges it into its own LDFLAGS.
+        assert content.count('LDFLAGS="$tools_rpath"') == 2
+        assert 'LDFLAGS="-lgcc_s $tools_rpath"' in content
 
     def test_stage14_seeds_installed_registry_from_sources(self):
         """Stage 14 must seed installed.list with versions resolved
