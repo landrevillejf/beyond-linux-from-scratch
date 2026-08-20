@@ -616,9 +616,16 @@ build_toolchain() {
     log_info "Building temporary tools (LFS Chapter 6)"
     # The temporary tools link against the target glibc, whose loader
     # searches only /lib and /usr/lib at runtime.  Give them an rpath
-    # toward $LFS/tools/lib so binaries such as /tools/bin/xz still
+    # toward the tools lib dir so binaries such as /tools/bin/xz still
     # find liblzma.so.5 when executed inside the chapter 7/8 chroot.
-    tools_rpath="-Wl,-rpath,$LFS/tools/lib"
+    #
+    # Two entries are needed because the same binaries run from two
+    # different roots: on the build host during the toolchain stage the
+    # tools live at $LFS/tools/lib, while inside the chroot ($LFS is /)
+    # they live at /tools/lib.  The loader skips any rpath entry that
+    # does not exist, so carrying both is harmless and lets each tool
+    # resolve its libraries in whichever root it is executed from.
+    tools_rpath="-Wl,-rpath,$LFS/tools/lib -Wl,-rpath,/tools/lib"
     for pkg in m4 ncurses bash coreutils diffutils file findutils gawk grep gzip make patch sed tar xz bison bzip2; do
         if [ "$pkg" = "make" ]; then
             archive=$(find . -maxdepth 1 -name "make-[0-9]*.tar.*" -print -quit)

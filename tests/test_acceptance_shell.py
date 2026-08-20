@@ -603,7 +603,7 @@ class TestLFSComplianceGuardrails:
         assert case_pos < host_first_pos < export_pos
 
     def test_temp_tools_carry_tools_lib_rpath(self):
-        """Temporary tools must carry an rpath toward $LFS/tools/lib.
+        """Temporary tools must carry an rpath toward the tools lib dir.
 
         The nightly xfce lfs-system run died on the very first source
         extraction: tar invoked /tools/bin/xz, which failed with
@@ -612,13 +612,43 @@ class TestLFSComplianceGuardrails:
         only searches /lib and /usr/lib at runtime, so /tools/lib is
         invisible inside the chapter 7/8 chroot. Every temporary tools
         configure call must therefore pass an rpath LDFLAGS.
+
+        The rpath must carry BOTH roots: $LFS/tools/lib (build host,
+        where the tools live during the toolchain stage) and /tools/lib
+        (the chroot, where $LFS is / and the same binaries run during
+        lfs-system). Embedding only $LFS/tools/lib resolves to a
+        non-existent path inside the chroot, which is exactly what made
+        the earlier fix a no-op there.
         """
         content = Path('host/04-build-toolchain.sh').read_text()
-        assert 'tools_rpath="-Wl,-rpath,$LFS/tools/lib"' in content
+        # Both the host-root and the chroot-root lib dirs are covered.
+        assert 'tools_rpath="-Wl,-rpath,$LFS/tools/lib ' \
+            '-Wl,-rpath,/tools/lib"' in content, \
+            "rpath must cover both $LFS/tools/lib and /tools/lib"
         # Generic loop configure plus the file branch pass the rpath;
         # ncurses merges it into its own LDFLAGS.
         assert content.count('LDFLAGS="$tools_rpath"') == 2
         assert 'LDFLAGS="-lgcc_s $tools_rpath"' in content
+
+    def test_uboot_uses_lfs_sources_not_host_root(self):
+        """The uboot stage must build inside $LFS/sources, never a
+        host-level /sources.
+
+        The nightly arm64/aarch64 run passed the toolchain stage but
+        died in the uboot stage with "mkdir: cannot create directory
+        '/sources': Permission denied": the stage runs as the
+        unprivileged lfs user, which cannot create /sources at the host
+        root. The U-Boot sources must be downloaded into the builder's
+        sources directory ($LFS/sources), which already exists and is
+        owned by lfs.
+        """
+        content = Path('host/05-build-uboot.sh').read_text()
+        # The stage works from $LFS/sources, not a host-level /sources.
+        assert 'SOURCES_DIR="${LFS:-/mnt/lfs}/sources"' in content
+        assert 'mkdir -p /sources' not in content, \
+            "uboot must not create a host-level /sources directory"
+        assert 'cd /sources' not in content, \
+            "uboot must not cd into a host-level /sources directory"
 
     def test_stage14_seeds_installed_registry_from_sources(self):
         """Stage 14 must seed installed.list with versions resolved

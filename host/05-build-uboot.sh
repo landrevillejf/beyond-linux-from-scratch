@@ -23,7 +23,10 @@ ARCH="${ARCH:-arm64}"
 U_BOOT_VERSION="${U_BOOT_VERSION:-2024.07}"
 U_BOOT_URL="https://ftp.denx.de/pub/u-boot/u-boot-${U_BOOT_VERSION}.tar.bz2"
 U_BOOT_DIR="u-boot-${U_BOOT_VERSION}"
-BOARD="${U_BOOT_BOARD:-rpi_4}" # default to Raspberry Pi 4 (64-bit)
+# Board comes from the profile/bootloader config (flattened by
+# builder.py as LFS_PROFILE_UBOOT_BOARD / LFS_CONFIG_BOOTLOADER_UBOOT_BOARD),
+# defaulting to the Raspberry Pi 4 (64-bit).
+BOARD="${U_BOOT_BOARD:-${LFS_PROFILE_UBOOT_BOARD:-${LFS_CONFIG_BOOTLOADER_UBOOT_BOARD:-rpi_4}}}"
 OUTPUT_DIR="${LFS:-/mnt/lfs}/boot"
 
 # Map boards to U-Boot defconfigs
@@ -55,15 +58,25 @@ fi
 # ----------------------------------------------------------------------
 # Download U-Boot
 # ----------------------------------------------------------------------
-mkdir -p /sources
-cd /sources
+# Use the builder's sources directory under $LFS: the stage runs as the
+# unprivileged lfs user, which cannot create a host-level /sources.
+SOURCES_DIR="${LFS:-/mnt/lfs}/sources"
+mkdir -p "$SOURCES_DIR"
+cd "$SOURCES_DIR"
 
 if [ ! -f "${U_BOOT_DIR}.tar.bz2" ]; then
     log_info "Downloading U-Boot ${U_BOOT_VERSION}..."
-    wget -q --show-progress "$U_BOOT_URL" || {
-        log_error "Failed to download U-Boot"
-        exit 1
-    }
+    if command -v curl >/dev/null 2>&1; then
+        curl -fL --retry 3 -o "${U_BOOT_DIR}.tar.bz2" "$U_BOOT_URL" || {
+            log_error "Failed to download U-Boot"
+            exit 1
+        }
+    else
+        wget -q "$U_BOOT_URL" || {
+            log_error "Failed to download U-Boot"
+            exit 1
+        }
+    fi
 fi
 
 # Extract if not already extracted
@@ -104,7 +117,7 @@ if [ -f "u-boot-dtb.bin" ]; then
     cp -v u-boot-dtb.bin "$OUTPUT_DIR/"
 fi
 # Copy device trees if available
-if ls arch/arm/dts/*.dtb 1>/dev/null 2>&1; then
+if [ -n "$(find arch/arm/dts -maxdepth 1 -name '*.dtb' -print -quit 2>/dev/null)" ]; then
     cp -v arch/arm/dts/*.dtb "$OUTPUT_DIR/"
 fi
 

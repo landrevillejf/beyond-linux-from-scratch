@@ -201,7 +201,19 @@
 
 ### Fixed
 
-- **Nightly #159 failures: aarch64 coreutils `make install` and xfce `xz: liblzma.so.5` missing** (`host/04-build-toolchain.sh`)
+- **Nightly #160: uboot stage `/sources` permission failure on aarch64** (`host/05-build-uboot.sh`)
+  - With the toolchain stage fixed, the arm64 job advanced to the
+    `uboot` stage and died on `mkdir: cannot create directory
+    '/sources': Permission denied`: the stage runs as the unprivileged
+    `lfs` user but worked from a host-level `/sources`
+  - Fix: U-Boot is now downloaded and built in `$LFS/sources` (the
+    builder's sources directory, owned by lfs); curl-first download
+    with wget fallback; the board is read from the flattened profile
+    config (`LFS_PROFILE_UBOOT_BOARD`); the `.dtb` probe uses `find`
+    instead of `ls`
+  - Regression test: `test_uboot_uses_lfs_sources_not_host_root`
+
+- **Nightly #159/#160 failures: aarch64 coreutils `make install` and x86_64 `xz: liblzma.so.5` missing** (`host/04-build-toolchain.sh`)
   - arm64 job: the `toolchain` stage died in temporary coreutils
     `make install` with `mv: '..._inst.451424_' ... are the same file`
     right after qemu reported `aarch64-binfmt-P: Could not open
@@ -215,14 +227,19 @@
     keep the book order. `QEMU_LD_PREFIX=$LFS` is also exported so any
     binfmt-mediated execution of target binaries resolves the loader
     from the sysroot
-  - xfce x86_64 job: the `lfs-system` stage died on the first source
+  - x86_64 jobs: the `lfs-system` stage died on the first source
     extraction (`xz: error while loading shared libraries:
     liblzma.so.5`): the temporary tools link against the target glibc
     whose loader only searches `/lib` and `/usr/lib` at runtime, so
     `/tools/lib` is invisible inside the chapter 7/8 chroot
   - Fix: every temporary tools configure call (generic loop, ncurses,
-    file) now passes `LDFLAGS="-Wl,-rpath,$LFS/tools/lib"`, keeping
-    the `/tools` userspace self-contained
+    file) passes `LDFLAGS="-Wl,-rpath,$LFS/tools/lib
+    -Wl,-rpath,/tools/lib"`. Both roots are embedded because the same
+    binaries run from two different roots — `$LFS/tools/lib` on the
+    build host during the toolchain stage and `/tools/lib` inside the
+    chroot where `$LFS` is `/`; the first iteration of this fix
+    embedded only the host path, which does not exist in the chroot
+    and left the failure unchanged
   - Regression tests: `test_toolchain_cross_builds_keep_host_utils_first`,
     `test_temp_tools_carry_tools_lib_rpath`
 
