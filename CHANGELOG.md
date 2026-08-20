@@ -201,6 +201,24 @@
 
 ### Fixed
 
+- **Nightly #161: lfs-system built the python docs tarball instead of the sources** (`lfs/05b-build-lfs-system.sh` + 17 more stage scripts)
+  - With the toolchain rpath fix in place, the xfce job advanced past
+    perl and died at `=== Building python-3.13.7-docs-html ===` with
+    `./configure: No such file or directory`: the `find_archive`
+    prefix glob returned the first alphabetical match, and the
+    documentation tarball sorts before `Python-3.13.7.tar.xz`
+  - Fix: `find_archive` is now variant-safe everywhere it resolves
+    tarballs by package name (`lfs/05b`, `lfs/06a`, `lfs/06c-e`,
+    `blfs/08`, `08a-d`, `09a-d`, `23`, `24`, `25`, `26`): it matches
+    case-insensitively (`Python-3.13.7.tar.xz`, `XML-Parser`),
+    treats underscores like dashes (`flit_core`), prefers
+    `name-<version>` tarballs while skipping `-docs`/`-html`
+    variants, and falls back to oddball layouts by preferring `-src`
+    archives (`tcl8.6.16-src`), then a top-level `configure` probe
+    (`expect5.45.4`, `icu4c-77_1-src.tgz`)
+  - Regression tests: `test_find_archive_survives_variant_tarballs`,
+    `test_all_stages_use_variant_safe_find_archive`
+
 - **Nightly #160: uboot stage `/sources` permission failure on aarch64** (`host/05-build-uboot.sh`)
   - With the toolchain stage fixed, the arm64 job advanced to the
     `uboot` stage and died on `mkdir: cannot create directory

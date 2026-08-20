@@ -94,7 +94,74 @@ mkdir -p /var/lib/lfs-builder/display-manager /etc/lightdm /usr/share/xsessions 
 JOBS="$(nproc 2>/dev/null || echo 1)"
 HAVE_SYSTEMD=false
 marker_for() { echo "/var/lib/lfs-builder/display-manager/$1.done"; }
-find_archive() { compgen -G "${1}-*.tar.*" 2>/dev/null | sort -V | tail -n 1; }
+# Match package names case-insensitively (Python-3.13.7.tar.xz),
+# treat underscores like dashes (flit_core), prefer name-<version>
+# tarballs over documentation variants (python-3.13.7-docs-html),
+# and fall back to oddball layouts (tcl8.6.16-src, expect5.45.4).
+find_archive() {
+    local base=$1 f name_lc prefix_lc
+    local -a tier1=() tier2=() filtered=()
+    prefix_lc=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+
+    for f in *.tar.* *.tgz; do
+        [ -f "$f" ] || continue
+        name_lc=$(printf '%s' "$f" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+        case "$name_lc" in
+            "$prefix_lc"*) ;;
+            *) continue ;;
+        esac
+        case "$name_lc" in
+            "$prefix_lc"-[0-9]*) tier1+=("$f") ;;
+            *) tier2+=("$f") ;;
+        esac
+    done
+
+    # Prefer name-<version> tarballs, skipping documentation variants
+    # such as python-3.13.7-docs-html.tar.bz2.
+    if [ "${#tier1[@]}" -gt 0 ]; then
+        for f in "${tier1[@]}"; do
+            case "$f" in
+                *-docs* | *-html* | *-apidoc*) ;;
+                *) filtered+=("$f") ;;
+            esac
+        done
+        [ "${#filtered[@]}" -gt 0 ] && tier1=("${filtered[@]}")
+        printf '%s\n' "${tier1[0]}"
+        return 0
+    fi
+
+    # Fallback: non-standard layouts such as tcl8.6.16-src.tar.gz or
+    # expect5.45.4.tar.gz.  Prefer -src archives, then any archive
+    # whose top level carries a configure script.
+    if [ "${#tier2[@]}" -eq 0 ]; then
+        echo "ERROR: no source archive found for $base" >&2
+        return 0
+    fi
+    for f in "${tier2[@]}"; do
+        case "$f" in
+            *-src*)
+                printf '%s\n' "$f"
+                return 0
+                ;;
+        esac
+    done
+    filtered=()
+    for f in "${tier2[@]}"; do
+        case "$f" in
+            *-docs* | *-html* | *-apidoc*) ;;
+            *) filtered+=("$f") ;;
+        esac
+    done
+    [ "${#filtered[@]}" -gt 0 ] && tier2=("${filtered[@]}")
+    for f in "${tier2[@]}"; do
+        if tar -tf "$f" 2>/dev/null | grep -Eq '(^|/)configure$'; then
+            printf '%s\n' "$f"
+            return 0
+        fi
+    done
+    printf '%s\n' "${tier2[0]}"
+    return 0
+}
 extract_archive() {
     local archive="$1" dir
     dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"

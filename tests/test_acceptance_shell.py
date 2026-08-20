@@ -650,6 +650,93 @@ class TestLFSComplianceGuardrails:
         assert 'cd /sources' not in content, \
             "uboot must not cd into a host-level /sources directory"
 
+    def test_find_archive_survives_variant_tarballs(self, tmp_path):
+        """find_archive must skip docs variants and survive case and
+        underscore tarball names.
+
+        Nightly #161 died in lfs-system right after perl with
+        "=== Building python-3.13.7-docs-html ===" followed by
+        "./configure: No such file or directory": the old prefix glob
+        returned the first alphabetical match, and the documentation
+        tarball sorts before Python-3.13.7.tar.xz.  The lookup must
+        also survive capitalized names (Python-3.13.7.tar.xz,
+        XML-Parser), underscores (flit_core) and oddball layouts
+        (tcl8.6.16-src, expect5.45.4, icu4c .tgz).
+        """
+        import re
+
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        match = re.search(r'^find_archive\(\) \{\n.*?^\}\n', content,
+                          re.DOTALL | re.MULTILINE)
+        assert match, "05b must define find_archive"
+        fn_text = match.group(0)
+
+        for name in ('Python-3.13.7.tar.xz',
+                     'python-3.13.7-docs-html.tar.bz2',
+                     'tcl8.6.16-src.tar.gz',
+                     'tcl8.6.16-html.tar.gz',
+                     'expect5.45.4.tar.gz',
+                     'flit_core-3.12.0.tar.gz',
+                     'icu4c-77_1-src.tgz'):
+            (tmp_path / name).touch()
+
+        probe = tmp_path / 'probe.sh'
+        probe.write_text(
+            '#!/bin/bash\nset -u\n' + fn_text +
+            'cd "$1"\n'
+            'for b in python tcl expect flit-core icu4c nosuchpkg; do\n'
+            '    r=$(find_archive "$b")\n'
+            '    echo "${b}=${r}"\n'
+            'done\n')
+        result = subprocess.run(['bash', str(probe), str(tmp_path)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        picks = dict(line.split('=', 1) for line in
+                     result.stdout.splitlines() if '=' in line)
+        assert picks['python'] == 'Python-3.13.7.tar.xz', \
+            "python must resolve to the buildable sources, not docs"
+        assert picks['tcl'] == 'tcl8.6.16-src.tar.gz', \
+            "tcl must prefer the -src archive over the -html docs"
+        assert picks['expect'] == 'expect5.45.4.tar.gz'
+        assert picks['flit-core'] == 'flit_core-3.12.0.tar.gz'
+        assert picks['icu4c'] == 'icu4c-77_1-src.tgz'
+        assert picks['nosuchpkg'] == ''
+
+    def test_all_stages_use_variant_safe_find_archive(self):
+        """Every stage that resolves source tarballs by package name
+        must use the variant-safe helper, never the old prefix glob
+        that matched documentation tarballs and missed .tgz, case and
+        underscore variants."""
+        legacy = 'compgen -G "${1}-*.tar.*"'
+        scripts = [
+            'lfs/05b-build-lfs-system.sh',
+            'lfs/06a-init-system.sh',
+            'lfs/06c-init-openrc.sh',
+            'lfs/06d-init-runit.sh',
+            'lfs/06e-init-s6.sh',
+            'blfs/08-build-blfs-base.sh',
+            'blfs/08a-build-blfs-libs.sh',
+            'blfs/08b-build-xorg.sh',
+            'blfs/08c-build-wayland.sh',
+            'blfs/08d-build-display-manager.sh',
+            'blfs/09a-build-xfce.sh',
+            'blfs/09b-build-gnome.sh',
+            'blfs/09c-build-kde.sh',
+            'blfs/09d-build-lxqt.sh',
+            'blfs/23-basic-networking.sh',
+            'blfs/24-multimedia.sh',
+            'blfs/25-server.sh',
+            'blfs/26-printing-scanning.sh',
+        ]
+        for script in scripts:
+            content = Path(script).read_text()
+            assert legacy not in content, \
+                f"{script} still uses the legacy prefix-glob lookup"
+            assert "tr '[:upper:]' '[:lower:]' | tr '_' '-'" in content, \
+                f"{script} lacks the case/underscore-safe lookup"
+            assert '"$prefix_lc"-[0-9]*) tier1+=("$f")' in content, \
+                f"{script} must prefer name-<version> tarballs"
+
     def test_stage14_seeds_installed_registry_from_sources(self):
         """Stage 14 must seed installed.list with versions resolved
         from the build's source tarballs, not just a hardcoded table.
