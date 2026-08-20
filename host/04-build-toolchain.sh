@@ -539,6 +539,16 @@ build_toolchain() {
     make DESTDIR="$LFS" install
     # Finishing touch from LFS 12.4 section 6.18: generic cc symlink.
     ln -sv gcc "$LFS/usr/bin/cc"
+    # Pass 2 installs libgcc_s.so.1 into the sysroot ($LFS/usr/lib).
+    # The temporary tools below still link with the pass 1 compiler,
+    # whose static-only libgcc keeps unwind symbols hidden since
+    # GCC 14. Without a shared libgcc in the sysroot, linking the
+    # ncurses C++ shared library fails later with "hidden symbol
+    # _Unwind_GetLanguageSpecificData in libgcc.a referenced by DSO".
+    if [ ! -e "$LFS/usr/lib/libgcc_s.so.1" ]; then
+        log_error "libgcc_s.so.1 missing from $LFS/usr/lib after GCC pass 2"
+        exit 1
+    fi
     cd "$LFS/sources"
     rm -rf "$GCC_DIR"
     log_success "GCC (pass 2) done"
@@ -612,7 +622,8 @@ build_toolchain() {
                 --without-ada \
                 --disable-stripping \
                 AWK=gawk \
-                CFLAGS="-O2 -std=gnu17"
+                CFLAGS="-O2 -std=gnu17" \
+                LDFLAGS="-lgcc_s"
             make -j"$NUM_JOBS"
             make TIC_PATH="$(pwd)/build/progs/tic" install
             ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"

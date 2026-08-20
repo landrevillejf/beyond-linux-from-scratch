@@ -201,6 +201,23 @@
 
 ### Fixed
 
+- **Nightly toolchain failure: hidden `_Unwind_*` symbol in ncurses C++ link** (`host/04-build-toolchain.sh`)
+  - Both nightly jobs (java-dev x86_64, arm64 aarch64) failed at the
+    `toolchain` stage with `hidden symbol '_Unwind_GetLanguageSpecificData'
+    in libgcc.a is referenced by DSO` while linking the ncurses
+    `--with-cxx-shared` demo program
+  - Root cause: the Chapter 6 temporary tools link with the pass 1
+    cross compiler (`--disable-shared`), whose static-only libgcc keeps
+    unwind symbols hidden since GCC 14. The sysroot had no
+    `libgcc_s.so.1`, so the linker could not resolve the unwind
+    reference carried by `libncurses++w.so`
+  - Fix: GCC pass 2 is already built before the tools loop, and it
+    installs `libgcc_s.so.1` into the sysroot (`$LFS/usr/lib`, reachable
+    through the usr-merge `/lib` symlink); the stage now fails fast if
+    it is missing, and the temporary ncurses build passes
+    `LDFLAGS="-lgcc_s"` so the shared C++ library and the demo program
+    resolve unwind symbols against the shared libgcc
+
 - **ncurses C++ binding fails with GCC 15** (`host/04-build-toolchain.sh`, `lfs/05b-build-lfs-system.sh`)
   - GCC 15 defaults to C23 where `bool` is a keyword, so ncurses
     configure misdetects `bool` and emits a `curses.h` that leaks

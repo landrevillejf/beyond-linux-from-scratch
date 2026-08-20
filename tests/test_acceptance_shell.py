@@ -495,6 +495,37 @@ class TestLFSComplianceGuardrails:
             assert 'CFLAGS="-O2 -std=gnu17"' in content, \
                 f"{script} must force C17 for ncurses (GCC 15 bool bug)"
 
+    def test_toolchain_provides_shared_libgcc_for_temp_tools(self):
+        """The temporary tools must link against a shared libgcc.
+
+        The Chapter 6 tools link with the pass 1 cross compiler whose
+        static-only libgcc keeps unwind symbols hidden since GCC 14, so
+        the ncurses --with-cxx-shared demo link failed in the nightly
+        with "hidden symbol _Unwind_GetLanguageSpecificData in libgcc.a
+        referenced by DSO". GCC pass 2 runs before the tools loop and
+        installs libgcc_s.so.1 into the sysroot; the stage must verify
+        it exists and the temporary ncurses build must link -lgcc_s.
+        """
+        content = Path('host/04-build-toolchain.sh').read_text()
+
+        # GCC pass 2 installs libgcc_s.so.1 before the tools loop and
+        # the stage fails fast when it is missing.
+        gcc_p2_pos = content.find('Building GCC (pass 2)')
+        tools_loop_pos = content.find(
+            'Building temporary tools (LFS Chapter 6)')
+        libgcc_check_pos = content.find('$LFS/usr/lib/libgcc_s.so.1')
+        assert -1 not in (gcc_p2_pos, tools_loop_pos, libgcc_check_pos)
+        assert gcc_p2_pos < libgcc_check_pos < tools_loop_pos, \
+            "libgcc_s.so.1 must be verified after GCC pass 2 and " \
+            "before the tools loop"
+
+        # Temporary ncurses resolves unwind symbols via the shared
+        # libgcc instead of the hidden static ones.
+        ncurses_pos = content.find('ncurses)')
+        assert ncurses_pos != -1
+        assert content.find('LDFLAGS="-lgcc_s"', ncurses_pos) > \
+            ncurses_pos, "Temporary ncurses must link with -lgcc_s"
+
     def test_stage14_seeds_installed_registry_from_sources(self):
         """Stage 14 must seed installed.list with versions resolved
         from the build's source tarballs, not just a hardcoded table.
