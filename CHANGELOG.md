@@ -201,6 +201,26 @@
 
 ### Fixed
 
+- **Nightly #158 toolchain failures: aarch64 `libgcc_s` location and coreutils help2man** (`host/04-build-toolchain.sh`)
+  - arm64 job: the fail-fast guard from the previous fix tripped with
+    `libgcc_s.so.1 missing from .../usr/lib after GCC pass 2` because GCC
+    installs 64-bit target libraries into its `MULTILIB_OSDIRNAMES`
+    default dir — `/usr/lib64` on aarch64. The LFS book's lib64 -> lib
+    normalization (section 5.3) was only applied for x86_64 and keyed on
+    `uname -m`, which never matches on cross builds
+  - Fix: the `t-linux64`/`t-aarch64-linux` sed is now keyed on `$LFS_TGT`
+    and covers `aarch64*`, applied in the libstdc++ pass and both GCC
+    passes; the remaining target-layout decisions (`$LFS/lib64` dir,
+    glibc loader compatibility symlinks) are keyed on `$LFS_TGT` too
+  - minimal x86_64 job: temporary coreutils failed with
+    `help2man: can't get '--help' info from man/stty.td/stty` because
+    target binaries happen to run on the same-architecture build host,
+    so autoconf resolves `cross_compiling=no` and coreutils runs the
+    real help2man against them
+  - Fix: the temporary coreutils build forces
+    `run_help2man=man/dummy-man`, which installs the distributed man
+    pages — exactly what coreutils does for genuine cross builds
+
 - **Nightly toolchain failure: hidden `_Unwind_*` symbol in ncurses C++ link** (`host/04-build-toolchain.sh`)
   - Both nightly jobs (java-dev x86_64, arm64 aarch64) failed at the
     `toolchain` stage with `hidden symbol '_Unwind_GetLanguageSpecificData'

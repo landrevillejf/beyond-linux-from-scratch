@@ -184,8 +184,10 @@ build_toolchain() {
             ln -sv "usr/$dir" "$LFS/$dir"
         fi
     done
-    case $(uname -m) in
-        x86_64) mkdir -pv "$LFS/lib64" ;;
+    # lib64 is part of the x86_64 target layout, so key on the
+    # target triple rather than the build host architecture.
+    case "$LFS_TGT" in
+        x86_64*) mkdir -pv "$LFS/lib64" ;;
     esac
 
     # ==============================================================
@@ -236,9 +238,17 @@ build_toolchain() {
         fi
     done
     # Use lib instead of lib64 as default directory for 64-bit libs.
-    case $(uname -m) in
-        x86_64)
+    # Keyed on the target triple: cross builds run on a host whose
+    # uname -m does not match the target (e.g. aarch64 on x86_64).
+    # Without this, GCC installs target libraries into /usr/lib64
+    # (MULTILIB_OSDIRNAMES default), splitting the sysroot layout.
+    case "$LFS_TGT" in
+        x86_64*)
             sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+        aarch64*)
+            sed -e '/mabi.lp64=/s/lib64/lib/' \
+                -i.orig gcc/config/aarch64/t-aarch64-linux
             ;;
     esac
     mkdir -v build
@@ -383,9 +393,11 @@ build_toolchain() {
     log_info "Building glibc"
     # LSB compliance symlink, plus the x86_64 loader compatibility
     # symlink required by the dynamic library loader (LFS 5.5).
-    case $(uname -m) in
-        i?86) ln -sfv ld-linux.so.2 "$LFS/lib/ld-lsb.so.3" ;;
-        x86_64)
+    # These belong to the target system, so key on the target
+    # triple instead of the build host architecture.
+    case "$LFS_TGT" in
+        i?86*) ln -sfv ld-linux.so.2 "$LFS/lib/ld-lsb.so.3" ;;
+        x86_64*)
             ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64"
             ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64/ld-lsb-x86-64.so.3"
             ;;
@@ -424,6 +436,17 @@ build_toolchain() {
     tar -xf "$GCC_TAR"
     GCC_DIR=$(find . -maxdepth 1 -type d -name "gcc-*" -print -quit | sed 's|^\./||')
     cd "$GCC_DIR"
+    # Same lib64 -> lib normalization as GCC pass 1 above, keyed on the
+    # target: otherwise libstdc++ lands in /usr/lib64 on aarch64.
+    case "$LFS_TGT" in
+        x86_64*)
+            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+        aarch64*)
+            sed -e '/mabi.lp64=/s/lib64/lib/' \
+                -i.orig gcc/config/aarch64/t-aarch64-linux
+            ;;
+    esac
     mkdir -v build-libstdc++
     cd build-libstdc++
     # Install into the final location ($LFS/usr/lib through DESTDIR):
@@ -509,9 +532,16 @@ build_toolchain() {
             exit 1
         fi
     done
-    case $(uname -m) in
-        x86_64)
+    # Same lib64 -> lib normalization as GCC pass 1 (book 5.3): pass 2
+    # installs libgcc_s.so.1 relative to this multilib OS dir name, and
+    # it must end up in $LFS/usr/lib for the temporary tools below.
+    case "$LFS_TGT" in
+        x86_64*)
             sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+            ;;
+        aarch64*)
+            sed -e '/mabi.lp64=/s/lib64/lib/' \
+                -i.orig gcc/config/aarch64/t-aarch64-linux
             ;;
     esac
     sed '/thread_header =/s/@.*@/gthr-posix.h/' \
@@ -587,6 +617,7 @@ build_toolchain() {
         # ----------------------------------------------------------
         extra_flags=""
         build_flag=""
+        make_flags=""
 
         case "$pkg" in
         bzip2)
@@ -636,6 +667,14 @@ build_toolchain() {
             ;;
         coreutils)
             extra_flags="--enable-install-program=hostname --enable-no-install-program=kill,uptime"
+            # When target binaries can execute on the build host (same
+            # architecture), autoconf resolves cross_compiling to "no"
+            # and coreutils runs the real help2man against them, which
+            # fails (e.g. "can't get `--help' info from man/stty.td/stty"
+            # under CI).  Force dummy-man, the script coreutils uses for
+            # genuine cross builds: it installs the distributed man
+            # pages, which is exactly what temporary tools need.
+            make_flags="run_help2man=man/dummy-man"
             ;;
         diffutils)
             build_flag="--build=$(./build-aux/config.guess)"
@@ -691,7 +730,8 @@ build_toolchain() {
                 --host="$LFS_TGT" \
                 $build_flag \
                 $extra_flags
-            make -j"$NUM_JOBS"
+            # shellcheck disable=SC2086
+            make -j"$NUM_JOBS" $make_flags
             make install
             if [ "$pkg" = "bash" ]; then
                 # LFS 12.4 section 6.4: /bin/sh compatibility symlink.

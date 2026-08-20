@@ -526,6 +526,49 @@ class TestLFSComplianceGuardrails:
         assert content.find('LDFLAGS="-lgcc_s"', ncurses_pos) > \
             ncurses_pos, "Temporary ncurses must link with -lgcc_s"
 
+    def test_toolchain_normalizes_lib64_for_all_targets(self):
+        """GCC must install 64-bit libraries into lib, not lib64,
+        for every supported target.
+
+        The nightly aarch64 build failed because GCC pass 2 installed
+        libgcc_s.so.1 into $LFS/usr/lib64 (the MULTILIB_OSDIRNAMES
+        default), tripping the libgcc_s fail-fast guard that looks in
+        $LFS/usr/lib. The lib64 -> lib sed from LFS book section 5.3
+        must therefore be keyed on the target triple (not uname -m,
+        which differs on cross builds) and cover aarch64 in addition
+        to x86_64, in the libstdc++ pass and both GCC passes.
+        """
+        content = Path('host/04-build-toolchain.sh').read_text()
+
+        # libstdc++ plus GCC pass 1 and pass 2 all normalize aarch64.
+        assert content.count('/mabi.lp64=/s/lib64/lib/') == 3, \
+            "aarch64 lib64 -> lib sed missing from a GCC build step"
+        assert 'gcc/config/aarch64/t-aarch64-linux' in content
+
+        # Keyed on the target triple so cross builds are covered;
+        # no target-layout decision may key on the host uname -m.
+        assert content.count('case "$LFS_TGT" in') == 5
+        assert 'case $(uname -m) in' not in content
+
+    def test_temp_coreutils_uses_dummy_man_for_man_pages(self):
+        """Temporary coreutils must not run the real help2man.
+
+        When target binaries happen to execute on the build host
+        (same architecture), autoconf resolves cross_compiling to
+        "no" and coreutils runs help2man against them; the nightly
+        x86_64 build then died on "help2man: can't get `--help' info
+        from man/stty.td/stty". Forcing run_help2man=man/dummy-man
+        selects the distributed man pages, exactly like a genuine
+        cross build.
+        """
+        content = Path('host/04-build-toolchain.sh').read_text()
+        coreutils_pos = content.find('coreutils)')
+        assert coreutils_pos != -1
+        assert content.find('run_help2man=man/dummy-man',
+                            coreutils_pos) > coreutils_pos, \
+            "Temporary coreutils must force dummy-man for man pages"
+        assert 'make -j"$NUM_JOBS" $make_flags' in content
+
     def test_stage14_seeds_installed_registry_from_sources(self):
         """Stage 14 must seed installed.list with versions resolved
         from the build's source tarballs, not just a hardcoded table.
