@@ -479,10 +479,16 @@ EOF
         sed -i '/MV.*old/d' Makefile.in
         sed -i '/{OLDSUFF}/c:' support/shlib-install
         sed -i 's/-Wl,-rpath,[^ ]*//' support/shobj-conf
+        # The chapter 7 ncurses lives in /tools/lib, outside the native
+        # compiler's default search paths (Nightly #165 died on
+        # "cannot find -lncursesw").  Expose it to configure so the
+        # shared libraries link against the real library, and keep the
+        # explicit SHLIB_LIBS so make never falls back to nothing.
         ./configure --prefix=/usr \
             --disable-static \
             --with-curses \
-            --docdir=/usr/share/doc/readline-8.3
+            --docdir=/usr/share/doc/readline-8.3 \
+            LDFLAGS="-L/tools/lib"
         make SHLIB_LIBS="-lncursesw" -j"$(nproc)"
         make install
         ;;

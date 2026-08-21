@@ -442,6 +442,27 @@ class TestLFSComplianceGuardrails:
         missing = expected - packages
         assert not missing, f"Chapter 8 packages missing: {sorted(missing)}"
 
+    def test_readline_configure_sees_tools_lib(self):
+        """readline must link against the temporary ncursesw.
+
+        Nightly #165 died in the chapter 8 readline build with
+        "cannot find -lncursesw": the only ncursesw available at that
+        point is the chapter 7 one in /tools/lib, which is outside the
+        native compiler's default search paths, so the forced
+        SHLIB_LIBS had nothing to resolve to.  configure must be given
+        -L/tools/lib, and it must appear before the make that forces
+        SHLIB_LIBS.
+        """
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        readline_pos = content.find('readline)')
+        ldflags_pos = content.find('LDFLAGS="-L/tools/lib"', readline_pos)
+        shlib_pos = content.find('SHLIB_LIBS="-lncursesw"', readline_pos)
+        assert readline_pos != -1
+        assert ldflags_pos > readline_pos, \
+            "readline configure must expose /tools/lib to the linker"
+        assert readline_pos < ldflags_pos < shlib_pos, \
+            "-L/tools/lib must reach configure before make links shlibs"
+
     def test_blfs_base_uses_per_package_commands(self):
         """blfs-base must use the BLFS book commands, not a generic
         configure/make template, and must not mask build failures."""

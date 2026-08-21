@@ -201,6 +201,21 @@
 
 ### Fixed
 
+- **Nightly #165: readline failed to link `-lncursesw` in lfs-system** (`lfs/05b-build-lfs-system.sh`)
+  - The only ncursesw present when chapter 8 readline builds is the
+    chapter 7 one installed under `/tools/lib`, which is outside the
+    native compiler's default search paths; configure never detected
+    it and the forced `SHLIB_LIBS="-lncursesw"` then died with
+    `ld: cannot find -lncursesw`
+  - Fix: pass `LDFLAGS="-L/tools/lib"` to readline's configure so the
+    curses library check resolves the temporary ncursesw; the chapter
+    8 ncurses later replaces it under `/usr/lib` with the same SONAME
+  - Test: `test_readline_configure_sees_tools_lib`
+- **graphene source URL restored to the BLFS book GNOME mirror** (`packages/stable/12.4/sources.list`)
+  - The GitHub refs URL downloaded a bare `1.10.8.tar.gz` with no
+    package name, failing `test_required_packages_have_sources` and
+    breaking `find_archive graphene` in blfs-libs
+
 - **Nightly #162/#163: corrupt cached zlib tarball poisoned every build** (`builder.py`)
   - The `packages-cache-latest` release carries a broken
     `zlib-1.3.1.tar.gz` (SHA256 `71a999aa…` vs upstream `9a93b2b7…`,
