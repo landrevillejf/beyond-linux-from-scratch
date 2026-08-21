@@ -291,6 +291,7 @@ python3 builder.py --generate-sources-list
 | `--config` | Configuration file path (`config/build.conf`) |
 | `--download-timeout` | Timeout in seconds for each download (default: from config or 300) |
 | `--download-retries` | Number of retries for failed downloads (default: from config or 3) |
+| `--stage-timeout` | Timeout in seconds for each build stage (default: 7200; raise for qemu-emulated cross builds) |
 | `--resume-from` | Resume from a specific stage |
 | `--write-usb <device>` | Write generated ISO to a USB device |
 | `--list-profiles` | Print available profiles |

@@ -665,6 +665,36 @@ class SourceDownloader:
         urllib.request.install_opener(opener)
         return opener
 
+    def _is_valid_archive(self, path: Path) -> bool:
+        """Check the magic bytes of an archive by extension.
+
+        Cache-restored files may be HTML error pages or truncated
+        downloads (Nightly #162/#163 died on a corrupt zlib tarball);
+        trusting them blindly poisons every later run.
+        """
+        magic_map = {
+            '.gz': (b'\x1f\x8b',),
+            '.tgz': (b'\x1f\x8b',),
+            '.xz': (b'\xfd7zXZ\x00',),
+            '.bz2': (b'BZh',),
+            '.zip': (b'PK',),
+        }
+        # .tar.* archives: match on the final compression suffix
+        suffixes = path.suffixes
+        if len(suffixes) >= 2 and suffixes[-2] == '.tar':
+            key = suffixes[-1]
+        else:
+            key = path.suffix
+        expected = magic_map.get(key)
+        if expected is None:
+            return True  # Unknown type: do not block the build
+        try:
+            with open(path, 'rb') as f:
+                header = f.read(6)
+        except OSError:
+            return False
+        return any(header.startswith(m) for m in expected)
+
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with exponential-backoff retry.
 
@@ -679,8 +709,11 @@ class SourceDownloader:
         retries = self.retries if retries is None else max(1, int(retries))
 
         if dest.exists():
-            self.logger.info(f"Already exists: {filename}")
-            return True
+            if self._is_valid_archive(dest):
+                self.logger.info(f"Already exists: {filename}")
+                return True
+            self.logger.warning(f"Existing file is not a valid archive, re-downloading: {filename}")
+            dest.unlink()
 
         for attempt in range(retries):
             self.logger.info(f"Downloading: {filename} (attempt {attempt + 1}/{retries})")
@@ -830,10 +863,14 @@ class SourceDownloader:
 class ScriptExecutor:
     """Execute build scripts with proper error handling"""
 
-    def __init__(self, env: Dict, output_dir: Path, logger: logging.Logger):
+    def __init__(self, env: Dict, output_dir: Path, logger: logging.Logger,
+                 stage_timeout: int = 7200):
         self.env = env
         self.output_dir = output_dir
         self.logger = logger
+        # Cross-compile jobs run the chroot under qemu-user emulation and
+        # need far more than 2 hours per stage (Nightly #163 arm64).
+        self.stage_timeout = stage_timeout
         self.completed_stages = []
 
     def find_script(self, script_path: str) -> Optional[Path]:
@@ -853,8 +890,10 @@ class ScriptExecutor:
 
         return None
 
-    def run_script(self, script_path: str, stage_name: str, timeout: int = 7200) -> bool:
+    def run_script(self, script_path: str, stage_name: str, timeout: Optional[int] = None) -> bool:
         """Run a single build script"""
+        if timeout is None:
+            timeout = self.stage_timeout
         self.logger.info(f"Running stage: {stage_name}")
 
         script = self.find_script(script_path)
@@ -1113,7 +1152,8 @@ class LFSBuilder:
                  cache_url: Optional[str] = None,
                  download_timeout: Optional[int] = None,
                  download_retries: Optional[int] = None,
-                 milestone: Optional[str] = None):
+                 milestone: Optional[str] = None,
+                 stage_timeout: Optional[int] = None):
         self.profile = profile
         self.output_dir = Path(output_dir).resolve()
         self.milestone = milestone
@@ -1129,6 +1169,10 @@ class LFSBuilder:
 
         timeout = download_timeout if download_timeout is not None else self.config.get('build_options.download_timeout', 300)
         retries = download_retries if download_retries is not None else self.config.get('build_options.retry_downloads', 3)
+        if stage_timeout is not None:
+            self.stage_timeout = stage_timeout
+        else:
+            self.stage_timeout = self.config.get('build_options.stage_timeout', 7200)
 
         self.downloader = SourceDownloader(
             self.output_dir / 'sources',
@@ -1140,7 +1184,8 @@ class LFSBuilder:
 
     def refresh_executor(self):
         """Rebuild script executor with up-to-date environment variables."""
-        self.executor = ScriptExecutor(self._get_env(), self.output_dir, self.logger)
+        self.executor = ScriptExecutor(self._get_env(), self.output_dir, self.logger,
+                                       stage_timeout=self.stage_timeout)
 
     def _apply_profile_settings(self):
         """Apply profile-specific settings to configuration"""
@@ -2225,6 +2270,9 @@ Examples:
     parser.add_argument('--download-retries', type=int,
                         help='Number of retries for failed downloads (default: from config or 3)')
 
+    parser.add_argument('--stage-timeout', type=int,
+                        help='Timeout in seconds for each build stage (default: 7200)')
+
     parser.add_argument('--arch', choices=['x86_64', 'aarch64'],
                     help='Target architecture (overrides profile default)')
 
@@ -2307,7 +2355,8 @@ def main():
         cache_url=args.cache_url,
         download_timeout=args.download_timeout,
         download_retries=args.download_retries,
-        milestone=args.milestone
+        milestone=args.milestone,
+        stage_timeout=args.stage_timeout
     )
 
     # --- Override architecture via --arch ---

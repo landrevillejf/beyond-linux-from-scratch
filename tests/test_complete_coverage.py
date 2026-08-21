@@ -599,5 +599,6 @@ class TestLFSBuilderMissingISO:
                     cache_url='https://my-custom/metadata.json',
                     download_timeout=None,
                     download_retries=None,
-                    milestone=None
+                    milestone=None,
+                    stage_timeout=None
                 )

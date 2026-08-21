@@ -592,6 +592,102 @@ class TestLFSBuilder:
             result = downloader.download('http://example.com/file', 'file', retries=0)
             assert result is False
 
+    def test_is_valid_archive_magic_bytes(self, sources_dir, mock_logger):
+        """_is_valid_archive must accept real archives and reject junk."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+
+        cases = {
+            'ok.tar.gz': (b'\x1f\x8b\x08\x00rest', True),
+            'ok.tgz': (b'\x1f\x8b\x08\x00rest', True),
+            'ok.tar.xz': (b'\xfd7zXZ\x00rest', True),
+            'ok.tar.bz2': (b'BZh9rest', True),
+            'ok.zip': (b'PK\x03\x04rest', True),
+            'ok.orig.tar.xz': (b'\xfd7zXZ\x00rest', True),
+            'bad.tar.gz': (b'<html>404 Not Found</html>', False),
+            'empty.tar.xz': (b'', False),
+            'notes.patch': (b'diff --git a/file', True),  # unknown ext: pass
+        }
+        for name, (content, expected) in cases.items():
+            path = sources_dir / name
+            path.write_bytes(content)
+            assert downloader._is_valid_archive(path) is expected, name
+
+    def test_is_valid_archive_unreadable(self, sources_dir, mock_logger):
+        """An unreadable archive file counts as invalid."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        path = sources_dir / 'locked.tar.gz'
+        path.write_bytes(b'\x1f\x8b')
+        with patch('builtins.open', side_effect=OSError("unreadable")):
+            assert downloader._is_valid_archive(path) is False
+
+    def test_download_redownloads_corrupt_existing_file(self, sources_dir, mock_logger):
+        """A cache-restored corrupt file must be replaced, not trusted."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        dest = sources_dir / 'zlib-1.3.1.tar.gz'
+        dest.write_bytes(b'<html>503</html>')
+
+        def fake_retrieve(url, path, *args):
+            with open(path, 'wb') as f:
+                f.write(b'\x1f\x8b\x08\x00')
+
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve) as mock_dl:
+            assert downloader.download('http://example.com/zlib-1.3.1.tar.gz') is True
+        mock_dl.assert_called_once()
+        assert dest.read_bytes().startswith(b'\x1f\x8b')
+
+    def test_download_keeps_valid_existing_file(self, sources_dir, mock_logger):
+        """A valid existing archive is accepted without any download."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        dest = sources_dir / 'pkg-1.0.tar.gz'
+        dest.write_bytes(b'\x1f\x8b\x08\x00')
+
+        with patch('urllib.request.urlretrieve') as mock_dl:
+            assert downloader.download('http://example.com/pkg-1.0.tar.gz') is True
+        mock_dl.assert_not_called()
+
+    def test_script_executor_stage_timeout(self, tmp_path):
+        """run_script honours the executor-level stage timeout."""
+        from builder import ScriptExecutor
+        import logging
+
+        script_path = tmp_path / "stage.sh"
+        script_path.write_text("#!/bin/bash\necho hello\n")
+        script_path.chmod(0o755)
+
+        executor = ScriptExecutor(env={}, output_dir=tmp_path,
+                                  logger=logging.getLogger(), stage_timeout=18000)
+        with patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run:
+            assert executor.run_script(str(script_path), 'test-stage') is True
+        assert mock_run.call_args[1]['timeout'] == 18000
+
+        # Explicit timeout still wins over the executor default
+        with patch('subprocess.run', return_value=MagicMock(returncode=0)) as mock_run:
+            assert executor.run_script(str(script_path), 'test-stage', timeout=60) is True
+        assert mock_run.call_args[1]['timeout'] == 60
+
+    def test_lfs_builder_stage_timeout_propagation(self, builder, temp_dir, mock_config_file):
+        """stage_timeout flows from LFSBuilder to the ScriptExecutor."""
+        assert builder.stage_timeout == 7200
+        assert builder.executor.stage_timeout == 7200
+
+        builder.stage_timeout = 18000
+        builder.refresh_executor()
+        assert builder.executor.stage_timeout == 18000
+
+        # Explicit constructor value takes precedence over the config
+        custom = LFSBuilder(profile='xfce', output_dir=temp_dir / 'lfs-build-2',
+                            config_file=mock_config_file, stage_timeout=21600)
+        assert custom.stage_timeout == 21600
+        assert custom.executor.stage_timeout == 21600
+
     def test_script_executor_find_script_fallback(self, tmp_path):
         """
         Cover the fallback in find_script when the script is found only by its base name.
@@ -731,8 +827,35 @@ class TestLFSBuilder:
                 cache_url='https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json',
                 download_timeout=None,
                 download_retries=None,
-                milestone=None
+                milestone=None,
+                stage_timeout=None
             )
+
+    def test_main_stage_timeout_option(self, tmp_path):
+        """--stage-timeout reaches the LFSBuilder constructor."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--stage-timeout', '18000',
+            '--no-live',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            assert MockBuilder.call_args[1]['stage_timeout'] == 18000
 
     @patch('builder.LFSBuilder._update_sources_list')
     @patch('builtins.print')

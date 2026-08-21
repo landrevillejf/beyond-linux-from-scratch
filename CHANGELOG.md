@@ -201,6 +201,33 @@
 
 ### Fixed
 
+- **Nightly #162/#163: corrupt cached zlib tarball poisoned every build** (`builder.py`)
+  - The `packages-cache-latest` release carries a broken
+    `zlib-1.3.1.tar.gz` (SHA256 `71a999aa…` vs upstream `9a93b2b7…`,
+    not gzip at all); the nightly copies it into `sources/` and
+    `download()` blindly trusted it (`Already exists:`), so every
+    x86_64 job died at zlib right after glibc with `gzip: stdin: not
+    in gzip format`
+  - Fix: `SourceDownloader.download()` now validates existing files by
+    archive magic bytes (gzip/xz/bzip2/zip) and re-downloads anything
+    invalid, making builds self-healing against any corrupt cache file
+  - Tests: `test_is_valid_archive_magic_bytes`,
+    `test_is_valid_archive_unreadable`,
+    `test_download_redownloads_corrupt_existing_file`,
+    `test_download_keeps_valid_existing_file`
+
+- **Nightly #163: arm64 lfs-system killed by the hardcoded 2h stage timeout** (`builder.py`, `.github/workflows/nightly.yml`)
+  - The U-Boot `ARCH=arm` fix worked (uboot stage now passes), but the
+    chroot build runs under qemu-aarch64 emulation and `lfs-system`
+    reached only early perl before the 7200s cap killed it
+  - Fix: new `--stage-timeout` CLI option (also honouring
+    `build_options.stage_timeout` in `config/build.conf`) plumbed
+    through `LFSBuilder` into `ScriptExecutor`; the nightly workflow
+    now passes `--stage-timeout 18000`
+  - Tests: `test_script_executor_stage_timeout`,
+    `test_lfs_builder_stage_timeout_propagation`,
+    `test_main_stage_timeout_option`
+
 - **Nightly #161: U-Boot build passed a kernel arch name to `ARCH`** (`host/05-build-uboot.sh`)
   - With the `$LFS/sources` fix in place the arm64 job advanced to the
     U-Boot compile and died with `ln: failed to create symbolic link

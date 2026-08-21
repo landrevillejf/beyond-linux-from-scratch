@@ -21,9 +21,9 @@ class TestSourceDownloader:
 
     def test_download_file_already_exists(self, sources_dir, mock_logger):
         """Test downloading file that already exists"""
-        # Create existing file
+        # Create existing file with a valid gzip header so it is trusted
         test_file = sources_dir / "test.tar.gz"
-        test_file.write_text("existing content")
+        test_file.write_bytes(b"\x1f\x8b\x08\x00existing content")
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         result = downloader.download("https://example.com/test.tar.gz", "test.tar.gz")

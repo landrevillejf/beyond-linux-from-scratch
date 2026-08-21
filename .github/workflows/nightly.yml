@@ -186,6 +186,7 @@ jobs:
             --arch ${{ matrix.arch }} \
             --output ./build-release \
             --verbose \
+            --stage-timeout 18000 \
             --download-timeout 600 \
             --download-retries 5
         env:
