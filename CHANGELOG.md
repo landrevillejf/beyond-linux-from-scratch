@@ -56,6 +56,18 @@
     stage to `ln -sfv` (bzip2, flex, pkgconf, gawk man page, vim)
     so a re-run after `--resume-from lfs-system` stays idempotent
 
+- **`lpm install` silently installed nothing on bash >= 4.4**
+  (`blfs/19-lpm.sh`)
+  - `install_order()` built its dependency list through an inverted
+    awk membership pipeline over the order array. On bash >= 4.4
+    (the GitHub runners) an empty array made `"${order[@]}"` expand
+    to nothing, the pipeline exited 0 and `lpm install` returned
+    success without installing anything, breaking the LPM sysroot
+    smoke tests in CI
+  - Membership checks now use `grep -qxF` over a `"${order[@]:-}"`
+    expansion and the final print is guarded against an empty array,
+    so the install order is built identically on every bash version
+
 - **Nightly pipeline completeness** (`builder.py`, `.github/workflows/nightly.yml`)
   - New `--nightly` CLI flag: enables dated ISO naming
     (`lfs-{version}-{profile}-{arch}-{init}-{YYYYMMDD}.iso`) so the ISO

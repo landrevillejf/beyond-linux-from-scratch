@@ -501,18 +501,23 @@ install_order() {
             if ! deps=$(resolve_deps "$pkg"); then
                 die "Cannot resolve dependencies for $pkg (circular detected)"
             fi
-            # Efficiently check if package already in order array using awk
+            # Membership checks must not rely on the exit status of an
+            # inverted pipeline: on bash >= 4.4 an empty order array
+            # made "${order[@]}" expand to nothing, awk exited 0 and
+            # `install` silently installed nothing (CI-only failure;
+            # macOS bash 3.2 masked it with a set -u error instead).
+            local d
             for d in $deps; do
-                if ! printf '%s\n' "${order[@]}" | awk -v x="$d" '$0 == x { exit 1 }'; then
+                if ! printf '%s\n' "${order[@]:-}" | grep -qxF "$d"; then
                     order+=("$d")
                 fi
             done
-            if ! printf '%s\n' "${order[@]}" | awk -v x="$pkg" '$0 == x { exit 1 }'; then
+            if ! printf '%s\n' "${order[@]:-}" | grep -qxF "$pkg"; then
                 order+=("$pkg")
             fi
         fi
     done
-    printf '%s\n' "${order[@]}"
+    [ "${#order[@]}" -eq 0 ] || printf '%s\n' "${order[@]}"
 }
 
 # ======================================================================

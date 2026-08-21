@@ -364,3 +364,34 @@ class TestLPMSysrootSmoke:
         result = self._lpm(sysroot, 'install', 'badpkg')
         assert result.returncode != 0
         assert 'Checksum mismatch' in result.stderr
+
+    def test_install_order_membership_is_version_safe(self):
+        """install_order must not depend on bash array-expansion quirks.
+
+        The membership check used an inverted awk pipeline over the
+        order array: on bash >= 4.4 (CI runners) an empty array made
+        the pipeline exit 0 and `lpm install` silently installed
+        nothing, while macOS bash 3.2 masked the bug with a set -u
+        "unbound variable" error. Membership must use grep -qxF over a
+        ${order[@]:-} expansion that survives empty arrays on every
+        bash version.
+        """
+        content = _content(LPM_SCRIPT)
+        order_fn = content.split('install_order()')[1].split('\n}\n')[0]
+        assert 'awk -v x=' not in order_fn, \
+            'inverted awk membership check is bash-version dependent'
+        assert 'grep -qxF' in order_fn, \
+            'install_order membership must use grep -qxF'
+        assert '"${order[@]:-}"' in order_fn, \
+            'order array expansion must tolerate an empty array'
+
+    def test_install_of_installed_package_exits_cleanly(self, sysroot):
+        """An empty install order must not abort under set -u.
+
+        demo is seeded as installed; installing it again exercises the
+        empty order array that killed the script on bash 3.2 with
+        "order[@]: unbound variable" instead of finishing quietly.
+        """
+        result = self._lpm(sysroot, 'install', 'demo')
+        assert result.returncode == 0, result.stderr
+        assert 'unbound variable' not in result.stderr
