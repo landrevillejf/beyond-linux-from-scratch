@@ -4,6 +4,14 @@
 
 ### Fixed
 
+- **lfs-system bc link failure** (`lfs/05b-build-lfs-system.sh`)
+  - bc's final link died on undefined `tputs`/`tgoto` references
+    (Nightly #167): the readline built just before bc embeds a
+    DT_NEEDED on chapter 7's `libncursesw.so.6` (which lives in
+    `/tools/lib`), and bc's linker had no search path for it. bc's
+    configure now receives `LDFLAGS='-L/tools/lib -Wl,-rpath-link,/tools/lib'`,
+    mirroring readline's own exposure
+
 - **Nightly pipeline completeness** (`builder.py`, `.github/workflows/nightly.yml`)
   - New `--nightly` CLI flag: enables dated ISO naming
     (`lfs-{version}-{profile}-{arch}-{init}-{YYYYMMDD}.iso`) so the ISO

@@ -500,7 +500,14 @@ EOF
         ;;
     bc)
         extract "$(find_archive bc)"
-        CC='gcc -std=c99' ./configure --prefix=/usr -G -O3 -r
+        # The readline built just above carries a DT_NEEDED on chapter
+        # 7's libncursesw.so.6 (/tools/lib), and the native ncurses is
+        # not built until after gcc. Without the search path below, the
+        # final link of bin/bc dies on undefined tputs/tgoto references
+        # (Nightly #167). Mirror the readline case's exposure.
+        CC='gcc -std=c99' \
+            LDFLAGS='-L/tools/lib -Wl,-rpath-link,/tools/lib' \
+            ./configure --prefix=/usr -G -O3 -r
         make -j"$(nproc)"
         make install
         ;;

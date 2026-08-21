@@ -691,6 +691,29 @@ class TestLFSComplianceGuardrails:
         assert case_pos < map_pos < first_make, \
             "ARCH must be normalized before the first make call"
 
+    def test_bc_links_against_tools_lib_ncursesw(self):
+        """bc must resolve readline's DT_NEEDED libncursesw.so.6.
+
+        Nightly #167 (full/sysvinit/x86_64) died in lfs-system while
+        linking bin/bc: the readline built just before bc links
+        against chapter 7's ncurses (/tools/lib) and carries DT_NEEDED
+        libncursesw.so.6, while the native ncurses is only built after
+        gcc. bc's final link had no search path for /tools/lib, so ld
+        reported "libncursesw.so.6 not found" and undefined tputs/
+        tgoto references. bc's configure consumes LDFLAGS from the
+        environment, so the fix mirrors the readline case's exposure.
+        """
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        bc_pos = content.find('    bc)\n')
+        assert bc_pos != -1, "05b must keep a bc build case"
+        bc_block = content[bc_pos:content.find(';;', bc_pos)]
+        assert "LDFLAGS='-L/tools/lib -Wl,-rpath-link,/tools/lib'" \
+            in bc_block, \
+            "bc must expose /tools/lib so ld resolves libncursesw.so.6"
+        readline_pos = content.find('    readline)\n')
+        assert readline_pos != -1 and readline_pos < bc_pos, \
+            "bc builds after readline and consumes its shared lib"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.
