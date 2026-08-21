@@ -249,9 +249,10 @@ https://download.gnome.org/sources/gnome-weather/48/gnome-weather-48.0.tar.xz
 https://download.gnome.org/sources/gnumeric/1.12/gnumeric-1.12.59.tar.xz
 https://download.gnome.org/sources/gobject-introspection/1.84/gobject-introspection-1.84.0.tar.xz
 https://download.gnome.org/sources/goffice/0.10/goffice-0.10.59.tar.xz
-https://download.gnome.org/sources/graphene/1.10/graphene-1.10.8.tar.xz
 https://download.gnome.org/sources/gsettings-desktop-schemas/48/gsettings-desktop-schemas-48.0.tar.xz
 https://download.gnome.org/sources/gsound/1.0/gsound-1.0.3.tar.xz
+https://ftp.exim.org/pub/pub/exim/exim4/exim-4.100.tar.gz
+https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.45.tar.xz
 https://download.gnome.org/sources/gspell/1.14/gspell-1.14.0.tar.xz
 https://download.gnome.org/sources/gtk-doc/1.34/gtk-doc-1.34.0.tar.xz
 https://download.gnome.org/sources/gtk-vnc/1.5/gtk-vnc-1.5.0.tar.xz
@@ -281,7 +282,6 @@ https://download.gnome.org/sources/libsigc++/2.12/libsigc++-2.12.1.tar.xz
 https://download.gnome.org/sources/libsoup/3.6/libsoup-3.6.5.tar.xz
 https://download.gnome.org/sources/libwnck/43/libwnck-43.2.tar.xz
 https://download.gnome.org/sources/libxml2/2.14/libxml2-2.14.5.tar.xz
-https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.43.tar.xz
 https://download.gnome.org/sources/localsearch/3.9/localsearch-3.9.0.tar.xz
 https://download.gnome.org/sources/mutter/48/mutter-48.4.tar.xz
 https://download.gnome.org/sources/nautilus/48/nautilus-48.3.tar.xz
@@ -494,7 +494,7 @@ https://files.pythonhosted.org/packages/source/t/trove_classifiers/trove_classif
 https://files.pythonhosted.org/packages/source/t/typogrify/typogrify-2.1.0.tar.gz
 https://files.pythonhosted.org/packages/source/u/urllib3/urllib3-2.5.0.tar.gz
 https://files.pythonhosted.org/packages/source/w/webencodings/webencodings-0.5.1.tar.gz
-https://ftp.exim.org/pub/exim/exim4/exim-4.98.2.tar.xz
+
 https://ftp.gnu.org/gnu/aspell/aspell-0.60.8.1.tar.gz
 https://ftp.gnu.org/gnu/aspell/dict/en/aspell6-en-2020.12.07-0.tar.bz2
 https://ftp.gnu.org/gnu/autoconf/autoconf-2.72.tar.xz
@@ -830,7 +830,7 @@ https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-0.18.tar.xz
 https://inkscape.org/gallery/item/56344/inkscape-1.4.2.tar.xz
 https://invisible-mirror.net/archives/luit/luit-20240910.tgz
 https://invisible-mirror.net/archives/lynx/tarballs/lynx2.9.2.tar.bz2
-https://invisible-mirror.net/archives/ncurses/current/ncurses-6.5-20250809.tgz
+https://github.com/ebassi/graphene/archive/refs/tags/1.10.8.tar.gz
 https://invisible-mirror.net/archives/xterm/xterm-401.tgz
 https://jfs.sourceforge.net/project/pub/jfsutils-1.1.15.tar.gz
 https://kerberos.org/dist/krb5/1.22/krb5-1.22.1.tar.gz
@@ -848,8 +848,7 @@ https://nmap.org/dist/nmap-7.98.tar.bz2
 https://nodejs.org/dist/v22.18.0/node-v22.18.0.tar.xz
 https://notroj.github.io/neon/neon-0.35.0.tar.gz
 https://oligarchy.co.uk/xapian/1.4.29/xapian-core-1.4.29.tar.xz
-https://pagure.io/libaio/archive/libaio-0.3.113/libaio-0.3.113.tar.gz
-https://pagure.io/xmlto/archive/0.0.29/xmlto-0.0.29.tar.gz
+
 https://people.freedesktop.org/~mccann/dist/sound-theme-freedesktop-0.8.tar.bz2
 https://people.freedesktop.org/~svu/libxklavier-5.4.tar.bz2
 https://pm-utils.freedesktop.org/releases/pm-utils-1.4.1.tar.gz
@@ -861,7 +860,7 @@ https://pypi.org/packages/source/M/MarkupSafe/markupsafe-3.0.2.tar.gz
 https://pypi.org/packages/source/f/flit-core/flit_core-3.12.0.tar.gz
 https://pypi.org/packages/source/s/setuptools/setuptools-80.9.0.tar.gz
 https://pypi.org/packages/source/w/wheel/wheel-0.46.1.tar.gz
-https://releases.pagure.org/newt/newt-0.52.25.tar.gz
+https://invisible-mirror.net/archives/ncurses/current/ncurses-6.6-20260815.tgz.asc
 https://s3.amazonaws.com/json-c_releases/releases/json-c-0.18.tar.gz
 https://salsa.debian.org/iso-codes-team/iso-codes/-/archive/v4.18.0/iso-codes-v4.18.0.tar.gz
 https://sg.danny.cz/sg/p/sg3_utils-1.48.tar.xz

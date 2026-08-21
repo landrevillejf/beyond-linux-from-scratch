@@ -161,7 +161,7 @@ https://github.com/harfbuzz/harfbuzz/releases/download/11.4.0/harfbuzz-11.4.0.ta
 https://www.cairographics.org/releases/pixman-0.46.2.tar.gz
 
 # cairo
-https://www.cairographics.org/snapshots/cairo-1.18.4.tar.xz
+https://www.cairographics.org/snapshots/cairo-1.17.8.tar.xz
 
 # fribidi
 https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz
@@ -399,13 +399,6 @@ https://github.com/OpenRC/openrc/archive/refs/tags/0.55.1.tar.gz
 # runit
 http://smarden.org/runit/runit-2.2.0.tar.gz
 
-# s6 ecosystem (skarnet toolchain)
-https://skarnet.org/software/skalibs/skalibs-2.14.3.0.tar.gz
-https://skarnet.org/software/execline/execline-2.9.6.1.tar.gz
-https://skarnet.org/software/s6/s6-2.13.1.tar.gz
-https://skarnet.org/software/s6-rc/s6-rc-0.5.5.2.tar.gz
-https://skarnet.org/software/nsss/nsss-0.2.0.4.tar.gz
-
 # ============================================================================
 # Application-specific dependencies (Phase 4)
 # ============================================================================
@@ -477,16 +470,11 @@ https://gitlab.freedesktop.org/wayland/wayland/-/archive/1.26.0/wayland-1.26.0.t
 
 https://poppler.freedesktop.org/poppler-26.08.0.tar.xz
 
-https://skarnet.org/software/s6-rc/s6-rc-0.7.0.0.tar.gz
-
-https://skarnet.org/software/s6/s6-2.15.1.0.tar.gz
-
 https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.13.2.tar.gz
 
 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/26.27.3/accountsservice-26.27.3.tar.gz
 
 https://www.freedesktop.org/software/systemd/systemd-221.tar.xz
-
 
 https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
 https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
