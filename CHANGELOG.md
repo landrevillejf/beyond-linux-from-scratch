@@ -4,6 +4,21 @@
 
 ### Fixed
 
+- **LPM configuration and checksum handling** (`config/lpm.conf`,
+  `blfs/19-lpm.sh`, `blfs/14-create-base-packages.sh`)
+  - Rewrote `config/lpm.conf` to only ship keys the engine consumes;
+    the old `LPM_DB="/var/lib/lpm/db.json"` relocated every database
+    into a `db.json/` subdirectory on installed systems, hiding the
+    build-time seeded registry, and dead keys (`REPO_MIRRORS`,
+    `GPG_VERIFY`, `DOWNLOAD_*`, ...) documented a configuration
+    surface that never existed
+  - `lpm install` now only verifies checksums that are real 64-hex
+    sha256 values; placeholders (`sha256-dummy`, `base-<hash>` from
+    stage 14) skip verification instead of dying with "Checksum
+    mismatch"
+  - Stage 14's shipped config aligned with the engine (`USE_COLOR=true`
+    instead of `1`, dead `JOBS=0` removed)
+
 - **lfs-system bc link failure** (`lfs/05b-build-lfs-system.sh`)
   - bc's final link died on undefined `tputs`/`tgoto` references
     (Nightly #167): the readline built just before bc embeds a

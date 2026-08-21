@@ -9,8 +9,10 @@ hardening. The smoke tests run the real script against a throwaway
 sysroot, so no root privileges are needed.
 """
 
+import io
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -18,6 +20,7 @@ import pytest
 LPM_SCRIPT = Path('blfs/19-lpm.sh')
 STAGE14 = Path('blfs/14-create-base-packages.sh')
 UPDATER = Path('blfs/18-system-updater.sh')
+LPM_CONF = Path('config/lpm.conf')
 
 
 def _content(path):
@@ -59,6 +62,40 @@ class TestLPMCommands:
         load_config = content.split('load_config()')[1].split('\n}\n')[0]
         assert 'load_repos_d' in load_config, \
             "load_config must read /etc/lpm/repos.d"
+
+
+class TestLPMConfigContract:
+    """config/lpm.conf is sourced by lpm; stale keys break the DB.
+
+    The historical config set LPM_DB to a FILE path (db.json) while the
+    engine treats LPM_DB as a directory, which relocated every database
+    into /var/lib/lpm/db.json/ and hid the build-time seeded registry.
+    """
+
+    def test_lpm_db_is_a_directory(self):
+        content = _content(LPM_CONF)
+        assert 'db.json' not in content, \
+            "LPM_DB must be a directory, not a file path"
+        assert 'LPM_DB=/var/lib/lpm' in content
+
+    def test_config_only_ships_consumed_keys(self):
+        content = _content(LPM_CONF)
+        for dead_key in ('REPO_MIRRORS', 'DEFAULT_REPO', 'GPG_VERIFY',
+                         'DOWNLOAD_RETRIES', 'MAX_DEPTH', 'USE_COLORS',
+                         'REQUIRE_ROOT', 'USE_SANDBOX'):
+            assert dead_key not in content, \
+                f"Dead config key still shipped: {dead_key}"
+        # JOBS= is dead (BUILD_JOBS= is the consumed one): match only
+        # at the start of a line so BUILD_JOBS stays legal.
+        assert '\nJOBS=' not in content, "Dead config key: JOBS"
+        assert 'REPO_REMOTE_URLS=()' in content
+
+    def test_stage14_config_matches_engine(self):
+        content = _content(STAGE14)
+        # USE_COLOR runs as a shell command: it must be true/false,
+        # never 1 (which silently disables colors).
+        assert 'USE_COLOR=true' in content
+        assert 'JOBS=0' not in content, "JOBS is not consumed by lpm"
 
 
 class TestLPMRepositoryPipeline:
@@ -198,3 +235,38 @@ class TestLPMSysrootSmoke:
         result = self._lpm(sysroot, 'why', 'demo')
         assert result.returncode == 0, result.stderr
         assert 'No known dependents' in result.stdout
+
+    def _make_package(self, sysroot, name, version):
+        """Build a minimal installable archive in the local repo."""
+        pkg_dir = sysroot / 'usr/share/lpm/packages'
+        pkg_dir.mkdir(parents=True, exist_ok=True)
+        archive = pkg_dir / f'{name}-{version}.tar.xz'
+        data = b'#!/bin/sh\necho hello\n'
+        info = tarfile.TarInfo(f'{name}-{version}/files/usr/bin/hello')
+        info.size = len(data)
+        info.mode = 0o755
+        with tarfile.open(archive, 'w:xz') as tf:
+            tf.addfile(info, io.BytesIO(data))
+        return archive
+
+    def test_placeholder_checksum_is_not_compared(self, sysroot):
+        """base-<hash> and sha256-dummy entries are placeholders: they
+        must skip verification, never fail it (stage 14 seeds them)."""
+        db = sysroot / 'var/lib/lpm/packages.list'
+        db.write_text(db.read_text() +
+                      'basepkg|1.0|Base package||base-abcdef1234567890\n')
+        self._make_package(sysroot, 'basepkg', '1.0')
+        result = self._lpm(sysroot, 'install', 'basepkg')
+        assert result.returncode == 0, result.stderr
+        assert 'Checksum mismatch' not in result.stderr
+        assert (sysroot / 'usr/bin/hello').exists()
+
+    def test_real_checksum_mismatch_still_rejected(self, sysroot):
+        """A real 64-hex sha256 that does not match must still die."""
+        db = sysroot / 'var/lib/lpm/packages.list'
+        db.write_text(db.read_text() +
+                      'badpkg|1.0|Bad package||' + '0' * 64 + '\n')
+        self._make_package(sysroot, 'badpkg', '1.0')
+        result = self._lpm(sysroot, 'install', 'badpkg')
+        assert result.returncode != 0
+        assert 'Checksum mismatch' in result.stderr

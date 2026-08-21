@@ -612,22 +612,22 @@ install_package() {
         local expected_checksum actual_checksum
         expected_checksum=$(get_pkg_field "$pkg_name" checksum)
         if [ -n "$expected_checksum" ]; then
-            if [ "$expected_checksum" = "sha256-dummy" ]; then
-                # Dummy checksum - warn if configured to do so
-                if [ "$ALLOW_DUMMY_CHECKSUMS" = "true" ]; then
-                    log_warn "Package $pkg_name has dummy checksum (no integrity verification)"
-                else
-                    if $VERBOSE; then
-                        log_warn "Package $pkg_name has dummy checksum; skipping verification"
-                    fi
-                fi
-            else
-                # Real checksum - verify
+            if [[ $expected_checksum =~ ^[0-9a-f]{64}$ ]]; then
+                # Real sha256 - verify it
                 actual_checksum=$(sha256_of "$pkg_file")
                 if [ "$expected_checksum" != "$actual_checksum" ]; then
                     die "Checksum mismatch for $pkg_name-$pkg_version"
                 fi
                 log_verbose "Checksum verified: $expected_checksum"
+            else
+                # Placeholder checksum (sha256-dummy, base-<hash>, ...):
+                # integrity verification is not possible, never compare
+                # it against the real file hash (Nightly audit fix).
+                if [ "$ALLOW_DUMMY_CHECKSUMS" = "true" ]; then
+                    log_warn "Package $pkg_name has a placeholder checksum (no integrity verification)"
+                else
+                    log_verbose "Package $pkg_name has a placeholder checksum; skipping verification"
+                fi
             fi
         fi
     fi

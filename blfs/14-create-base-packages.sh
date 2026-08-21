@@ -255,25 +255,29 @@ log_success "Repository manifest exported to $REPO_DIR"
 # ---------------------------------------------------------------------------
 # LPM configuration file
 # ---------------------------------------------------------------------------
+# Same canonical content as config/lpm.conf (installed unconditionally by
+# the 19-lpm stage); only variables consumed by the engine are listed.
 if [ ! -f "$LFS/etc/lpm/lpm.conf" ]; then
     log_info "Writing default LPM configuration to /etc/lpm/lpm.conf"
     run_privileged tee "$LFS/etc/lpm/lpm.conf" >/dev/null <<'CONF'
 # LFS Package Manager configuration
-# See /usr/share/doc/lpm/README for details
+# NOTE: LPM_DB is a DIRECTORY; the databases live inside it.
 
 # LPM runtime paths
 LPM_DB=/var/lib/lpm
 LPM_LOGS=/var/log/lpm
 LPM_PACKAGES_DIR=/usr/share/lpm/packages
 
-# Remote repositories. Leave empty until a signed repository is published.
+# Remote repositories live in /etc/lpm/repos.d/*.conf (name=url).
 REPO_REMOTE_URLS=()
 
-# Number of parallel jobs for compilation
-JOBS=0   # 0 = auto (nproc)
+# Integrity and authenticity
+VERIFY_CHECKSUMS=true
+VERIFY_SIGNATURES=false
+GPG_KEYRING=/etc/lpm/trusted.gpg
 
 # Disable ANSI colours (also honoured via NO_COLOR env var)
-USE_COLOR=1
+USE_COLOR=true
 CONF
 fi
 
