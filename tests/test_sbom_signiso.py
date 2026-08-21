@@ -282,10 +282,12 @@ class TestMainSBOMAndSignISO:
 class TestISONameGeneration:
     """Test get_iso_name() method for versioned ISO naming"""
 
-    def _make_builder(self, tmp_path, profile='minimal', milestone=None):
+    def _make_builder(self, tmp_path, profile='minimal', milestone=None,
+                      nightly=False):
         config_file = tmp_path / "test.conf"
         config_file.write_text("{}")
-        return LFSBuilder(profile, tmp_path, config_file, milestone=milestone)
+        return LFSBuilder(profile, tmp_path, config_file, milestone=milestone,
+                          nightly=nightly)
 
     def test_get_iso_name_default(self, tmp_path):
         """ISO name includes version, profile, arch, init"""
@@ -320,6 +322,29 @@ class TestISONameGeneration:
         today = datetime.now().strftime("%Y%m%d")
         assert 'beta1' in name
         assert today in name
+
+    def test_get_iso_name_nightly_defaults_to_dated(self, tmp_path):
+        """nightly=True makes the default ISO name include today's date"""
+        builder = self._make_builder(tmp_path, nightly=True)
+        name = builder.get_iso_name()
+        today = datetime.now().strftime("%Y%m%d")
+        assert name.endswith(f"-{today}.iso")
+
+    def test_get_iso_name_nightly_with_milestone(self, tmp_path):
+        """nightly + milestone keeps the date as the last component"""
+        builder = self._make_builder(tmp_path, milestone='rc1', nightly=True)
+        name = builder.get_iso_name()
+        today = datetime.now().strftime("%Y%m%d")
+        parts = name.replace('.iso', '').split('-')
+        assert parts[-1] == today
+        assert 'rc1' in parts
+
+    def test_get_iso_name_not_nightly_defaults_to_undated(self, tmp_path):
+        """Without nightly, the default ISO name carries no date"""
+        builder = self._make_builder(tmp_path)
+        name = builder.get_iso_name()
+        today = datetime.now().strftime("%Y%m%d")
+        assert today not in name
 
     def test_build_creates_compat_symlink(self, tmp_path):
         """build() creates backward-compatible lfs-installer.iso symlink (line 1948)"""

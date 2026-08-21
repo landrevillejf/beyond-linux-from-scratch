@@ -52,3 +52,63 @@ def test_release_workflow_ensures_lfs_owns_build_dir_before_builder_runs():
         "Full-tree chown must appear before the builder.py invocation so that "
         "the lfs user can create its log directory without a PermissionError"
     )
+
+
+class TestReleasePipelineHardening:
+    """Guardrails for signing, compat pointers and 2 GB asset splitting."""
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def test_nightly_signing_step_is_secret_guarded(self):
+        workflow = self._read("nightly.yml")
+        assert "HAVE_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY != '' }}" in workflow
+        assert "if: env.HAVE_GPG_KEY == 'true'" in workflow
+        assert "gpg --batch --import" in workflow
+        assert "--detach-sign --armor" in workflow
+
+    def test_nightly_publishes_compat_iso_pointer(self):
+        workflow = self._read("nightly.yml")
+        assert "lfs-installer.iso.pointer" in workflow
+        build_section = workflow.split("create-release:")[0]
+        assert "iso_name=$ISO" in build_section
+        assert "sha256=$SHA" in build_section
+
+    def test_nightly_exports_split_rootfs_for_selected_profiles(self):
+        workflow = self._read("nightly.yml")
+        # Rootfs is only useful (and heavy) for the reference desktop and
+        # the ARM target; other profiles must not pay the asset cost.
+        assert "if: matrix.profile == 'xfce' || matrix.profile == 'arm64'" \
+            in workflow
+        assert "split -b 1900m" in workflow
+        assert "rootfs-*.tar.zst.part-*" in workflow
+
+    def test_nightly_prunes_old_releases(self):
+        workflow = self._read("nightly.yml")
+        create_release = workflow.split("create-release:")[1]
+        assert "30 days ago" in create_release
+        assert "gh release delete" in create_release
+
+    def test_rootfs_cache_release_uses_split_parts(self):
+        workflow = self._read("build-rootfs-cache.yml")
+        # A single rootfs archive breaks the day it exceeds the 2 GB
+        # release-asset cap; the cache must stream into split parts.
+        assert "split -b 1900m" in workflow
+        assert "rootfs-cache-*.tar.zst.part-*" in workflow
+
+    def test_iso_from_cache_reassembles_all_parts(self):
+        workflow = self._read("build-iso-from-cache.yml")
+        # The consumer must fetch every part of the rootfs-cache-latest
+        # release, not just the first asset it finds.
+        assert "releases/tags/rootfs-cache-latest" in workflow
+        assert "head -n1" not in workflow
+        assert "part_urls<<EOF" in workflow
+
+    def test_release_workflow_publishes_compat_iso_pointer(self):
+        workflow = Path(".github/workflows/release.yml").read_text()
+        # The pointer must reach both the Actions artifact and the GitHub
+        # release so releases/latest/download/lfs-installer.iso.pointer
+        # stays a stable machine-readable alias.
+        assert workflow.count("lfs-installer.iso.pointer") >= 3
+        assert "download_url=https://github.com/${{ github.repository }}" \
+            "/releases/download/${GITHUB_REF_NAME}/$ISO" in workflow

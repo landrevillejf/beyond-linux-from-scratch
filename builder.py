@@ -1153,10 +1153,12 @@ class LFSBuilder:
                  download_timeout: Optional[int] = None,
                  download_retries: Optional[int] = None,
                  milestone: Optional[str] = None,
-                 stage_timeout: Optional[int] = None):
+                 stage_timeout: Optional[int] = None,
+                 nightly: bool = False):
         self.profile = profile
         self.output_dir = Path(output_dir).resolve()
         self.milestone = milestone
+        self.nightly = nightly
         if isinstance(config_file, str):
             config_file = Path(config_file)
         self.config = LFSConfig(config_file)   # <- UN SEUL ARGUMENT
@@ -1265,17 +1267,22 @@ class LFSBuilder:
 
         return init
 
-    def get_iso_name(self, dated: bool = False) -> str:
+    def get_iso_name(self, dated: Optional[bool] = None) -> str:
         """Generate the versioned ISO filename.
 
         Format: lfs-{version}-{profile}-{arch}-{init}[-{milestone}][-{date}].iso
 
         Args:
             dated: If True, append today's date (for nightly builds).
+                   If None, defaults to the builder's nightly flag so that
+                   every consumer (env vars, build, sign, SBOM) agrees.
 
         Returns:
             ISO filename string (e.g. 'lfs-0.52.40-xfce-x86_64-sysvinit.iso')
         """
+        if dated is None:
+            dated = self.nightly
+
         version = __version__
         arch = self.get_target_architecture()
         init = self.get_init_system()
@@ -2286,6 +2293,9 @@ Examples:
     parser.add_argument('--milestone',
                         help='Milestone tag for ISO naming (e.g. alpha1, beta1, rc1)')
 
+    parser.add_argument('--nightly', action='store_true',
+                        help='Nightly build mode: append today\'s date to the ISO filename')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -2356,7 +2366,8 @@ def main():
         download_timeout=args.download_timeout,
         download_retries=args.download_retries,
         milestone=args.milestone,
-        stage_timeout=args.stage_timeout
+        stage_timeout=args.stage_timeout,
+        nightly=args.nightly
     )
 
     # --- Override architecture via --arch ---

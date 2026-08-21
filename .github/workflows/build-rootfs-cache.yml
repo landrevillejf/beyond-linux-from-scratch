@@ -114,29 +114,42 @@ jobs:
         run: |
           ls -l /tmp/lfs-build/build-release/image/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
 
-      - name: Compress rootfs
+      - name: Compress rootfs (split parts)
         run: |
-          sudo tar --zstd -cf rootfs-cache-$(date +%Y%m%d).tar.zst -C /tmp/lfs-build/build-release/image .
-          ls -lh rootfs-cache-*.tar.zst
+          # Release assets are capped at 2 GB: stream the zstd tarball
+          # straight into split parts, same convention as cache-packages.
+          sudo bash -c "cd /tmp/lfs-build/build-release && tar --zstd -cf - -C image . | split -b 1900m -d -a 2 - /tmp/lfs-build/rootfs-cache-$(date +%Y%m%d).tar.zst.part-"
+          cd /tmp/lfs-build || exit 1
+          sha256sum rootfs-cache-*.tar.zst.part-* > SHA256SUMS
+          ls -lh rootfs-cache-*.tar.zst.part-*
 
       - name: Generate release body
         id: release_body
         run: |
+          cd /tmp/lfs-build || exit 1
           {
             echo 'body<<EOF'
             echo '# 🖥️ LFS Root Filesystem Cache'
             echo ''
             echo "Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            echo "Size: $(du -sh rootfs-cache-*.tar.zst | cut -f1)"
+            echo "Parts: $(ls rootfs-cache-*.tar.zst.part-* | wc -l)"
+            echo "Size: $(du -ch rootfs-cache-*.tar.zst.part-* | tail -n1 | cut -f1)"
             echo ''
             echo 'Contient le noyau et les outils de base.'
+            echo ''
+            echo 'Reassemble with:'
+            echo '```bash'
+            echo 'cat $(ls -v rootfs-cache-*.tar.zst.part-*) > rootfs-cache.tar.zst'
+            echo '```'
             echo 'EOF'
-          } >> $GITHUB_OUTPUT
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload rootfs cache to release
         uses: softprops/action-gh-release@v2
         with:
-          files: rootfs-cache-*.tar.zst
+          files: |
+            /tmp/lfs-build/rootfs-cache-*.tar.zst.part-*
+            /tmp/lfs-build/SHA256SUMS
           tag_name: rootfs-cache-latest
           name: LFS Root Filesystem Cache
           body: ${{ steps.release_body.outputs.body }}

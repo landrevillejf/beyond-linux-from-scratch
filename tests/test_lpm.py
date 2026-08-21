@@ -105,6 +105,24 @@ class TestLPMRepositoryPipeline:
         create_release = content.split('create-release:')[1]
         assert 'prerelease: true' in create_release
 
+    def test_nightly_release_has_dated_tag(self):
+        # Without an explicit tag, softprops would tag the release with
+        # the branch name and every nightly would overwrite the same
+        # release. Each nightly must get its own dated tag and title.
+        content = _content(Path('.github/workflows/nightly.yml'))
+        create_release = content.split('create-release:')[1]
+        assert 'tag_name: nightly-' in create_release
+        assert 'name: Nightly Build' in create_release
+        assert 'make_latest: false' in create_release
+
+    def test_nightly_build_uses_dated_iso_naming(self):
+        # The workflow verifies/uploads a date-suffixed ISO name, so the
+        # build itself must run with --nightly (dated ISO naming) or the
+        # verify step would reference a file that never exists.
+        content = _content(Path('.github/workflows/nightly.yml'))
+        build_section = content.split('create-release:')[0]
+        assert '--nightly' in build_section
+
 
 class TestSystemUpdater:
     """lfs-update must work on sysvinit and systemd alike."""

@@ -313,6 +313,7 @@ python3 builder.py --generate-sources-list
 | `--sign-iso [GPG_KEY]` | Sign the generated ISO with GPG (optional key ID or email) |
 | `--sbom` | Generate an SPDX software bill of materials after the build |
 | `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`) |
+| `--nightly` | Nightly build mode: append today's date to the ISO filename |
 
 ## Professional Branding System
 

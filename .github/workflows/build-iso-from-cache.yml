@@ -44,27 +44,43 @@ jobs:
         id: get_cache
         run: |
           if [ -n "${{ github.event.inputs.cache_url }}" ]; then
-            echo "cache_url=${{ github.event.inputs.cache_url }}" >> "$GITHUB_OUTPUT"
+            echo "single_url=${{ github.event.inputs.cache_url }}" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases"
-          ASSET_URL=$(curl -fsSL "$RELEASES_URL" | jq -r '
-            .[]?.assets[]? |
-            select(.name | test("^rootfs-cache-.*\\.(tar\\.zst|tar\\.xz)$")) |
+          # The rootfs cache release ships split parts (2 GB asset cap);
+          # collect every part sorted by name for reassembly.
+          RELEASES_URL="https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/tags/rootfs-cache-latest"
+          ASSETS=$(curl -fsSL "$RELEASES_URL" | jq -r '
+            .assets[]? |
+            select(.name | test("^rootfs-cache-.*\\.tar\\.zst\\.part-[0-9][0-9]$")) |
             .browser_download_url
-          ' | head -n1)
-          if [ -z "$ASSET_URL" ] || [ "$ASSET_URL" = "null" ]; then
-            echo "No rootfs cache archive found in releases"
+          ' | sort)
+          if [ -z "$ASSETS" ]; then
+            echo "No rootfs cache parts found in releases"
             exit 1
           fi
-          echo "cache_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "part_urls<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$ASSETS" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
 
       - name: Download and extract cache
         run: |
           sudo mkdir -p /tmp/lfs-build/image
-          cd /tmp/lfs-build
-          sudo wget -q --show-progress "${{ steps.get_cache.outputs.cache_url }}" -O rootfs-cache.tar
+          cd /tmp/lfs-build || exit 1
+          if [ -n "${{ steps.get_cache.outputs.single_url }}" ]; then
+            sudo wget -q --show-progress "${{ steps.get_cache.outputs.single_url }}" -O rootfs-cache.tar
+          else
+            # Reassemble the split parts in name order before extracting.
+            while IFS= read -r url; do
+              echo "Downloading $url"
+              wget -q --show-progress -O - "$url" >> rootfs-cache.tar
+            done <<< "${{ steps.get_cache.outputs.part_urls }}"
+          fi
+          if [ ! -s rootfs-cache.tar ]; then
+            echo "Combined rootfs cache archive is empty."
+            exit 1
+          fi
           if file rootfs-cache.tar | grep -qi zstd; then
             sudo tar --zstd -xf rootfs-cache.tar -C image/
           else

@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Nightly pipeline completeness** (`builder.py`, `.github/workflows/nightly.yml`)
+  - New `--nightly` CLI flag: enables dated ISO naming
+    (`lfs-{version}-{profile}-{arch}-{init}-{YYYYMMDD}.iso`) so the ISO
+    the builder produces matches the dated name the nightly workflow
+    verifies and uploads (previously the verify step referenced a file
+    that was never created)
+  - `create-release` now uses a unique dated tag
+    (`nightly-YYYYMMDD`) and release name (`Nightly Build YYYYMMDD`)
+    instead of overwriting a release tagged with the branch name; also
+    sets `make_latest: false` so the stable `latest` pointer is
+    preserved alongside `prerelease: true`
+  - Per-profile artifact names in the release: kernel, `SHA256SUMS`,
+    `build_info.json`, SBOM and LPM manifest are renamed with a
+    `{profile}-{arch}-{init}` suffix so matrix jobs no longer overwrite
+    each other's assets
+  - Nightly builds now generate the SPDX SBOM (`--sbom`) and upload it
+    as a release asset
+
+- **Release pipeline hardening: signing, compat pointer, asset splitting**
+  - `nightly.yml`: GPG signing step guarded on `secrets.GPG_PRIVATE_KEY`
+    / `secrets.GPG_PASSPHRASE` (fingerprint from `vars.GPG_KEY_ID`);
+    uploads a detached armored `.iso.sig` next to the ISO, and skips
+    cleanly while the secrets are not configured
+  - `nightly.yml` + `release.yml`: publish a tiny
+    `lfs-installer.iso.pointer` asset (ISO name + SHA256 + download URL)
+    resolving the backward-compatible installer name without
+    duplicating multi-GB ISOs; for stable releases it is available at
+    `releases/latest/download/lfs-installer.iso.pointer`
+  - `nightly.yml`: split rootfs export (`tar --zstd | split -b 1900m`,
+    same convention as the packages cache) for the `xfce` and `arm64`
+    profiles, part checksums appended to the per-profile SHA256SUMS;
+    nightly releases older than 30 days are pruned after publishing
+  - `build-rootfs-cache.yml`: rootfs cache now streamed into
+    `*.tar.zst.part-NN` assets with SHA256SUMS (a single archive would
+    break the 2 GB release-asset cap); `build-iso-from-cache.yml`
+    updated to download and reassemble every part instead of only the
+    first matching asset
+
 ### Changed
 
 - **LFS/BLFS book compliance remediation, wave 1** (`docs/LFS_COMPLIANCE_AUDIT.md`)

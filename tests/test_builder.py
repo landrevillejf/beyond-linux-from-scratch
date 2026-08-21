@@ -828,7 +828,8 @@ class TestLFSBuilder:
                 download_timeout=None,
                 download_retries=None,
                 milestone=None,
-                stage_timeout=None
+                stage_timeout=None,
+                nightly=False
             )
 
     def test_main_stage_timeout_option(self, tmp_path):
@@ -856,6 +857,32 @@ class TestLFSBuilder:
                 main()
 
             assert MockBuilder.call_args[1]['stage_timeout'] == 18000
+
+    def test_main_nightly_flag(self, tmp_path):
+        """--nightly reaches the LFSBuilder constructor for dated ISO naming."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--nightly',
+            '--no-live',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            assert MockBuilder.call_args[1]['nightly'] is True
 
     @patch('builder.LFSBuilder._update_sources_list')
     @patch('builtins.print')

@@ -600,5 +600,6 @@ class TestLFSBuilderMissingISO:
                     download_timeout=None,
                     download_retries=None,
                     milestone=None,
-                    stage_timeout=None
+                    stage_timeout=None,
+                    nightly=False
                 )
