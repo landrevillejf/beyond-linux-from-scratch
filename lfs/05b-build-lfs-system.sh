@@ -463,7 +463,7 @@ EOF
         make -j"$(nproc)"
         make PREFIX=/usr install
         cp -av libbz2.so.* /usr/lib
-        ln -sv libbz2.so.1.0.8 /usr/lib/libbz2.so
+        ln -sfv libbz2.so.1.0.8 /usr/lib/libbz2.so
         cp -v bzip2-shared /usr/bin/bzip2
         for i in /usr/bin/{bzcat,bunzip2}; do
             ln -sfv bzip2 "$i"
@@ -539,8 +539,8 @@ EOF
             --disable-static
         make -j"$(nproc)"
         make install
-        ln -sv flex /usr/bin/lex
-        ln -sv flex.1 /usr/share/man/man1/lex.1
+        ln -sfv flex /usr/bin/lex
+        ln -sfv flex.1 /usr/share/man/man1/lex.1
         ;;
     tcl)
         extract "$(find_archive tcl)"
@@ -598,8 +598,8 @@ EOF
             --docdir=/usr/share/doc/pkgconf-2.5.1
         make -j"$(nproc)"
         make install
-        ln -sv pkgconf /usr/bin/pkg-config
-        ln -sv pkgconf.1 /usr/share/man/man1/pkg-config.1
+        ln -sfv pkgconf /usr/bin/pkg-config
+        ln -sfv pkgconf.1 /usr/share/man/man1/pkg-config.1
         ;;
     binutils)
         extract "$(find_archive binutils)"
@@ -726,7 +726,10 @@ EOF
             --with-system-zlib
         make -j"$(nproc)"
         make install
-        ln -sv gcc /usr/bin/cc
+        # gcc >= 15 creates /usr/bin/cc during make install itself
+        # (Nightly #168 died on "File exists" here); keep the book's
+        # link for older compilers without failing when it is there.
+        [ -e /usr/bin/cc ] || ln -sv gcc /usr/bin/cc
         ;;
     ncurses)
         extract "$(find_archive ncurses)"
@@ -1006,7 +1009,7 @@ EOF
         make -j"$(nproc)"
         rm -f /usr/bin/gawk-*
         make install
-        ln -sv gawk.1 /usr/share/man/man1/awk.1
+        ln -sfv gawk.1 /usr/share/man/man1/awk.1
         ;;
     findutils)
         extract "$(find_archive findutils)"
@@ -1093,11 +1096,11 @@ EOF
         ./configure --prefix=/usr
         make -j"$(nproc)"
         make install
-        ln -sv vim /usr/bin/vi
+        ln -sfv vim /usr/bin/vi
         for L in /usr/share/man/{,*/}man1/vim.1; do
-            ln -sv vim.1 "$(dirname "$L")/vi.1"
+            ln -sfv vim.1 "$(dirname "$L")/vi.1"
         done
-        ln -sv ../vim/vim91/doc /usr/share/doc/vim-9.1.1629
+        ln -sfv ../vim/vim91/doc /usr/share/doc/vim-9.1.1629
         cat > /etc/vimrc << "EOF"
 " Begin /etc/vimrc
 

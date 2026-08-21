@@ -714,6 +714,31 @@ class TestLFSComplianceGuardrails:
         assert readline_pos != -1 and readline_pos < bc_pos, \
             "bc builds after readline and consumes its shared lib"
 
+    def test_gcc_cc_link_tolerates_existing_target(self):
+        """The gcc cc symlink must not fail when gcc installs it.
+
+        Nightly #168 (minimal and java-dev, sysvinit/x86_64) died in
+        lfs-system immediately after gcc's make install with "ln:
+        failed to create symbolic link '/usr/bin/cc': File exists":
+        GCC >= 15 creates /usr/bin/cc during make install itself, so
+        the book's legacy `ln -sv gcc /usr/bin/cc` aborts the stage
+        under set -e. The link creation must be guarded so re-runs and
+        modern compilers both survive.
+        """
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        gcc_pos = content.find('    gcc)\n')
+        assert gcc_pos != -1, "05b must keep a gcc build case"
+        # The gcc case nests a `case $(uname -m)` with its own ;;, so
+        # slice up to the next top-level package instead.
+        end_pos = content.find('    ncurses)\n', gcc_pos)
+        assert end_pos != -1
+        gcc_block = content[gcc_pos:end_pos]
+        assert '[ -e /usr/bin/cc ] || ln -sv gcc /usr/bin/cc' \
+            in gcc_block, \
+            "gcc's cc link must be skipped when gcc installed it"
+        assert '\n        ln -sv gcc /usr/bin/cc\n' not in gcc_block, \
+            "unguarded cc link would fail on GCC >= 15"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

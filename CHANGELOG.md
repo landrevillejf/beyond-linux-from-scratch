@@ -45,6 +45,17 @@
     configure now receives `LDFLAGS='-L/tools/lib -Wl,-rpath-link,/tools/lib'`,
     mirroring readline's own exposure
 
+- **lfs-system gcc cc-link failure** (`lfs/05b-build-lfs-system.sh`)
+  - GCC >= 15 creates `/usr/bin/cc` during `make install` itself, so
+    the legacy book line `ln -sv gcc /usr/bin/cc` aborted lfs-system
+    with "ln: failed to create symbolic link '/usr/bin/cc': File
+    exists" (Nightly #168, both matrix jobs, after ~1h19m of build).
+    The link is now guarded (`[ -e /usr/bin/cc ] || ln -sv ...`),
+    keeping the book's link for older compilers
+  - Hardened the remaining resume-sensitive `ln -sv` sites in the same
+    stage to `ln -sfv` (bzip2, flex, pkgconf, gawk man page, vim)
+    so a re-run after `--resume-from lfs-system` stays idempotent
+
 - **Nightly pipeline completeness** (`builder.py`, `.github/workflows/nightly.yml`)
   - New `--nightly` CLI flag: enables dated ISO naming
     (`lfs-{version}-{profile}-{arch}-{init}-{YYYYMMDD}.iso`) so the ISO
