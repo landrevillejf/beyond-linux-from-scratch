@@ -162,11 +162,13 @@ jobs:
           echo "🗑️ Removed cached kernel to force fresh download for all architectures"
 
       # ------- DEBUG (optionnel) -------
+      # awk consomme toute l'entree; head fermerait le pipe et ls
+      # mourrait en SIGPIPE, ce qui fait echouer l'etape (pipefail).
       - name: Debug sources directory before build
         run: |
-          echo "📂 Sources directory:"
-          ls -la /tmp/lfs-build/build-release/sources/ | head -30
-          echo "files in sources : $(ls /tmp/lfs-build/build-release/sources/ | wc -l)"
+          echo "Sources directory:"
+          ls -la /tmp/lfs-build/build-release/sources/ | awk 'NR <= 30'
+          echo "files in sources : $(find /tmp/lfs-build/build-release/sources/ -maxdepth 1 -type f | wc -l)"
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
