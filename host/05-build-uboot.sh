@@ -20,6 +20,14 @@ fi
 # The builder exports CROSS_COMPILE (e.g. aarch64-linux-gnu-) and ARCH.
 CROSS_COMPILE="${CROSS_COMPILE:-aarch64-linux-gnu-}"
 ARCH="${ARCH:-arm64}"
+# U-Boot has no arch/aarch64 or arch/arm64 tree: every 32/64-bit ARM
+# board builds with ARCH=arm (Nightly #161 died in create_symlink on
+# 'arch/aarch64/include/asm/arch').  Map kernel-style arch names.
+case "$ARCH" in
+    aarch64*|arm64*)
+        ARCH=arm
+        ;;
+esac
 U_BOOT_VERSION="${U_BOOT_VERSION:-2024.07}"
 U_BOOT_URL="https://ftp.denx.de/pub/u-boot/u-boot-${U_BOOT_VERSION}.tar.bz2"
 U_BOOT_DIR="u-boot-${U_BOOT_VERSION}"

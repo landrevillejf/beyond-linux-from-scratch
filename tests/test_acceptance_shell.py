@@ -650,6 +650,26 @@ class TestLFSComplianceGuardrails:
         assert 'cd /sources' not in content, \
             "uboot must not cd into a host-level /sources directory"
 
+    def test_uboot_maps_kernel_arch_to_uboot_arm(self):
+        """Kernel-style arch names must map to U-Boot's ARCH=arm.
+
+        Nightly #161 advanced past the $LFS/sources fix and died in
+        the U-Boot build with "ln: failed to create symbolic link
+        'arch/aarch64/include/asm/arch'": the builder exports the
+        kernel architecture name (aarch64), but U-Boot has no
+        arch/aarch64 or arch/arm64 tree — every 32/64-bit ARM board
+        builds with ARCH=arm, selected by the defconfig.
+        """
+        content = Path('host/05-build-uboot.sh').read_text()
+        assert 'aarch64*|arm64*)' in content, \
+            "uboot must map kernel arch names to U-Boot arch names"
+        case_pos = content.find('aarch64*|arm64*)')
+        map_pos = content.find('ARCH=arm', case_pos)
+        first_make = content.find('make ARCH="${ARCH}"')
+        assert -1 not in (map_pos, first_make)
+        assert case_pos < map_pos < first_make, \
+            "ARCH must be normalized before the first make call"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

@@ -201,6 +201,17 @@
 
 ### Fixed
 
+- **Nightly #161: U-Boot build passed a kernel arch name to `ARCH`** (`host/05-build-uboot.sh`)
+  - With the `$LFS/sources` fix in place the arm64 job advanced to the
+    U-Boot compile and died with `ln: failed to create symbolic link
+    'arch/aarch64/include/asm/arch': No such file or directory`:
+    builder.py exports the kernel architecture name (`aarch64`), but
+    U-Boot has no `arch/aarch64` or `arch/arm64` tree
+  - Fix: kernel-style arch names (`aarch64*`, `arm64*`) are mapped to
+    U-Boot's `ARCH=arm` before the first `make` call; the defconfig
+    (`rpi_4_defconfig`) still selects the 64-bit ARMv8 build
+  - Regression test: `test_uboot_maps_kernel_arch_to_uboot_arm`
+
 - **Nightly #161: lfs-system built the python docs tarball instead of the sources** (`lfs/05b-build-lfs-system.sh` + 17 more stage scripts)
   - With the toolchain rpath fix in place, the xfce job advanced past
     perl and died at `=== Building python-3.13.7-docs-html ===` with
