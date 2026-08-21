@@ -57,6 +57,12 @@ run_privileged mkdir -p "$LFS/etc/lpm"
 BASE_LIST="$LFS/usr/share/lpm/base-packages.list"
 DB_FILE="$LFS/var/lib/lpm/packages.list"
 INSTALLED_FILE="$LFS/var/lib/lpm/installed.list"
+# Per-package file lists captured during the build (lfs/05b).
+MANIFEST_DIR="$LFS/var/lib/lpm/manifests"
+# Repository export consumed by the release pipelines. Installed
+# systems fetch it from the GitHub release assets via `lpm update-db`.
+REPO_DIR="${LFS_CONFIG_OUTPUT_DIR:-$(dirname "$LFS")}/lpm-repo"
+mkdir -p "$REPO_DIR"
 
 # ---------------------------------------------------------------------------
 # Canonical base package set (LFS 13.0 + minimal BLFS runtime)
@@ -137,6 +143,43 @@ sha256_stdin() {
     fi
 }
 
+# Assemble {name}-{version}.tar.xz from the file list captured during
+# the build. Members land under a {name}-{version}/files/ prefix so
+# lpm's --strip-components=1 install layout works unchanged.
+package_from_manifest() {
+    local name="$1" version="$2" list="$3" out="$4"
+    local rel_list
+    rel_list=$(mktemp)
+    # Drop the leading slash and keep only entries still present in
+    # the rootfs (the strip/cleanup passes delete files late).
+    while IFS= read -r f; do
+        f="${f#/}"
+        [ -z "$f" ] && continue
+        if [ -e "$LFS/$f" ] || [ -L "$LFS/$f" ]; then
+            printf '%s\n' "$f"
+        fi
+    done < "$list" > "$rel_list"
+    if [ ! -s "$rel_list" ]; then
+        rm -f "$rel_list"
+        return 1
+    fi
+    # || status=$? so a broken archive degrades to the placeholder
+    # checksum instead of aborting the whole stage (set -e + pipefail).
+    local status=0
+    run_privileged tar --no-recursion --verbatim-files-from \
+        --transform "s|^|$name-$version/files/|" \
+        -C "$LFS" -T "$rel_list" -cf - 2>/dev/null | xz -T0 > "$out" ||
+        status=$?
+    rm -f "$rel_list"
+    if [ "$status" -ne 0 ] || [ ! -s "$out" ]; then
+        # Never leave a zero-byte archive behind: the release glob
+        # would happily upload it.
+        rm -f "$out"
+        return 1
+    fi
+    return 0
+}
+
 TARBALL_VERSIONS=$(mktemp)
 if [ -d "$LFS/sources" ]; then
     for tarball in "$LFS/sources"/*.tar.*; do
@@ -193,8 +236,25 @@ fi
 
 while IFS='|' read -r name version description deps; do
     [ -z "$name" ] && continue
-    # Checksum placeholder; LPM replaces it on a real install/build.
-    checksum="base-$(printf '%s' "$name-$version" | sha256_stdin | cut -c1-16)"
+    # Build a real binary package when the build captured a manifest;
+    # its sha256 goes straight into the database so lpm install can
+    # verify it. Packages built outside 05b (or metadata-only) keep a
+    # placeholder checksum that lpm skips instead of comparing.
+    checksum=""
+    manifest="$MANIFEST_DIR/$name.list"
+    if [ -s "$manifest" ]; then
+        tarball="$REPO_DIR/$name-$version.tar.xz"
+        if package_from_manifest "$name" "$version" "$manifest" "$tarball"; then
+            run_privileged chmod 0644 "$tarball"
+            checksum=$(sha256_stdin < "$tarball")
+            log_info "Packaged $name-$version ($(du -h "$tarball" | cut -f1))"
+        else
+            log_warning "Packaging failed for $name-$version; keeping placeholder"
+        fi
+    fi
+    if [ -z "$checksum" ]; then
+        checksum="base-$(printf '%s' "$name-$version" | sha256_stdin | cut -c1-16)"
+    fi
     # Replace any stale entry for this package, then append the fresh one.
     awk -F'|' -v n="$name" '$1 != n' "$TMP_DB" >"$TMP_DB.new"
     mv "$TMP_DB.new" "$TMP_DB"
@@ -224,11 +284,9 @@ run_privileged install -m 0644 "$TMP_INSTALLED.new" "$INSTALLED_FILE"
 rm -f "$TMP_DB" "$TMP_INSTALLED" "$TMP_INSTALLED.new"
 
 # ---------------------------------------------------------------------------
-# Export the repository manifest for the release pipeline. Installed
-# systems fetch it from the GitHub release assets via `lpm update-db`.
+# Export the repository manifest for the release pipeline. The binary
+# package tarballs created above travel alongside it.
 # ---------------------------------------------------------------------------
-REPO_DIR="${LFS_CONFIG_OUTPUT_DIR:-$(dirname "$LFS")}/lpm-repo"
-mkdir -p "$REPO_DIR"
 install -m 0644 "$DB_FILE" "$REPO_DIR/packages.list" 2>/dev/null ||
     cp "$LFS/var/lib/lpm/packages.list" "$REPO_DIR/packages.list"
 (

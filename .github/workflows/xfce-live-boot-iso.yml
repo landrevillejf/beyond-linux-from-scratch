@@ -101,6 +101,7 @@ jobs:
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
             /tmp/lfs-build/lpm-repo/packages.list*
+            /tmp/lfs-build/lpm-repo/*.tar.xz
 
       - name: Create release tag metadata
         id: release_info
@@ -131,6 +132,7 @@ jobs:
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
             /tmp/lfs-build/lpm-repo/packages.list*
+            /tmp/lfs-build/lpm-repo/*.tar.xz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

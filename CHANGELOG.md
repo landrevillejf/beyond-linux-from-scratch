@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Added
+
+- **LPM binary repository for base packages** (`lfs/05b-build-lfs-system.sh`,
+  `blfs/14-create-base-packages.sh`, `.github/workflows/release.yml`,
+  `.github/workflows/xfce-live-boot-iso.yml`)
+  - The chapter 8 build loop now captures per-package file lists
+    (`/var/lib/lpm/manifests/<pkg>.list`, snapshot diff via awk so it
+    works before diffutils is built)
+  - Stage 14 assembles each manifest into a real
+    `{name}-{version}.tar.xz` in `lpm-repo/` (lpm's
+    `{name}-{version}/files/` install layout) and records the real
+    sha256 of the tarball in the repository manifest; packages without
+    a manifest keep the placeholder checksum lpm skips
+  - Stable release pipelines upload `lpm-repo/*.tar.xz` next to
+    `packages.list`, so installed systems can reinstall and upgrade
+    base packages over the network; nightlies stay metadata-only to
+    avoid matrix asset collisions
+
 ### Fixed
 
 - **LPM configuration and checksum handling** (`config/lpm.conf`,

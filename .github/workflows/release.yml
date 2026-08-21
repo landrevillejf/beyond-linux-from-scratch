@@ -216,6 +216,7 @@ jobs:
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/lpm-repo/*.tar.xz
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
           if-no-files-found: error
 
@@ -247,6 +248,7 @@ jobs:
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/SHA256SUMS
             /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/lpm-repo/*.tar.xz
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
           generate_release_notes: true
 

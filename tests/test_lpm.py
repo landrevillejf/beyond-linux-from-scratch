@@ -21,6 +21,7 @@ LPM_SCRIPT = Path('blfs/19-lpm.sh')
 STAGE14 = Path('blfs/14-create-base-packages.sh')
 UPDATER = Path('blfs/18-system-updater.sh')
 LPM_CONF = Path('config/lpm.conf')
+LFS_SYSTEM = Path('lfs/05b-build-lfs-system.sh')
 
 
 def _content(path):
@@ -96,6 +97,99 @@ class TestLPMConfigContract:
         # never 1 (which silently disables colors).
         assert 'USE_COLOR=true' in content
         assert 'JOBS=0' not in content, "JOBS is not consumed by lpm"
+
+
+class TestLPMBinaryRepo:
+    """The base set is published as real binary packages.
+
+    05b captures per-package file lists during the build; stage 14
+    turns them into {name}-{version}.tar.xz archives whose sha256
+    lands in the repository manifest, and the stable release
+    pipelines upload the tarballs next to packages.list.
+    """
+
+    def test_05b_captures_package_manifests(self):
+        content = _content(LFS_SYSTEM)
+        assert 'LPM_MANIFEST_DIR=/var/lib/lpm/manifests' in content
+        assert 'snapshot_tree()' in content
+        assert '"$LPM_MANIFEST_DIR/$pkg.list"' in content
+        # The diff must run before diffutils exists: awk, not comm.
+        loop = content.split('for pkg in $CH8_PACKAGES')[1]
+        assert 'comm ' not in loop.split('done')[0]
+
+    def test_stage14_builds_binary_packages(self):
+        content = _content(STAGE14)
+        assert 'package_from_manifest()' in content
+        assert 'MANIFEST_DIR="$LFS/var/lib/lpm/manifests"' in content
+        # lpm install layout: {name}-{version}/files/ prefix.
+        assert '--transform "s|^|$name-$version/files/|"' in content
+        # Real checksums come from the tarball itself.
+        assert 'checksum=$(sha256_stdin < "$tarball")' in content
+
+    def test_stable_workflows_upload_binary_packages(self):
+        for workflow in ('.github/workflows/release.yml',
+                         '.github/workflows/xfce-live-boot-iso.yml'):
+            content = _content(Path(workflow))
+            assert 'lpm-repo/*.tar.xz' in content, \
+                f"{workflow} must upload the base binary packages"
+
+    def test_nightly_stays_metadata_only(self):
+        content = _content(Path('.github/workflows/nightly.yml'))
+        assert 'lpm-repo/*.tar.xz' not in content, \
+            "matrix jobs would collide on identical asset names"
+
+    def test_stage14_creates_real_package(self, tmp_path):
+        """End-to-end: manifest -> tarball -> sha256 in the DB."""
+        if shutil.which('bash') is None:
+            pytest.skip('bash not available')
+        # package_from_manifest needs GNU tar (--transform,
+        # --verbatim-files-from); real builds run on Linux runners.
+        tar_version = subprocess.run(['tar', '--version'],
+                                     capture_output=True, text=True)
+        if 'GNU tar' not in tar_version.stdout:
+            pytest.skip('GNU tar required (bsdtar lacks --transform)')
+        root = tmp_path / 'fake-root'
+        (root / 'usr/bin').mkdir(parents=True)
+        (root / 'usr/lib').mkdir(parents=True)
+        (root / 'usr/bin/demo').write_text('#!/bin/sh\necho demo\n')
+        (root / 'usr/lib/libdemo.so').write_text('fake-lib')
+        (root / 'usr/lib/broken').symlink_to('libdemo.so')
+        # Stage 14 only packages entries of the curated BASE_PACKAGES
+        # set, so the fake manifest must ride on a real member (glibc).
+        (root / 'var/lib/lpm/manifests').mkdir(parents=True)
+        (root / 'var/lib/lpm/manifests/glibc.list').write_text(
+            '/usr/bin/demo\n'
+            '/usr/lib/libdemo.so\n'
+            '/usr/lib/broken\n'
+            '/usr/lib/gone-after-strip\n')
+        # Version hint resolved the same way as a real build.
+        (root / 'sources').mkdir()
+        (root / 'sources/glibc-2.42.tar.xz').touch()
+
+        bin_dir = tmp_path / 'bin'
+        bin_dir.mkdir()
+        # Identity sudo shim: the smoke test already owns the tree.
+        shim = bin_dir / 'sudo'
+        shim.write_text('#!/bin/sh\nexec "$@"\n')
+        shim.chmod(0o755)
+
+        env = {'PATH': f'{bin_dir}:/usr/bin:/bin:/usr/sbin:/sbin',
+               'LFS': str(root), 'HOME': '/tmp'}
+        result = subprocess.run(['bash', str(STAGE14)],
+                                capture_output=True, text=True,
+                                timeout=300, env=env)
+        assert result.returncode == 0, result.stderr
+
+        repo = tmp_path / 'lpm-repo'
+        tarball = repo / 'glibc-2.42.tar.xz'
+        assert tarball.exists(), 'binary package must be created'
+        assert tarball.stat().st_size > 0
+
+        db = (repo / 'packages.list').read_text()
+        entry = next(l for l in db.splitlines() if l.startswith('glibc|'))
+        checksum = entry.split('|')[4]
+        assert len(checksum) == 64 and checksum != 'sha256-dummy', \
+            'manifest must carry the real tarball sha256'
 
 
 class TestLPMRepositoryPipeline:

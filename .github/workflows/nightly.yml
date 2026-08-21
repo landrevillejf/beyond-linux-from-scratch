@@ -287,6 +287,10 @@ jobs:
               mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
             done
           fi
+          # Base binary package tarballs are deliberately not uploaded
+          # on nightlies: matrix jobs would collide on the same asset
+          # names when the release is flattened. The binary repository
+          # ships with stable releases only (release.yml).
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4

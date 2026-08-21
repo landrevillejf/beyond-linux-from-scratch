@@ -357,7 +357,28 @@ coreutils diffutils gawk findutils groff grub gzip iproute2 kbd libpipeline
 make patch tar texinfo vim markupsafe jinja2 udev man-db procps-ng util-linux
 e2fsprogs sysklogd sysvinit"
 
+# ============================================================
+# LPM binary repository: per-package file-list capture.
+# Every package's NEWLY ADDED files are recorded in
+# /var/lib/lpm/manifests/<pkg>.list; stage 14 (create-base-packages)
+# turns those lists into real {name}-{version}.tar.xz binary
+# packages with genuine sha256 checksums, so installed systems can
+# reinstall and upgrade base packages over the network.
+# ============================================================
+LPM_MANIFEST_DIR=/var/lib/lpm/manifests
+mkdir -p "$LPM_MANIFEST_DIR"
+
+# Files and symlinks of the system tree, minus volatile/build trees.
+snapshot_tree() {
+    find / -xdev \
+        \( -path /proc -o -path /sys -o -path /dev -o -path /run \
+           -o -path /sources -o -path /tools -o -path /tmp \
+           -o -path /var/log -o -path "$LPM_MANIFEST_DIR" \) -prune \
+        -o \( -type f -o -type l \) -print
+}
+
 for pkg in $CH8_PACKAGES; do
+    snapshot_tree > /tmp/lpm-before.list
     case "$pkg" in
     man-pages)
         extract "$(find_archive man-pages)"
@@ -1266,6 +1287,14 @@ EOF
         ;;
     esac
     cd /sources
+    # Record the files this package added (awk set difference; the
+    # chapter 7 gawk is on PATH here while diffutils' comm may not be
+    # built yet). Modified files keep their original owner.
+    snapshot_tree > /tmp/lpm-after.list
+    awk 'NR == FNR { seen[$0] = 1; next } !($0 in seen)' \
+        /tmp/lpm-before.list /tmp/lpm-after.list \
+        > "$LPM_MANIFEST_DIR/$pkg.list"
+    echo "Captured manifest for $pkg: $(wc -l < "$LPM_MANIFEST_DIR/$pkg.list") files"
 done
 
 # ============================================================
