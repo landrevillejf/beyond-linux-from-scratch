@@ -966,9 +966,10 @@ EOF
         ;;
     meson)
         extract "$(find_archive meson)"
-        # Book 8.62: pip installs the meson console script into
-        # /usr/bin itself; an extra symlink here would replace that
-        # real script with a relative self-link (nightly #170).
+        # BLFS book installs meson with pip only; pip puts the meson
+        # console script into /usr/bin itself, and an extra symlink
+        # here would replace that real script with a relative
+        # self-link (nightly #170).
         pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
         pip3 install --no-index --find-links dist meson
         # Fail here rather than at the next meson consumer (kmod, udev)
@@ -1091,7 +1092,10 @@ EOF
         ;;
     tar)
         extract "$(find_archive tar)"
-        ./configure --prefix=/usr
+        # Book: chapter 8 builds as root, and tar's configure rejects
+        # that unless FORCE_UNSAFE_CONFIGURE=1 is set (same as the
+        # coreutils case). Nightly #172 died on this check.
+        FORCE_UNSAFE_CONFIGURE=1 ./configure --prefix=/usr
         make -j"$(nproc)"
         make install
         ;;

@@ -99,11 +99,19 @@
     installed cleanly: the meson case ended with
     `ln -sfv meson /usr/bin/meson`, which replaced the real console
     script pip had just installed with a relative self-referencing
-    symlink that resolves to nothing. LFS 12.4 8.62 installs meson
+    symlink that resolves to nothing. The BLFS book installs meson
     with `pip3 wheel` + `pip3 install` only; the non-book symlink is
     removed, and the case now verifies `meson` is on PATH so any
     future drift fails the meson case instead of the next consumer
     (kmod, udev)
+
+- **lfs-system tar "should not run configure as root" failure**
+  (`lfs/05b-build-lfs-system.sh`)
+  - Nightly #172 (xfce/sysvinit/x86_64) died at tar-1.35: the tar
+    case ran a bare `./configure`, but chapter 8 builds run as root
+    inside the chroot and tar's gnulib configure rejects that. Per
+    the book, the case now passes `FORCE_UNSAFE_CONFIGURE=1`, same as
+    the coreutils case
 
 - **`lpm install` silently installed nothing on bash >= 4.4**
   (`blfs/19-lpm.sh`)

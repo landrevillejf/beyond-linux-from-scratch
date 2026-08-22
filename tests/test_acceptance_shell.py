@@ -777,7 +777,7 @@ class TestLFSComplianceGuardrails:
         "meson: command not found": pip had installed the real
         /usr/bin/meson console script, then the case ran
         `ln -sfv meson /usr/bin/meson`, replacing it with a relative
-        self-referencing symlink. LFS 12.4 8.62 installs meson with
+        self-referencing symlink. The BLFS book installs meson with
         pip3 only, no symlink.
         """
         content = Path('lfs/05b-build-lfs-system.sh').read_text()
@@ -789,6 +789,23 @@ class TestLFSComplianceGuardrails:
             "the self-link clobbers the pip-installed console script"
         assert 'command -v meson' in block, \
             "a missing meson must fail the meson case, not kmod/udev"
+
+    def test_root_unsafe_packages_force_configure(self):
+        """coreutils and tar must bypass the gnulib root check.
+
+        Nightly #172 (xfce/sysvinit/x86_64) died in lfs-system at
+        tar-1.35: "you should not run configure as root (set
+        FORCE_UNSAFE_CONFIGURE=1 ...)". Chapter 8 builds run as root
+        inside the chroot, and the book sets FORCE_UNSAFE_CONFIGURE=1
+        for the packages whose configure performs the root check.
+        """
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        for pkg in ('coreutils', 'tar'):
+            pos = content.find(f'    {pkg})\n')
+            assert pos != -1, f"05b must keep a {pkg} build case"
+            block = content[pos:content.find(';;', pos)]
+            assert 'FORCE_UNSAFE_CONFIGURE=1' in block, \
+                f"{pkg} configure rejects root without FORCE_UNSAFE_CONFIGURE"
 
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
