@@ -87,6 +87,7 @@ BUILD_STAGES = [
     ('server', 'blfs/25-server.sh'),
     ('printing-scanning', 'blfs/26-printing-scanning.sh'),
     ('audio-studio', 'blfs/27-audio-studio.sh'),
+    ('knowledge', 'blfs/28-knowledge.sh'),
     ('package-manager', 'blfs/19-lpm.sh'),
     ('base-packages', 'blfs/14-create-base-packages.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
@@ -200,6 +201,20 @@ class LFSConfig:
                 "tools": ["maven", "gradle", "tomcat", "jenkins", "docker", "kubectl"],
                 "optimizations": True,
                 "demo_projects": True
+            },
+
+            "knowledge": {
+                "enabled": False,
+                "engine": "ollama",
+                "engine_version": "0.12.6",
+                "engine_sha256": "",
+                "models": ["qwen2.5-coder:7b"],
+                "default_model": "qwen2.5-coder:7b",
+                "provision_models": "first-boot",
+                "listen": "127.0.0.1:11434",
+                "allow_network": False,
+                "web_ui": False,
+                "system_prompt_file": ""
             },
 
             "desktop": {
@@ -1762,6 +1777,11 @@ class LFSBuilder:
         if _audio_profile:
             stages.append(('audio-studio', 'blfs/27-audio-studio.sh'))
 
+        # Local AI assistant "knowledge" (Ollama), opt-in; runs before the
+        # package-manager block so stage 14 manifests capture its files.
+        if self.config.get('knowledge.enabled', False):
+            stages.append(('knowledge', 'blfs/28-knowledge.sh'))
+
         # Package manager
         if self.profile_config.get('package_manager', True):
             stages.append(('package-manager', 'blfs/19-lpm.sh'))
@@ -2335,6 +2355,9 @@ Examples:
     parser.add_argument('--nightly', action='store_true',
                         help='Nightly build mode: append today\'s date to the ISO filename')
 
+    parser.add_argument('--with-knowledge', action='store_true',
+                        help='Enable the local "knowledge" AI assistant (Ollama, opt-in)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -2458,6 +2481,11 @@ def main():
     if args.bootloader:
         builder.config.set('bootloader.type', args.bootloader)
         builder.logger.info(f"Bootloader overridden to: {args.bootloader}")
+        refresh_executor = True
+
+    if args.with_knowledge:
+        builder.config.set('knowledge.enabled', True)
+        builder.logger.info("Local AI assistant 'knowledge' enabled")
         refresh_executor = True
 
     if refresh_executor:

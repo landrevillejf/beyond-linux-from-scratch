@@ -35,6 +35,28 @@
     nightly, so both init paths stay proven; the stale commented-out
     systemd job block is removed
 
+- **Local AI assistant "knowledge" (opt-in)** (`blfs/28-knowledge.sh`,
+  `builder.py`, `config/build.conf`, `docs/KNOWLEDGE_DESIGN.md`)
+  - New optional stage installs a free, fully local AI assistant
+    based on Ollama (MIT) and open-weight models; disabled by default
+    and enabled via the `knowledge` section in `config/build.conf` or
+    the new `--with-knowledge` CLI flag
+  - Secure by default: the engine tarball is only installed after
+    verification against a pinned sha256 (`knowledge.engine_sha256`,
+    mandatory), the API binds to loopback unless
+    `knowledge.allow_network=true`, and the daemon runs as an
+    unprivileged `ollama` user
+  - Ships a `knowledge` CLI wrapper (chat, one-shot questions, code
+    review, shell suggestions) that never executes model output, plus
+    sysvinit/systemd service integration per `$INIT_SYSTEM`
+  - Model weights are provisioned at first boot by default
+    (`provision_models=first-boot`), or baked into the image at build
+    time with a disk preflight check (`build-time`)
+  - The stage runs after `audio-studio`, before the `package-manager`/`base-packages` block, so stage 14's manifest
+    capture includes the assistant in the LPM binary repository
+  - Design document: `docs/KNOWLEDGE_DESIGN.md`; guardrail tests in
+    `tests/test_acceptance_shell.py::TestKnowledgeStageGuardrails`
+
 ### Fixed
 
 - **NeuralRack v0.4.1 for the audio-studio profile**
@@ -73,8 +95,6 @@
     `packages.list`, so installed systems can reinstall and upgrade
     base packages over the network; nightlies stay metadata-only to
     avoid matrix asset collisions
-
-### Fixed
 
 - **Dead BLFS layer stages are now scheduled** (`builder.py`)
   - Audit G1/G2: `blfs/23-basic-networking.sh`, `blfs/25-server.sh` and
