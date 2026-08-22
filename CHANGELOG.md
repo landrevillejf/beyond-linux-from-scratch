@@ -218,6 +218,20 @@
 
 ### Changed
 
+- **Duplicate `lpm` stage removed** (`builder.py`, `README.md`)
+  - The scheduler ran `blfs/19-lpm.sh` twice: once as `package-manager`
+    (before `base-packages`) and again as a legacy `lpm` stage after
+    `system-updater`. The second run was idempotent but redundant; it
+    is removed from `get_build_stages()` and `BUILD_STAGES`, and the
+    README stage table now lists 40 stages
+
+- **`blfs/19-lpm.sh` is shfmt-clean** (`blfs/19-lpm.sh`)
+  - The LPM engine now conforms to the CI sh-checker gate
+    (`SHFMT_OPTS: -s -i 4`): redirection spacing (`>>file`),
+    continuation-line indentation and one single-quoted log string.
+    Formatting only, no behavior change; previously a latent CI
+    failure waiting for the next edit of the file
+
 - **Dead security config keys removed** (`config/build.conf`,
   `config/build.conf.json`, `config/default.json`, `builder.py`)
   - Audit G7: `security.fail2ban`, `security.hids` and

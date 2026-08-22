@@ -49,7 +49,7 @@ DRY_RUN=false
 FORCE=false
 NO_COLOR=false
 LOCK_FD=""
-VISITED_DEPS=""        # Visited packages as pipe-separated list (e.g., "pkg1|pkg2|pkg3|")
+VISITED_DEPS=""          # Visited packages as pipe-separated list (e.g., "pkg1|pkg2|pkg3|")
 HISTORY_ACTION="install" # Transaction type recorded by install_package
 
 # ======================================================================
@@ -1163,9 +1163,9 @@ update_db() {
                 if $VERIFY_SIGNATURES; then
                     if curl -fsSL --connect-timeout 15 -o "$tmp_sig" "$url/packages.list.sig" 2>/dev/null; then
                         if gpg --no-default-keyring --keyring "$GPG_KEYRING" \
-                               --verify "$tmp_sig" "$tmp_index" >/dev/null 2>&1; then
+                            --verify "$tmp_sig" "$tmp_index" >/dev/null 2>&1; then
                             log_info "Repository index signature verified for $url"
-                            cat "$tmp_index" >> "$tmp_db"
+                            cat "$tmp_index" >>"$tmp_db"
                             merged=true
                         else
                             log_error "Signature verification FAILED for $url/packages.list – skipping"
@@ -1174,7 +1174,7 @@ update_db() {
                         log_warn "No signature for $url/packages.list – skipping (VERIFY_SIGNATURES=true)"
                     fi
                 else
-                    cat "$tmp_index" >> "$tmp_db"
+                    cat "$tmp_index" >>"$tmp_db"
                     merged=true
                 fi
             else
@@ -1569,7 +1569,7 @@ register_kernel_dep() {
     [ -z "$pkg_name" ] || [ -z "$dep_type" ] && return 1
     # Remove existing entry for this package
     sed_inplace "/^${pkg_name}|/d" "$kernel_deps_file"
-    echo "${pkg_name}|${kernel_ver}|${dep_type}" >> "$kernel_deps_file"
+    echo "${pkg_name}|${kernel_ver}|${dep_type}" >>"$kernel_deps_file"
     log_verbose "Registered kernel dependency: $pkg_name (kernel=$kernel_ver, type=$dep_type)"
 }
 
@@ -1608,7 +1608,7 @@ list_kernel_deps() {
 
     if [ ! -s "$kernel_deps_file" ]; then
         log_info "No kernel-dependent packages registered."
-        log_info "Tip: recipes can declare kernel_dep=\"modules|headers|runtime\""
+        log_info 'Tip: recipes can declare kernel_dep="modules|headers|runtime"'
         return 0
     fi
 
@@ -1633,7 +1633,7 @@ list_kernel_deps() {
             printf "  %-20s %-15s %-10s " "$pkg_name${installed_ver:+-$installed_ver}" "$pkg_kernel_ver" "$dep_type"
             echo -e "$(_apply_color "${marker}")${status}$(_apply_color "${C_NC}")"
         fi
-    done < "$kernel_deps_file"
+    done <"$kernel_deps_file"
 
     if [ "$stale_count" -gt 0 ]; then
         echo ""
@@ -1663,7 +1663,7 @@ rebuild_kernel_deps() {
         if [ "$pkg_kernel_ver" != "$kernel_ver" ]; then
             stale_pkgs+=("$pkg_name")
         fi
-    done < "$kernel_deps_file"
+    done <"$kernel_deps_file"
 
     if [ ${#stale_pkgs[@]} -eq 0 ]; then
         log_success "All kernel-dependent packages are up to date (kernel $kernel_ver)."
@@ -1792,7 +1792,7 @@ repo_add() {
         fi
 
         # Write pipe-separated entry: name|version|description|deps|checksum
-        echo "${pkg_name}|${pkg_version}|${desc}|${deps}|${checksum}" >> "$tmp_index"
+        echo "${pkg_name}|${pkg_version}|${desc}|${deps}|${checksum}" >>"$tmp_index"
         count=$((count + 1))
     done
 
@@ -1802,7 +1802,7 @@ repo_add() {
     fi
 
     # Sort by package name and write final index
-    sort -t'|' -k1,1 "$tmp_index" > "$index_file"
+    sort -t'|' -k1,1 "$tmp_index" >"$index_file"
     rm -f "$tmp_index"
 
     log_success "Repository index created: $index_file ($count packages)"
@@ -1811,7 +1811,7 @@ repo_add() {
     if command -v gpg >/dev/null 2>&1; then
         log_info "Signing repository index..."
         if gpg --batch --yes --armor --detach-sign \
-               --output "$sig_file" "$index_file" 2>/dev/null; then
+            --output "$sig_file" "$index_file" 2>/dev/null; then
             log_success "Repository index signed: $sig_file"
             log_info "Distribute both packages.list and packages.list.sig"
         else
@@ -1834,8 +1834,8 @@ repo_add() {
         printf '# %-30s %-15s %s\n' "-------" "-------" "-----------"
         while IFS='|' read -r name ver desc deps checksum; do
             printf '# %-30s %-15s %s\n' "$name" "$ver" "$desc"
-        done < "$index_file"
-    } > "$summary_file"
+        done <"$index_file"
+    } >"$summary_file"
     log_info "Summary written to $summary_file"
 }
 
@@ -1862,7 +1862,7 @@ verify_repo_index() {
     fi
 
     if gpg --no-default-keyring --keyring "$GPG_KEYRING" \
-           --verify "$sig_file" "$index_file" >/dev/null 2>&1; then
+        --verify "$sig_file" "$index_file" >/dev/null 2>&1; then
         log_info "Repository index signature verified"
         return 0
     else
@@ -2245,7 +2245,7 @@ install_lpm_stage() {
     # Configure default remote repositories. The manifest is published
     # by the release pipeline (blfs/14-create-base-packages.sh exports
     # lpm-repo/packages.list, uploaded as a GitHub release asset).
-    cat > "$target/etc/lpm/repos.d/default.conf" <<'REPOS'
+    cat >"$target/etc/lpm/repos.d/default.conf" <<'REPOS'
 # LPM default remote repositories
 # Format: name=url
 # The first matching repo is tried first; falls back to the next.

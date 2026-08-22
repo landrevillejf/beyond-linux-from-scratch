@@ -181,13 +181,12 @@ cross-compiled architectures). The master ordered list is:
 32. `calamares`
 33. `first-boot`
 34. `system-updater`
-35. `lpm`
-36. `luks-encryption`
-37. `initramfs`
-38. `bootloader`
-39. `installer`
-40. `live-system` (when enabled)
-41. `validate`
+35. `luks-encryption`
+36. `initramfs`
+37. `bootloader`
+38. `installer`
+39. `live-system` (when enabled)
+40. `validate`
 
 ## Repository structure
 

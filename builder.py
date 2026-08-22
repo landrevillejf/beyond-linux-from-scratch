@@ -95,7 +95,6 @@ BUILD_STAGES = [
     ('calamares', 'blfs/22-calamares-installer.sh'),
     ('first-boot', 'blfs/17-first-boot-service.sh'),
     ('system-updater', 'blfs/18-system-updater.sh'),
-    ('lpm', 'blfs/19-lpm.sh'),
     ('luks-encryption', 'blfs/21-luks-encryption.sh'),
     ('initramfs', 'final/12-create-initramfs.sh'),
     ('bootloader', 'final/13-create-bootloader.sh'),
@@ -1787,10 +1786,10 @@ class LFSBuilder:
         # First boot service
         stages.append(('first-boot', 'blfs/17-first-boot-service.sh'))
 
-        # System updater
+        # System updater (lpm itself is already installed by the
+        # package-manager stage before base-packages)
         if self.profile_config.get('system_updater', True):
             stages.append(('system-updater', 'blfs/18-system-updater.sh'))
-            stages.append(('lpm', 'blfs/19-lpm.sh'))
 
         # FINAL STAGES (un seul initramfs ici)
         # LUKS encryption support must run BEFORE initramfs (initramfs needs dm-crypt modules)

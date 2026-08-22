@@ -428,6 +428,16 @@ class TestLFSBuilder:
                 assert stage in master, \
                     f"{stage} ({profile}) missing from BUILD_STAGES"
 
+    def test_build_stages_has_no_duplicate_scripts(self):
+        """Each stage script must be scheduled exactly once.
+
+        blfs/19-lpm.sh used to run twice (package-manager + legacy
+        lpm stage); the redundant second run is removed.
+        """
+        from builder import BUILD_STAGES
+        scripts = [script for _, script in BUILD_STAGES]
+        assert len(scripts) == len(set(scripts))
+
     def test_default_security_config_has_no_dead_keys(self, tmp_path):
         """Audit G7: fail2ban/hids/daily_scans had no consumer.
 
