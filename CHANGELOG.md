@@ -4,6 +4,27 @@
 
 ### Added
 
+- **NeuralRack v0.4.1 for the audio-studio profile**
+  (`blfs/27-audio-studio.sh`, `builder.py`, `packages/custom-sources.list`)
+  - New `audio-studio` stage builds and installs NeuralRack v0.4.1
+    (brummer10 neural amp modeller / impulse response loader) as an
+    LV2 plugin into `/usr/lib/lv2` plus a standalone app when JACK or
+    ALSA is present; the stage is scheduled only for the `audio-cli`
+    and `audio-studio` profiles, after the BLFS multimedia stack
+    (ALSA/PipeWire) which those profiles now build as well
+  - Builds the LV2 host stack required by the plugin: zix 0.4.2,
+    serd 0.32.4, sord 0.16.18, lv2 1.18.10, sratom 0.6.18, lilv
+    0.26.4 and libsndfile 1.2.2 (BLFS book commands)
+  - Book deviation: lv2/zix/serd/sord/sratom/lilv and NeuralRack have
+    no BLFS book page, so they build from canonical upstream release
+    tarballs with pinned sha256 checksums verified before extraction.
+    The NeuralRack release `-src` tarball is used because the generic
+    GitHub `refs/tags` archive lacks the git submodules and downloads
+    under a version-only filename that breaks source resolution
+  - On the CLI-only `audio-cli` profile the stage installs the LV2
+    host stack and skips NeuralRack (its GUI needs cairo/X11); on
+    `audio-studio` a missing GUI stack aborts the build
+
 - **LPM binary repository for base packages** (`lfs/05b-build-lfs-system.sh`,
   `blfs/14-create-base-packages.sh`, `.github/workflows/release.yml`,
   `.github/workflows/xfce-live-boot-iso.yml`)

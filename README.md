@@ -171,20 +171,21 @@ cross-compiled architectures). The master ordered list is:
 22. `multimedia`
 23. `server`
 24. `printing-scanning`
-25. `base-packages`
-26. `security`
-27. `privacy`
-28. `branding`
-29. `calamares`
-30. `first-boot`
-31. `system-updater`
-32. `lpm`
-33. `luks-encryption`
-34. `initramfs`
-35. `bootloader`
-36. `installer`
-37. `live-system` (when enabled)
-38. `validate`
+25. `audio-studio` (audio profiles only)
+26. `base-packages`
+27. `security`
+28. `privacy`
+29. `branding`
+30. `calamares`
+31. `first-boot`
+32. `system-updater`
+33. `lpm`
+34. `luks-encryption`
+35. `initramfs`
+36. `bootloader`
+37. `installer`
+38. `live-system` (when enabled)
+39. `validate`
 
 ## Repository structure
 
@@ -364,7 +365,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `secure` | Hardened profile with privacy tools | xfce | Yes | 6 | 5 |
 | `full` | Full feature profile | gnome | Yes | 20 | 12 |
 | `audio-cli` | Headless audio production | none | No | 2 | 3 |
-| `audio-studio` | Desktop audio production | xfce | Yes | 8 | 6 |
+| `audio-studio` | Desktop audio production (LV2 + NeuralRack) | xfce | Yes | 8 | 6 |
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |

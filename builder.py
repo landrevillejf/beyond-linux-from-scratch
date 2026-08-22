@@ -82,6 +82,7 @@ BUILD_STAGES = [
     ('multimedia', 'blfs/24-multimedia.sh'),
     ('server', 'blfs/25-server.sh'),
     ('printing-scanning', 'blfs/26-printing-scanning.sh'),
+    ('audio-studio', 'blfs/27-audio-studio.sh'),
     ('base-packages', 'blfs/14-create-base-packages.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
@@ -1718,6 +1719,13 @@ class LFSBuilder:
             stages.append(('desktop', 'blfs/09-build-desktop.sh'))
             stages.append(('applications', 'blfs/10-build-applications.sh'))
             stages.append(('configure-desktop', 'blfs/11-configure-desktop.sh'))
+
+        # Audio production stack (audio-cli / audio-studio profiles):
+        # the BLFS multimedia stack (ALSA, PipeWire, codecs) plus the
+        # LV2 host stack and the NeuralRack neural amp modeller.
+        if self.profile in ('audio-cli', 'audio-studio'):
+            stages.append(('multimedia', 'blfs/24-multimedia.sh'))
+            stages.append(('audio-studio', 'blfs/27-audio-studio.sh'))
 
         # Java development
         if self.profile_config.get('java_dev', False):

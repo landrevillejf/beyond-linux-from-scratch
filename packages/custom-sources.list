@@ -475,7 +475,6 @@ https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.13.2.tar
 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/26.27.3/accountsservice-26.27.3.tar.gz
 
 https://www.freedesktop.org/software/systemd/systemd-221.tar.xz
-
 https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
 https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
 https://ftpmirror.gnu.org/autoconf/autoconf-2.72.tar.xz
@@ -597,6 +596,21 @@ https://download.gnome.org/sources/gtk/4.18/gtk-4.18.6.tar.xz
 https://download.gnome.org/sources/gcr/4.4/gcr-4.4.0.1.tar.xz
 
 https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz
+
+# ============================================================================
+# Audio studio (audio-cli / audio-studio profiles, blfs/27-audio-studio.sh)
+# LV2 host stack plus the NeuralRack neural amp modeller. The NeuralRack
+# release -src tarball bundles the git submodules; the generic GitHub
+# refs/tags archive does not and must never be used here.
+# ============================================================================
+https://lv2plug.in/spec/lv2-1.18.10.tar.xz
+https://download.drobilla.net/zix-0.4.2.tar.xz
+https://download.drobilla.net/serd-0.32.4.tar.xz
+https://download.drobilla.net/sord-0.16.18.tar.xz
+https://download.drobilla.net/sratom-0.6.18.tar.xz
+https://download.drobilla.net/lilv-0.26.4.tar.xz
+https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz
+https://github.com/brummer10/NeuralRack/releases/download/v0.4.1/NeuralRack-v0.4.1-src.tar.xz
 
 # patches
 https://www.linuxfromscratch.org/patches/lfs/12.4/bzip2-1.0.8-install_docs-1.patch

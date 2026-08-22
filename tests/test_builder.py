@@ -294,6 +294,47 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'privacy' in stage_names
 
+    def test_get_build_stages_audio_studio_builds_audio_stack(self, builder):
+        """audio-studio must build the multimedia stack then NeuralRack.
+
+        The profile promises a full audio production studio, so the
+        BLFS multimedia stage (ALSA/PipeWire) and the audio-studio
+        stage (LV2 host stack + NeuralRack v0.4.1) must run, in that
+        order, before the package manager captures the manifest.
+        """
+        from builder import ProfileManager
+        builder.profile = 'audio-studio'
+        builder.profile_config = ProfileManager.get_profile('audio-studio')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'multimedia' in stage_names
+        assert 'audio-studio' in stage_names
+        assert stage_names.index('multimedia') < \
+            stage_names.index('audio-studio')
+        assert stage_names.index('audio-studio') < \
+            stage_names.index('package-manager')
+
+    def test_get_build_stages_audio_cli_includes_audio_stack(self, builder):
+        """audio-cli gets the same stack; NeuralRack self-skips (no GUI)."""
+        from builder import ProfileManager
+        builder.profile = 'audio-cli'
+        builder.profile_config = ProfileManager.get_profile('audio-cli')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'multimedia' in stage_names
+        assert 'audio-studio' in stage_names
+
+    def test_get_build_stages_non_audio_profiles_skip_audio_stack(self, builder):
+        """Desktop/server profiles must not get audio-only software."""
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'audio-studio' not in stage_names
+
+    def test_master_stage_list_contains_audio_studio(self):
+        """BUILD_STAGES documents the audio stage after printing."""
+        from builder import BUILD_STAGES
+        names = [name for name, _ in BUILD_STAGES]
+        assert 'audio-studio' in names
+        assert names.index('printing-scanning') < \
+            names.index('audio-studio')
+
     def test_get_build_stages_cross_compile(self, builder):
         """Test build stages with cross-compilation"""
         with patch.object(builder, 'is_cross_compile', return_value=True):

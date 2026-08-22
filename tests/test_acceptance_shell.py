@@ -1066,6 +1066,110 @@ class TestBLFSErrorPolicyGuardrails:
                 os.unlink(tmp_path)
 
 
+class TestAudioStudioStageGuardrails:
+    """Guardrails for the audio production stage (blfs/27-audio-studio.sh).
+
+    The stage builds the LV2 host stack and NeuralRack v0.4.1 for the
+    audio-cli / audio-studio profiles.  NeuralRack has no BLFS book
+    page, so its tarball must come from the upstream release asset
+    (the generic GitHub refs/tags archive lacks the git submodules and
+    cannot build) and every archive must be sha256-verified before
+    extraction.
+    """
+
+    SCRIPT = Path('blfs/27-audio-studio.sh')
+    SOURCES = Path('packages/custom-sources.list')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    def test_script_exists_and_is_strict(self, content):
+        assert self.SCRIPT.exists(), "27-audio-studio.sh stage must exist"
+        assert 'set -euo pipefail' in content
+
+    def test_non_audio_profile_skips_stage(self, tmp_path):
+        """A manual --resume-from must not poison other profiles."""
+        env = dict(os.environ)
+        env['LFS'] = str(tmp_path)
+        env['PROFILE'] = 'xfce'
+        result = subprocess.run(['bash', str(self.SCRIPT)],
+                                capture_output=True, text=True, env=env)
+        assert result.returncode == 0, result.stderr
+        assert 'stage skipped' in result.stdout
+
+    def test_stage_refuses_to_run_without_chroot(self, tmp_path):
+        """Audio profiles must fail loudly on a broken build tree."""
+        env = dict(os.environ)
+        env['LFS'] = str(tmp_path)
+        env['PROFILE'] = 'audio-studio'
+        result = subprocess.run(['bash', str(self.SCRIPT)],
+                                capture_output=True, text=True, env=env)
+        assert result.returncode != 0
+
+    def test_checksums_pinned_and_verified_before_extract(self, content):
+        """Every archive is sha256-verified before tar touches it."""
+        for sha in (
+            # NeuralRack v0.4.1 release -src tarball
+            '82b88d2aa20155d7522b7eea030b5e888eb1ca5559af47be9a4870fa5d6226f7',
+            # lv2-1.18.10
+            '78c51bcf21b54e58bb6329accbb4dae03b2ed79b520f9a01e734bd9de530953f',
+            # lilv-0.26.4
+            '1c8b5fcb78718173e67d76e51ad423f5113a9ff68463f2566195ae46396089e3',
+        ):
+            assert sha in content, f"missing pinned checksum {sha}"
+        assert 'sha256sum -c' in content
+        assert content.index('sha256sum -c') < content.index('tar -xf'), \
+            "checksums must be verified before extraction"
+        assert 'refusing to build' in content
+
+    def test_neuralrack_source_is_release_asset_not_refs_archive(self):
+        """The refs/tags archive lacks git submodules and downloads
+        under a generic filename; only the -src release asset works."""
+        sources = self.SOURCES.read_text()
+        content = self.SCRIPT.read_text()
+        assert 'archive/refs/tags' not in content
+        assert 'NeuralRack/archive/refs' not in sources
+        assert ('https://github.com/brummer10/NeuralRack/releases/'
+                'download/v0.4.1/NeuralRack-v0.4.1-src.tar.xz') in sources
+
+    def test_audio_sources_are_listed(self):
+        sources = self.SOURCES.read_text()
+        for tarball in ('lv2-1.18.10.tar.xz', 'lilv-0.26.4.tar.xz',
+                        'serd-0.32.4.tar.xz', 'sord-0.16.18.tar.xz',
+                        'sratom-0.6.18.tar.xz', 'zix-0.4.2.tar.xz',
+                        'libsndfile-1.2.2.tar.xz'):
+            assert tarball in sources, f"{tarball} missing from sources"
+
+    def test_shellcheck_clean(self, content):
+        import re
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip("shellcheck not installed")
+        result = subprocess.run(['shellcheck', str(self.SCRIPT)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout
+
+        inner_re = re.compile(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            re.DOTALL | re.MULTILINE)
+        match = inner_re.search(content)
+        assert match, "27-audio-studio.sh has no INNEREOF heredoc"
+        with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.sh', delete=False) as tmp:
+            tmp.write(match.group(1))
+            tmp_path = tmp.name
+        try:
+            result = subprocess.run(['shellcheck', tmp_path],
+                                    capture_output=True, text=True)
+            assert result.returncode == 0, \
+                f"shellcheck failed on inner payload:\n{result.stdout}"
+        finally:
+            os.unlink(tmp_path)
+
+
 class TestBLFSBookCommandGuardrails:
     """Wave 3 guardrails (audit finding F-07).
 
