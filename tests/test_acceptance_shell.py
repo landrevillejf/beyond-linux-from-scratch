@@ -739,6 +739,37 @@ class TestLFSComplianceGuardrails:
         assert '\n        ln -sv gcc /usr/bin/cc\n' not in gcc_block, \
             "unguarded cc link would fail on GCC >= 15"
 
+    def test_usr_bin_env_bridged_before_openssl(self):
+        """/usr/bin/env must exist in the chroot before openssl.
+
+        Nightly #169 (minimal/sysvinit/x86_64) died in lfs-system at
+        openssl: "./config: /sources/openssl-3.5.2/Configure:
+        /usr/bin/env: bad interpreter: No such file or directory".
+        LFS 12.4 6.5 installs the temporary Coreutils under /usr, so
+        env exists when chapter 8 starts; here the temporary tools
+        live under /tools, so lfs-basic must bridge /usr/bin/env to
+        /tools/bin/env and lfs-system must drop the bridge before the
+        final Coreutils install (make install would write through the
+        symlink into /tools, leaving a dangling /usr/bin/env once
+        /tools is removed).
+        """
+        basic = Path('lfs/05a-build-lfs-basic.sh').read_text()
+        assert 'ln -sfn /tools/bin/env "$LFS/usr/bin/env"' in basic, \
+            "lfs-basic must bridge /usr/bin/env to the temporary env"
+        assert '[ ! -e "$LFS/usr/bin/env" ]' in basic, \
+            "the env bridge must not clobber an existing real env"
+
+        system = Path('lfs/05b-build-lfs-system.sh').read_text()
+        coreutils_pos = system.find('    coreutils)\n')
+        assert coreutils_pos != -1, "05b must keep a coreutils case"
+        block = system[coreutils_pos:system.find(';;', coreutils_pos)]
+        drop_pos = block.find('rm -f /usr/bin/env')
+        install_pos = block.find('\n        make install\n')
+        assert drop_pos != -1 and install_pos != -1, \
+            "coreutils must drop the env bridge before installing"
+        assert drop_pos < install_pos, \
+            "make install would write through the env bridge symlink"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

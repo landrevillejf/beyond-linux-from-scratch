@@ -77,6 +77,22 @@
     stage to `ln -sfv` (bzip2, flex, pkgconf, gawk man page, vim)
     so a re-run after `--resume-from lfs-system` stays idempotent
 
+- **lfs-system openssl "bad interpreter: /usr/bin/env" failure**
+  (`lfs/05a-build-lfs-basic.sh`, `lfs/05b-build-lfs-system.sh`)
+  - Nightly #169 (minimal/sysvinit/x86_64) died at openssl:
+    `./config: /sources/openssl-3.5.2/Configure: /usr/bin/env: bad
+    interpreter: No such file or directory`. LFS 12.4 6.5 installs the
+    temporary Coreutils under `/usr`, so `/usr/bin/env` exists when
+    chapter 8 starts; here the temporary tools live under `/tools`, so
+    the kernel could not resolve the `#!/usr/bin/env perl` shebang of
+    OpenSSL's `Configure`
+  - `lfs-basic` now bridges `/usr/bin/env -> /tools/bin/env` (guarded
+    so an existing real env is never clobbered), and `lfs-system`
+    drops the bridge right before the final Coreutils `make install`
+    so a real `/usr/bin/env` replaces it — installing through the
+    symlink would write into `/tools` and leave `/usr/bin/env`
+    dangling once `/tools` is removed at the end of chapter 8
+
 - **`lpm install` silently installed nothing on bash >= 4.4**
   (`blfs/19-lpm.sh`)
   - `install_order()` built its dependency list through an inverted

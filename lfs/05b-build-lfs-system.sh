@@ -990,6 +990,11 @@ EOF
             --prefix=/usr \
             --enable-no-install-program=kill,uptime
         make -j"$(nproc)"
+        # Drop the /usr/bin/env bridge to /tools/bin/env created by
+        # lfs-basic: make install would write through the symlink into
+        # /tools, leaving /usr/bin/env dangling once /tools is removed
+        # at the end of this script.
+        rm -f /usr/bin/env
         make install
         mv -v /usr/bin/chroot /usr/sbin
         mkdir -pv /usr/share/man/man8

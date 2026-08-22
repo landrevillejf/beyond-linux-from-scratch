@@ -253,6 +253,21 @@ if [ ! -x "$LFS/bin/sh" ]; then
 fi
 
 # -----------------------------------------------------------------
+# Bridge /usr/bin/env to the temporary env.  LFS 12.4 installs the
+# temporary Coreutils under /usr (book section 6.5), so /usr/bin/env
+# already exists when chapter 8 starts.  Here the temporary tools
+# live under /tools, and OpenSSL's Configure script (#!/usr/bin/env
+# perl) is the first script that needs env before the final Coreutils
+# is built.  lfs-system removes the bridge right before the final
+# Coreutils install so a real file replaces it.
+# -----------------------------------------------------------------
+if [ ! -e "$LFS/usr/bin/env" ]; then
+    log_info "Bridging /usr/bin/env -> /tools/bin/env"
+    run_privileged mkdir -p "$LFS/usr/bin"
+    run_privileged ln -sfn /tools/bin/env "$LFS/usr/bin/env"
+fi
+
+# -----------------------------------------------------------------
 # Create essential directories inside chroot
 # -----------------------------------------------------------------
 log_info "Creating essential directories"
