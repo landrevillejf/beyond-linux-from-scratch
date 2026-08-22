@@ -24,6 +24,12 @@ if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt
     exit 1
 }
 APPS_TO_BUILD="${LFS_CONFIG_APPS_TO_BUILD:-firefox,vlc,clamav}"
+# The gnu-free profiles promise GNU Emacs (BLFS postlfs/emacs); the
+# emacs tarball ships in packages/custom-sources.list, so request it
+# regardless of the apps config key instead of leaving it unbuilt.
+case "${PROFILE:-}" in
+gnu-free*) APPS_TO_BUILD="$APPS_TO_BUILD,emacs" ;;
+esac
 export APPS_TO_BUILD
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -221,7 +227,7 @@ have_pc() { pkg-config --exists "$1" 2>/dev/null; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
 missing_items() { local missing=() item; for item in "$@"; do case "$item" in pc:*) have_pc "${item#pc:}" || missing+=("${item#pc:}");; cmd:*) have_cmd "${item#cmd:}" || missing+=("${item#cmd:}");; file:*) [ -e "${item#file:}" ] || missing+=("${item#file:}");; *) have_cmd "$item" || missing+=("$item");; esac; done; printf '%s\n' "${missing[@]}"; }
 check_deps() { local app="$1" missing; shift; missing="$(missing_items "$@")"; if [ -n "$missing" ]; then log_warning "$app dependencies missing; skipping $app: $(echo "$missing" | tr '\n' ' ')"; return 1; fi; }
-is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; thunderbird) [ -x /usr/bin/thunderbird ];; inkscape) [ -x /usr/bin/inkscape ];; evolution) [ -x /usr/bin/evolution ];; filezilla) [ -x /usr/bin/filezilla ];; transmission) [ -x /usr/bin/transmission-gtk ] || [ -x /usr/bin/transmission-qt ];; audacity) [ -x /usr/bin/audacity ];; mumble) [ -x /usr/bin/mumble ];; hexchat) [ -x /usr/bin/hexchat ];; pidgin) [ -x /usr/bin/pidgin ];; obsidian) [ -x /usr/bin/obsidian ];; *) return 1;; esac; }
+is_installed() { local app="$1"; [ -f "$(marker_for "$app")" ] && return 0; case "$app" in firefox) [ -x /usr/bin/firefox ];; libreoffice) [ -x /usr/bin/libreoffice ];; gimp) [ -x /usr/bin/gimp ];; vlc) [ -x /usr/bin/vlc ];; thunderbird) [ -x /usr/bin/thunderbird ];; inkscape) [ -x /usr/bin/inkscape ];; evolution) [ -x /usr/bin/evolution ];; filezilla) [ -x /usr/bin/filezilla ];; transmission) [ -x /usr/bin/transmission-gtk ] || [ -x /usr/bin/transmission-qt ];; audacity) [ -x /usr/bin/audacity ];; mumble) [ -x /usr/bin/mumble ];; hexchat) [ -x /usr/bin/hexchat ];; pidgin) [ -x /usr/bin/pidgin ];; obsidian) [ -x /usr/bin/obsidian ];; emacs) [ -x /usr/bin/emacs ];; *) return 1;; esac; }
 finish_app() { touch "$(marker_for "$1")"; log_success "$1 installed"; }
 build_firefox() {
     local app=firefox archive dir rust_version
@@ -295,6 +301,21 @@ build_clamav() {
     popd >/dev/null
     rm -rf "$dir"
     finish_app "$app"
+}
+# BLFS postlfs/emacs – the gnu-free profile promise; the emacs tarball
+# from custom-sources.list was downloaded but never built before.
+build_emacs() {
+    local app=emacs archive dir
+    if is_installed "$app"; then log_info "Emacs already installed; skipping"; return 0; fi
+    if ! check_deps Emacs cmd:make cmd:tar cmd:pkg-config; then return 1; fi
+    archive="$(find_archive 'emacs-*.tar.*')"; [ -n "$archive" ] || { log_warning "Emacs source archive missing; skipping"; return 1; }
+    log_info "Building Emacs from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
+    ./configure --prefix=/usr
+    make -j"$(jobs)"
+    make install
+    chown -R root:root /usr/share/emacs
+    rm -f /usr/lib/systemd/user/emacs.service
+    popd >/dev/null; rm -rf "$dir"; finish_app "$app"
 }
 build_thunderbird() {
     local app=thunderbird archive dir rust_version
@@ -418,7 +439,7 @@ build_obsidian() {
 requested_app() { local app="$1" raw normalized; IFS=',' read -r -a requested <<< "$APPS_TO_BUILD"; for raw in "${requested[@]}"; do normalized="$(echo "$raw" | tr '[:upper:]' '[:lower:]' | xargs)"; [ "$normalized" = "$app" ] && return 0; done; return 1; }
 log_info "Application selection: $APPS_TO_BUILD"
 status=0
-for app in firefox libreoffice gimp vlc clamav thunderbird inkscape evolution filezilla transmission audacity mumble hexchat pidgin obsidian; do
+for app in firefox libreoffice gimp vlc clamav thunderbird inkscape evolution filezilla transmission audacity mumble hexchat pidgin obsidian emacs; do
     if requested_app "$app"; then
         log_info "Starting $app build"
         if "build_$app"; then log_success "$app build complete"; else log_warning "$app was not built; see dependency/source messages above"; status=1; fi

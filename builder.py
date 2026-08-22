@@ -375,7 +375,7 @@ class ProfileManager:
             'description': 'Full GNU System with all GNU packages',
             'size_gb': 10,
             'build_time_hours': 8,
-            'packages': ['gnu-all', 'gnu-emacs', 'gnu-octave', 'icecat'],
+            'packages': ['gnu-all', 'gnu-emacs'],
             'desktop': 'xfce',
             'init_system': 'sysvinit',
             'java_dev': False,
@@ -391,7 +391,7 @@ class ProfileManager:
             'description': 'XFCE desktop environment',
             'size_gb': 4,
             'build_time_hours': 4,
-            'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps'],
+            'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'multimedia'],
             'desktop': 'xfce',
             'init_system': 'systemd',
             'java_dev': False,
@@ -405,7 +405,7 @@ class ProfileManager:
             'description': 'GNOME desktop environment',
             'size_gb': 8,
             'build_time_hours': 8,
-            'packages': ['base', 'network', 'ssh', 'xorg', 'gnome', 'apps'],
+            'packages': ['base', 'network', 'ssh', 'xorg', 'gnome', 'apps', 'multimedia'],
             'desktop': 'gnome',
             'init_system': 'systemd',
             'java_dev': False,
@@ -419,7 +419,7 @@ class ProfileManager:
             'description': 'Java development environment with XFCE',
             'size_gb': 10,
             'build_time_hours': 6,
-            'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'java', 'maven', 'gradle', 'tomcat', 'jenkins', 'docker'],
+            'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'multimedia', 'java', 'maven', 'gradle', 'tomcat', 'jenkins', 'docker'],
             'desktop': 'xfce',
             'init_system': 'systemd',
             'java_dev': True,
@@ -478,7 +478,7 @@ class ProfileManager:
             'description': 'CLI-only audio production system',
             'size_gb': 2,
             'build_time_hours': 3,
-            'packages': ['base', 'network', 'audio-core', 'audio-midi'],
+            'packages': ['base', 'network', 'audio-core'],
             'desktop': None,
             'init_system': 'sysvinit',
             'java_dev': False,
@@ -509,7 +509,7 @@ class ProfileManager:
             'description': 'Full audio production studio with XFCE',
             'size_gb': 8,
             'build_time_hours': 6,
-            'packages': ['base', 'network', 'xorg', 'xfce', 'audio-core', 'audio-daw', 'audio-plugins', 'audio-midi'],
+            'packages': ['base', 'network', 'xorg', 'xfce', 'audio-core', 'audio-plugins'],
             'desktop': 'xfce',
             'init_system': 'systemd',
             'java_dev': False,
@@ -537,7 +537,7 @@ class ProfileManager:
             'description': 'LXQt extremely lightweight Qt desktop environment',
             'size_gb': 2,
             'build_time_hours': 3,
-            'packages': ['base', 'network', 'ssh', 'xorg', 'lxqt', 'apps'],
+            'packages': ['base', 'network', 'ssh', 'xorg', 'lxqt', 'apps', 'multimedia'],
             'desktop': 'lxqt',
             'init_system': 'systemd',
             'java_dev': False,
@@ -1742,15 +1742,19 @@ class LFSBuilder:
         if self._profile_has_pkg('network'):
             stages.append(('basic-networking', 'blfs/23-basic-networking.sh'))
 
-        # Audio production stack (audio-cli / audio-studio profiles):
-        # the BLFS multimedia stack (ALSA, PipeWire, codecs) plus the
-        # LV2 host stack and the NeuralRack neural amp modeller.  The two
-        # stages are interleaved with server/printing exactly as in the
-        # BUILD_STAGES master list (multimedia before server, audio-studio
-        # after printing-scanning); audio profiles skip server/printing so
+        # Audio/multimedia stack: the BLFS multimedia chapter (ALSA,
+        # PipeWire, codecs, ffmpeg, mpv, VLC) plus the LV2 host stack
+        # and the NeuralRack neural amp modeller for the audio
+        # profiles.  Desktop profiles declare the 'multimedia' token so
+        # their promised apps (VLC needs pc:libavcodec) actually get
+        # their runtime libraries; without it the applications stage
+        # silently skipped VLC.  The two stages are interleaved with
+        # server/printing exactly as in the BUILD_STAGES master list
+        # (multimedia before server, audio-studio after
+        # printing-scanning); audio profiles skip server/printing so
         # the effective order is unchanged for them.
         _audio_profile = self.profile in ('audio-cli', 'audio-studio')
-        if _audio_profile:
+        if _audio_profile or self._profile_has_pkg('multimedia'):
             stages.append(('multimedia', 'blfs/24-multimedia.sh'))
 
         if self._profile_has_pkg('ssh') or self._profile_has_pkg('server-tools'):

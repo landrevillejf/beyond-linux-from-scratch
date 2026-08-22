@@ -2,7 +2,14 @@
 # blfs/12-install-java-dev.sh
 # Java Development Environment installation
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
-set -e
+#
+# Fail-fast policy (profile completeness audit): every component of the
+# java-dev profile promise (JDK, Maven, Gradle, Tomcat, Jenkins, Docker,
+# kubectl) is REQUIRED.  The previous `if ls <tarball>` guards turned a
+# missing source into a silent no-op and the stage logged success on an
+# image without Java.  A missing archive or a failed verification now
+# aborts the stage.
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -77,85 +84,104 @@ fi
 
 cat >"$LFS/install-java.sh" <<'INNEREOF'
 #!/bin/bash
-set -e
+set -euo pipefail
 cd /sources
 
-install_package() {
-    local archive=$1
-    local target_dir=$2
-    local name=$(basename "$archive" | sed -E 's/\.tar\.[a-z0-9]+$//')
-    echo "=== Installing $name ==="
-    tar -xf "$archive"
-    local dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-    mv "$dir" "$target_dir"
-    echo "=== $name installed to $target_dir ==="
+log_info() { echo "[INFO] $*"; }
+log_error() { echo "[ERROR] $*" >&2; }
+
+fail() {
+    log_error "$*"
+    exit 1
 }
 
-# Java JDK
-if ls OpenJDK21U-jdk_*.tar.gz 1> /dev/null 2>&1; then
-    mkdir -p /usr/lib/java
-    install_package $(ls OpenJDK21U-jdk_*.tar.gz | head -n1) /usr/lib/java/jdk
-    cat > /etc/profile.d/java.sh << 'EOF'
+# Resolve a required source archive; abort the stage when missing.
+require_file() {
+    local pattern="$1" f
+    # shellcheck disable=SC2086
+    f="$(ls $pattern 2>/dev/null | head -n1 || true)"
+    [ -n "$f" ] || fail "required source archive missing: $pattern"
+    printf '%s\n' "$f"
+}
+
+install_tarball() {
+    local archive="$1" target="$2" dir
+    dir="$(tar -tf "$archive" | head -n1 | cut -d/ -f1)"
+    tar -xf "$archive"
+    rm -rf "$target"
+    mv "$dir" "$target"
+    log_info "$(basename "$archive") installed to $target"
+}
+
+# Temurin OpenJDK 21 (required by every other component)
+jdk_archive="$(require_file 'OpenJDK21U-jdk_*.tar.gz')"
+mkdir -p /usr/lib/java
+install_tarball "$jdk_archive" /usr/lib/java/jdk
+cat > /etc/profile.d/java.sh << 'EOF'
 export JAVA_HOME=/usr/lib/java/jdk
 export PATH=$JAVA_HOME/bin:$PATH
 EOF
-    chmod +x /etc/profile.d/java.sh
-    /usr/lib/java/jdk/bin/java -version
-fi
+chmod +x /etc/profile.d/java.sh
+export JAVA_HOME=/usr/lib/java/jdk
+export PATH="$JAVA_HOME/bin:$PATH"
+java -version
 
 # Maven
-if ls apache-maven-*.tar.gz 1> /dev/null 2>&1; then
-    install_package $(ls apache-maven-*.tar.gz | head -n1) /usr/lib/maven
-    cat > /etc/profile.d/maven.sh << 'EOF'
+mvn_archive="$(require_file 'apache-maven-*-bin.tar.gz')"
+install_tarball "$mvn_archive" /usr/lib/maven
+cat > /etc/profile.d/maven.sh << 'EOF'
 export MAVEN_HOME=/usr/lib/maven
 export PATH=$MAVEN_HOME/bin:$PATH
 EOF
-    chmod +x /etc/profile.d/maven.sh
-fi
+chmod +x /etc/profile.d/maven.sh
+/usr/lib/maven/bin/mvn --version
 
-# Gradle
-if ls gradle-*.zip 1> /dev/null 2>&1; then
-    unzip -q $(ls gradle-*.zip | head -n1) -d /usr/lib
-    mv /usr/lib/gradle-* /usr/lib/gradle
-    cat > /etc/profile.d/gradle.sh << 'EOF'
+# Gradle (zip archive; LFS ships python3, not unzip)
+gradle_zip="$(require_file 'gradle-*-bin.zip')"
+rm -rf /usr/lib/gradle
+python3 -m zipfile -e "$gradle_zip" /usr/lib
+mv /usr/lib/gradle-* /usr/lib/gradle
+cat > /etc/profile.d/gradle.sh << 'EOF'
 export GRADLE_HOME=/usr/lib/gradle
 export PATH=$GRADLE_HOME/bin:$PATH
 EOF
-    chmod +x /etc/profile.d/gradle.sh
-fi
+chmod +x /etc/profile.d/gradle.sh
+/usr/lib/gradle/bin/gradle --version
 
 # Tomcat
-if ls apache-tomcat-*.tar.gz 1> /dev/null 2>&1; then
-    install_package $(ls apache-tomcat-*.tar.gz | head -n1) /usr/lib/tomcat
-    groupadd -r tomcat 2>/dev/null || true
-    useradd -r -g tomcat -d /usr/lib/tomcat tomcat 2>/dev/null || true
-    chown -R tomcat:tomcat /usr/lib/tomcat
-fi
+tomcat_archive="$(require_file 'apache-tomcat-*.tar.gz')"
+install_tarball "$tomcat_archive" /usr/lib/tomcat
+groupadd -r tomcat 2>/dev/null || true
+useradd -r -g tomcat -d /usr/lib/tomcat tomcat 2>/dev/null || true
+chown -R tomcat:tomcat /usr/lib/tomcat
+[ -x /usr/lib/tomcat/bin/catalina.sh ] || fail "Tomcat install incomplete: catalina.sh missing"
 
 # Jenkins
-if [ -f jenkins.war ]; then
-    mkdir -p /usr/lib/jenkins
-    cp jenkins.war /usr/lib/jenkins/
-    groupadd -r jenkins 2>/dev/null || true
-    useradd -r -g jenkins -d /usr/lib/jenkins jenkins 2>/dev/null || true
-    chown -R jenkins:jenkins /usr/lib/jenkins
-fi
+jenkins_war="$(require_file 'jenkins.war')"
+mkdir -p /usr/lib/jenkins
+cp "$jenkins_war" /usr/lib/jenkins/jenkins.war
+groupadd -r jenkins 2>/dev/null || true
+useradd -r -g jenkins -d /usr/lib/jenkins jenkins 2>/dev/null || true
+chown -R jenkins:jenkins /usr/lib/jenkins
 
-# Docker
-if ls docker-*.tgz 1> /dev/null 2>&1; then
-    tar -xf $(ls docker-*.tgz | head -n1) -C /usr/lib
-    mv /usr/lib/docker /usr/lib/docker-bin
-    ln -sf /usr/lib/docker-bin/docker /usr/bin/docker
-    ln -sf /usr/lib/docker-bin/dockerd /usr/bin/dockerd
-    groupadd -r docker 2>/dev/null || true
-fi
+# Docker (static binaries)
+docker_archive="$(require_file 'docker-*.tgz')"
+tar -xf "$docker_archive" -C /usr/lib
+rm -rf /usr/lib/docker-bin
+mv /usr/lib/docker /usr/lib/docker-bin
+for tool in docker dockerd containerd containerd-shim-runc-v2 ctr runc docker-init docker-proxy; do
+    [ -x "/usr/lib/docker-bin/$tool" ] || fail "Docker install incomplete: $tool missing"
+    ln -sf "/usr/lib/docker-bin/$tool" "/usr/bin/$tool"
+done
+groupadd -r docker 2>/dev/null || true
+docker --version
 
 # kubectl
-if [ -f kubectl ]; then
-    install -m 755 kubectl /usr/bin/kubectl
-fi
+kubectl_bin="$(require_file 'kubectl')"
+install -m 755 "$kubectl_bin" /usr/bin/kubectl
+kubectl version --client
 
-echo "Java tools installed."
+log_info "Java tools installed."
 INNEREOF
 
 run_privileged chmod +x "$LFS/install-java.sh"

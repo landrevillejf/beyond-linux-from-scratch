@@ -169,7 +169,7 @@ cross-compiled architectures). The master ordered list is:
 20. `configure-desktop`
 21. `java-dev`
 22. `basic-networking` (profiles declaring the `network` package)
-23. `multimedia` (audio profiles only)
+23. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
 24. `server` (profiles declaring `ssh` or `server-tools`)
 25. `printing-scanning` (profiles declaring `printing`, or `all`)
 26. `audio-studio` (audio profiles only)

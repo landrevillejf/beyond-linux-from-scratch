@@ -6,12 +6,12 @@
 # Error policy (audit finding F-07): a required package failure aborts the
 # stage.  Only packages that are explicitly optional (missing from
 # packages/stable/12.4/sources.list) may fail with a warning.
-#
 # Book compliance (audit finding F-07, wave 3): multimedia packages are
 # built with the commands of their docs/books (multimedia chapter)
 # pages; ffmpeg enables each codec backend only when its dev library is
-# available.  libtheora and mplayer have no book page and use the
-# generic build_pkg fallback.
+# available.  libtheora, mplayer and jack2 have no book page: the first
+# two use the generic build_pkg fallback, jack2 builds with its bundled
+# waf so PipeWire ships the pipewire-jack API layer for JACK clients.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -183,6 +183,7 @@ is_installed() {
         alsa-lib) have_pc alsa ;;
         alsa-utils) have_cmd aplay ;;
         alsa-plugins) [ -d /usr/lib/alsa-lib ] ;;
+        jack2) have_pc jack ;;
         pulseaudio) have_cmd pulseaudio ;;
         pipewire) have_cmd pipewire ;;
         gstreamer) have_pc gstreamer-1.0 ;;
@@ -525,6 +526,17 @@ build_commands_vlc() {
     desktop_post_install
 }
 
+# jack2 – no BLFS book page (audit: audio-core promise).  jack2 ships
+# its own waf copy; built before PipeWire so meson detects it and
+# installs the pipewire-jack compatibility layer.
+build_jack2() { book_install jack2 build_commands_jack2; }
+build_commands_jack2() {
+    command -v python3 >/dev/null 2>&1 || { log_warning "jack2 needs python3"; return 1; }
+    ./waf configure --prefix=/usr --libdir=/usr/lib &&
+    ./waf build -j"$JOBS" &&
+    ./waf install
+}
+
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
 # Multimedia packages get their book commands; packages without a BLFS
@@ -582,6 +594,11 @@ run_build required alsa-utils
 
 # alsa-plugins – ALSA plugins
 run_build required alsa-plugins
+
+# jack2 – JACK server + headers; not in packages/stable/12.4/sources.list
+# (custom source), so it stays optional per the F-07 policy.  Must run
+# before PipeWire, which then provides the pipewire-jack API layer.
+run_build optional jack2
 
 log_info "Phase 3: PulseAudio (optional sound server)"
 

@@ -190,6 +190,9 @@ is_installed() {
         nfs-utils) have_cmd showmount ;;
         wireless_tools) have_cmd iwconfig || have_cmd iw ;;
         wpa_supplicant) have_cmd wpa_supplicant ;;
+        dhcpcd) have_cmd dhcpcd ;;
+        libndp) have_pc libndp ;;
+        networkmanager) have_cmd nmcli || have_cmd NetworkManager ;;
         *) return 1 ;;
     esac
 }
@@ -437,6 +440,53 @@ EOF
     fi
 }
 
+# BLFS basicnet/dhcpcd – RFC 2131 compliant DHCP client; built without
+# privilege separation since the chroot has no dhcpcd user.
+build_dhcpcd() { book_install dhcpcd build_commands_dhcpcd; }
+build_commands_dhcpcd() {
+    ./configure --prefix=/usr                \
+                --sysconfdir=/etc            \
+                --libexecdir=/usr/lib/dhcpcd \
+                --dbdir=/var/lib/dhcpcd      \
+                --runstatedir=/run           \
+                --disable-privsep &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/networkmanager (required dependency)
+build_libndp() { book_install libndp build_commands_libndp; }
+build_commands_libndp() {
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/networkmanager – book commands; nmtui is disabled
+# because newt is not in packages/stable/12.4/sources.list, and session
+# tracking uses elogind only when the display-manager stage built it.
+build_networkmanager() { book_install networkmanager build_commands_networkmanager; }
+build_commands_networkmanager() {
+    local session_tracking=none
+    if have_pc elogind; then session_tracking=elogind; fi
+    grep -rl '^#!.*python$' . 2>/dev/null | xargs -r sed -i '1s/python/&3/' || true
+    mkdir -p build && cd build &&
+    meson setup ..                    \
+          --prefix=/usr               \
+          --buildtype=release         \
+          -D libaudit=no              \
+          -D nmtui=false              \
+          -D ovs=false                \
+          -D ppp=false                \
+          -D nbft=false               \
+          -D selinux=false            \
+          -D session_tracking="$session_tracking" \
+          -D modem_manager=false      \
+          -D systemdsystemunitdir=no  \
+          -D systemd_journal=false    \
+          -D nm_cloud_setup=false     \
+          -D qt=false &&
+    ninja -j"$JOBS" && ninja install
+}
+
 # Policy wrapper (audit finding F-07).  required: any failure aborts the
 # stage.  optional: failures are logged and the build continues.
 # Packages without a BLFS book page would use the generic build_pkg.
@@ -507,6 +557,23 @@ run_build required wireless_tools
 
 # wpa_supplicant – WPA/WPA2/EAP Authenticator and Supplicant
 run_build required wpa_supplicant
+
+log_info "Phase 7: Connection management"
+
+# dhcpcd – RFC 2131 compliant DHCP client (BLFS basicnet/dhcpcd)
+run_build required dhcpcd
+
+# libndp – NetworkManager's only required dependency
+run_build required libndp
+
+# NetworkManager – its meson build needs GLib; profiles without the
+# xorg stack (minimal/server/audio-cli) keep dhcpcd only, so the
+# requirement is downgraded for them instead of aborting the stage.
+if have_pc glib-2.0; then
+    run_build required networkmanager
+else
+    run_build optional networkmanager
+fi
 
 log_success "BLFS Basic Networking build complete"
 INNEREOF

@@ -4,6 +4,50 @@
 
 ### Added
 
+- **Java development toolchain actually installed** (`blfs/12-install-java-dev.sh`,
+  `packages/custom-sources.list`)
+  - Profile completeness audit: the java-dev stage wrapped every
+    install in `if ls <tarball>` guards, none of those tarballs were
+    in any download list, and the stage logged success anyway — the
+    image shipped without Java.  The seven required sources are now
+    listed (Temurin JDK 21.0.10+9, Maven 3.9.16, Gradle 8.14, Tomcat
+    10.1.56, Jenkins 2.555.3, Docker 28.3.3 static binaries, kubectl
+    1.32.4) and the stage is fail-fast: a missing archive or a failed
+    verification (`java -version`, `mvn --version`, `gradle --version`,
+    `docker --version`, `kubectl version --client`) aborts the build
+  - Gradle is extracted with `python3 -m zipfile` since unzip is not
+    part of the LFS base
+
+- **Connection management in basic-networking**
+  (`blfs/23-basic-networking.sh`)
+  - Audit: the stage ended at wpa_supplicant, so no built system had a
+    DHCP client beyond static configuration and desktops had no WiFi
+    management.  dhcpcd 10.2.4 (required) and libndp + NetworkManager
+    1.54.0 (BLFS book commands, `nmtui` off, elogind session tracking
+    when available) are built; NetworkManager stays optional on
+    profiles without the GLib stack (minimal/server/audio-cli)
+
+- **JACK audio infrastructure for the audio profiles**
+  (`blfs/24-multimedia.sh`, `packages/custom-sources.list`)
+  - Audit: audio-core promised JACK but no stage built it.  jack2
+    1.9.22 is built with its bundled waf before PipeWire, which then
+    ships the pipewire-jack API layer; the NeuralRack stage's
+    `have_pc jack` guard now resolves
+
+- **GNU Emacs for the gnu-free profiles**
+  (`blfs/10-build-applications.sh`)
+  - Audit: the emacs-30.2 tarball was downloaded but never built.
+    The applications stage now requests and builds Emacs (BLFS
+    postlfs/emacs commands) whenever `PROFILE` is a gnu-free profile
+
+- **Multimedia stack for desktop profiles** (`builder.py`, `README.md`)
+  - Audit: `blfs/24-multimedia.sh` was gated to audio profiles only,
+    so the kde profile's 'multimedia' token was dead and VLC (which
+    needs pc:libavcodec) was silently skipped on every desktop.  The
+    stage now runs for audio profiles and any profile declaring the
+    'multimedia' package token; xfce, gnome, lxqt, kde, java-dev and
+    full declare it
+
 - **QEMU boot smoke test for every release pipeline**
   (`tools/qemu-boot-smoke.sh`, `.github/workflows/nightly.yml`,
   `.github/workflows/release.yml`,
@@ -34,6 +78,18 @@
   - Audit G4: `minimal` and `xfce` now also build with systemd on every
     nightly, so both init paths stay proven; the stale commented-out
     systemd job block is removed
+
+### Changed
+
+- **Profile promises aligned with what stages actually build**
+  (`builder.py`)
+  - Audit: the dead tokens `audio-daw`/`audio-midi` (no DAW or MIDI
+    sequencer exists in the BLFS 13.0 book), `gnu-octave` (needs CMake
+    and LAPACK, absent from the stack) and `icecat` (last GNU prebuilt
+    release is 60.7.0 from 2019; a source build is a full Firefox
+    toolchain) promised software no stage could deliver.  They are
+    removed from the profiles instead of staying as decoration, and a
+    guardrail test fails CI if they reappear
 
 ### Fixed
 

@@ -411,6 +411,51 @@ class TestLFSBuilder:
         assert stage_names.index('multimedia') < \
             stage_names.index('audio-studio')
 
+    def test_get_build_stages_multimedia_token_schedules_stack(self, builder):
+        """Desktop profiles declaring 'multimedia' get the BLFS stack.
+
+        Profile completeness audit: VLC (applications stage) requires
+        pc:libavcodec, which only the multimedia stage installs.  The
+        kde profile declared the 'multimedia' token but the scheduler
+        gated the stage to audio profiles only, so VLC was silently
+        skipped on every desktop.  The token now gates the stage.
+        """
+        from builder import ProfileManager
+        for profile in ('kde', 'xfce', 'gnome', 'lxqt', 'java-dev', 'full'):
+            builder.profile = profile
+            builder.profile_config = ProfileManager.get_profile(profile)
+            stage_names = [s[0] for s in builder.get_build_stages()]
+            assert 'multimedia' in stage_names, \
+                f"{profile} declares multimedia but the stage is missing"
+
+    def test_get_build_stages_no_multimedia_without_token(self, builder):
+        """Profiles without the token keep the stage out."""
+        from builder import ProfileManager
+        for profile in ('minimal', 'server', 'secure'):
+            builder.profile = profile
+            builder.profile_config = ProfileManager.get_profile(profile)
+            stage_names = [s[0] for s in builder.get_build_stages()]
+            assert 'multimedia' not in stage_names, \
+                f"{profile} must not schedule multimedia"
+
+    def test_profiles_carry_no_dead_package_tokens(self, builder):
+        """Profile promises must map to software a stage installs.
+
+        Profile completeness audit: audio-daw/audio-midi (no DAW or
+        MIDI sequencer exists in the BLFS book), gnu-octave (needs
+        CMake + LAPACK, absent from the stack) and icecat (last GNU
+        prebuilt release is 60.7.0 from 2019) were dead tokens, so the
+        profiles silently shipped without them.  They are removed from
+        the promises instead of being kept as decoration.
+        """
+        from builder import ProfileManager
+        dead_tokens = {'audio-daw', 'audio-midi', 'gnu-octave', 'icecat'}
+        for name, profile in ProfileManager.PROFILES.items():
+            packages = set(profile.get('packages', []))
+            assert not packages & dead_tokens, \
+                f"profile {name} promises unbuildable packages: " \
+                f"{packages & dead_tokens}"
+
     def test_build_stages_constant_matches_scheduler(self, builder):
         """BUILD_STAGES must stay in sync with get_build_stages.
 

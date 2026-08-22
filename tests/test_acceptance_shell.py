@@ -1057,6 +1057,7 @@ class TestBLFSErrorPolicyGuardrails:
         'libsoup3': ['libsoup'],
         'apache': ['httpd'],
         'qt6': ['qt-everywhere-src'],
+        'networkmanager': ['NetworkManager'],
     }
 
     # Packages provided by another stage or by the LFS base system.
@@ -1309,6 +1310,75 @@ class TestCustomSourcesGuardrails:
             f"conflicting systemd sources (glob order picks the " \
             f"oldest tree): {entries}"
         assert 'systemd-257.8' in entries[0], entries
+
+
+class TestProfilePromiseGuardrails:
+    """Profile completeness audit guardrails.
+
+    Every profile promise must map to software a stage really
+    installs, and every required archive must be listed exactly once
+    in custom-sources.list (duplicate filenames collide on the
+    download key, exactly like the systemd-221 incident).
+    """
+
+    SOURCES = Path('packages/custom-sources.list')
+
+    JAVA_ARCHIVES = (
+        'OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_9.tar.gz',
+        'apache-maven-3.9.16-bin.tar.gz',
+        'gradle-8.14-bin.zip',
+        'apache-tomcat-10.1.56.tar.gz',
+        'jenkins.war',
+        'docker-28.3.3.tgz',
+        'kubectl',
+    )
+
+    def _listed_filenames(self):
+        return [
+            line.strip().rsplit('/', 1)[-1]
+            for line in self.SOURCES.read_text().splitlines()
+            if line.strip().startswith('http')
+        ]
+
+    def test_java_toolchain_sources_are_listed_exactly_once(self):
+        """The java-dev stage is fail-fast, so its seven archives must
+        be present in custom-sources.list exactly once each."""
+        listed = self._listed_filenames()
+        for archive in self.JAVA_ARCHIVES:
+            count = listed.count(archive)
+            assert count == 1, \
+                f"{archive} listed {count} times (must be exactly 1)"
+
+    def test_jack2_source_is_listed_exactly_once(self):
+        listed = self._listed_filenames()
+        assert listed.count('jack2-1.9.22.tar.gz') == 1
+
+    def test_java_dev_stage_has_no_silent_skip_guards(self):
+        """The old `if ls <tarball>` guards logged success on an image
+        without Java; the stage must stay fail-fast."""
+        import re
+        content = Path('blfs/12-install-java-dev.sh').read_text()
+        assert not re.search(r'(?m)^\s*if ls ', content), \
+            "java-dev stage must not silently skip missing archives"
+        assert 'require_file' in content, \
+            "java-dev stage must resolve required archives via require_file"
+        assert 'set -euo pipefail' in content
+
+    def test_networking_stage_builds_dhcpcd_and_networkmanager(self):
+        content = Path('blfs/23-basic-networking.sh').read_text()
+        assert 'run_build required dhcpcd' in content
+        assert 'run_build required libndp' in content
+        assert 'build_commands_networkmanager' in content
+
+    def test_multimedia_stage_builds_jack2(self):
+        content = Path('blfs/24-multimedia.sh').read_text()
+        assert 'run_build optional jack2' in content
+        assert 'build_commands_jack2' in content
+
+    def test_applications_stage_builds_emacs_for_gnu_free(self):
+        content = Path('blfs/10-build-applications.sh').read_text()
+        assert 'gnu-free*) APPS_TO_BUILD="$APPS_TO_BUILD,emacs"' in content
+        assert 'build_emacs()' in content
 
 
 class TestBLFSBookCommandGuardrails:

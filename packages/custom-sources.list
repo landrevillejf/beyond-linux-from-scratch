@@ -615,6 +615,24 @@ https://download.drobilla.net/lilv-0.26.4.tar.xz
 https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz
 https://github.com/brummer10/NeuralRack/releases/download/v0.4.1/NeuralRack-v0.4.1-src.tar.xz
 
+# JACK audio connection kit (audio-core promise of the audio profiles;
+# no BLFS book page, built by blfs/24-multimedia.sh with its bundled
+# waf; PipeWire detects it and ships the pipewire-jack API layer)
+https://github.com/jackaudio/jack2/releases/download/v1.9.22/jack2-1.9.22.tar.gz
+
+# Java development toolchain (java-dev profile, blfs/12-install-java-dev.sh).
+# Versions match packages/sources_report.json.  The stage is fail-fast:
+# every archive below is required, so list each of them exactly once
+# (duplicate filenames collide on the download key and silently replace
+# each other, exactly like the systemd-221 incident).
+https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.10%2B9/OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_9.tar.gz
+https://archive.apache.org/dist/maven/maven-3/3.9.16/binaries/apache-maven-3.9.16-bin.tar.gz
+https://services.gradle.org/distributions/gradle-8.14-bin.zip
+https://archive.apache.org/dist/tomcat/tomcat-10/v10.1.56/bin/apache-tomcat-10.1.56.tar.gz
+https://get.jenkins.io/war-stable/2.555.3/jenkins.war
+https://download.docker.com/linux/static/stable/x86_64/docker-28.3.3.tgz
+https://dl.k8s.io/release/v1.32.4/bin/linux/amd64/kubectl
+
 # patches
 https://www.linuxfromscratch.org/patches/lfs/12.4/bzip2-1.0.8-install_docs-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/coreutils-9.7-upstream_fix-1.patch
