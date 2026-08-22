@@ -966,9 +966,17 @@ EOF
         ;;
     meson)
         extract "$(find_archive meson)"
+        # Book 8.62: pip installs the meson console script into
+        # /usr/bin itself; an extra symlink here would replace that
+        # real script with a relative self-link (nightly #170).
         pip3 wheel -w dist --no-cache-dir --no-build-isolation --no-deps "$PWD"
         pip3 install --no-index --find-links dist meson
-        ln -sfv meson /usr/bin/meson
+        # Fail here rather than at the next meson consumer (kmod, udev)
+        # if the console script did not land on PATH.
+        command -v meson >/dev/null || {
+            echo "ERROR: meson not on PATH after pip install" >&2
+            exit 1
+        }
         ;;
     kmod)
         extract "$(find_archive kmod)"

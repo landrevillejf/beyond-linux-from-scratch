@@ -93,6 +93,18 @@
     symlink would write into `/tools` and leave `/usr/bin/env`
     dangling once `/tools` is removed at the end of chapter 8
 
+- **lfs-system kmod "meson: command not found" failure**
+  (`lfs/05b-build-lfs-system.sh`)
+  - Nightly #170 (all profiles) died at kmod right after meson
+    installed cleanly: the meson case ended with
+    `ln -sfv meson /usr/bin/meson`, which replaced the real console
+    script pip had just installed with a relative self-referencing
+    symlink that resolves to nothing. LFS 12.4 8.62 installs meson
+    with `pip3 wheel` + `pip3 install` only; the non-book symlink is
+    removed, and the case now verifies `meson` is on PATH so any
+    future drift fails the meson case instead of the next consumer
+    (kmod, udev)
+
 - **`lpm install` silently installed nothing on bash >= 4.4**
   (`blfs/19-lpm.sh`)
   - `install_order()` built its dependency list through an inverted

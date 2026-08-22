@@ -770,6 +770,26 @@ class TestLFSComplianceGuardrails:
         assert drop_pos < install_pos, \
             "make install would write through the env bridge symlink"
 
+    def test_meson_case_keeps_pip_console_script(self):
+        """The meson case must not symlink /usr/bin/meson over itself.
+
+        Nightly #170 (all profiles) died in lfs-system at kmod with
+        "meson: command not found": pip had installed the real
+        /usr/bin/meson console script, then the case ran
+        `ln -sfv meson /usr/bin/meson`, replacing it with a relative
+        self-referencing symlink. LFS 12.4 8.62 installs meson with
+        pip3 only, no symlink.
+        """
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        meson_pos = content.find('    meson)\n')
+        assert meson_pos != -1, "05b must keep a meson build case"
+        block = content[meson_pos:content.find(';;', meson_pos)]
+        assert 'pip3 wheel' in block and 'pip3 install' in block
+        assert 'ln -sfv meson /usr/bin/meson' not in block, \
+            "the self-link clobbers the pip-installed console script"
+        assert 'command -v meson' in block, \
+            "a missing meson must fail the meson case, not kmod/udev"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.
