@@ -56,24 +56,28 @@ SCRIPT_DIRS = {
     'common': 'common'
 }
 
-# Build stages with correct paths
+# Build stages with correct paths.  This master list mirrors the order of
+# LFSBuilder.get_build_stages(); conditional stages are all listed here and
+# filtered per profile at runtime.  Keep both in sync (guardrail:
+# tests/test_builder.py::test_build_stages_constant_matches_scheduler).
 BUILD_STAGES = [
     ('host-check', 'host/01-check-host.sh'),
     ('host-prepare', 'host/02-prepare-host.sh'),
+    ('qemu-setup', 'host/00-setup-qemu.sh'),
     ('disk-image', 'host/03-create-disk-image.sh'),
     ('toolchain', 'host/04-build-toolchain.sh'),
-    ('qemu-setup', 'host/00-setup-qemu.sh'),
     ('uboot', 'host/05-build-uboot.sh'),
     ('lfs-basic', 'lfs/05a-build-lfs-basic.sh'),
     ('lfs-system', 'lfs/05b-build-lfs-system.sh'),
     ('init-system', 'lfs/06a-init-system.sh'),
-    ('service-mgmt', 'lfs/06b-service-management.sh'),
+    ('service-abstraction', 'lfs/06b-service-management.sh'),
     ('configure-lfs', 'lfs/07-configure-lfs.sh'),
     ('blfs-base', 'blfs/08-build-blfs-base.sh'),
     ('blfs-libs', 'blfs/08a-build-blfs-libs.sh'),
     ('xorg', 'blfs/08b-build-xorg.sh'),
     ('wayland', 'blfs/08c-build-wayland.sh'),
     ('display-manager', 'blfs/08d-build-display-manager.sh'),
+    ('build-kernel', 'lfs/08-build-kernel.sh'),
     ('desktop', 'blfs/09-build-desktop.sh'),
     ('applications', 'blfs/10-build-applications.sh'),
     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
@@ -83,6 +87,7 @@ BUILD_STAGES = [
     ('server', 'blfs/25-server.sh'),
     ('printing-scanning', 'blfs/26-printing-scanning.sh'),
     ('audio-studio', 'blfs/27-audio-studio.sh'),
+    ('package-manager', 'blfs/19-lpm.sh'),
     ('base-packages', 'blfs/14-create-base-packages.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
@@ -222,12 +227,9 @@ class LFSConfig:
                 "kernel_hardening": True,
                 "firewall": {"enabled": True, "backend": "nftables", "allow_ssh": True, "allow_http": False},
                 "privacy": {"disable_telemetry": True, "clear_tmp_on_boot": True, "disable_core_dumps": True},
-                "fail2ban": {"enabled": True, "ban_time": 3600, "max_retry": 5},
                 "audit": {"enabled": True, "monitor_files": ["/etc/passwd", "/etc/shadow", "/etc/sudoers"]},
                 "user_hardening": {"password_min_length": 12, "disable_root_login": True, "max_login_attempts": 5},
-                "encryption": {"encrypted_swap": True, "swap_size_mb": 2048},
-                "hids": {"enabled": True, "daily_check": True, "tool": "aide"},
-                "daily_scans": {"enabled": True, "rootkit_check": True, "port_scan": True}
+                "encryption": {"encrypted_swap": True, "swap_size_mb": 2048}
             },
 
             "bootloader": {
@@ -1669,6 +1671,17 @@ class LFSBuilder:
         except (KeyError, tarfile.ReadError, Exception):
             return False
 
+    def _profile_has_pkg(self, name: str) -> bool:
+        """Return True when the active profile's package list requests *name*.
+
+        The 'all' token (full profile) matches every package group.  This
+        turns the declarative profile package lists into real stage gating
+        (audit G1/G2: networking/server/printing stages existed but were
+        never scheduled, so their packages reached no built system).
+        """
+        packages = self.profile_config.get('packages', [])
+        return 'all' in packages or name in packages
+
     def get_build_stages(self) -> List[Tuple[str, str]]:
         """Get ordered list of build stages with correct script paths"""
         stages = []
@@ -1720,16 +1733,34 @@ class LFSBuilder:
             stages.append(('applications', 'blfs/10-build-applications.sh'))
             stages.append(('configure-desktop', 'blfs/11-configure-desktop.sh'))
 
-        # Audio production stack (audio-cli / audio-studio profiles):
-        # the BLFS multimedia stack (ALSA, PipeWire, codecs) plus the
-        # LV2 host stack and the NeuralRack neural amp modeller.
-        if self.profile in ('audio-cli', 'audio-studio'):
-            stages.append(('multimedia', 'blfs/24-multimedia.sh'))
-            stages.append(('audio-studio', 'blfs/27-audio-studio.sh'))
-
         # Java development
         if self.profile_config.get('java_dev', False):
             stages.append(('java-dev', 'blfs/12-install-java-dev.sh'))
+
+        # BLFS layer stages declared by the profile package list.  Audit
+        # G1/G2: these scripts were implemented but never scheduled, so
+        # NetworkManager/dhcpcd, OpenSSH and CUPS reached no built system.
+        if self._profile_has_pkg('network'):
+            stages.append(('basic-networking', 'blfs/23-basic-networking.sh'))
+
+        # Audio production stack (audio-cli / audio-studio profiles):
+        # the BLFS multimedia stack (ALSA, PipeWire, codecs) plus the
+        # LV2 host stack and the NeuralRack neural amp modeller.  The two
+        # stages are interleaved with server/printing exactly as in the
+        # BUILD_STAGES master list (multimedia before server, audio-studio
+        # after printing-scanning); audio profiles skip server/printing so
+        # the effective order is unchanged for them.
+        _audio_profile = self.profile in ('audio-cli', 'audio-studio')
+        if _audio_profile:
+            stages.append(('multimedia', 'blfs/24-multimedia.sh'))
+
+        if self._profile_has_pkg('ssh') or self._profile_has_pkg('server-tools'):
+            stages.append(('server', 'blfs/25-server.sh'))
+        if self._profile_has_pkg('printing'):
+            stages.append(('printing-scanning', 'blfs/26-printing-scanning.sh'))
+
+        if _audio_profile:
+            stages.append(('audio-studio', 'blfs/27-audio-studio.sh'))
 
         # Package manager
         if self.profile_config.get('package_manager', True):

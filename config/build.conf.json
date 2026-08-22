@@ -86,11 +86,6 @@
       "clear_tmp_on_boot": true,
       "disable_core_dumps": true
     },
-    "fail2ban": {
-      "enabled": true,
-      "ban_time": 3600,
-      "max_retry": 5
-    },
     "audit": {
       "enabled": true,
       "monitor_files": [
@@ -107,16 +102,6 @@
     "encryption": {
       "encrypted_swap": true,
       "swap_size_mb": 2048
-    },
-    "hids": {
-      "enabled": true,
-      "daily_check": true,
-      "tool": "aide"
-    },
-    "daily_scans": {
-      "enabled": true,
-      "rootkit_check": true,
-      "port_scan": true
     }
   },
   "bootloader": {

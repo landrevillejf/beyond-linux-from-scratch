@@ -112,3 +112,41 @@ class TestReleasePipelineHardening:
         assert workflow.count("lfs-installer.iso.pointer") >= 3
         assert "download_url=https://github.com/${{ github.repository }}" \
             "/releases/download/${GITHUB_REF_NAME}/$ISO" in workflow
+
+
+class TestNightlyCoverageAndBootSmoke:
+    """Guardrails for audit gaps G3/G4 and the QEMU boot smoke test.
+
+    G3: GNOME/KDE/LXQt stages had zero CI coverage.  G4: only sysvinit
+    was CI-proven.  Reliability: every regression since nightly #169
+    was caught during the build, never by booting the artifact.
+    """
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def test_nightly_matrix_covers_all_desktop_environments(self):
+        workflow = self._read("nightly.yml")
+        for profile in ("gnome", "kde", "lxqt"):
+            assert f"profile: {profile}" in workflow, \
+                f"{profile} has no nightly coverage"
+
+    def test_nightly_matrix_covers_systemd(self):
+        workflow = self._read("nightly.yml")
+        assert "init: systemd" in workflow
+
+    def test_pipelines_boot_artifacts_with_reusable_smoke_script(self):
+        """All release pipelines must boot the artifact through
+        tools/qemu-boot-smoke.sh; the old inline 90s variant swallowed
+        QEMU failures (|| true) and passed -append without -kernel."""
+        for name in ("nightly.yml", "release.yml",
+                     "build-iso-from-cache.yml"):
+            workflow = self._read(name)
+            assert "tools/qemu-boot-smoke.sh" in workflow, name
+            assert "timeout 90s qemu-system-x86_64" not in workflow, name
+
+    def test_nightly_headless_profiles_accept_disk_image(self):
+        """minimal/server ship no live ISO; verify and the smoke test
+        must fall back to the disk image instead of failing."""
+        workflow = self._read("nightly.yml")
+        assert "build-release.img" in workflow

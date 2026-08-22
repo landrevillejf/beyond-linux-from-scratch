@@ -4,6 +4,39 @@
 
 ### Added
 
+- **QEMU boot smoke test for every release pipeline**
+  (`tools/qemu-boot-smoke.sh`, `.github/workflows/nightly.yml`,
+  `.github/workflows/release.yml`,
+  `.github/workflows/build-iso-from-cache.yml`)
+  - New reusable script boots the build artifact (live ISO or raw disk
+    image) in QEMU and asserts the kernel reaches userspace: it rejects
+    kernel panics, silent boots, and boots that never hand over to init
+  - The artifact's kernel and initramfs are extracted and booted
+    directly with `console=ttyS0`, giving the test full control of the
+    serial console regardless of the shipped grub/isolinux config; KVM
+    is used when available, TCG otherwise
+  - Replaces the fragile inline CI step (90 s budget, `|| true`
+    swallowing QEMU failures, `-append` ignored without `-kernel`);
+    wired into nightly (ISO, or disk image for headless profiles),
+    release and build-iso-from-cache
+  - Supporting fixes so the live ISO actually boots:
+    `final/12-create-initramfs.sh` now detects `live.squashfs` on the
+    boot media, mounts it via loop device and `switch_root`s into it
+    (previously the ISO panicked with "Attempted to kill init"), and
+    `config/kernel-config` gains `ISO9660_FS`/`SQUASHFS`/`BLK_DEV_LOOP`
+    plus the 8250 serial console
+
+- **Nightly CI coverage for desktop environments and systemd**
+  (`.github/workflows/nightly.yml`)
+  - Audit G3: `gnome`, `kde` and `lxqt` join the nightly matrix with
+    their native init (systemd); previously only xfce-family stages had
+    CI coverage
+  - Audit G4: `minimal` and `xfce` now also build with systemd on every
+    nightly, so both init paths stay proven; the stale commented-out
+    systemd job block is removed
+
+### Fixed
+
 - **NeuralRack v0.4.1 for the audio-studio profile**
   (`blfs/27-audio-studio.sh`, `builder.py`, `packages/custom-sources.list`)
   - New `audio-studio` stage builds and installs NeuralRack v0.4.1
@@ -42,6 +75,26 @@
     avoid matrix asset collisions
 
 ### Fixed
+
+- **Dead BLFS layer stages are now scheduled** (`builder.py`)
+  - Audit G1/G2: `blfs/23-basic-networking.sh`, `blfs/25-server.sh` and
+    `blfs/26-printing-scanning.sh` were implemented but never reached by
+    `get_build_stages()`, so NetworkManager/wpa_supplicant/dhcpcd,
+    OpenSSH and CUPS landed in no built system and the profile package
+    lists (`network`, `ssh`, `server-tools`, `all`) were aspirational
+  - A new `_profile_has_pkg()` helper gates the three stages on the
+    profile package list (`all` matches every group), scheduled in the
+    documented BUILD_STAGES order: basic-networking, then multimedia,
+    server, printing-scanning and audio-studio
+  - Headless nightly profiles (minimal, server) ship no live ISO; the
+    verify/sign/pointer/upload/smoke steps now fall back to the disk
+    image instead of failing on the missing ISO
+
+- **BUILD_STAGES drifted from the scheduler** (`builder.py`, `README.md`)
+  - Audit G6: the constant listed `service-mgmt` while the scheduler
+    emitted `service-abstraction`, and it lacked `build-kernel` and
+    `package-manager`; the constant now mirrors `get_build_stages()`
+    exactly and a guardrail test fails on any future drift
 
 - **LPM configuration and checksum handling** (`config/lpm.conf`,
   `blfs/19-lpm.sh`, `blfs/14-create-base-packages.sh`)
@@ -164,6 +217,13 @@
     first matching asset
 
 ### Changed
+
+- **Dead security config keys removed** (`config/build.conf`,
+  `config/build.conf.json`, `config/default.json`, `builder.py`)
+  - Audit G7: `security.fail2ban`, `security.hids` and
+    `security.daily_scans` were exported as `LFS_CONFIG_SECURITY_*`
+    variables but consumed by no stage script; they are removed from the
+    shipped configs and from `LFSConfig.get_default_config()`
 
 - **LFS/BLFS book compliance remediation, wave 1** (`docs/LFS_COMPLIANCE_AUDIT.md`)
   - `lfs/05b-build-lfs-system.sh`: full rewrite — native chapter 7/8

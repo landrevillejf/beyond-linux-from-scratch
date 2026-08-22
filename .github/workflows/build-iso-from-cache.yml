@@ -133,6 +133,12 @@ jobs:
           sha256sum /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }} > /tmp/lfs-build/SHA256SUMS
           sha256sum /tmp/lfs-build/image/boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
 
+      - name: Boot ISO in QEMU (smoke test)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86
+          bash tools/qemu-boot-smoke.sh "/tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}"
+
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:

@@ -350,6 +350,96 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'uboot' in stage_names
 
+    def test_get_build_stages_schedules_network_and_server(self, builder):
+        """Profile package lists must gate the BLFS layer stages.
+
+        Audit G1/G2: blfs/23-basic-networking.sh, 25-server.sh and
+        26-printing-scanning.sh were implemented but never scheduled,
+        so NetworkManager/dhcpcd, OpenSSH and CUPS reached no built
+        system.  The xfce profile declares network+ssh, so
+        basic-networking and server must run; it declares no printing
+        token, so printing-scanning must stay out.
+        """
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'basic-networking' in stage_names
+        assert 'server' in stage_names
+        assert 'printing-scanning' not in stage_names
+
+    def test_get_build_stages_full_profile_schedules_all_layers(self, builder):
+        """The 'all' package token (full profile) matches every group."""
+        from builder import ProfileManager
+        builder.profile = 'full'
+        builder.profile_config = ProfileManager.get_profile('full')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'basic-networking' in stage_names
+        assert 'server' in stage_names
+        assert 'printing-scanning' in stage_names
+
+    def test_get_build_stages_base_only_profile_skips_layers(self, builder):
+        """A profile without layer tokens gets none of the BLFS layers."""
+        builder.profile_config = dict(builder.profile_config)
+        builder.profile_config['packages'] = ['base']
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'basic-networking' not in stage_names
+        assert 'server' not in stage_names
+        assert 'printing-scanning' not in stage_names
+
+    def test_profile_has_pkg_wildcard_and_absence(self, builder):
+        """'all' matches every group; absent tokens never match."""
+        builder.profile_config = dict(builder.profile_config)
+        builder.profile_config['packages'] = ['all']
+        assert builder._profile_has_pkg('printing')
+        assert builder._profile_has_pkg('ssh')
+        builder.profile_config['packages'] = ['base']
+        assert not builder._profile_has_pkg('network')
+        builder.profile_config['packages'] = []
+        assert not builder._profile_has_pkg('ssh')
+
+    def test_get_build_stages_audio_stack_runs_after_networking(self, builder):
+        """Audio profiles get networking before the audio stack.
+
+        Audio profiles declare the 'network' token, so the newly
+        scheduled basic-networking stage must precede multimedia and
+        audio-studio without breaking their relative order.
+        """
+        from builder import ProfileManager
+        builder.profile = 'audio-studio'
+        builder.profile_config = ProfileManager.get_profile('audio-studio')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert stage_names.index('basic-networking') < \
+            stage_names.index('multimedia')
+        assert stage_names.index('multimedia') < \
+            stage_names.index('audio-studio')
+
+    def test_build_stages_constant_matches_scheduler(self, builder):
+        """BUILD_STAGES must stay in sync with get_build_stages.
+
+        Audit G6: the constant had drifted (service-mgmt vs
+        service-abstraction, missing build-kernel/package-manager).
+        Every stage the scheduler can emit must appear in the master
+        list for every profile.
+        """
+        from builder import BUILD_STAGES, ProfileManager
+        master = set(BUILD_STAGES)
+        for profile in ('xfce', 'minimal', 'server', 'full', 'audio-studio'):
+            builder.profile = profile
+            builder.profile_config = ProfileManager.get_profile(profile)
+            for stage in builder.get_build_stages():
+                assert stage in master, \
+                    f"{stage} ({profile}) missing from BUILD_STAGES"
+
+    def test_default_security_config_has_no_dead_keys(self, tmp_path):
+        """Audit G7: fail2ban/hids/daily_scans had no consumer.
+
+        No stage script reads the flattened LFS_CONFIG_SECURITY_*
+        variables for these keys, so the defaults must not ship them.
+        """
+        from builder import LFSConfig
+        cfg = LFSConfig(tmp_path / 'build.conf')
+        security = cfg.data['security']
+        for dead_key in ('fail2ban', 'hids', 'daily_scans'):
+            assert dead_key not in security
+
     def test_flatten_config_simple_dict(self, builder):
         """Test flattening simple dictionary"""
         test_dict = {

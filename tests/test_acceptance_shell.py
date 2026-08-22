@@ -807,6 +807,48 @@ class TestLFSComplianceGuardrails:
             assert 'FORCE_UNSAFE_CONFIGURE=1' in block, \
                 f"{pkg} configure rejects root without FORCE_UNSAFE_CONFIGURE"
 
+    def test_initramfs_supports_live_squashfs(self):
+        """The live ISO boots with root=/dev/sr0, but the real root is
+        the live.squashfs stored on the media.
+
+        Without mounting the squashfs, switch_root dies on the missing
+        /sbin/init ("Attempted to kill init" panic) and neither a real
+        live boot nor the QEMU smoke test can reach userspace.
+        """
+        content = Path('final/12-create-initramfs.sh').read_text()
+        assert 'live.squashfs' in content
+        assert 'losetup /dev/loop0 /mnt/live.squashfs' in content
+        assert 'switch_root /sysroot /sbin/init' in content
+
+    def test_kernel_config_supports_live_boot_and_serial(self):
+        """Live boot needs iso9660/squashfs/loop; the QEMU smoke test
+        observes the guest through console=ttyS0."""
+        content = Path('config/kernel-config').read_text()
+        for option in ('CONFIG_ISO9660_FS=y', 'CONFIG_SQUASHFS=y',
+                       'CONFIG_BLK_DEV_LOOP=y',
+                       'CONFIG_SERIAL_8250=y',
+                       'CONFIG_SERIAL_8250_CONSOLE=y'):
+            assert option in content, f"kernel-config lacks {option}"
+
+    def test_qemu_boot_smoke_script_is_a_real_gate(self):
+        """The smoke test must reject panics and silent boots.
+
+        Every regression since nightly #169 was caught during the
+        build, never by booting the artifact; the reusable script is
+        the post-build gate for nightly, release and iso-from-cache.
+        """
+        script = Path('tools/qemu-boot-smoke.sh')
+        assert script.exists()
+        content = script.read_text()
+        assert 'set -euo pipefail' in content
+        # Failure paths: kernel panic, silent boot, no userspace.
+        assert 'Kernel panic' in content
+        assert 'Linux version' in content
+        # Direct kernel boot with a serial console, not the fragile
+        # 90s -cdrom attempt whose -append flag was ignored.
+        assert 'console=ttyS0' in content
+        assert '-kernel "$WORKDIR/vmlinuz"' in content
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

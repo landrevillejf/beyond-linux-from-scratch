@@ -149,43 +149,45 @@ cross-compiled architectures). The master ordered list is:
 
 1. `host-check`
 2. `host-prepare`
-3. `disk-image`
-4. `toolchain`
-5. `qemu-setup` (cross-compile architectures)
+3. `qemu-setup` (cross-compile architectures)
+4. `disk-image`
+5. `toolchain`
 6. `uboot` (ARM bootloaders)
 7. `lfs-basic`
 8. `lfs-system`
 9. `init-system`
-10. `service-mgmt`
+10. `service-abstraction`
 11. `configure-lfs`
 12. `blfs-base`
 13. `blfs-libs`
 14. `xorg`
 15. `wayland`
 16. `display-manager`
-17. `desktop`
-18. `applications`
-19. `configure-desktop`
-20. `java-dev`
-21. `basic-networking`
-22. `multimedia`
-23. `server`
-24. `printing-scanning`
-25. `audio-studio` (audio profiles only)
-26. `base-packages`
-27. `security`
-28. `privacy`
-29. `branding`
-30. `calamares`
-31. `first-boot`
-32. `system-updater`
-33. `lpm`
-34. `luks-encryption`
-35. `initramfs`
-36. `bootloader`
-37. `installer`
-38. `live-system` (when enabled)
-39. `validate`
+17. `build-kernel`
+18. `desktop`
+19. `applications`
+20. `configure-desktop`
+21. `java-dev`
+22. `basic-networking` (profiles declaring the `network` package)
+23. `multimedia` (audio profiles only)
+24. `server` (profiles declaring `ssh` or `server-tools`)
+25. `printing-scanning` (profiles declaring `printing`, or `all`)
+26. `audio-studio` (audio profiles only)
+27. `package-manager`
+28. `base-packages`
+29. `security`
+30. `privacy`
+31. `branding`
+32. `calamares`
+33. `first-boot`
+34. `system-updater`
+35. `lpm`
+36. `luks-encryption`
+37. `initramfs`
+38. `bootloader`
+39. `installer`
+40. `live-system` (when enabled)
+41. `validate`
 
 ## Repository structure
 

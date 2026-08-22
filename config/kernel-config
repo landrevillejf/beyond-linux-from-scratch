@@ -10,6 +10,11 @@ CONFIG_SYSTEM_REVOCATION_KEYS=""
 CONFIG_DEFAULT_HOSTNAME="lfs-desktop"
 CONFIG_LOCALVERSION="-lfs"
 
+# Serial console: lets the QEMU boot smoke test (tools/qemu-boot-smoke.sh)
+# observe kernel and userspace output with console=ttyS0.
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+
 # ============================================================================
 # PROCESSOR TYPE AND FEATURES (x86_64)
 # ============================================================================
@@ -56,6 +61,11 @@ CONFIG_VFAT_FS=y
 CONFIG_NTFS_FS=y
 CONFIG_PROC_FS=y
 CONFIG_SYSFS=y
+# Live ISO boot: the initramfs (final/12-create-initramfs.sh) mounts the
+# boot media (iso9660) and the live.squashfs it holds via a loop device.
+CONFIG_ISO9660_FS=y
+CONFIG_SQUASHFS=y
+CONFIG_BLK_DEV_LOOP=y
 
 # ============================================================================
 # NETWORKING
