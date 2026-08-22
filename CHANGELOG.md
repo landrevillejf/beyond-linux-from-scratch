@@ -93,6 +93,22 @@
 
 ### Fixed
 
+- **find_archive now picks the newest version among duplicates**
+  (all `lfs/` and `blfs/` stage scripts)
+  - Nightly #174 (minimal/sysvinit/x86_64) failed exactly like #173
+    even though the stale systemd entries were removed from
+    `packages/custom-sources.list`: the nightly restores the
+    packages-cache-latest release into `sources/`, and that cache
+    still carried systemd-221 and systemd-256.20 next to
+    systemd-257.8.  `find_archive` returned the first glob-order
+    match (the oldest name), so the chapter 8 udev case ran against
+    the 2015 systemd-221 tree again
+  - Every copy of `find_archive` now sorts the versioned candidates
+    (`sort -V`) and returns the newest, which is always the version
+    the book commands target (source lists are pinned).  A functional
+    test replays the #174 scenario (three systemd tarballs) and a
+    static guardrail fails CI if glob-order selection returns
+
 - **NeuralRack v0.4.1 for the audio-studio profile**
   (`blfs/27-audio-studio.sh`, `builder.py`, `packages/custom-sources.list`)
   - New `audio-studio` stage builds and installs NeuralRack v0.4.1

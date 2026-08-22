@@ -147,7 +147,10 @@ find_archive() {
             esac
         done
         [ "${#filtered[@]}" -gt 0 ] && tier1=("${filtered[@]}")
-        printf '%s\n' "${tier1[0]}"
+        # Newest version wins: stale duplicates restored from the CI
+        # packages cache must never shadow the book version (glob
+        # order silently picks the oldest name, nightly #174).
+        printf '%s\n' "${tier1[@]}" | sort -V | tail -n 1
         return 0
     fi
 

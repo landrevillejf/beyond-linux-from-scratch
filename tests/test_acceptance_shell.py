@@ -1381,6 +1381,74 @@ class TestProfilePromiseGuardrails:
         assert 'build_emacs()' in content
 
 
+class TestFindArchiveVersionSelection:
+    """find_archive must pick the newest version among duplicates.
+
+    Nightly #174 (minimal/sysvinit/x86_64) failed exactly like #173
+    even though custom-sources.list was fixed: the nightly restores
+    the packages-cache-latest release into sources/, and that cache
+    still carried the stale systemd-221 and systemd-256.20 tarballs
+    next to systemd-257.8.  find_archive returned the first
+    glob-order match (the oldest name), so the chapter 8 udev case
+    deterministically ran against systemd-221 again.  Every copy now
+    sorts the versioned candidates and returns the newest.
+    """
+
+    STAGE_DIRS = ('lfs', 'blfs')
+
+    def _stage_scripts_with_find_archive(self):
+        for dirname in self.STAGE_DIRS:
+            for script in sorted(Path(dirname).glob('*.sh')):
+                content = script.read_text()
+                if 'find_archive()' in content:
+                    yield script, content
+
+    def test_no_stage_picks_the_first_glob_order_tarball(self):
+        offenders = [
+            str(script)
+            for script, content in self._stage_scripts_with_find_archive()
+            if '"${tier1[0]}"' in content
+        ]
+        assert not offenders, \
+            f"glob-order selection resurrects stale cached tarballs " \
+            f"in: {offenders}"
+
+    def test_versioned_selection_sorts_by_version(self):
+        for script, content in self._stage_scripts_with_find_archive():
+            assert 'sort -V' in content, \
+                f"{script} find_archive must sort candidates by version"
+
+    def test_find_archive_prefers_newest_systemd(self, tmp_path):
+        """Replay nightly #174: three systemd tarballs in sources/.
+
+        The LFS 12.4 udev case expects the systemd-257.8 layout
+        (rules.d/), so find_archive must return the newest tarball
+        even when older duplicates are present.
+        """
+        import re
+
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        match = re.search(r'(find_archive\(\) \{.*?\n\})', content,
+                          re.DOTALL)
+        assert match, "find_archive not found in lfs/05b"
+
+        workdir = tmp_path / 'sources'
+        workdir.mkdir()
+        for name in ('systemd-221.tar.xz', 'systemd-256.20.tar.gz',
+                     'systemd-257.8.tar.gz'):
+            (workdir / name).write_bytes(b'')
+
+        probe = tmp_path / 'probe.sh'
+        probe.write_text(
+            f"set -euo pipefail\n{match.group(1)}\n"
+            f"cd '{workdir}'\nfind_archive systemd\n")
+        result = subprocess.run(['bash', str(probe)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.strip() == 'systemd-257.8.tar.gz', \
+            f"find_archive picked {result.stdout.strip()!r}"
+
+
 class TestBLFSBookCommandGuardrails:
     """Wave 3 guardrails (audit finding F-07).
 
