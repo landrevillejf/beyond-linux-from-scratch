@@ -1280,6 +1280,88 @@ class TestAudioStudioStageGuardrails:
             os.unlink(tmp_path)
 
 
+
+class TestKnowledgeStageGuardrails:
+    """Guardrails for the optional 'knowledge' AI assistant stage.
+
+    blfs/28-knowledge.sh installs a free, fully local Ollama-based
+    assistant. Because it is opt-in, installs a third-party binary and
+    generates a CLI that fronts an LLM, the stage must stay strictly
+    gated, checksum-verified, loopback-only, and must never execute
+    model output.
+    """
+
+    SCRIPT = Path('blfs/28-knowledge.sh')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    def test_script_exists_and_is_strict(self, content):
+        assert self.SCRIPT.exists(), "28-knowledge.sh stage must exist"
+        assert 'set -euo pipefail' in content
+
+    def test_stage_is_opt_in(self, content):
+        """Disabled builds must not touch the assistant at all."""
+        assert 'LFS_CONFIG_KNOWLEDGE_ENABLED:-false' in content
+        assert 'stage skipped' in content
+
+    def test_disabled_stage_exits_zero(self, tmp_path):
+        env = dict(os.environ)
+        env['LFS'] = str(tmp_path)
+        env.pop('LFS_CONFIG_KNOWLEDGE_ENABLED', None)
+        result = subprocess.run(['bash', str(self.SCRIPT)],
+                                capture_output=True, text=True, env=env)
+        assert result.returncode == 0, result.stderr
+        assert 'stage skipped' in result.stdout
+
+    def test_enabled_without_sha256_aborts(self, tmp_path):
+        env = dict(os.environ)
+        env['LFS'] = str(tmp_path)
+        env['LFS_CONFIG_KNOWLEDGE_ENABLED'] = 'true'
+        env.pop('LFS_CONFIG_KNOWLEDGE_ENGINE_SHA256', None)
+        result = subprocess.run(['bash', str(self.SCRIPT)],
+                                capture_output=True, text=True, env=env)
+        assert result.returncode != 0
+        assert 'engine_sha256 must be pinned' in result.stderr
+
+    def test_engine_requires_pinned_sha256(self, content):
+        """The checksum is verified before the tarball is extracted."""
+        assert 'knowledge.engine_sha256 must be pinned' in content
+        assert 'Engine sha256 mismatch' in content
+        assert content.index('Engine sha256 mismatch') < \
+            content.index('tar -xzf')
+
+    def test_listen_defaults_to_loopback(self, content):
+        assert '127.0.0.1:11434' in content
+        assert ('must stay on loopback unless '
+                'knowledge.allow_network=true') in content
+
+    def test_init_service_follows_init_system(self, content):
+        assert 'case "$INIT" in' in content
+        assert 'ollama.service' in content
+        assert '/etc/init.d/ollama' in content
+
+    def test_wrapper_never_executes_model_output(self, content):
+        """The knowledge CLI prints suggestions; it never runs them."""
+        wrapper = content.split(
+            'cat >"$LFS/usr/bin/knowledge"')[1].split('\nWRAPPER\n')[0]
+        assert 'eval' not in wrapper, \
+            "knowledge wrapper must not eval model output"
+        assert 'never auto-runs' in wrapper
+
+    def test_shellcheck_clean(self):
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip("shellcheck not installed")
+        result = subprocess.run(['shellcheck', str(self.SCRIPT)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout
+
+
+
 class TestBLFSBookCommandGuardrails:
     """Wave 3 guardrails (audit finding F-07).
 

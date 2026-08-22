@@ -335,6 +335,32 @@ class TestLFSBuilder:
         assert names.index('printing-scanning') < \
             names.index('audio-studio')
 
+    def test_get_build_stages_knowledge_disabled_by_default(self, builder):
+        """The knowledge AI assistant stage is opt-in and off by default."""
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'knowledge' not in stage_names
+
+    def test_get_build_stages_with_knowledge(self, builder):
+        """Enabled knowledge stage must run before base-packages.
+
+        Stage 14's manifest capture turns installed files into LPM
+        binary packages, so the assistant must already be in place.
+        """
+        builder.config.set('knowledge.enabled', True)
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'knowledge' in stage_names
+        assert stage_names.index('knowledge') < stage_names.index('base-packages')
+
+    def test_master_stage_list_places_knowledge_before_base_packages(self):
+        """BUILD_STAGES lists knowledge after audio-studio and before
+        base-packages."""
+        from builder import BUILD_STAGES
+        names = [name for name, _ in BUILD_STAGES]
+        assert names.index('audio-studio') < names.index('knowledge')
+        assert names.index('knowledge') < names.index('base-packages')
+
     def test_get_build_stages_cross_compile(self, builder):
         """Test build stages with cross-compilation"""
         with patch.object(builder, 'is_cross_compile', return_value=True):
@@ -521,6 +547,42 @@ class TestLFSBuilder:
         # Check that LFS_PROFILE_* variables are present
         profile_vars = [k for k in env.keys() if k.startswith('LFS_PROFILE_')]
         assert len(profile_vars) > 0
+
+    def test_get_env_exports_knowledge_config(self, builder):
+        """knowledge.* keys flatten into LFS_CONFIG_KNOWLEDGE_* vars.
+
+        Booleans must be lowercase strings and the model list must be
+        comma-joined: the stage script parses them verbatim.
+        """
+        builder.config.data['knowledge'] = {
+            'enabled': True,
+            'engine': 'ollama',
+            'engine_sha256': 'a' * 64,
+            'models': ['qwen2.5-coder:7b', 'llama3.2:3b'],
+            'listen': '127.0.0.1:11434',
+            'allow_network': False,
+            'provision_models': 'first-boot'
+        }
+        env = builder._get_env()
+        assert env['LFS_CONFIG_KNOWLEDGE_ENABLED'] == 'true'
+        assert env['LFS_CONFIG_KNOWLEDGE_ENGINE'] == 'ollama'
+        assert env['LFS_CONFIG_KNOWLEDGE_ENGINE_SHA256'] == 'a' * 64
+        assert env['LFS_CONFIG_KNOWLEDGE_MODELS'] == \
+            'qwen2.5-coder:7b,llama3.2:3b'
+        assert env['LFS_CONFIG_KNOWLEDGE_LISTEN'] == '127.0.0.1:11434'
+        assert env['LFS_CONFIG_KNOWLEDGE_ALLOW_NETWORK'] == 'false'
+        assert env['LFS_CONFIG_KNOWLEDGE_PROVISION_MODELS'] == 'first-boot'
+
+    def test_default_config_ships_knowledge_disabled(self, tmp_path):
+        """Default config must ship the knowledge section, disabled."""
+        config = LFSConfig(tmp_path / 'build.conf')
+        knowledge = config.data.get('knowledge')
+        assert knowledge is not None
+        assert knowledge['enabled'] is False
+        assert knowledge['engine'] == 'ollama'
+        assert knowledge['engine_sha256'] == ''
+        assert knowledge['provision_models'] == 'first-boot'
+        assert knowledge['listen'] == '127.0.0.1:11434'
 
     def test_get_env_cross_compile(self, builder):
         """Test environment variables for cross-compilation"""
@@ -1014,6 +1076,34 @@ class TestLFSBuilder:
                 main()
 
             assert MockBuilder.call_args[1]['nightly'] is True
+
+    def test_main_with_knowledge_flag(self, tmp_path):
+        """--with-knowledge enables the local AI assistant stage."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--with-knowledge',
+            '--no-live',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            mock_instance.config.set.assert_any_call(
+                'knowledge.enabled', True)
+            mock_instance.refresh_executor.assert_called()
 
     @patch('builder.LFSBuilder._update_sources_list')
     @patch('builtins.print')
