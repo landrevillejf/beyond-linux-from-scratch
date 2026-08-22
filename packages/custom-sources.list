@@ -386,8 +386,12 @@ https://github.com/Xubuntu/lightdm-gtk-greeter/releases/download/lightdm-gtk-gre
 # Init System packages (06a-init-system.sh, 06c-06e)
 # ============================================================================
 
-# systemd and its dependencies
-https://www.freedesktop.org/software/systemd/systemd-256.20.tar.gz
+# systemd and its dependencies (the systemd tarball itself is listed
+# once, near the init tools section below: the LFS 12.4 systemd-257.8
+# used by both the udev chapter 8 case and 06a-init-system.sh; extra
+# entries download under distinct filenames and find_archive's glob
+# order then silently picks the oldest tree -- nightly #173 proved it
+# with a stale systemd-221)
 https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.54.tar.bz2
 https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.1.tar.bz2
 https://github.com/seccomp/libseccomp/releases/download/v2.6.0/libseccomp-2.6.0.tar.xz
@@ -474,7 +478,6 @@ https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.13.2.tar
 
 https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/26.27.3/accountsservice-26.27.3.tar.gz
 
-https://www.freedesktop.org/software/systemd/systemd-221.tar.xz
 https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
 https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
 https://ftpmirror.gnu.org/autoconf/autoconf-2.72.tar.xz

@@ -1280,6 +1280,37 @@ class TestAudioStudioStageGuardrails:
             os.unlink(tmp_path)
 
 
+class TestCustomSourcesGuardrails:
+    """Guardrails against version collisions in custom-sources.list.
+
+    Nightly #173 (full/sysvinit/x86_64) died in the chapter 8 udev
+    case: the list carried three systemd entries (256.20, 221, 257.8).
+    Each entry downloads under a distinct filename, and find_archive
+    returns the first glob-order match, so the udev case (written for
+    the LFS 12.4 systemd-257.8 layout) deterministically ran against
+    the 2015 systemd-221 tree and died at
+    rules.d/50-udev-default.rules.in.
+    """
+
+    SOURCES = Path('packages/custom-sources.list')
+
+    def test_systemd_tarball_is_listed_exactly_once(self):
+        entries = []
+        for line in self.SOURCES.read_text().splitlines():
+            line = line.strip()
+            if not line.startswith('http'):
+                continue
+            name = line.rsplit('/', 1)[-1]
+            # systemd-<digit>... tarballs only; this keeps the
+            # systemd-man-pages-* helper archive out of the check.
+            if name.startswith('systemd-') and name[8:9].isdigit():
+                entries.append(line)
+        assert len(entries) == 1, \
+            f"conflicting systemd sources (glob order picks the " \
+            f"oldest tree): {entries}"
+        assert 'systemd-257.8' in entries[0], entries
+
+
 class TestBLFSBookCommandGuardrails:
     """Wave 3 guardrails (audit finding F-07).
 

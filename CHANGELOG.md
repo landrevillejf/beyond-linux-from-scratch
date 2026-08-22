@@ -166,6 +166,22 @@
     the book, the case now passes `FORCE_UNSAFE_CONFIGURE=1`, same as
     the coreutils case
 
+- **lfs-system udev built from a stale systemd-221 tree**
+  (`packages/custom-sources.list`, `tests/test_acceptance_shell.py`)
+  - Nightly #173 (full/sysvinit/x86_64) died in the chapter 8 udev
+    case at `sed: can't read rules.d/50-udev-default.rules.in`: the
+    sources list carried three systemd tarballs (256.20, 221, 257.8).
+    Each downloads under a distinct filename, and `find_archive`
+    returns the first glob-order match, so the udev case (written for
+    the LFS 12.4 systemd-257.8 layout, where the rules live in
+    `rules.d/`) deterministically extracted the 2015 systemd-221 tree
+    (rules still under `rules/rules/`)
+  - Both stale entries are removed; the LFS 12.4 systemd-257.8 tarball
+    from the init tools section is now the only systemd source, shared
+    by the udev chapter 8 case and 06a-init-system.sh. A guardrail
+    test fails CI if a second systemd tarball ever reappears in
+    `packages/custom-sources.list`
+
 - **`lpm install` silently installed nothing on bash >= 4.4**
   (`blfs/19-lpm.sh`)
   - `install_order()` built its dependency list through an inverted
