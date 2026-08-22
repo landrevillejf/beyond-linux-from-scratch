@@ -173,20 +173,21 @@ cross-compiled architectures). The master ordered list is:
 24. `server` (profiles declaring `ssh` or `server-tools`)
 25. `printing-scanning` (profiles declaring `printing`, or `all`)
 26. `audio-studio` (audio profiles only)
-27. `package-manager`
-28. `base-packages`
-29. `security`
-30. `privacy`
-31. `branding`
-32. `calamares`
-33. `first-boot`
-34. `system-updater`
-35. `luks-encryption`
-36. `initramfs`
-37. `bootloader`
-38. `installer`
-39. `live-system` (when enabled)
-40. `validate`
+27. `knowledge` (when enabled)
+28. `package-manager`
+29. `base-packages`
+30. `security`
+31. `privacy`
+32. `branding`
+33. `calamares`
+34. `first-boot`
+35. `system-updater`
+36. `luks-encryption`
+37. `initramfs`
+38. `bootloader`
+39. `installer`
+40. `live-system` (when enabled)
+41. `validate`
 
 ## Repository structure
 
@@ -318,6 +319,7 @@ python3 builder.py --generate-sources-list
 | `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`) |
 | `--nightly` | Nightly build mode: append today's date to the ISO filename |
 | `--skip-man-pages` | Export `SKIP_MAN_PAGES=true` so stage scripts skip man page generation even when `rst2man` is present |
+| `--with-knowledge` | Enable the local "knowledge" AI assistant (Ollama, opt-in; see `docs/KNOWLEDGE_DESIGN.md`) |
 
 ## Professional Branding System
 
