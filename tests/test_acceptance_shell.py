@@ -478,6 +478,19 @@ class TestLFSComplianceGuardrails:
         assert '--openssldir=/etc/ssl' in content
         assert '--with-openssl' in content, "cURL must link against OpenSSL"
         assert '--with-ca-path=/etc/ssl/certs' in content
+
+        # curl 8.15 requires libpsl, which needs libidn2 and
+        # libunistring; the whole chain must be built before cURL in
+        # this stage (08a runs later, nightly #178).
+        for pkg in ('libunistring', 'libidn2', 'libpsl'):
+            pkg_pos = content.find(f'find_archive {pkg})')
+            curl_pos = content.find('find_archive curl)')
+            assert pkg_pos != -1, f"{pkg} must be built in blfs-base"
+            assert pkg_pos < curl_pos, \
+                f"{pkg} must be installed before cURL (nightly #178)"
+        assert 'meson setup --prefix=/usr' in content, \
+            "libpsl uses the book meson build"
+        assert '--buildtype=release' in content
         assert '--with-history' in content, "libxml2 needs readline history"
         assert 'PYTHON=/usr/bin/python3' in content
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **cURL configure failure in blfs-base (nightly #178)**
+  (`blfs/08-build-blfs-base.sh`)
+  - curl 8.15 hard-requires libpsl; `configure` aborted with
+    `libpsl libs and/or directories were not found where specified!`
+    because libpsl (and its libidn2/libunistring chain, only built
+    later by the 08a libs stage) was missing.  The IDN stack is now
+    built in blfs-base before cURL, following the BLFS book commands
+    (meson build for libpsl)
+
 ## [0.53.0] - 2026-08-23
 
 ### Added

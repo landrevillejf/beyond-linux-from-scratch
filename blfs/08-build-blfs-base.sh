@@ -209,7 +209,40 @@ make install
 rm -rvf /usr/bin/c_rehash
 cd /sources
 
-# ---- cURL (BLFS basicnet – needs OpenSSL first) ----
+# ---- IDN stack for cURL (BLFS general + basicnet) ----
+# curl 8.15 requires libpsl (BLFS basicnet/curl), which itself
+# needs libidn2 and libunistring.  The 08a libs stage runs after
+# this one, so the whole chain must land here before cURL.
+extract "$(find_archive libunistring)"
+./configure --prefix=/usr \
+    --disable-static
+make -j"$(nproc)"
+make install
+cd /sources
+
+extract "$(find_archive libidn2)"
+./configure --prefix=/usr \
+    --disable-static
+make -j"$(nproc)"
+make install
+cd /sources
+
+psl_dir=$(tar -tf "$(find_archive libpsl)" | head -1 | cut -d/ -f1)
+extract "$(find_archive libpsl)"
+mkdir -p build
+cd build
+meson setup --prefix=/usr \
+    --buildtype=release \
+    ..
+ninja
+ninja install
+install -v -dm755 \
+    "/usr/share/doc/${psl_dir}/libpsl"
+install -v -m644 ../doc/libpsl/* \
+    "/usr/share/doc/${psl_dir}/libpsl"
+cd /sources
+
+# ---- cURL (BLFS basicnet – needs OpenSSL and libpsl first) ----
 curl_dir=$(tar -tf "$(find_archive curl)" | head -1 | cut -d/ -f1)
 extract "$(find_archive curl)"
 ./configure --prefix=/usr \
