@@ -12,6 +12,12 @@
     later by the 08a libs stage) was missing.  The IDN stack is now
     built in blfs-base before cURL, following the BLFS book commands
     (meson build for libpsl)
+- **libpsl docs install aborting blfs-base (nightly #179)**
+  (`blfs/08-build-blfs-base.sh`)
+  - Follow-up to the nightly #178 fix: the libpsl release tarball
+    ships no documentation and the BLFS book installs none
+    ("Installed Directories: None"), so the doc copy step failed with
+    `cannot stat '../doc/libpsl/*'` and was removed
 
 ## [0.53.0] - 2026-08-23
 

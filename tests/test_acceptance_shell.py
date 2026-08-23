@@ -491,6 +491,8 @@ class TestLFSComplianceGuardrails:
         assert 'meson setup --prefix=/usr' in content, \
             "libpsl uses the book meson build"
         assert '--buildtype=release' in content
+        assert 'doc/libpsl' not in content, \
+            "libpsl tarball ships no docs; book installs none (#179)"
         assert '--with-history' in content, "libxml2 needs readline history"
         assert 'PYTHON=/usr/bin/python3' in content
 

@@ -227,7 +227,8 @@ make -j"$(nproc)"
 make install
 cd /sources
 
-psl_dir=$(tar -tf "$(find_archive libpsl)" | head -1 | cut -d/ -f1)
+# The release tarball ships no docs and the book installs none
+# ("Installed Directories: None"), so only ninja install (nightly #179).
 extract "$(find_archive libpsl)"
 mkdir -p build
 cd build
@@ -236,10 +237,6 @@ meson setup --prefix=/usr \
     ..
 ninja
 ninja install
-install -v -dm755 \
-    "/usr/share/doc/${psl_dir}/libpsl"
-install -v -m644 ../doc/libpsl/* \
-    "/usr/share/doc/${psl_dir}/libpsl"
 cd /sources
 
 # ---- cURL (BLFS basicnet – needs OpenSSL and libpsl first) ----
