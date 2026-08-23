@@ -72,8 +72,12 @@ ensure_bootstrap_chroot_shell() {
     # through conventional paths required by chroot; the inner build uses
     # PATH=/tools/bin and never imports host programs or libraries.
     run_privileged mkdir -p "$LFS/bin"
-    run_privileged ln -sfn /tools/bin/bash "$LFS/bin/bash"
-    run_privileged ln -sfn bash "$LFS/bin/sh"
+    # Same-file guarded: on usr-merged layouts a re-run would point
+    # both paths at one file and ln -sfn aborts under set -e.
+    [ "$LFS/bin/bash" -ef "$LFS/tools/bin/bash" ] ||
+        run_privileged ln -sfn /tools/bin/bash "$LFS/bin/bash"
+    [ "$LFS/bin/sh" -ef "$LFS/bin/bash" ] ||
+        run_privileged ln -sfn bash "$LFS/bin/sh"
 
     # ------------------------------------------------------------------
     # Ensure the dynamic linker is reachable at the path the cross-compiled

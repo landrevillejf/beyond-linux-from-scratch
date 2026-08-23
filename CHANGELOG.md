@@ -93,6 +93,29 @@
 
 ### Fixed
 
+- **lfs-system no longer dies on the final /bin/bash re-link**
+  (`lfs/05b-build-lfs-system.sh`, `lfs/05a-build-lfs-basic.sh`)
+  - Nightly #176 (minimal/sysvinit/x86_64) compiled the whole system
+    and failed on the very last line of lfs-system:
+    `ln: '/usr/bin/bash' and '/bin/bash' are the same file`.  On a
+    fresh disk image `host/04` creates the usr-merge symlinks
+    (`bin -> usr/bin`, `lib -> usr/lib`, `sbin -> usr/sbin`), so once
+    chapter 8 installs the final bash both paths are one file and
+    `ln -sfn` aborts under `set -e`
+  - Every `/bin/bash` and `/bin/sh` re-link (the chroot standalone
+    switch, the post-build relink and the 05a bootstrap links) is now
+    guarded with a `-ef` same-file test and skipped when both paths
+    already resolve to the same file.  A functional test replays the
+    merged-usr layout and static guardrails fail CI if the unguarded
+    commands return
+
+- **test_arch_cli_override uses a hermetic output directory**
+  (`tests/test_arch_option.py`)
+  - The xfce-sysvinit cache workflow creates `/tmp/lfs-build` with
+    sudo before running pytest (nightly #28), so `setup_logging()`
+    crashed with `PermissionError` when the test passed that directory
+    as `--output`; the test now uses a `tmp_path`-based directory
+
 - **find_archive now picks the newest version among duplicates**
   (all `lfs/` and `blfs/` stage scripts)
   - Nightly #174 (minimal/sysvinit/x86_64) failed exactly like #173

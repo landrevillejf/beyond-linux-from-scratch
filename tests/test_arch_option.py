@@ -184,18 +184,21 @@ def test_arch_environment_variables(tmp_path):
 
 
 
-def test_arch_cli_override(monkeypatch):
+def test_arch_cli_override(monkeypatch, tmp_path):
     """Vérifie que l'option --arch dans la CLI met à jour la configuration."""
     import sys
     from builder import main
 
-    # Simuler sys.argv
+    # Simuler sys.argv.  Le répertoire de sortie doit être un chemin
+    # hermetique : les workflows CI créent /tmp/lfs-build avec sudo
+    # avant pytest (xfce-sysvinit cache, nightly), et setup_logging()
+    # échouerait en PermissionError sur le sous-dossier logs.
     monkeypatch.setattr(sys, 'argv', [
         'builder.py',
         '--profile', 'minimal',
         '--init', 'sysvinit',
         '--arch', 'aarch64',
-        '--output', '/tmp/lfs-build',
+        '--output', str(tmp_path / 'lfs-build'),
     ])
 
     # Patcher les méthodes qui lanceraient le build pour éviter l'exécution

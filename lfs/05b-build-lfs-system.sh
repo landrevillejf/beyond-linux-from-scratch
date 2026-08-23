@@ -1396,11 +1396,15 @@ userdel -r tester 2>/dev/null || true
 
 # ============================================================
 # Make the system standalone: point /bin/bash at the chapter 8
-# bash, remove the temporary /tools tree, and verify.
+# bash, remove the temporary /tools tree, and verify.  On the
+# usr-merged layout (fresh disk image, host/04) /bin/bash and
+# /usr/bin/bash are already the same file, and ln -sfn dies with
+# "are the same file" under set -e (nightly #176), so only link
+# when the two paths still differ.
 # ============================================================
 echo "=== Removing /tools and switching to the final system ==="
-ln -sfn /usr/bin/bash /bin/bash
-ln -sfn bash /bin/sh
+[ /bin/bash -ef /usr/bin/bash ] || ln -sfn /usr/bin/bash /bin/bash
+[ /bin/sh -ef /bin/bash ] || ln -sfn bash /bin/sh
 rm -rf /tools
 
 if env -i PATH=/usr/bin:/usr/sbin /bin/bash -c 'echo standalone system OK'; then
@@ -1419,11 +1423,15 @@ log_info "Entering chroot and compiling..."
 run_privileged chroot "$LFS" /bin/bash -c "export INIT_SYSTEM=$INIT_SYSTEM; export KERNEL_TYPE=$KERNEL_TYPE; export LFS_TGT=$LFS_TGT; /build-lfs-system.sh"
 
 # -----------------------------------------------------------------
-# Post-build: re-link /bin/bash to the newly built system bash
+# Post-build: re-link /bin/bash to the newly built system bash.
+# Same-file guarded: on usr-merged layouts both paths resolve to
+# one file and ln -sfn would fail (nightly #176).
 # -----------------------------------------------------------------
 if [ -x "$LFS/usr/bin/bash" ]; then
-    run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
-    run_privileged ln -sfn bash "$LFS/bin/sh"
+    [ "$LFS/bin/bash" -ef "$LFS/usr/bin/bash" ] ||
+        run_privileged ln -sfn /usr/bin/bash "$LFS/bin/bash"
+    [ "$LFS/bin/sh" -ef "$LFS/bin/bash" ] ||
+        run_privileged ln -sfn bash "$LFS/bin/sh"
 fi
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true

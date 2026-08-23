@@ -1449,6 +1449,73 @@ class TestFindArchiveVersionSelection:
             f"find_archive picked {result.stdout.strip()!r}"
 
 
+class TestStandaloneSwitchSameFileGuards:
+    """The /bin/bash re-links must survive usr-merged layouts.
+
+    Nightly #176 (minimal/sysvinit/x86_64) compiled the whole system
+    and died on the very last line of lfs-system: on a fresh disk
+    image host/04 creates bin -> usr/bin symlinks, so after chapter 8
+    installs the final bash, /bin/bash and /usr/bin/bash are one file
+    and `ln -sfn /usr/bin/bash /bin/bash` aborts with "are the same
+    file" under set -e.  Every such re-link is now guarded with -ef.
+    """
+
+    def test_lfs_system_payload_guards_the_standalone_links(self):
+        import re
+
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        assert '[ /bin/bash -ef /usr/bin/bash ] || ' \
+            'ln -sfn /usr/bin/bash /bin/bash' in content
+        assert '[ /bin/sh -ef /bin/bash ] || ln -sfn bash /bin/sh' \
+            in content
+        assert not re.search(r'(?m)^ln -sfn /usr/bin/bash /bin/bash$',
+                             content)
+        assert not re.search(r'(?m)^ln -sfn bash /bin/sh$', content)
+
+    def test_lfs_system_postbuild_relink_is_same_file_guarded(self):
+        content = Path('lfs/05b-build-lfs-system.sh').read_text()
+        assert '[ "$LFS/bin/bash" -ef "$LFS/usr/bin/bash" ] ||' in content
+        assert '[ "$LFS/bin/sh" -ef "$LFS/bin/bash" ] ||' in content
+
+    def test_lfs_basic_bootstrap_links_are_same_file_guarded(self):
+        content = Path('lfs/05a-build-lfs-basic.sh').read_text()
+        assert '[ "$LFS/bin/bash" -ef "$LFS/tools/bin/bash" ] ||' in content
+        assert '[ "$LFS/bin/sh" -ef "$LFS/bin/bash" ] ||' in content
+
+    def test_merged_usr_layout_replay(self, tmp_path):
+        """Reproduce nightly #176: bin -> usr/bin, one real bash.
+
+        The unguarded ln -sfn must fail with "same file" (GNU ln) and
+        the guarded form must complete under set -e.
+        """
+        version = subprocess.run(['ln', '--version'],
+                                 capture_output=True, text=True)
+        if version.returncode != 0 or 'coreutils' not in version.stdout:
+            pytest.skip('replay requires GNU coreutils ln')
+
+        (tmp_path / 'usr' / 'bin').mkdir(parents=True)
+        (tmp_path / 'usr' / 'bin' / 'bash').write_bytes(b'#!/bin/sh\n')
+        os.symlink('usr/bin', str(tmp_path / 'bin'))
+
+        unguarded = (
+            f"set -e; ln -sfn {tmp_path}/usr/bin/bash "
+            f"{tmp_path}/bin/bash")
+        bad = subprocess.run(['bash', '-c', unguarded],
+                             capture_output=True, text=True)
+        assert bad.returncode != 0, \
+            "unguarded ln -sfn should fail on the same file"
+        assert 'same file' in bad.stderr
+
+        guarded = (
+            f"set -e; [ {tmp_path}/bin/bash -ef {tmp_path}/usr/bin/bash ] "
+            f"|| ln -sfn {tmp_path}/usr/bin/bash {tmp_path}/bin/bash; "
+            f"echo ok")
+        good = subprocess.run(['bash', '-c', guarded],
+                              capture_output=True, text=True)
+        assert good.returncode == 0, good.stderr
+        assert 'ok' in good.stdout
+
+
 class TestBLFSBookCommandGuardrails:
     """Wave 3 guardrails (audit finding F-07).
 
