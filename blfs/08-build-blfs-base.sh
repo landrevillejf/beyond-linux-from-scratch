@@ -284,6 +284,14 @@ sed '/libs=/s/xml2.*/xml2"/' -i /usr/bin/xml2-config
 cd /sources
 
 # ---- blfs-bootscripts (requires lfs-bootscripts from stage 06a) ----
+# The BLFS book (introduction/bootscripts.html) defines no bulk
+# "make install" for this package: every init script carries its own
+# "make install-<init-script>" target, run by the stage that builds
+# the matching service.  The Makefile has no "install" rule at all,
+# so a blanket "make install" dies with "No rule to make target
+# 'install'" (nightly #181).  The book only asks to keep the source
+# tree around until the BLFS system is complete, so extract it here
+# and let the per-service stages pick the targets they need.
 archive=""
 for f in blfs-bootscripts-*.tar.xz; do
     if [ -f "$f" ]; then
@@ -295,7 +303,6 @@ if [ -z "$archive" ]; then
     exit 1
 fi
 extract "$archive"
-make install
 cd /sources
 
 echo "BLFS base packages built."

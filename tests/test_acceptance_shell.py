@@ -506,6 +506,24 @@ class TestLFSComplianceGuardrails:
                 assert 'mount' in stripped, \
                     f"Error masking outside mount cleanup: {stripped}"
 
+    def test_blfs_bootscripts_no_bulk_install(self):
+        """blfs-bootscripts must never run a bulk make install.
+
+        The BLFS book (introduction/bootscripts.html) installs each
+        init script with its own "make install-<init-script>" target;
+        the package Makefile defines no "install" rule, so the blanket
+        "make install" added by the bootscripts installation feature
+        aborted blfs-base with "No rule to make target 'install'"
+        (nightly #181). blfs-base may only keep the source tree
+        available for the per-service stages.
+        """
+        content = Path('blfs/08-build-blfs-base.sh').read_text()
+        pos = content.find('---- blfs-bootscripts')
+        assert pos != -1, "blfs-bootscripts section missing from blfs-base"
+        for line in content[pos:].splitlines():
+            assert line.strip() != 'make install', \
+                "blfs-bootscripts has no bulk install target (nightly #181)"
+
     def test_final_validation_has_standalone_guardrails(self):
         """final/16 must verify /tools removal and scan for /tools
         rpaths (audit finding F-08)."""

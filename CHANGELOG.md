@@ -18,6 +18,17 @@
     ships no documentation and the BLFS book installs none
     ("Installed Directories: None"), so the doc copy step failed with
     `cannot stat '../doc/libpsl/*'` and was removed
+- **blfs-bootscripts bulk install aborting blfs-base (nightly #181)**
+  (`blfs/08-build-blfs-base.sh`)
+  - Every profile died in blfs-base with
+    `make: *** No rule to make target 'install'. Stop.` right after
+    libxml2: the blfs-bootscripts package has no bulk `install`
+    target.  The BLFS book (introduction/bootscripts.html) installs
+    each init script with its own `make install-<init-script>` target
+    and only asks to keep the source tree around until the BLFS
+    system is complete.  The blanket `make install` is dropped; the
+    archive is still verified and extracted in /sources for the
+    per-service stages
 
 ## [0.53.0] - 2026-08-23
 
