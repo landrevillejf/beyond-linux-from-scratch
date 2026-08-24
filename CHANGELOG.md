@@ -4,6 +4,30 @@
 
 ### Fixed
 
+- **Dead source URLs from nightly #182 download errors**
+  (`packages/custom-sources.list`, `packages/stable/12.4/sources.list`,
+  `config/packages.conf.json`, `config/build-java.conf`, `builder.py`)
+  - libxslt: GNOME keeps sources under `major.minor` directories, so
+    `sources/libxslt/1.1.43/` was a permanent 404; repointed to
+    `sources/libxslt/1.1/libxslt-1.1.43.tar.xz`
+  - graphene: the GitHub release asset is gone; repointed to the BLFS
+    book's GNOME mirror (`sources/graphene/1.10/`)
+  - exim: upstream purges old versions from the FTP (and the entry had
+    a doubled `/pub/pub/` path); repointed to the only surviving
+    release, exim-4.100
+  - Temurin JDK: Adoptium removed the 21.0.10+9 release; the java-dev
+    toolchain now pins 21.0.9+10 everywhere (source list, packages
+    config, build-java.conf, default configs)
+  - Business-ISBN-3.012: CPAN keeps only the latest version of a
+    distribution, so the pinned release moved to backpan.perl.org
+  - ncurses-6.5-20250809 snapshot: the invisible-mirror.net `current`
+    directory rotated to 6.6 snapshots; the dead override is dropped
+    and the official LFS ncurses URL is restored
+  - jack2: upstream stopped attaching release assets after v1.9.14 and
+    no mirror carries `jack2-1.9.22.tar.gz`; the dead entry is removed
+    (jack2 stays optional in blfs/24, the pipewire-jack layer covers
+    the JACK API) and the guardrail test now fails if it returns
+
 - **cURL configure failure in blfs-base (nightly #178)**
   (`blfs/08-build-blfs-base.sh`)
   - curl 8.15 hard-requires libpsl; `configure` aborted with

@@ -1357,7 +1357,7 @@ class TestProfilePromiseGuardrails:
     SOURCES = Path('packages/custom-sources.list')
 
     JAVA_ARCHIVES = (
-        'OpenJDK21U-jdk_x64_linux_hotspot_21.0.10_9.tar.gz',
+        'OpenJDK21U-jdk_x64_linux_hotspot_21.0.9_10.tar.gz',
         'apache-maven-3.9.16-bin.tar.gz',
         'gradle-8.14-bin.zip',
         'apache-tomcat-10.1.56.tar.gz',
@@ -1382,9 +1382,14 @@ class TestProfilePromiseGuardrails:
             assert count == 1, \
                 f"{archive} listed {count} times (must be exactly 1)"
 
-    def test_jack2_source_is_listed_exactly_once(self):
+    def test_no_dead_jack2_source_is_listed(self):
+        """Upstream stopped attaching release assets after v1.9.14, so
+        every known jack2-1.9.22 tarball URL is a permanent 404
+        (nightly #182).  jack2 stays optional in 24-multimedia.sh
+        (pipewire-jack covers the JACK API); the dead entry must not
+        come back until a real package-prefixed tarball exists."""
         listed = self._listed_filenames()
-        assert listed.count('jack2-1.9.22.tar.gz') == 1
+        assert listed.count('jack2-1.9.22.tar.gz') == 0
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image

@@ -44,7 +44,7 @@
   },
   "java_dev": {
     "enabled": false,
-    "version": "21.0.10",
+    "version": "21.0.9",
     "distribution": "temurin",
     "tools": [
       "maven",

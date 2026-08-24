@@ -67,7 +67,7 @@ def mock_config_file(temp_dir):
         },
         "java_dev": {
             "enabled": False,
-            "version": "21.0.10",
+            "version": "21.0.9",
             "distribution": "temurin"
         },
         "desktop": {

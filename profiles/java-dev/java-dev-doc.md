@@ -76,7 +76,7 @@ systemctl start jenkins
 All versions can be overridden by setting environment variables **before** running the script:
 
 ```bash
-JAVA_VERSION=21.0.10 MAVEN_VERSION=3.9.9 bash 12-install-java-dev.sh
+JAVA_VERSION=21.0.9 MAVEN_VERSION=3.9.9 bash 12-install-java-dev.sh
 ```
 
 See the top of the script for the full list (`JAVA_VERSION`, `MAVEN_VERSION`, `GRADLE_VERSION`, `TOMCAT_VERSION`, `NODE_VERSION`, `DOCKER_VERSION`, `JENKINS_VERSION`, `KUBECTL_VERSION`, `SPRING_BOOT_VERSION`).

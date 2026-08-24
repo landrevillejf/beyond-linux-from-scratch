@@ -194,7 +194,7 @@ class LFSConfig:
 
             "java_dev": {
                 "enabled": False,
-                "version": "21.0.10",
+                "version": "21.0.9",
                 "distribution": "temurin",
                 "tools": ["maven", "gradle", "tomcat", "jenkins", "docker", "kubectl"],
                 "optimizations": True,
