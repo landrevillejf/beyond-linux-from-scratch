@@ -1146,10 +1146,15 @@ run_build() {
 
 # ======================================================================
 # Verify prerequisites from LFS base
+#
+# pcre2 must not appear in this list: no LFS stage builds it, this
+# stage does (BLFS general/pcre2, before glib2) — nightly #183 died
+# on a "Missing LFS prerequisites" abort that required the package
+# before the package that provides it could run.
 # ======================================================================
 verify_prerequisites() {
     local missing=() pc
-    for pc in zlib expat libffi pcre2 python3; do
+    for pc in zlib expat libffi python3; do
         if ! have_pc "$pc" 2>/dev/null && ! have_cmd "$pc" 2>/dev/null; then
             missing+=("$pc")
         fi
@@ -1199,7 +1204,12 @@ run_build required fontconfig
 
 log_info "Phase 3: GLib ecosystem"
 
-# glib2 – depends on pcre2 (LFS), libffi (LFS)
+# pcre2 – BLFS general/pcre2; no LFS stage builds it, and glib2
+# hard-requires it, so it must precede the GLib ecosystem
+# (nightly #183).  book_install skips it when already present.
+run_build required pcre2
+
+# glib2 – depends on pcre2, libffi (LFS)
 run_build required glib2
 
 # graphene – GTK 4 dependency
@@ -1334,7 +1344,9 @@ run_build required libunistring
 run_build required libidn2
 run_build optional libidn
 
-# pcre2 – already in LFS, rebuild only if missing
+# pcre2 – built in phase 3 before glib2; this second call is a
+# book_install no-op when present and covers resume-from runs that
+# restart the stage mid-list.
 run_build required pcre2
 
 # libseccomp – secure computing mode

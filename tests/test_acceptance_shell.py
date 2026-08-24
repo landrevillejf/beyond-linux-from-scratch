@@ -524,6 +524,35 @@ class TestLFSComplianceGuardrails:
             assert line.strip() != 'make install', \
                 "blfs-bootscripts has no bulk install target (nightly #181)"
 
+    def test_blfs_libs_pcre2_not_a_prerequisite_and_precedes_glib2(self):
+        """pcre2 is built by blfs-libs itself, never by an LFS stage.
+
+        Nightly #183 (full/sysvinit/x86_64) died in blfs-libs after
+        0.2 s with "Missing LFS prerequisites: pcre2": the
+        verify_prerequisites check demanded a package no earlier
+        stage installs, and the stage's own pcre2 build ran in the
+        last phase, after glib2 (which hard-requires pcre2).  pcre2
+        must stay out of the prerequisite list and run before glib2.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+
+        # The prerequisite loop must not mention pcre2.
+        func_pos = content.find('verify_prerequisites()')
+        assert func_pos != -1
+        func_end = content.find('verify_prerequisites\n', func_pos)
+        func = content[func_pos:func_end if func_end != -1 else
+                       func_pos + 800]
+        assert 'pcre2' not in func, \
+            "pcre2 is provided by this stage, not by LFS (nightly #183)"
+
+        # First pcre2 build must precede the glib2 build.
+        pcre2_pos = content.find('run_build required pcre2')
+        glib2_pos = content.find('run_build required glib2')
+        assert pcre2_pos != -1, "pcre2 build missing from blfs-libs"
+        assert glib2_pos != -1, "glib2 build missing from blfs-libs"
+        assert pcre2_pos < glib2_pos, \
+            "pcre2 must be built before glib2 (nightly #183)"
+
     def test_final_validation_has_standalone_guardrails(self):
         """final/16 must verify /tools removal and scan for /tools
         rpaths (audit finding F-08)."""

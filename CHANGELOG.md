@@ -4,6 +4,17 @@
 
 ### Fixed
 
+- **blfs-libs aborting on its own pcre2 prerequisite (nightly #183)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - The first run to pass blfs-base died in blfs-libs after 0.2 s:
+    `Missing LFS prerequisites: pcre2`.  No LFS stage builds pcre2
+    (it is the BLFS general/pcre2 package), yet verify_prerequisites
+    demanded it up front while the stage's own pcre2 build ran in the
+    last phase, after glib2 which hard-requires it.  pcre2 is dropped
+    from the prerequisite loop and now builds first in the GLib
+    ecosystem phase; the later entry stays as a no-op for resume-from
+    runs
+
 - **Dead source URLs from nightly #182 download errors**
   (`packages/custom-sources.list`, `packages/stable/12.4/sources.list`,
   `config/packages.conf.json`, `config/build-java.conf`, `builder.py`)
