@@ -553,6 +553,42 @@ class TestLFSComplianceGuardrails:
         assert pcre2_pos < glib2_pos, \
             "pcre2 must be built before glib2 (nightly #183)"
 
+    def test_prep_src_keeps_logs_off_stdout(self):
+        """prep_src stdout is captured as the extracted directory.
+
+        Nightly #184 (full/sysvinit/x86_64) died on the very first
+        blfs-libs package: book_install ran
+        pushd '[INFO] Building libpng from ...\\nlibpng-1.6.47'
+        because prep_src logged to stdout, which book_install
+        captures to obtain the directory name.  Every stage that
+        defines prep_src must send its progress message to stderr.
+        """
+        for script in sorted(Path('blfs').glob('*.sh')):
+            content = script.read_text()
+            if 'prep_src()' not in content:
+                continue
+            if 'Building $pkg from $archive' not in content:
+                continue
+            assert 'log_info "Building $pkg from $archive" >&2' \
+                in content, \
+                f"{script}: prep_src log must go to stderr " \
+                "(stdout is the directory name, nightly #184)"
+
+    def test_kernel_stage_reads_sources_from_lfs_tree(self):
+        """build-kernel must locate sources in $LFS/sources.
+
+        Nightly #185 (minimal/sysvinit/x86_64) died with "Sources
+        directory not found: /tmp/lfs-build/sources": the stage
+        guessed $(dirname $LFS)/sources, but CI keeps the host
+        downloads in build-release/sources.  The chroot mirror at
+        $LFS/sources is populated by lfs-basic for every profile and
+        is already asserted below for the native path, so it is the
+        canonical location.
+        """
+        content = Path('lfs/08-build-kernel.sh').read_text()
+        assert 'SOURCES_HOST="$LFS/sources"' in content
+        assert '$(dirname "$LFS")/sources' not in content
+
     def test_final_validation_has_standalone_guardrails(self):
         """final/16 must verify /tools removal and scan for /tools
         rpaths (audit finding F-08)."""
@@ -1410,6 +1446,20 @@ class TestProfilePromiseGuardrails:
             count = listed.count(archive)
             assert count == 1, \
                 f"{archive} listed {count} times (must be exactly 1)"
+
+    def test_business_isbn_overridden_via_backpan(self):
+        """CPAN keeps only the latest release of a distribution, so
+        the official wget-list's Business-ISBN-3.012 URL is a
+        permanent 404 (nightly #185).  Only custom-sources.list
+        overrides the fetched official lists at runtime -- the fix
+        in packages/stable/12.4/sources.list had no effect because
+        that file is never read at runtime.
+        """
+        listed = self._listed_filenames()
+        assert listed.count('Business-ISBN-3.012.tar.gz') == 1
+        content = self.SOURCES.read_text()
+        assert ('https://backpan.perl.org/authors/id/B/BR/BRIANDFOY/'
+                'Business-ISBN-3.012.tar.gz') in content
 
     def test_no_dead_jack2_source_is_listed(self):
         """Upstream stopped attaching release assets after v1.9.14, so

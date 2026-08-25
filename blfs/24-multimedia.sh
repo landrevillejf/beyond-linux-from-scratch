@@ -218,7 +218,7 @@ prep_src() {
         log_error "Source archive missing for $pkg"
         return 1
     fi
-    log_info "Building $pkg from $archive"
+    log_info "Building $pkg from $archive" >&2
     extract_archive "$archive"
 }
 

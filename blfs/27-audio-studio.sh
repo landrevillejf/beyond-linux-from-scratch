@@ -239,7 +239,7 @@ prep_src() {
         return 1
     fi
     verify_sha256 "$archive" || return 1
-    log_info "Building $pkg from $archive"
+    log_info "Building $pkg from $archive" >&2
     extract_archive "$archive"
 }
 

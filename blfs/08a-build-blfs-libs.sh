@@ -295,7 +295,9 @@ archive_names() {
 }
 
 # Find and extract the source archive of a package, printing the
-# extracted directory name.
+# extracted directory name.  Everything BUT the directory name must
+# stay off stdout: book_install captures it (nightly #184 pushed into
+# "[INFO] Building libpng from ...\nlibpng-1.6.47").
 prep_src() {
     local pkg="$1" archive="" base
     for base in $(archive_names "$pkg"); do
@@ -306,7 +308,7 @@ prep_src() {
         log_error "Source archive missing for $pkg"
         return 1
     fi
-    log_info "Building $pkg from $archive"
+    log_info "Building $pkg from $archive" >&2
     extract_archive "$archive"
 }
 

@@ -4,6 +4,35 @@
 
 ### Fixed
 
+- **blfs-libs pushd into a log line (nightly #184)**
+  (`blfs/08a`, `08b`, `08c`, `08d`, `09a`, `09b`, `09c`, `09d`, `23`,
+  `24`, `25`, `26`, `27`)
+  - The first run past the pcre2 gate died on libpng after 0.2 s:
+    `pushd: '[INFO] Building libpng from libpng-1.6.47.tar.xz\n
+    libpng-1.6.47': No such file or directory`.  `book_install`
+    captures `prep_src` stdout to obtain the extracted directory
+    name, but `prep_src` logged its progress message to stdout, so
+    the directory became the log line plus the name.  The message
+    now goes to stderr in every stage that defines `prep_src`, and a
+    guardrail test fails CI if any copy logs to stdout again
+
+- **build-kernel looking for sources next to $LFS (nightly #185)**
+  (`lfs/08-build-kernel.sh`)
+  - minimal/sysvinit/x86_64 died with `Sources directory not found:
+    /tmp/lfs-build/sources`: the stage guessed
+    `$(dirname $LFS)/sources`, but CI keeps host downloads in
+    `build-release/sources`.  It now reads `$LFS/sources`, the
+    chroot mirror that lfs-basic populates for every profile and
+    that the native path already asserts 20 lines later
+
+- **Business-ISBN override placed where builder.py reads it**
+  (`packages/custom-sources.list`)
+  - The nightly #182 fix put the backpan.perl.org mirror in
+    `packages/stable/12.4/sources.list`, which is never read at
+    runtime, so #185 still 404'd on cpan.org.  The override now lives
+    in `custom-sources.list`, the only file that overrides the
+    fetched official wget-lists
+
 - **blfs-libs aborting on its own pcre2 prerequisite (nightly #183)**
   (`blfs/08a-build-blfs-libs.sh`)
   - The first run to pass blfs-base died in blfs-libs after 0.2 s:
@@ -31,6 +60,7 @@
     config, build-java.conf, default configs)
   - Business-ISBN-3.012: CPAN keeps only the latest version of a
     distribution, so the pinned release moved to backpan.perl.org
+    (see the Unreleased entry for the placement fix)
   - ncurses-6.5-20250809 snapshot: the invisible-mirror.net `current`
     directory rotated to 6.6 snapshots; the dead override is dropped
     and the official LFS ncurses URL is restored

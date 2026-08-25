@@ -59,10 +59,13 @@ fi
 log_info "Using kernel configuration: $KERNEL_CONFIG_SRC"
 
 # ---------------------------------------------------------------------------
-# Locate the kernel sources (host sources dir, mirrored into the chroot by
-# the lfs-basic stage)
+# Locate the kernel sources.  The chroot mirror ($LFS/sources) is the
+# canonical copy: lfs-basic populates it for every profile, whatever
+# the builder's host output layout (nightly #185 died on the old
+# "$(dirname $LFS)/sources" guess because CI keeps its sources in
+# build-release/sources, not next to $LFS).
 # ---------------------------------------------------------------------------
-SOURCES_HOST="$(dirname "$LFS")/sources"
+SOURCES_HOST="$LFS/sources"
 if [ ! -d "$SOURCES_HOST" ]; then
     log_error "Sources directory not found: $SOURCES_HOST"
     exit 1
