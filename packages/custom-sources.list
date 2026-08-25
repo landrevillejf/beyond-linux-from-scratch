@@ -57,8 +57,10 @@ https://download.imagemagick.org/archive/releases/ImageMagick-7.1.2-27.tar.gz
 # man-db
 https://download-mirror.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz
 
-# ntp
-https://www.ntp.org/downloads/ntp-4.2.8p18.tar.gz
+# ntp -- the ntp.org download URL is dead (it serves an HTML error
+# page, nightly #187: 'gzip: stdin: not in gzip format'); use the BLFS
+# conglomeration mirror instead.
+https://ftp2.osuosl.org/pub/blfs/conglomeration/ntp/ntp-4.2.8p18.tar.gz
 
 # xscreensaver
 https://ftp2.osuosl.org/pub/blfs/conglomeration/xscreensaver/xscreensaver-6.12.tar.gz
@@ -161,8 +163,10 @@ https://github.com/harfbuzz/harfbuzz/releases/download/11.4.0/harfbuzz-11.4.0.ta
 # pixman
 https://www.cairographics.org/releases/pixman-0.46.2.tar.gz
 
-# cairo
-https://www.cairographics.org/snapshots/cairo-1.17.8.tar.xz
+# cairo -- the 1.17.8 snapshot no longer compiles with the LFS 12.4
+# GCC 14 toolchain (ninja dies in util/cairo-script, nightly #187);
+# use the current stable release, the same one as the BLFS book.
+https://www.cairographics.org/releases/cairo-1.18.4.tar.xz
 
 # fribidi
 https://github.com/fribidi/fribidi/releases/download/v1.0.16/fribidi-1.0.16.tar.xz

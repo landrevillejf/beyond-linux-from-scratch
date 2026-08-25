@@ -61,6 +61,28 @@
 
 ### Fixed
 
+- **Dead ntp.org download URL (nightly #187)**
+  (`packages/custom-sources.list`)
+  - minimal/sysvinit/x86_64 died in basic-networking with
+    `gzip: stdin: not in gzip format` on ntp-4.2.8p18.tar.gz.  The
+    packages-cache copy of the tarball is an HTML page, and the
+    re-download triggered by the magic-byte check hit the override
+    URL `www.ntp.org/downloads/`, which now serves the same HTML
+    error page.  The override repoints to the BLFS conglomeration
+    mirror (`ftp2.osuosl.org/pub/blfs/conglomeration/ntp/`), which
+    serves the genuine tarball
+
+- **cairo 1.17.8 snapshot no longer compiles (nightly #187)**
+  (`packages/custom-sources.list`)
+  - java-dev/sysvinit/x86_64 (and every other profile past
+    blfs-base) died in blfs-libs: ninja stopped while compiling
+    `util/cairo-script/cairo-script-operators.c`.  The 2023
+    `snapshots/cairo-1.17.8` pinned by the override does not build
+    with the LFS 12.4 GCC 14 toolchain.  The override now pins the
+    current stable release `cairo-1.18.4` from
+    `cairographics.org/releases/`, the same version as the BLFS
+    book's wget-list
+
 - **cmake: command not found in blfs-libs (nightly #186)**
   (`blfs/08-build-blfs-base.sh`)
   - full/sysvinit/x86_64 passed libpng and died on the next package:

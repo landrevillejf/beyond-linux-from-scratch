@@ -1576,6 +1576,28 @@ class TestProfilePromiseGuardrails:
         assert ('https://backpan.perl.org/authors/id/B/BR/BRIANDFOY/'
                 'Business-ISBN-3.012.tar.gz') in content
 
+    def test_ntp_source_is_not_the_dead_ntp_org_url(self):
+        """ntp.org's download URL serves an HTML error page, so nightly
+        #187 died with 'gzip: stdin: not in gzip format' in the
+        basic-networking stage.  The override must stay on the BLFS
+        conglomeration mirror until upstream revives."""
+        listed = self._listed_filenames()
+        assert listed.count('ntp-4.2.8p18.tar.gz') == 1
+        content = self.SOURCES.read_text()
+        assert 'www.ntp.org/downloads' not in content
+        assert ('https://ftp2.osuosl.org/pub/blfs/conglomeration/ntp/'
+                'ntp-4.2.8p18.tar.gz') in content
+
+    def test_cairo_is_stable_release_not_snapshot(self):
+        """The cairo 1.17.8 snapshot no longer compiles with the LFS
+        12.4 GCC 14 toolchain (ninja stops in util/cairo-script,
+        nightly #187); custom-sources.list must pin the current stable
+        release used by the BLFS book."""
+        listed = self._listed_filenames()
+        assert listed.count('cairo-1.18.4.tar.xz') == 1
+        content = self.SOURCES.read_text()
+        assert 'snapshots/cairo-1.17.8' not in content
+
     def test_no_dead_jack2_source_is_listed(self):
         """Upstream stopped attaching release assets after v1.9.14, so
         every known jack2-1.9.22 tarball URL is a permanent 404
