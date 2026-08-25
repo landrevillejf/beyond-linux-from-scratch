@@ -366,7 +366,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `secure` | Hardened profile with privacy tools | xfce | Yes | 6 | 5 |
 | `full` | Full feature profile | gnome | Yes | 20 | 12 |
 | `audio-cli` | Headless audio production | none | No | 2 | 3 |
-| `audio-studio` | Desktop audio production (LV2 + NeuralRack) | xfce | Yes | 8 | 6 |
+| `audio-studio` | Desktop audio production (LV2 + NeuralRack + LSP/Dragonfly plugins, PREEMPT_RT) | xfce | Yes | 8 | 7 |
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |

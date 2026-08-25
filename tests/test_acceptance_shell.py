@@ -1409,6 +1409,62 @@ class TestAudioStudioStageGuardrails:
                         'libsndfile-1.2.2.tar.xz'):
             assert tarball in sources, f"{tarball} missing from sources"
 
+    def test_plugin_packs_gated_on_audio_plugins_token(self, content):
+        """Phases 4-5 run only when the profile carries the
+        audio-plugins token, so audio-cli stays a console stack."""
+        assert 'has_pkg()' in content, "has_pkg token gate helper missing"
+        gated = content[content.index('Phase 4: LV2 plugin packs'):]
+        assert 'if has_pkg audio-plugins; then' in gated
+        assert 'build_lsp_plugins' in gated
+        assert 'build_dragonfly_reverb' in gated
+        assert 'Skipping plugin packs' in gated
+
+    def test_plugin_checksums_pinned(self, content):
+        for sha in (
+            # lsp-plugins-src-1.2.35 release asset
+            '2c95ec7bb219d561ea3db36051b6c732133bcd76426fb836b1dd850dc4b5bb6c',
+            # dragonfly-reverb-3.2.10-src release asset
+            '18af55a9592c9f50c4d5f86c9d5159132735d9ba53d49e9cfe7169b3109f7743',
+        ):
+            assert sha in content, f"missing pinned checksum {sha}"
+
+    def test_plugin_sources_listed_exactly_once(self):
+        """Both plugin packs need their -src release asset; the generic
+        refs/tags archive lacks the bundled sub-projects/DPF framework."""
+        listed = [line.strip().rsplit('/', 1)[-1]
+                  for line in self.SOURCES.read_text().splitlines()
+                  if line.strip().startswith('http')]
+        for archive in ('lsp-plugins-src-1.2.35.tar.gz',
+                        'dragonfly-reverb-3.2.10-src.tar.xz'):
+            assert listed.count(archive) == 1, \
+                f"{archive} listed {listed.count(archive)} times"
+
+    def test_plugin_bundles_install_into_lv2_dir(self, content):
+        """Dragonfly ships no install target; the stage must hand-copy
+        its bundles so lilv can discover them next to lsp-*.lv2."""
+        assert '/usr/lib/lv2' in content
+        assert 'cp -r bin/*.lv2 /usr/lib/lv2/' in content
+
+    def test_realtime_limits_installed(self, content):
+        """PipeWire gains realtime via RLIMIT once the audio group has
+        rtprio/memlock; the tuning must always run (ungated phase)."""
+        assert '/etc/security/limits.d/audio.conf' in content
+        assert '@audio   -   rtprio     99' in content
+        assert '@audio   -   memlock    unlimited' in content
+        assert 'groupadd -f audio' in content
+
+    def test_audio_studio_kernel_is_preempt_rt(self):
+        """The audio-studio promise requires the PREEMPT_RT kernel;
+        the preemption model is exclusive, so the voluntary model must
+        be absent, and live-ISO boot options must survive."""
+        kernel = Path('config/kernel-config-audio-studio').read_text()
+        assert 'CONFIG_PREEMPT_RT=y' in kernel
+        assert 'CONFIG_EXPERT=y' in kernel
+        assert 'CONFIG_PREEMPT_VOLUNTARY' not in kernel
+        for option in ('CONFIG_ISO9660_FS=y', 'CONFIG_SQUASHFS=y',
+                       'CONFIG_BLK_DEV_LOOP=y'):
+            assert option in kernel
+
     def test_shellcheck_clean(self, content):
         import re
         try:

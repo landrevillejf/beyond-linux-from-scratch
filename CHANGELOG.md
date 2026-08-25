@@ -2,6 +2,63 @@
 
 ## Unreleased
 
+### Added
+
+- **LV2 plugin packs for the audio-studio profile**
+  (`blfs/27-audio-studio.sh`, `packages/custom-sources.list`)
+  - The `audio-plugins` package token was declared on audio-studio but
+    completely inert: no stage consumed it and no plugin reached the
+    built system.  Stage 27 now builds LSP Plugins 1.2.35 (the full
+    LV2/LADSPA suite, restricted to `lv2 ladspa ui` features so no
+    JACK/GStreamer/OpenGL backend is needed) and Dragonfly Reverb
+    3.2.10 (DPF-based hall/room/plate/early-reflection reverb, LV2
+    bundles only) when the token is present.  Both use their `-src`
+    release tarballs, which bundle the LSP sub-projects and the DPF
+    framework; the bundles land in `/usr/lib/lv2`.  audio-cli keeps its
+    CLI-only promise and skips the token-gated phases
+
+- **Realtime audio tuning for the audio profiles**
+  (`blfs/27-audio-studio.sh`)
+  - No built system had any realtime scheduling configuration.  Stage 27
+    now creates the `audio` group and installs
+    `/etc/security/limits.d/audio.conf` (`@audio - rtprio 99`,
+    `memlock unlimited`, `nice -19`) plus a low-latency
+    `/etc/sysctl.d/90-audio.conf`.  PipeWire grants realtime priority via
+    RLIMIT with these limits, so no rtkit build is required.  The
+    first-boot service already adds the created user to the `audio` group
+    (`blfs/17-first-boot-service.sh`); this makes that group and its
+    limits actually exist
+
+- **PREEMPT_RT realtime kernel for audio-studio**
+  (`config/kernel-config-audio-studio`)
+  - The base kernel config is `PREEMPT_VOLUNTARY`, unsuitable for
+    low-latency audio.  A per-profile variant is added and auto-selected
+    by `lfs/08-build-kernel.sh` (it prefers `kernel-config-$PROFILE`):
+    `CONFIG_PREEMPT_RT=y` (+ `CONFIG_EXPERT=y` prerequisite),
+    `HIGH_RES_TIMERS`, `HZ_1000`, `NO_HZ_FULL`,
+    `IRQ_FORCED_THREADING`, `HPET`, `SND_HRTIMER`, plus the live-boot
+    ISO9660/SQUASHFS options of the base config.  Other profiles keep the
+    default config
+
+- **Neural Amp Modeler starter models (best-effort)**
+  (`blfs/27-audio-studio.sh`)
+  - Stage 27 installs any `.nam` model pre-downloaded into `/sources`
+    into `/usr/share/neuralrack/models` for NeuralRack to load.  No
+    stable open-licensed model mirror could be pinned, so a missing model
+    set is a warning, never a build failure; models are optional open
+    content and can be added later via `packages/custom-sources.list`
+
+- **Ardour DAW deferred (no buildable source)**
+  - Investigated as part of the "full pro studio" request: Ardour ships
+    no buildable tarball.  Its GitHub archive is an export-ignore stub
+    (the tag tarball contains only a README) and the official
+    `community.ardour.org` release-dist requires an account, so Ardour
+    can only be built from a full `git clone` and additionally needs a
+    large dependency stack (boost, fftw, aubio, libusb, hidapi, libltc,
+    libwebsockets, fluidsynth, ...) that is mostly absent.  Ardour is
+    deferred to a dedicated follow-up; the plugin packs, NeuralRack and
+    realtime/PREEMPT_RT groundwork above are the first increment
+
 ### Fixed
 
 - **cmake: command not found in blfs-libs (nightly #186)**

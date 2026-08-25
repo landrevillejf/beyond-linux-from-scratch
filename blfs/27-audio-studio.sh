@@ -10,14 +10,23 @@ set -euo pipefail
 # only built when a GUI stack (cairo + X11) is present, which means
 # audio-studio in practice.
 #
-# Book deviation (documented in CHANGELOG.md): lv2/zix/serd/sord/
-# sratom/lilv and NeuralRack have no BLFS book page, so they are
-# built from their canonical upstream release tarballs with pinned
-# sha256 checksums verified BEFORE extraction.  The NeuralRack
-# release "-src" tarball bundles the git submodules; the generic
-# GitHub refs/tags archive does not and cannot build.
+# On the audio-studio profile (the 'audio-plugins' package token) the
+# stage additionally installs the LSP Plugins and Dragonfly Reverb LV2
+# plugin packs, pre-loads any Neural Amp Modeler (.nam) starter models
+# found in /sources, and applies the realtime audio tuning (audio
+# group, /etc/security/limits.d, sysctl).  audio-cli stays a pure
+# CLI/host stack: the plugin/token-gated phases are skipped there.
 #
-# Environment contract (exported by builder.py): LFS, PROFILE
+# Book deviation (documented in CHANGELOG.md): lv2/zix/serd/sord/
+# sratom/lilv, NeuralRack, LSP Plugins and Dragonfly Reverb have no
+# BLFS book page, so they are built from their canonical upstream
+# release tarballs with pinned sha256 checksums verified BEFORE
+# extraction.  The NeuralRack and LSP Plugins "-src" release tarballs
+# bundle their git submodules / sub-projects; the generic GitHub
+# refs/tags archive does not and cannot build.
+#
+# Environment contract (exported by builder.py): LFS, PROFILE,
+# LFS_PROFILE_PACKAGES (comma-separated profile package tokens)
 #======================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -39,7 +48,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
@@ -57,11 +69,11 @@ log_info "========================================="
 # audio profiles, but a manual --resume-from must not poison other
 # profiles with audio-only software.
 case "${PROFILE:-audio-studio}" in
-    audio-*) ;;
-    *)
-        log_info "audio-studio stage skipped (profile ${PROFILE} is not an audio profile)"
-        exit 0
-        ;;
+audio-*) ;;
+*)
+    log_info "audio-studio stage skipped (profile ${PROFILE} is not an audio profile)"
+    exit 0
+    ;;
 esac
 
 if [ "$IN_DOCKER" = true ]; then
@@ -69,7 +81,10 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     log_error "chroot not working"
     exit 1
@@ -188,6 +203,10 @@ sha256_for() {
             echo "3799ca9924d3125038880367bf1468e53a1b7e3686a934f098b7e1d286cdb80e" ;;
         NeuralRack-v0.4.1-src.tar.xz)
             echo "82b88d2aa20155d7522b7eea030b5e888eb1ca5559af47be9a4870fa5d6226f7" ;;
+        lsp-plugins-src-1.2.35.tar.gz)
+            echo "2c95ec7bb219d561ea3db36051b6c732133bcd76426fb836b1dd850dc4b5bb6c" ;;
+        dragonfly-reverb-3.2.10-src.tar.xz)
+            echo "18af55a9592c9f50c4d5f86c9d5159132735d9ba53d49e9cfe7169b3109f7743" ;;
         *) return 1 ;;
     esac
 }
@@ -215,6 +234,16 @@ extract_archive() {
 
 have_pc() { pkg-config --exists "$1" 2>/dev/null; }
 
+# Profile package-token gate.  LFS_PROFILE_PACKAGES is the comma-separated
+# package list exported by builder.py (_flatten_config of the profile
+# 'packages' array).  'all' (the full profile) matches every token.
+has_pkg() {
+    case ",${LFS_PROFILE_PACKAGES:-}," in
+        *,all,* | *,"$1",*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
 is_installed() {
     local pkg="$1"
     [ -f "$(marker_for "$pkg")" ] && return 0
@@ -227,6 +256,8 @@ is_installed() {
         lilv) have_pc lilv-0 ;;
         libsndfile) have_pc sndfile ;;
         neuralrack) [ -d /usr/lib/lv2/NeuralRack.lv2 ] ;;
+        lsp-plugins) compgen -G '/usr/lib/lv2/lsp-*.lv2' >/dev/null ;;
+        dragonfly-reverb) [ -d /usr/lib/lv2/DragonflyHallReverb.lv2 ] ;;
         *) return 1 ;;
     esac
 }
@@ -316,6 +347,93 @@ build_neuralrack() {
     log_success "NeuralRack installed"
 }
 
+build_lsp_plugins() {
+    local dir
+    if is_installed lsp-plugins; then log_info "LSP Plugins already installed; skipping"; return 0; fi
+    if ! have_pc cairo || ! have_pc x11 || ! have_pc sndfile; then
+        log_error "LSP Plugins require cairo/x11/sndfile; desktop + audio stack missing"
+        return 1
+    fi
+    dir="$(prep_src lsp-plugins)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    # LSP auto-detects every format/backend; restrict to LV2 + LADSPA with
+    # the cairo/X11 GUI so no JACK/GStreamer/OpenGL backend is required.
+    make config PREFIX=/usr FEATURES="lv2 ladspa ui"
+    make -j"$JOBS"
+    make install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for lsp-plugins)"
+    log_success "LSP Plugins installed"
+}
+
+build_dragonfly_reverb() {
+    local dir
+    if is_installed dragonfly-reverb; then log_info "Dragonfly Reverb already installed; skipping"; return 0; fi
+    if ! have_pc x11 || ! have_pc gl; then
+        log_error "Dragonfly Reverb requires X11 + OpenGL (mesa); desktop stack missing"
+        return 1
+    fi
+    dir="$(prep_src dragonfly-reverb)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    # DPF framework is bundled under dpf/.  Build the LV2 bundles only
+    # (skip VST2/VST3/DSSI/JACK-standalone); DPF has no install target,
+    # so the bundles are copied into /usr/lib/lv2.
+    make -j"$JOBS" BUILD_VST2=false BUILD_VST3=false BUILD_DSSI=false BUILD_JACK=false
+    install -d /usr/lib/lv2
+    cp -r bin/*.lv2 /usr/lib/lv2/
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for dragonfly-reverb)"
+    log_success "Dragonfly Reverb installed"
+}
+
+# Best-effort Neural Amp Modeler starter content.  NeuralRack loads .nam
+# models; any model pre-downloaded into /sources (add a pinned .nam URL
+# to packages/custom-sources.list) is installed into the shared models
+# directory.  A missing model set is a warning, never a build failure --
+# models are optional open content with unstable hosting.
+install_nam_models() {
+    local models_dir=/usr/share/neuralrack/models f count=0
+    install -d "$models_dir"
+    for f in *.nam; do
+        [ -f "$f" ] || continue
+        if install -m 0644 "$f" "$models_dir/"; then
+            count=$((count + 1))
+            log_info "Installed NAM model: $f"
+        fi
+    done
+    if [ "$count" -gt 0 ]; then
+        log_success "$count NAM starter model(s) installed in $models_dir"
+    else
+        log_warning "No .nam starter models in /sources; NeuralRack ships functional but without presets"
+    fi
+}
+
+# Realtime audio scheduling for members of the 'audio' group.  PipeWire
+# grants realtime priority via RLIMIT when rtprio/memlock are raised, so
+# no rtkit build is required.  The first-boot service already adds the
+# created user to the 'audio' group (blfs/17-first-boot-service.sh); here
+# we only make sure that group and the limits/sysctl actually exist.
+realtime_tuning() {
+    log_info "Applying realtime audio tuning"
+    groupadd -f audio
+    install -d /etc/security/limits.d
+    cat > /etc/security/limits.d/audio.conf <<'EOF'
+# Realtime audio scheduling for members of the audio group (audio profiles)
+@audio   -   rtprio     99
+@audio   -   memlock    unlimited
+@audio   -   nice       -19
+EOF
+    install -d /etc/sysctl.d
+    cat > /etc/sysctl.d/90-audio.conf <<'EOF'
+# Low-latency audio tuning (audio profiles)
+vm.swappiness = 10
+fs.inotify.max_user_instances = 524288
+EOF
+    log_success "Realtime tuning applied (audio group + limits.d/audio.conf + sysctl)"
+}
+
 log_info "Phase 1: LV2 host stack (zix, serd, sord, lv2, sratom, lilv)"
 meson_build zix
 meson_build serd
@@ -330,6 +448,24 @@ build_libsndfile
 log_info "Phase 3: NeuralRack v0.4.1 (LV2 + standalone)"
 build_neuralrack
 
+log_info "Phase 4: LV2 plugin packs (LSP Plugins + Dragonfly Reverb)"
+if has_pkg audio-plugins; then
+    build_lsp_plugins
+    build_dragonfly_reverb
+else
+    log_info "Skipping plugin packs (no audio-plugins token on profile ${PROFILE:-audio-cli})"
+fi
+
+log_info "Phase 5: Neural Amp Modeler starter models (best-effort)"
+if has_pkg audio-plugins; then
+    install_nam_models
+else
+    log_info "Skipping NAM starter models (no audio-plugins token)"
+fi
+
+log_info "Phase 6: realtime audio tuning (audio group + limits + sysctl)"
+realtime_tuning
+
 log_success "Audio studio stack build complete"
 INNEREOF
 
@@ -337,6 +473,7 @@ run_privileged chmod +x "$LFS/build-audio-studio.sh"
 run_privileged chroot "$LFS" /usr/bin/env -i \
     HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
     PROFILE="${PROFILE:-audio-studio}" \
+    LFS_PROFILE_PACKAGES="${LFS_PROFILE_PACKAGES:-}" \
     /bin/bash /build-audio-studio.sh
 
 log_success "Audio studio stack built successfully"

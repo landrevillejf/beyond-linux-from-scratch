@@ -628,6 +628,16 @@ https://download.drobilla.net/lilv-0.26.4.tar.xz
 https://github.com/libsndfile/libsndfile/releases/download/1.2.2/libsndfile-1.2.2.tar.xz
 https://github.com/brummer10/NeuralRack/releases/download/v0.4.1/NeuralRack-v0.4.1-src.tar.xz
 
+# LV2 plugin packs for the audio-studio profile ('audio-plugins' token),
+# built by blfs/27-audio-studio.sh Phase 4.  Both "-src" release tarballs
+# bundle their sub-projects/DPF framework; the generic GitHub refs/tags
+# archive does not and must never be used here.  (Ardour is intentionally
+# NOT wired: it ships no buildable tarball -- its GitHub archive is an
+# export-ignore stub and the official release-dist requires an account --
+# so it needs a git-clone build and is deferred to a follow-up.)
+https://github.com/lsp-plugins/lsp-plugins/releases/download/1.2.35/lsp-plugins-src-1.2.35.tar.gz
+https://github.com/michaelwillis/dragonfly-reverb/releases/download/3.2.10/dragonfly-reverb-3.2.10-src.tar.xz
+
 # JACK audio connection kit (audio-core promise of the audio profiles;
 # no BLFS book page, built by blfs/24-multimedia.sh with its bundled
 # waf; PipeWire detects it and ships the pipewire-jack API layer).
