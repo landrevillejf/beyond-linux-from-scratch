@@ -1457,7 +1457,8 @@ class TestAudioStudioStageGuardrails:
         """The audio-studio promise requires the PREEMPT_RT kernel;
         the preemption model is exclusive, so the voluntary model must
         be absent, and live-ISO boot options must survive."""
-        kernel = Path('config/kernel-config-audio-studio').read_text()
+        kernel = Path(__file__).parent.parent / 'config/kernel-config-audio-studio'
+        kernel = kernel.read_text()
         assert 'CONFIG_PREEMPT_RT=y' in kernel
         assert 'CONFIG_EXPERT=y' in kernel
         assert 'CONFIG_PREEMPT_VOLUNTARY' not in kernel
