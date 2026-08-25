@@ -186,6 +186,7 @@ is_installed() {
         libevent) have_pc libevent ;;
         libnl) have_pc libnl-3.0 ;;
         libmnl) have_pc libmnl ;;
+        libpcap) have_pc libpcap ;;
         nghttp2) have_pc libnghttp2 ;;
         nmap) have_cmd nmap ;;
         lynx) have_cmd lynx ;;
@@ -323,6 +324,16 @@ build_commands_nghttp2() {
                 --disable-static  \
                 --enable-lib-only \
                 --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/libpcap – nmap's recommended dependency.  Without it
+# nmap statically compiles its bundled libpcap, which picks up the
+# installed libnl-3 netlink support and then fails the final link
+# with undefined nl_*/genl_* symbols (nightly #186).
+build_libpcap() { book_install libpcap build_commands_libpcap; }
+build_commands_libpcap() {
+    ./configure --prefix=/usr &&
     make -j"$JOBS" && make install
 }
 
@@ -534,6 +545,9 @@ run_build required libmnl
 
 # nghttp2 – HTTP/2 library
 run_build required nghttp2
+
+# libpcap – packet capture library nmap links against
+run_build required libpcap
 
 log_info "Phase 3: Network tools"
 

@@ -4,6 +4,37 @@
 
 ### Fixed
 
+- **cmake: command not found in blfs-libs (nightly #186)**
+  (`blfs/08-build-blfs-base.sh`)
+  - full/sysvinit/x86_64 passed libpng and died on the next package:
+    `/build-blfs-libs.sh: line 306: cmake: command not found` while
+    building libjpeg-turbo, the first cmake consumer.  No stage ever
+    built cmake.  The blfs-base stage now installs it after cURL
+    using the BLFS book bootstrap commands; every cmake dependency
+    that does not exist yet at that point (libarchive, libuv,
+    nghttp2, zstd plus the book's jsoncpp/cppdap/librhash) is
+    excluded with `--no-system-*` so the bundled copy is used
+
+- **nmap final link missing libnl symbols (nightly #186)**
+  (`blfs/23-basic-networking.sh`)
+  - minimal/x86_64/systemd failed linking nmap with undefined
+    references to `nl_socket_free`, `genl_ctrl_search_by_name`, etc.
+    from the bundled libpcap: without a system libpcap, nmap
+    statically compiles its bundled copy, which picks up the
+    installed libnl-3 netlink support and never receives `-lnl-3`
+    at the final link.  The stage now builds the system libpcap
+    (BLFS basicnet commands, nmap's recommended dependency) in
+    Phase 2 before nmap
+
+- **Expired inkscape.org gallery URL (nightly #186)**
+  (`packages/custom-sources.list`)
+  - The official wget-list points at
+    `inkscape.org/gallery/item/56344/inkscape-1.4.2.tar.xz`, which
+    now returns HTTP 403 (gallery item URLs expire).  The override
+    repoints to the BLFS conglomeration mirror
+    (`ftp2.osuosl.org/pub/blfs/conglomeration/inkscape/`), which
+    keeps every book source under its book filename
+
 - **blfs-libs pushd into a log line (nightly #184)**
   (`blfs/08a`, `08b`, `08c`, `08d`, `09a`, `09b`, `09c`, `09d`, `23`,
   `24`, `25`, `26`, `27`)

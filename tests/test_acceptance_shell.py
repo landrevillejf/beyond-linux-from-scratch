@@ -589,6 +589,65 @@ class TestLFSComplianceGuardrails:
         assert 'SOURCES_HOST="$LFS/sources"' in content
         assert '$(dirname "$LFS")/sources' not in content
 
+    def test_blfs_base_builds_cmake_before_libs_stage(self):
+        """blfs-base must install cmake before the 08a libs stage.
+
+        Nightly #186 (full/sysvinit/x86_64) died on the second
+        blfs-libs package: libjpeg-turbo ran cmake, which no stage
+        ever built ("cmake: command not found").  The blfs-base
+        stage now builds cmake with the book bootstrap commands;
+        --no-system-* flags keep the bundled copy for every cmake
+        dependency that does not exist yet at that point.
+        """
+        content = Path('blfs/08-build-blfs-base.sh').read_text()
+        assert 'find_archive cmake' in content, \
+            "blfs-base must build cmake (nightly #186)"
+        assert './bootstrap --prefix=/usr' in content
+        for lib in ('libarchive', 'libuv', 'nghttp2', 'zstd'):
+            assert f'--no-system-{lib}' in content, \
+                f"cmake must bundle {lib} (not built before 08a)"
+        # cmake must land in blfs-base, before any expat/libxml2 work,
+        # and no later stage may claim it is still missing.
+        libs = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        assert 'cmake: command not found' not in libs
+
+    def test_basic_networking_builds_libpcap_before_nmap(self):
+        """Stage 23 must build system libpcap before nmap.
+
+        Nightly #186 (minimal/x86_64/systemd) failed linking nmap:
+        without a system libpcap, nmap statically compiles its
+        bundled copy, which picks up the installed libnl-3 netlink
+        support and leaves nl_*/genl_* symbols undefined at the
+        final link.  The BLFS book lists libpcap as nmap's
+        recommended dependency, so the stage builds it first.
+        """
+        content = Path('blfs/23-basic-networking.sh').read_text()
+        pcap_pos = content.find('run_build required libpcap')
+        nmap_pos = content.find('run_build required nmap')
+        assert pcap_pos != -1, "libpcap build missing from stage 23"
+        assert nmap_pos != -1, "nmap build missing from stage 23"
+        assert pcap_pos < nmap_pos, \
+            "libpcap must be built before nmap (nightly #186)"
+        assert 'build_commands_libpcap' in content
+        assert 'libpcap) have_pc libpcap ;;' in content
+
+    def test_inkscape_overridden_via_conglomeration_mirror(self):
+        """The dead inkscape.org gallery URL must be overridden.
+
+        Nightly #186 reported HTTP 403 for
+        inkscape.org/gallery/item/56344/inkscape-1.4.2.tar.xz: the
+        gallery item URL expired.  custom-sources.list is the only
+        file that overrides the fetched official wget-lists, so the
+        BLFS conglomeration mirror must be listed there exactly
+        once.
+        """
+        content = Path('packages/custom-sources.list').read_text()
+        url = ('https://ftp2.osuosl.org/pub/blfs/conglomeration/'
+               'inkscape/inkscape-1.4.2.tar.xz')
+        assert content.count(url) == 1, \
+            "inkscape conglomeration override missing or duplicated"
+        assert 'inkscape.org/gallery' not in content
+
     def test_final_validation_has_standalone_guardrails(self):
         """final/16 must verify /tools removal and scan for /tools
         rpaths (audit finding F-08)."""

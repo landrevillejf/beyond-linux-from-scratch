@@ -104,8 +104,9 @@ fi
 # -----------------------------------------------------------------
 # Internal build script – per-package BLFS book commands.
 # Order follows the BLFS dependency chain: OpenSSL first (cURL
-# links against it), then cURL, expat, libxml2, blfs-bootscripts.
-# ICU support is omitted for libxml2 because icu4c is only built
+# links against it), then cURL, CMake (build tool needed by the
+# next stage), expat, libxml2, blfs-bootscripts.  ICU support is
+# omitted for libxml2 because icu4c is only built
 # later by 08a-build-blfs-libs.sh (it is optional and only needed
 # by QtWebEngine).
 # -----------------------------------------------------------------
@@ -255,6 +256,31 @@ find docs \( -name 'Makefile*' -o \
     -name 'CMakeLists.txt' \) -delete
 mkdir -p "/usr/share/doc/${curl_dir}"
 cp -v -R docs -T "/usr/share/doc/${curl_dir}"
+cd /sources
+
+# ---- CMake (BLFS general – build tool required by the 08a libs stage) ----
+# Nightly #186: libjpeg-turbo, the first cmake consumer (08a phase 1),
+# died with "cmake: command not found" because no stage built cmake.
+# The book lists cURL, libarchive, libuv and nghttp2 as cmake's
+# dependencies; at this point only cURL exists, so the book's
+# --system-libs is kept but every missing library is excluded with
+# --no-system-* and falls back to the bundled copy.
+cmake_dir=$(tar -tf "$(find_archive cmake)" | head -1 | cut -d/ -f1)
+extract "$(find_archive cmake)"
+sed -i '/"lib64"/s/64//' Modules/GNUInstallDirs.cmake
+./bootstrap --prefix=/usr \
+    --system-libs \
+    --mandir=/share/man \
+    --no-system-jsoncpp \
+    --no-system-cppdap \
+    --no-system-librhash \
+    --no-system-libarchive \
+    --no-system-libuv \
+    --no-system-nghttp2 \
+    --no-system-zstd \
+    --docdir="/usr/share/doc/${cmake_dir}"
+make -j"$(nproc)"
+make install
 cd /sources
 
 # ---- expat (BLFS general) ----
