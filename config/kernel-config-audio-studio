@@ -1,0 +1,112 @@
+# ============================================================================
+# LINUX KERNEL CONFIGURATION (x86_64) -- audio-studio profile
+# ============================================================================
+# Realtime variant of config/kernel-config, auto-selected by
+# lfs/08-build-kernel.sh (it prefers kernel-config-$PROFILE over the
+# default kernel-config).  The differences from the base config are the
+# PREEMPT_RT realtime preemption model and the low-latency timer options
+# required for pro-audio work (Ardour/LV2 plugin hosts on PipeWire).
+# ============================================================================
+
+# ============================================================================
+# GENERAL SETUP
+# ============================================================================
+CONFIG_SYSTEM_TRUSTED_KEYS=""
+CONFIG_SYSTEM_REVOCATION_KEYS=""
+CONFIG_DEFAULT_HOSTNAME="lfs-desktop"
+CONFIG_LOCALVERSION="-lfs-audio"
+
+# Serial console: lets the QEMU boot smoke test (tools/qemu-boot-smoke.sh)
+# observe kernel and userspace output with console=ttyS0.
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+
+# ============================================================================
+# PROCESSOR TYPE AND FEATURES (x86_64)
+# ============================================================================
+CONFIG_SMP=y
+CONFIG_NR_CPUS=64
+
+# --- Realtime preemption model (the audio-studio promise) ---------------
+# PREEMPT_RT selects CONFIG_PREEMPT and makes almost every interrupt
+# threadable, giving the bounded-latency scheduling that JACK/PipeWire
+# realtime audio needs.  CONFIG_EXPERT is the prerequisite that makes
+# the PREEMPT_RT choice visible in the preemption-model menu.  The base
+# config's voluntary preemption model is deliberately NOT carried over:
+# the preemption model is a single exclusive choice.
+CONFIG_EXPERT=y
+CONFIG_PREEMPT_RT=y
+CONFIG_HIGH_RES_TIMERS=y
+CONFIG_HZ_1000=y
+CONFIG_HZ=1000
+CONFIG_NO_HZ_FULL=y
+CONFIG_IRQ_FORCED_THREADING=y
+CONFIG_HPET=y
+
+# ============================================================================
+# DEVICE DRIVERS
+# ============================================================================
+# Audio drivers
+CONFIG_SND=y
+CONFIG_SND_HDA_INTEL=y
+CONFIG_SND_USB_AUDIO=y
+CONFIG_SND_PCI=y
+# High-precision audio timing helpers
+CONFIG_SND_HRTIMER=y
+
+# Network drivers
+CONFIG_E1000=y
+CONFIG_E1000E=y
+CONFIG_R8169=y
+CONFIG_ATH9K=y
+CONFIG_IWLWIFI=y
+
+# Storage drivers
+CONFIG_BLK_DEV_NVME=y
+CONFIG_ATA=y
+CONFIG_SATA_AHCI=y
+
+# Input drivers
+CONFIG_KEYBOARD_ATKBD=y
+CONFIG_MOUSE_PS2=y
+CONFIG_HID=y
+CONFIG_USB_HID=y
+
+# ============================================================================
+# FILE SYSTEMS
+# ============================================================================
+CONFIG_EXT4_FS=y
+CONFIG_XFS_FS=y
+CONFIG_BTRFS_FS=y
+CONFIG_FUSE_FS=y
+CONFIG_VFAT_FS=y
+CONFIG_NTFS_FS=y
+CONFIG_PROC_FS=y
+CONFIG_SYSFS=y
+# Live ISO boot: the initramfs (final/12-create-initramfs.sh) mounts the
+# boot media (iso9660) and the live.squashfs it holds via a loop device.
+CONFIG_ISO9660_FS=y
+CONFIG_SQUASHFS=y
+CONFIG_BLK_DEV_LOOP=y
+
+# ============================================================================
+# NETWORKING
+# ============================================================================
+CONFIG_NETFILTER=y
+CONFIG_IP_NF_IPTABLES=y
+CONFIG_BRIDGE=y
+CONFIG_VLAN_8021Q=y
+
+# ============================================================================
+# SECURITY
+# ============================================================================
+CONFIG_SECURITY_SELINUX=y
+CONFIG_SECURITY_APPARMOR=y
+CONFIG_CRYPTO=y
+
+# ============================================================================
+# VIRTUALIZATION
+# ============================================================================
+CONFIG_KVM=y
+CONFIG_VHOST_NET=y
+CONFIG_VIRTIO_PCI=y
