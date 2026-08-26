@@ -31,7 +31,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
@@ -50,7 +53,10 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     log_error "chroot not working"
     exit 1
@@ -191,6 +197,7 @@ is_installed() {
         nmap) have_cmd nmap ;;
         lynx) have_cmd lynx ;;
         ntp) have_cmd ntpd || have_cmd ntpdate ;;
+        sqlite) have_cmd sqlite3 ;;
         nfs-utils) have_cmd showmount ;;
         wireless_tools) have_cmd iwconfig || have_cmd iw ;;
         wpa_supplicant) have_cmd wpa_supplicant ;;
@@ -382,6 +389,25 @@ build_commands_ntp() {
     make -j"$JOBS" && make install
 }
 
+# BLFS server/sqlite -- the book lists sqlite as a REQUIRED dependency
+# of nfs-utils (LIBS="-lsqlite3 -levent_core" links the fsidd daemon),
+# but the server stage that normally builds it runs AFTER this one, so
+# nfs-utils configure died with "C compiler cannot create executables"
+# (nightly #189).  Build it here, right before its first consumer;
+# 25-server.sh then skips it through its is_installed check.
+build_sqlite() { book_install sqlite build_commands_sqlite; }
+build_commands_sqlite() {
+    ./configure --prefix=/usr     \
+                --disable-static  \
+                --enable-fts4     \
+                --enable-fts5     \
+                CPPFLAGS="-D SQLITE_ENABLE_COLUMN_METADATA=1 \
+                          -D SQLITE_ENABLE_UNLOCK_NOTIFY=1   \
+                          -D SQLITE_ENABLE_DBSTAT_VTAB=1     \
+                          -D SQLITE_SECURE_DELETE=1" &&
+    make -j"$JOBS" && make install
+}
+
 # BLFS basicnet/nfs-utils
 build_nfs_utils() { book_install nfs-utils build_commands_nfs_utils; }
 build_commands_nfs_utils() {
@@ -563,6 +589,10 @@ log_info "Phase 4: Time synchronization"
 run_build required ntp
 
 log_info "Phase 5: Network file systems"
+
+# sqlite -- required by nfs-utils (fsidd links -lsqlite3); built here
+# because the server stage that owns it runs after this one.
+run_build required sqlite
 
 # nfs-utils – NFS server and client tools
 run_build required nfs-utils

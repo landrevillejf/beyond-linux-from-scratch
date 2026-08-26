@@ -177,8 +177,10 @@ https://download.gnome.org/sources/pango/1.56/pango-1.56.4.tar.xz
 # dbus
 https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz
 
-# dbus-glib
-https://dbus.freedesktop.org/releases/dbus-glib/dbus-glib-0.112.tar.gz
+# dbus-glib -- deliberately NO override: the 0.112 pin no longer
+# compiles against the current glib headers (G_TYPE_VALUE_ARRAY
+# deprecation is a hard #pragma GCC error, nightly #189), and the
+# official BLFS wget-list already carries the fixed 0.114 release.
 
 # at-spi2-core
 https://download.gnome.org/sources/at-spi2-core/2.56/at-spi2-core-2.56.4.tar.xz

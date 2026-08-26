@@ -61,6 +61,26 @@
 
 ### Fixed
 
+- **dbus-glib 0.112 no longer compiles (nightly #189)**
+  (`packages/custom-sources.list`)
+  - Every desktop profile died in blfs-libs: make stops in
+    `dbus-gvalue.c` because the `G_TYPE_VALUE_ARRAY` deprecation is a
+    hard `#pragma GCC error` with the glib headers built earlier in
+    the same stage.  The custom-sources.list override pinned 0.112
+    while the official BLFS wget-list already carries 0.114, which
+    removes the deprecated GValueArray usage.  The override is
+    dropped so the official 0.114 release is used
+
+- **nfs-utils configure: "C compiler cannot create executables"
+  (nightly #189)** (`blfs/23-basic-networking.sh`)
+  - minimal/server/arm64 profiles died in basic-networking: the book
+    configures nfs-utils with `LIBS="-lsqlite3 -levent_core"`
+    (required for the fsidd daemon), but sqlite is only built by the
+    server stage, which runs AFTER basic-networking, so every
+    configure probe failed to link.  Stage 23 now builds sqlite
+    (book server/sqlite commands) right before nfs-utils; the server
+    stage skips it through its is_installed check
+
 - **Dead ntp.org download URL (nightly #187)**
   (`packages/custom-sources.list`)
   - minimal/sysvinit/x86_64 died in basic-networking with

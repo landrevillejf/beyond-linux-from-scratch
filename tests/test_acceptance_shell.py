@@ -1608,6 +1608,27 @@ class TestProfilePromiseGuardrails:
         listed = self._listed_filenames()
         assert listed.count('jack2-1.9.22.tar.gz') == 0
 
+    def test_dbus_glib_override_does_not_downgrade_to_0_112(self):
+        """dbus-glib 0.112 no longer compiles against the current glib
+        headers (the G_TYPE_VALUE_ARRAY deprecation is a hard
+        '#pragma GCC error', nightly #189).  The official BLFS
+        wget-list already carries the fixed 0.114 release, so
+        custom-sources.list must not override it back to 0.112."""
+        content = self.SOURCES.read_text()
+        assert 'dbus-glib-0.112' not in content
+
+    def test_networking_stage_builds_sqlite_before_nfs_utils(self):
+        """nfs-utils configure links every probe program with
+        LIBS="-lsqlite3 -levent_core" (the book requires both for the
+        fsidd daemon), so sqlite must exist in the chroot first;
+        nightly #189 died with 'C compiler cannot create executables'
+        because the server stage owning sqlite runs later."""
+        content = Path('blfs/23-basic-networking.sh').read_text()
+        assert 'run_build required sqlite' in content
+        assert content.index('run_build required sqlite') < \
+            content.index('run_build required nfs-utils')
+        assert 'LIBS="-lsqlite3 -levent_core"' in content
+
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image
         without Java; the stage must stay fail-fast."""
