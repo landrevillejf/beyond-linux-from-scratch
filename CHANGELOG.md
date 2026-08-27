@@ -61,6 +61,28 @@
 
 ### Fixed
 
+- **nfs-utils configure: "Please install rpcgen" (nightly #192)**
+  (`blfs/23-basic-networking.sh`)
+  - All 12 profiles died in basic-networking at nfs-utils configure:
+    `configure: error: Please install rpcgen or use --with-rpcgen`.
+    glibc no longer ships `rpc/rpc.h` nor rpcgen, and the BLFS book
+    lists libtirpc (RPC headers/library) and rpcsvc-proto (rpcgen)
+    as REQUIRED nfs-utils dependencies, plus rpcbind at runtime.
+    All three tarballs (plus the libtirpc gcc15 patch) were already
+    downloaded into /sources by the official wget-list but no stage
+    ever built them.  Stage 23 now builds libtirpc, rpcsvc-proto and
+    rpcbind with the book commands between sqlite and nfs-utils
+
+- **gdk-pixbuf missing shared-mime-info dependency (nightly #191/#192)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - Every desktop profile died in blfs-libs with meson's
+    `Dependency "shared-mime-info" not found, tried pkgconfig and
+    cmake`: since gdk-pixbuf 2.43 the shared-mime-info pkg-config
+    file is a hard meson dependency, but the stage built
+    shared-mime-info after gdk-pixbuf.  The two builds are swapped;
+    shared-mime-info only needs glib2 and libxml2, both already
+    installed at that point
+
 - **dbus-glib 0.112 no longer compiles (nightly #189)**
   (`packages/custom-sources.list`)
   - Every desktop profile died in blfs-libs: make stops in

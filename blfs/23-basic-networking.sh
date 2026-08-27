@@ -198,6 +198,9 @@ is_installed() {
         lynx) have_cmd lynx ;;
         ntp) have_cmd ntpd || have_cmd ntpdate ;;
         sqlite) have_cmd sqlite3 ;;
+        libtirpc) have_pc libtirpc ;;
+        rpcsvc-proto) have_cmd rpcgen ;;
+        rpcbind) have_cmd rpcbind ;;
         nfs-utils) have_cmd showmount ;;
         wireless_tools) have_cmd iwconfig || have_cmd iw ;;
         wpa_supplicant) have_cmd wpa_supplicant ;;
@@ -408,6 +411,47 @@ build_commands_sqlite() {
     make -j"$JOBS" && make install
 }
 
+# BLFS basicnet/libtirpc -- REQUIRED by nfs-utils: its configure aborts
+# on missing rpc/rpc.h (glibc no longer ships RPC headers) and on a
+# missing rpcgen (nightly #192).  The gcc15 patch only applies when the
+# official wget-list downloaded it into /sources.
+build_libtirpc() { book_install libtirpc build_commands_libtirpc; }
+build_commands_libtirpc() {
+    local p
+    for p in ../libtirpc-*-gcc15_fixes-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --disable-static  \
+                --disable-gssapi &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/rpcsvc-proto -- ships the rpcsvc headers plus the
+# rpcgen program nfs-utils configure demands ("Please install rpcgen
+# or use --with-rpcgen", nightly #192).
+build_rpcsvc_proto() { book_install rpcsvc-proto build_commands_rpcsvc_proto; }
+build_commands_rpcsvc_proto() {
+    ./configure --sysconfdir=/etc &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS basicnet/rpcbind -- the book lists it as a REQUIRED runtime
+# dependency of nfs-utils (rpc.statd registers through it).  Needs
+# libtirpc, built just above.
+build_rpcbind() { book_install rpcbind build_commands_rpcbind; }
+build_commands_rpcbind() {
+    sed -i "/servname/s:rpcbind:sunrpc:" src/rpcbind.c
+    ./configure --prefix=/usr        \
+                --bindir=/usr/sbin   \
+                --with-rpcuser=root  \
+                --enable-warmstarts  \
+                --without-systemdsystemunitdir &&
+    make -j"$JOBS" && make install
+}
+
 # BLFS basicnet/nfs-utils
 build_nfs_utils() { book_install nfs-utils build_commands_nfs_utils; }
 build_commands_nfs_utils() {
@@ -593,6 +637,18 @@ log_info "Phase 5: Network file systems"
 # sqlite -- required by nfs-utils (fsidd links -lsqlite3); built here
 # because the server stage that owns it runs after this one.
 run_build required sqlite
+
+# libtirpc -- provides rpc/rpc.h; glibc dropped the RPC headers, so
+# nfs-utils configure cannot probe them without it (nightly #192).
+run_build required libtirpc
+
+# rpcsvc-proto -- provides the rpcgen program nfs-utils demands at
+# configure time (nightly #192).
+run_build required rpcsvc-proto
+
+# rpcbind -- REQUIRED runtime dependency of nfs-utils per the book;
+# needs the libtirpc/rpcsvc-proto chain built just above.
+run_build required rpcbind
 
 # nfs-utils – NFS server and client tools
 run_build required nfs-utils

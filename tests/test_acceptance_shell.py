@@ -553,6 +553,27 @@ class TestLFSComplianceGuardrails:
         assert pcre2_pos < glib2_pos, \
             "pcre2 must be built before glib2 (nightly #183)"
 
+    def test_blfs_libs_builds_shared_mime_info_before_gdk_pixbuf(self):
+        """shared-mime-info must precede gdk-pixbuf in blfs-libs.
+
+        Nightly #191/#192 (all desktop profiles) died at gdk-pixbuf:
+        since gdk-pixbuf 2.43 its meson build declares a hard
+        dependency on the shared-mime-info pkg-config file
+        ("Dependency \"shared-mime-info\" not found, tried pkgconfig
+        and cmake"), but the stage built shared-mime-info after it.
+        shared-mime-info itself only needs glib2 and libxml2, both
+        already installed at that point, so the swap is safe.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        smi_pos = content.find('run_build required shared-mime-info')
+        pixbuf_pos = content.find('run_build required gdk-pixbuf')
+        assert smi_pos != -1, \
+            "shared-mime-info build missing from blfs-libs"
+        assert pixbuf_pos != -1, "gdk-pixbuf build missing from blfs-libs"
+        assert smi_pos < pixbuf_pos, \
+            "shared-mime-info must be built before gdk-pixbuf " \
+            "(nightly #191/#192)"
+
     def test_prep_src_keeps_logs_off_stdout(self):
         """prep_src stdout is captured as the extracted directory.
 
@@ -1628,6 +1649,31 @@ class TestProfilePromiseGuardrails:
         assert content.index('run_build required sqlite') < \
             content.index('run_build required nfs-utils')
         assert 'LIBS="-lsqlite3 -levent_core"' in content
+
+    def test_networking_stage_builds_rpc_chain_before_nfs_utils(self):
+        """libtirpc, rpcsvc-proto and rpcbind must precede nfs-utils.
+
+        Nightly #192 (all 12 profiles) died at nfs-utils configure
+        with "Please install rpcgen or use --with-rpcgen": glibc no
+        longer ships rpc/rpc.h nor rpcgen, and the BLFS book lists
+        libtirpc (RPC headers/library) and rpcsvc-proto (rpcgen) as
+        REQUIRED nfs-utils dependencies, plus rpcbind at runtime.
+        Both tarballs were already downloaded into /sources by the
+        official wget-list but no stage ever built them.
+        """
+        content = Path('blfs/23-basic-networking.sh').read_text()
+        nfs_pos = content.index('run_build required nfs-utils')
+        for pkg in ('libtirpc', 'rpcsvc-proto', 'rpcbind'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 23"
+            assert pos < nfs_pos, \
+                f"{pkg} must be built before nfs-utils (nightly #192)"
+        assert 'build_commands_libtirpc' in content
+        assert 'build_commands_rpcsvc_proto' in content
+        assert 'build_commands_rpcbind' in content
+        assert 'libtirpc) have_pc libtirpc ;;' in content
+        assert 'rpcsvc-proto) have_cmd rpcgen ;;' in content
+        assert 'rpcbind) have_cmd rpcbind ;;' in content
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image

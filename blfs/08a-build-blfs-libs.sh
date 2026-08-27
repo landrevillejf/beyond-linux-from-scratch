@@ -1253,11 +1253,14 @@ run_build required at-spi2-core
 
 log_info "Phase 6: Image loading and MIME"
 
-# gdk-pixbuf – depends on glib2, libpng, libjpeg-turbo, tiff
-run_build required gdk-pixbuf
-
-# shared-mime-info – depends on glib2, libxml2
+# shared-mime-info – depends on glib2, libxml2; since gdk-pixbuf 2.43
+# its pkg-config file is a hard meson dependency, so it must be built
+# first (nightly #191: "Dependency shared-mime-info not found")
 run_build required shared-mime-info
+
+# gdk-pixbuf – depends on glib2, libpng, libjpeg-turbo, tiff,
+# shared-mime-info
+run_build required gdk-pixbuf
 
 # hicolor-icon-theme – icon directory structure
 run_build required hicolor-icon-theme
