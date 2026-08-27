@@ -61,6 +61,26 @@
 
 ### Fixed
 
+- **gdk-pixbuf 2.44.4 hard depends on glycin-2 (nightly #193)**
+  (`packages/custom-sources.list`)
+  - All desktop profiles died in blfs-libs: meson reported
+    `Dependency "glycin-2" not found, tried pkgconfig and cmake`
+    at gdk-pixbuf 2.44.4.  That version introduced a hard meson
+    dependency on glycin-2, which is not in the BLFS 12.4 book and
+    has no buildable release tarball.  The override is reverted to
+    the book version 2.42.12, whose only required dependencies are
+    glib2, libjpeg-turbo, libpng and shared-mime-info
+
+- **libtirpc 1.3.6 fails to compile with GCC 15 (nightly #193)**
+  (`packages/custom-sources.list`)
+  - All CLI profiles died in basic-networking: libtirpc 1.3.6
+    emitted `conflicting types for 'xdr_opaque_auth'` because GCC 15
+    defaults to C23 where `()` means "no arguments" instead of
+    K&R "unspecified".  The BLFS gcc15 patch
+    (libtirpc-1.3.6-gcc15_fixes-1.patch) fixes this but was not
+    downloaded; it is now listed in the patches section of
+    custom-sources.list
+
 - **nfs-utils configure: "Please install rpcgen" (nightly #192)**
   (`blfs/23-basic-networking.sh`)
   - All 12 profiles died in basic-networking at nfs-utils configure:

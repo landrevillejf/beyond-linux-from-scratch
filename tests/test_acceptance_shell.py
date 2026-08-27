@@ -574,6 +574,36 @@ class TestLFSComplianceGuardrails:
             "shared-mime-info must be built before gdk-pixbuf " \
             "(nightly #191/#192)"
 
+    def test_gdk_pixbuf_pinned_to_blfs_book_version(self):
+        """gdk-pixbuf must stay at the BLFS 12.4 book version (2.42.x).
+
+        Nightly #193 (all desktop profiles) died at gdk-pixbuf 2.44.4:
+        meson reported `Dependency "glycin-2" not found, tried pkgconfig
+        and cmake`.  Version 2.44.x introduced a hard meson dependency
+        on glycin-2, which is not in the BLFS book and has no buildable
+        release tarball.  The custom-sources.list override must pin the
+        book version 2.42.12, whose only required dependencies are
+        glib2, libjpeg-turbo, libpng and shared-mime-info.
+        """
+        content = Path('packages/custom-sources.list').read_text()
+        assert 'gdk-pixbuf/2.42/gdk-pixbuf-2.42.12.tar.xz' in content, \
+            "gdk-pixbuf must be pinned to BLFS book version 2.42.12"
+        assert 'gdk-pixbuf/2.44' not in content, \
+            "gdk-pixbuf 2.44.x requires glycin-2 (not in BLFS book)"
+
+    def test_libtirpc_gcc15_patch_in_custom_sources(self):
+        """The libtirpc gcc15 patch must be in custom-sources.list.
+
+        Nightly #193 (all CLI profiles) died at libtirpc 1.3.6:
+        GCC 15 defaults to C23 where `()` means no-args, causing
+        `conflicting types for 'xdr_opaque_auth'`.  The BLFS
+        gcc15_fixes patch resolves this but is only fetched when
+        listed in custom-sources.list.
+        """
+        content = Path('packages/custom-sources.list').read_text()
+        assert 'libtirpc-1.3.6-gcc15_fixes' in content, \
+            "libtirpc gcc15 patch missing from custom-sources.list"
+
     def test_prep_src_keeps_logs_off_stdout(self):
         """prep_src stdout is captured as the extracted directory.
 
