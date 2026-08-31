@@ -645,6 +645,21 @@ class ProfileManager:
 # SOURCE DOWNLOADER
 # ============================================================================
 
+# Reference kept so the IPv4-only wrapper below can delegate to the
+# real resolver.
+_ORIGINAL_GETADDRINFO = socket.getaddrinfo
+
+
+def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    """Restrict DNS resolution to IPv4 addresses.
+
+    The IPv6 route from CI runners to some mirrors (ftp.gnu.org)
+    intermittently dies with ENETUNREACH while IPv4 keeps working
+    (Nightly #194), so download attempts alternate between stacks.
+    """
+    return _ORIGINAL_GETADDRINFO(host, port, socket.AF_INET, type, proto, flags)
+
+
 class SourceDownloader:
     """Download and verify LFS/BLFS sources"""
 
@@ -719,6 +734,12 @@ class SourceDownloader:
 
         for attempt in range(retries):
             self.logger.info(f"Downloading: {filename} (attempt {attempt + 1}/{retries})")
+            # Alternate dual-stack and IPv4-only resolution: the IPv6
+            # route to some mirrors dies intermittently on CI runners
+            # (ENETUNREACH) while IPv4 keeps working.
+            previous_getaddrinfo = socket.getaddrinfo
+            if attempt % 2 == 1:
+                socket.getaddrinfo = _ipv4_only_getaddrinfo
             try:
                 previous_timeout = socket.getdefaulttimeout()
                 socket.setdefaulttimeout(self.timeout)
@@ -754,6 +775,8 @@ class SourceDownloader:
                     continue
                 self.logger.error(f"Failed to download {url}: {e}")
                 return False
+            finally:
+                socket.getaddrinfo = previous_getaddrinfo
 
     def download_from_list(self, list_file: Path, parallel: int = 4,
                            retry_passes: int = 2) -> bool:
@@ -1156,11 +1179,13 @@ class LFSBuilder:
                  download_retries: Optional[int] = None,
                  milestone: Optional[str] = None,
                  stage_timeout: Optional[int] = None,
-                 nightly: bool = False):
+                 nightly: bool = False,
+                 skip_man_pages: bool = False):
         self.profile = profile
         self.output_dir = Path(output_dir).resolve()
         self.milestone = milestone
         self.nightly = nightly
+        self.skip_man_pages = skip_man_pages
         if isinstance(config_file, str):
             config_file = Path(config_file)
         self.config = LFSConfig(config_file)   # <- UN SEUL ARGUMENT
@@ -1337,6 +1362,7 @@ class LFSBuilder:
             'KERNEL_TYPE': str(self.config.get('kernel.type', 'linux')).lower(),
             'KERNEL_VERSION': str(self.config.get('kernel.version', '6.16.1')),
             'SYSTEM_UPDATER': str(self.profile_config.get('system_updater', True)).lower(),
+            'SKIP_MAN_PAGES': str(self.skip_man_pages).lower(),
             'LFS_VERSION': __version__,
             'ISO_NAME': self.get_iso_name(),
             'LC_ALL': 'POSIX'
@@ -1846,8 +1872,15 @@ class LFSBuilder:
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
-                if not base:
+                # Strip only the first version token and keep the revision
+                # tag plus extension in the key.  Stripping everything after
+                # the version made a tarball and its companion patch hash to
+                # the same key, so the custom gcc15 patch silently evicted
+                # the libtirpc tarball from the generated list (Nightly
+                # #194); it also collapsed distinct patches of the same
+                # package (coreutils i18n vs upstream_fix).
+                base = re.sub(r'[-_][v]?\d+(?:[.+]\d+)*', '', filename, count=1)
+                if not base or base.startswith('.'):
                     self.logger.warning(
                         f"source_key: regex stripped entire filename '{filename}'; "
                         "using full filename as key"
@@ -2338,6 +2371,9 @@ Examples:
     parser.add_argument('--nightly', action='store_true',
                         help='Nightly build mode: append today\'s date to the ISO filename')
 
+    parser.add_argument('--skip-man-pages', action='store_true',
+                        help='Skip man page generation (for environments without rst2man/docutils)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -2409,7 +2445,8 @@ def main():
         download_retries=args.download_retries,
         milestone=args.milestone,
         stage_timeout=args.stage_timeout,
-        nightly=args.nightly
+        nightly=args.nightly,
+        skip_man_pages=args.skip_man_pages
     )
 
     # --- Override architecture via --arch ---

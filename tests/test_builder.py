@@ -1015,7 +1015,8 @@ class TestLFSBuilder:
                 download_retries=None,
                 milestone=None,
                 stage_timeout=None,
-                nightly=False
+                nightly=False,
+                skip_man_pages=False
             )
 
     def test_main_stage_timeout_option(self, tmp_path):
@@ -1585,3 +1586,129 @@ def test_update_sources_list_kernel_valid_skips_download(tmp_path, monkeypatch):
         assert sources_file.exists()
         content = sources_file.read_text()
         assert "kernel.org" not in content
+
+class TestSkipManPages:
+    """Tests for --skip-man-pages flag functionality"""
+
+    def test_skip_man_pages_false_by_default(self, builder):
+        """Verify skip_man_pages is False by default"""
+        assert builder.skip_man_pages is False
+
+    def test_skip_man_pages_exported_in_env(self, builder):
+        """Verify SKIP_MAN_PAGES is exported in environment"""
+        env = builder._get_env()
+        assert 'SKIP_MAN_PAGES' in env
+        assert env['SKIP_MAN_PAGES'] == 'false'
+
+    def test_skip_man_pages_true_exported_correctly(self, temp_dir, mock_config_file):
+        """Verify SKIP_MAN_PAGES=true is exported when flag is set"""
+        output_dir = temp_dir / "lfs-build"
+        builder = LFSBuilder(
+            profile="xfce",
+            output_dir=output_dir,
+            config_file=mock_config_file,
+            skip_man_pages=True
+        )
+        env = builder._get_env()
+        assert env['SKIP_MAN_PAGES'] == 'true'
+
+    def test_skip_man_pages_builder_init_accepts_flag(self, temp_dir, mock_config_file):
+        """Verify LFSBuilder.__init__ accepts skip_man_pages parameter"""
+        output_dir = temp_dir / "lfs-build"
+        builder = LFSBuilder(
+            profile="xfce",
+            output_dir=output_dir,
+            config_file=mock_config_file,
+            skip_man_pages=True
+        )
+        assert hasattr(builder, 'skip_man_pages')
+        assert builder.skip_man_pages is True
+
+
+class TestNightly194Fixes:
+    """Regression tests for the Nightly #194 failures."""
+
+    def test_source_key_keeps_tarball_and_patch_distinct(self, tmp_path, monkeypatch):
+        """A companion patch must not evict its tarball from the list.
+
+        Nightly #194: the libtirpc gcc15 patch hashed to the same key
+        as the official tarball and silently replaced it, so the
+        basic-networking stage died on a missing source archive.
+        """
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'config.json'
+        config_file.write_text(json.dumps({
+            'repositories': ['https://example.com/wget-list'],
+        }))
+        builder = LFSBuilder(profile='minimal',
+                             output_dir=tmp_path / 'out',
+                             config_file=config_file)
+        builder.logger = MagicMock()
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir()
+        (packages_dir / 'custom-sources.list').write_text(
+            'https://www.linuxfromscratch.org/patches/blfs/12.4/'
+            'libtirpc-1.3.6-gcc15_fixes-1.patch\n'
+        )
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = (
+            b'https://downloads.sourceforge.net/libtirpc/libtirpc-1.3.6.tar.bz2\n'
+        )
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            assert builder._update_sources_list() is True
+
+        content = builder._generated_sources_list.read_text()
+        assert 'libtirpc-1.3.6.tar.bz2' in content
+        assert 'libtirpc-1.3.6-gcc15_fixes-1.patch' in content
+
+    def test_ipv4_only_getaddrinfo_forces_af_inet(self):
+        """The wrapper must pin name resolution to IPv4."""
+        import socket
+        import builder as builder_module
+
+        calls = {}
+
+        def fake_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+            calls['args'] = (host, port, family, type, proto, flags)
+            return []
+
+        with patch.object(builder_module, '_ORIGINAL_GETADDRINFO', fake_getaddrinfo):
+            result = builder_module._ipv4_only_getaddrinfo('ftp.gnu.org', 443)
+        assert result == []
+        assert calls['args'][0] == 'ftp.gnu.org'
+        assert calls['args'][2] == socket.AF_INET
+
+    def test_download_alternates_ipv4_only_resolver(self, sources_dir, mock_logger):
+        """Odd attempts resolve IPv4-only; the resolver is restored after.
+
+        Nightly #194: GitHub runners lost their IPv6 route to
+        ftp.gnu.org (ENETUNREACH) while IPv4 kept working, so retries
+        alternate between dual-stack and IPv4-only resolution.
+        """
+        import socket
+        import builder as builder_module
+        from builder import SourceDownloader
+
+        observed = []
+
+        def fake_retrieve(url, dest, *args):
+            observed.append(socket.getaddrinfo)
+            if len(observed) == 1:
+                raise OSError(101, 'Network is unreachable')
+            with open(dest, 'wb') as f:
+                f.write(b'\x1f\x8b\x08\x00')
+
+        downloader = SourceDownloader(sources_dir, mock_logger, timeout=1)
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve), \
+                patch('time.sleep'):
+            result = downloader.download('http://example.com/pkg-1.0.tar.gz', retries=2)
+
+        assert result is True
+        assert observed[0] is not builder_module._ipv4_only_getaddrinfo
+        assert observed[1] is builder_module._ipv4_only_getaddrinfo
+        # The original resolver is restored once the download settles.
+        assert socket.getaddrinfo is not builder_module._ipv4_only_getaddrinfo

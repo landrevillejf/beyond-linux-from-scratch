@@ -485,7 +485,9 @@ build_commands_glib2() {
     [ -f ../glib-skip_warnings-1.patch ] &&
         patch -Np1 -i ../glib-skip_warnings-1.patch
     man_pages=disabled
-    command -v rst2man >/dev/null 2>&1 && man_pages=enabled
+    if [ "${SKIP_MAN_PAGES:-false}" != true ] && command -v rst2man >/dev/null 2>&1; then
+        man_pages=enabled
+    fi
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
@@ -624,11 +626,19 @@ build_commands_at_spi2_core() {
 build_gdk_pixbuf() { book_install gdk-pixbuf build_commands_gdk_pixbuf; }
 
 build_commands_gdk_pixbuf() {
+    # 2.42.x defaults the boolean meson option 'man' to true, so meson
+    # hard-fails without rst2man (Nightly #194).  Skip man pages unless
+    # docutils is installed, mirroring the glib2 pattern above.
+    man_pages=true
+    if [ "${SKIP_MAN_PAGES:-false}" = true ] || ! command -v rst2man >/dev/null 2>&1; then
+        man_pages=false
+    fi
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
           -D others=enabled \
+          -D man="$man_pages" \
           --wrap-mode=nofallback &&
     ninja && ninja install
 }

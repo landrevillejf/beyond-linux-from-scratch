@@ -705,7 +705,12 @@ https://custom.url/source2.tar.xz
         assert "linux-6.16.1.tar.xz" not in content
 
     def test_update_sources_list_filename_completely_stripped_by_regex(self, tmp_path, monkeypatch):
-        """Vérifie que le regex de source_key gère correctement les noms de fichiers avec des versions."""
+        """Vérifie que le regex de source_key gère correctement les noms de fichiers avec des versions.
+
+        Depuis le correctif Nightly #194, l'extension fait partie de la
+        clé : deux archives du même nom de base mais d'extension
+        différente ne se dédupliquent plus et survivent toutes les deux.
+        """
         from builder import LFSBuilder, LFSConfig
         from unittest.mock import patch, MagicMock
 
@@ -746,12 +751,13 @@ https://custom.url/source2.tar.xz
 
         # La substitution du noyau doit être présente
         assert 'linux-6.16.1.tar.xz' in content
-        # Une seule des deux URLs de paquet doit être présente (celle qui survit)
+        # Les deux URLs de paquet survivent : leurs extensions
+        # différentes produisent des clés distinctes (Nightly #194)
         assert 'https://example.com/pkg-5.3.2.tar.xz' in content
-        assert 'https://example.com/pkg_v7.1.0.tar.gz' not in content
-        # Il doit y avoir 2 URLs au total (1 paquet + 1 noyau)
+        assert 'https://example.com/pkg_v7.1.0.tar.gz' in content
+        # Il doit y avoir 3 URLs au total (2 paquets + 1 noyau)
         lines = [line for line in content.splitlines() if line.startswith(('http://', 'https://'))]
-        assert len(lines) == 2
+        assert len(lines) == 3
 
     def test_update_sources_list_kernel_type_linux_libre(self, tmp_path, monkeypatch):
         """Vérifie que le type de noyau 'linux-libre' génère la bonne URL."""

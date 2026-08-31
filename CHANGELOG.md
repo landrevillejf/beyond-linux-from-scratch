@@ -61,6 +61,45 @@
 
 ### Fixed
 
+- **Sources list dedup evicted tarballs in favour of patches (nightly #194)**
+  (`builder.py`)
+  - `source_key()` stripped everything after the first version token,
+    so a tarball and its companion patch hashed to the same key.  The
+    custom `libtirpc-1.3.6-gcc15_fixes-1.patch` therefore silently
+    evicted the official `libtirpc-1.3.6.tar.bz2` from the generated
+    list, killing minimal, server and arm64 in basic-networking with
+    `no source archive found for libtirpc`.  The same collision also
+    dropped one of the two coreutils patches.  Only the first version
+    token is stripped now; the revision tag and extension stay in the
+    key, and the generated list regains ~86 previously lost sources
+
+- **gdk-pixbuf 2.42.12 fails without rst2man (nightly #194)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - All eight desktop profiles died in blfs-libs: the 2.42.x boolean
+    meson option `man` defaults to true, so meson hard-fails with
+    `No rst2man found, but man pages were explicitly enabled`.  The
+    build now disables man pages unless docutils is installed
+    (mirroring the glib2 pattern) and honours `SKIP_MAN_PAGES`, which
+    the new `--skip-man-pages` CLI flag exports
+
+- **Dead pagure.io archive URLs and IPv6 ENETUNREACH downloads
+  (nightly #194)** (`packages/custom-sources.list`, `builder.py`)
+  - The BLFS wget-list pagure archive URLs for libaio 0.3.113 and
+    xmlto 0.0.29 return 404; both are overridden with the identical
+    tarballs from `releases.pagure.org`, and the libtirpc tarball is
+    pinned to the book version so it stays in lockstep with the gcc15
+    patch
+  - GitHub runners intermittently lose their IPv6 route while IPv4
+    keeps working (`Errno 101 Network is unreachable` against
+    ftp.gnu.org for cpio, ed, aspell).  Download attempts now
+    alternate dual-stack and IPv4-only name resolution
+
+- **Cancelled nightly jobs leave no logs** (`.github/workflows/nightly.yml`)
+  - The aarch64 cross-build dies at the runner time limit with
+    `The operation was canceled` and `failure()` is false for
+    cancellations, so its build logs were never uploaded.  Logs are
+    now uploaded on `failure() || cancelled()`
+
 - **gdk-pixbuf 2.44.4 hard depends on glycin-2 (nightly #193)**
   (`packages/custom-sources.list`)
   - All desktop profiles died in blfs-libs: meson reported
