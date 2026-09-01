@@ -86,6 +86,24 @@
 
 ### Fixed
 
+- **httpd BLFS layout patch never applied (nightly #196)**
+  (`blfs/25-server.sh`)
+  - After the nightly #195 fix apache correctly picked
+    `httpd-2.4.65.tar.bz2`, but configure aborted with `unable to
+    find layout BLFS`: the patch glob `httpd-*-blfs_layout-*.patch`
+    requires a version segment that the book patch
+    `httpd-blfs_layout-1.patch` does not carry, so it was silently
+    skipped.  Both naming schemes are accepted now
+
+- **stale vala-0.56.9 shadowed the book version (nightly #196)**
+  (`packages/custom-sources.list`)
+  - The custom list carried two vala entries (0.58.3 and 0.56.9)
+    which collide on the dedup key; the last one in the file wins,
+    so the stale 0.56.9 was downloaded and died compiling against
+    glib 2.84 (`assignment to 'gchar **' from incompatible pointer
+    type 'const gchar * const*'`).  Both entries are removed and
+    the official BLFS wget-list now serves the book's vala 0.56.18
+
 - **vala configure aborts without graphviz (nightly #195)**
   (`blfs/08a-build-blfs-libs.sh`)
   - All nine desktop matrix jobs died in blfs-libs: vala 0.56's

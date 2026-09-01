@@ -322,7 +322,10 @@ build_commands_pcre2() {
 build_apache() { book_install apache build_commands_apache; }
 build_commands_apache() {
     local p
-    for p in ../httpd-*-blfs_layout-*.patch; do
+    # The book patch is named httpd-blfs_layout-1.patch (no version
+    # segment before the tag); also accept versioned variants so the
+    # BLFS layout always reaches config.layout (Nightly #196).
+    for p in ../httpd-blfs_layout-*.patch ../httpd-*-blfs_layout-*.patch; do
         [ -f "$p" ] || continue
         patch -Np1 -i "$p" || return 1
     done

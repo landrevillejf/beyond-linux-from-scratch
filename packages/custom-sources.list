@@ -205,8 +205,10 @@ https://download.gnome.org/sources/libgee/0.20/libgee-0.20.7.tar.xz
 # libxslt (GNOME directory is 1.1, not 1.1.43; nightly #182)
 https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.43.tar.xz
 
-# vala
-https://download.gnome.org/sources/vala/0.58/vala-0.58.3.tar.xz
+# vala -- the official BLFS wget-list serves the book version; both
+# custom entries below collided on the dedup key and the stale
+# vala-0.56.9 (last in file) won, then failed to compile against
+# glib 2.84 (Nightly #196).
 
 # gobject-introspection
 https://download.gnome.org/sources/gobject-introspection/1.82/gobject-introspection-1.82.0.tar.xz
@@ -464,8 +466,6 @@ https://download.gimp.org/pub/babl/0.1/babl-0.1.98.tar.xz
 https://download.gimp.org/pub/gegl/0.4/gegl-0.4.8.tar.bz2
 
 https://download.gnome.org/sources/json-glib/1.10/json-glib-1.10.8.tar.xz
-
-https://download.gnome.org/sources/vala/0.56/vala-0.56.9.tar.xz
 
 https://github.com/ubuntu/lightdm/archive/refs/tags/1.33.1.tar.gz
 
