@@ -677,6 +677,14 @@ https://downloads.sourceforge.net/libtirpc/libtirpc-1.3.6.tar.bz2
 https://releases.pagure.org/libaio/libaio-0.3.113.tar.gz
 https://releases.pagure.org/xmlto/xmlto-0.0.29.tar.gz
 
+# Ardour dependency stack (audio-studio profile) -- no BLFS book page;
+# sha256 pins live in blfs/27-audio-studio.sh.  Ardour itself is a
+# pinned git clone from git.ardour.org (stage 27), its GitHub tag
+# archives are placeholder stubs
+https://downloads.sourceforge.net/liblo/liblo-0.36.tar.gz
+https://github.com/vamp-plugins/vamp-plugin-sdk/archive/refs/tags/vamp-plugin-sdk-v2.10.tar.gz
+https://breakfastquay.com/files/releases/rubberband-4.0.0.tar.bz2
+
 # patches
 https://www.linuxfromscratch.org/patches/lfs/12.4/bzip2-1.0.8-install_docs-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/coreutils-9.7-upstream_fix-1.patch

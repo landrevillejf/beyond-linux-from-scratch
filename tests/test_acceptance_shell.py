@@ -1496,6 +1496,57 @@ class TestAudioStudioStageGuardrails:
         assert '/usr/lib/lv2' in content
         assert 'cp -r bin/*.lv2 /usr/lib/lv2/' in content
 
+    def test_ardour_checksums_pinned(self, content):
+        """Ardour's non-book dependencies are sha256-pinned like the
+        other upstream tarballs; the book packages (fftw, boost, *mm)
+        come from the official wget-list and carry the book checksums."""
+        for sha in (
+            # liblo-0.36
+            'c08d14832e8dcf8f06840405824a4f9611a0cb3daed0198946326c740941c8b6',
+            # vamp-plugin-sdk-v2.10
+            'b552bc91817294c7f90ea07d70938642ebf15d5e3bafc81cf7d55efab9995399',
+            # rubberband-4.0.0
+            'af050313ee63bc18b35b2e064e5dce05b276aaf6d1aa2b8a82ced1fe2f8028e9',
+        ):
+            assert sha in content, f"missing pinned checksum {sha}"
+
+    def test_ardour_sources_are_listed_exactly_once(self):
+        """liblo/vamp-plugin-sdk/rubberband have no BLFS book page;
+        their pinned releases must sit in custom-sources.list exactly
+        once (duplicate filenames collide on the download key)."""
+        listed = [line.strip().rsplit('/', 1)[-1]
+                  for line in self.SOURCES.read_text().splitlines()
+                  if line.strip().startswith('http')]
+        for archive in ('liblo-0.36.tar.gz',
+                        'vamp-plugin-sdk-v2.10.tar.gz',
+                        'rubberband-4.0.0.tar.bz2'):
+            assert listed.count(archive) == 1, \
+                f"{archive} listed {listed.count(archive)} times"
+
+    def test_ardour_source_is_a_pinned_tag_clone(self, content):
+        """GitHub tag archives of Ardour/ardour are placeholder stubs
+        (README-GITHUB.txt says so) and git.ardour.org archives need a
+        login, so the tree must come from a pinned shallow tag clone
+        whose revision is baked into libs/ardour/revision.cc (the LFS
+        chroot ships no git for waf's git-describe)."""
+        assert 'git clone --quiet --depth 1 --branch "$ARDOUR_TAG"' in content
+        assert 'https://git.ardour.org/ardour/ardour.git' in content
+        assert 'ARDOUR_TAG=9.8' in content
+        assert 'describe --tags' in content
+        assert 'libs/ardour/revision.cc' in content
+
+    def test_ardour_stack_gated_on_audio_plugins_token(self, content):
+        """Phases 5-6 run only on audio-studio; audio-cli stays a
+        console stack and must not drag in the GUI dependency chain."""
+        gated = content[content.index('Phase 5: Ardour dependency stack'):]
+        assert 'if has_pkg audio-plugins; then' in gated
+        for fn in ('build_fftw', 'build_boost', 'mm_build gtkmm',
+                   'build_liblo', 'build_vamp_plugin_sdk',
+                   'build_rubberband', 'build_ardour'):
+            assert fn in gated, f"{fn} missing from the token-gated phases"
+        assert 'Skipping Ardour dependency stack' in gated
+        assert 'Skipping Ardour' in gated
+
     def test_realtime_limits_installed(self, content):
         """PipeWire gains realtime via RLIMIT once the audio group has
         rtprio/memlock; the tuning must always run (ungated phase)."""

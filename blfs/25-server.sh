@@ -184,6 +184,9 @@ is_installed() {
     [ -f "$(marker_for "$pkg")" ] && return 0
     case "$pkg" in
         apache) have_cmd httpd ;;
+        apr) have_cmd apr-1-config ;;
+        apr-util) have_cmd apu-1-config ;;
+        pcre2) have_cmd pcre2-config ;;
         mariadb) have_cmd mariadbd || have_cmd mysqld ;;
         postgresql) have_cmd postgres ;;
         sqlite) have_cmd sqlite3 ;;
@@ -203,13 +206,15 @@ is_installed() {
 # extracted directory name.
 prep_src() {
     local pkg="$1" archive=""
-    archive="$(find_archive "$pkg")"
-    if [ -z "$archive" ]; then
-        case "$pkg" in
-            # The Apache tarball is named httpd-<version>
-            apache) archive="$(find_archive httpd)" ;;
-        esac
-    fi
+    case "$pkg" in
+        # The Apache HTTP Server tarball is named httpd-<version>.
+        # Resolve it first: the apache-ant/apache-maven/apache-tomcat
+        # tarballs restored to the source list (Nightly #195) share
+        # the "apache" prefix and their -src archive would otherwise
+        # shadow httpd through find_archive's fallback tier.
+        apache) archive="$(find_archive httpd)" ;;
+        *)      archive="$(find_archive "$pkg")" ;;
+    esac
     if [ -z "$archive" ]; then
         log_error "Source archive missing for $pkg"
         return 1
@@ -275,6 +280,43 @@ build_pkg() {
 # ======================================================================
 # Per-package BLFS book commands (wave 3, server chapter).
 # ======================================================================
+
+# BLFS general/apr – required by Apr-Util and Apache HTTPD
+build_apr() { book_install apr build_commands_apr; }
+build_commands_apr() {
+    ./configure --prefix=/usr \
+                --disable-static \
+                --with-installbuilddir=/usr/share/apr-1/build &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS general/apr-util – required by Apache HTTPD
+build_apr_util() { book_install apr-util build_commands_apr_util; }
+build_commands_apr_util() {
+    ./configure --prefix=/usr \
+                --with-apr=/usr \
+                --with-gdbm=/usr \
+                --with-openssl=/usr \
+                --with-crypto &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS general/pcre2 – required by Apache HTTPD.  Desktop profiles
+# already install it in blfs-libs; book_install skips it then.
+build_pcre2() { book_install pcre2 build_commands_pcre2; }
+build_commands_pcre2() {
+    ./configure --prefix=/usr \
+                --docdir="/usr/share/doc/$dir" \
+                --enable-unicode \
+                --enable-jit \
+                --enable-pcre2-16 \
+                --enable-pcre2-32 \
+                --enable-pcre2grep-libz \
+                --enable-pcre2grep-libbz2 \
+                --enable-pcre2test-libreadline \
+                --disable-static &&
+    make -j"$JOBS" && make install
+}
 
 # BLFS server/apache – BLFS layout patch and sed fixes, guarded.
 build_apache() { book_install apache build_commands_apache; }
@@ -573,6 +615,16 @@ run_build() {
 }
 
 log_info "Phase 1: Web server"
+
+# apr – Apache Portable Runtime, prerequisite of apr-util
+run_build required apr
+
+# apr-util – required by Apache HTTPD (BLFS server/apache)
+run_build required apr-util
+
+# pcre2 – required by Apache HTTPD; no LFS stage builds it and the
+# headless profiles skip blfs-libs, so build it here when missing
+run_build required pcre2
 
 # apache – Apache HTTP Server
 run_build required apache

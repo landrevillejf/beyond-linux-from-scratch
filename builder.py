@@ -506,9 +506,9 @@ class ProfileManager:
             'bootloader': 'uboot'
         },
         'audio-studio': {
-            'description': 'Pro audio studio: XFCE, LV2 + NeuralRack, LSP/Dragonfly plugins, PREEMPT_RT',
-            'size_gb': 8,
-            'build_time_hours': 7,
+            'description': 'Pro audio studio: XFCE, Ardour + LV2/NeuralRack, LSP/Dragonfly plugins, PREEMPT_RT',
+            'size_gb': 9,
+            'build_time_hours': 8,
             'packages': ['base', 'network', 'xorg', 'xfce', 'audio-core', 'audio-plugins'],
             'desktop': 'xfce',
             'init_system': 'systemd',

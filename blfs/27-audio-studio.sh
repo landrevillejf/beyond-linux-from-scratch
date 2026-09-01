@@ -12,18 +12,26 @@ set -euo pipefail
 #
 # On the audio-studio profile (the 'audio-plugins' package token) the
 # stage additionally installs the LSP Plugins and Dragonfly Reverb LV2
-# plugin packs, pre-loads any Neural Amp Modeler (.nam) starter models
-# found in /sources, and applies the realtime audio tuning (audio
-# group, /etc/security/limits.d, sysctl).  audio-cli stays a pure
-# CLI/host stack: the plugin/token-gated phases are skipped there.
+# plugin packs, the Ardour 9.8 DAW with its dependency stack (fftw,
+# boost, the sigc++/glibmm/cairomm/atkmm/pangomm/gtkmm3 C++ bindings,
+# liblo, vamp-plugin-sdk, rubberband), pre-loads any Neural Amp Modeler
+# (.nam) starter models found in /sources, and applies the realtime
+# audio tuning (audio group, /etc/security/limits.d, sysctl).  audio-cli
+# stays a pure CLI/host stack: the plugin/token-gated phases are
+# skipped there.
 #
 # Book deviation (documented in CHANGELOG.md): lv2/zix/serd/sord/
-# sratom/lilv, NeuralRack, LSP Plugins and Dragonfly Reverb have no
-# BLFS book page, so they are built from their canonical upstream
-# release tarballs with pinned sha256 checksums verified BEFORE
-# extraction.  The NeuralRack and LSP Plugins "-src" release tarballs
-# bundle their git submodules / sub-projects; the generic GitHub
-# refs/tags archive does not and cannot build.
+# sratom/lilv, NeuralRack, LSP Plugins, Dragonfly Reverb, liblo,
+# vamp-plugin-sdk and rubberband have no BLFS book page, so they are
+# built from their canonical upstream release tarballs with pinned
+# sha256 checksums verified BEFORE extraction.  The NeuralRack and LSP
+# Plugins "-src" release tarballs bundle their git submodules /
+# sub-projects; the generic GitHub refs/tags archive does not and
+# cannot build.  Ardour has no usable tarball at all (GitHub tag
+# archives of Ardour/ardour are placeholder stubs, git.ardour.org
+# archives require login), so it is fetched on the host side with a
+# pinned shallow tag clone and its waf revision is baked into
+# libs/ardour/revision.cc before .git is dropped.
 #
 # Environment contract (exported by builder.py): LFS, PROFILE,
 # LFS_PROFILE_PACKAGES (comma-separated profile package tokens)
@@ -114,6 +122,40 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
     run_privileged mkdir -p "$LFS/sources"
     run_privileged cp -rv "$SOURCES_HOST"/* "$LFS/sources/"
     if ! run_privileged chown -R lfs:lfs "$LFS/sources" 2>/dev/null; then log_warning "Could not chown $LFS/sources to lfs:lfs"; fi
+fi
+
+# Ardour source tree (audio-studio only): git-only, see the book
+# deviation note in the header.  The clone is pinned to the release
+# tag; waf's git-describe revision is frozen into revision.cc because
+# the LFS chroot ships no git.
+ARDOUR_TAG=9.8
+if [ "${LFS_PROFILE_PACKAGES:-}" != "${LFS_PROFILE_PACKAGES#*audio-plugins}" ]; then
+    ARDOUR_SRC="$LFS/sources/ardour-${ARDOUR_TAG}"
+    if [ -f "$ARDOUR_SRC/wscript" ] && [ -f "$ARDOUR_SRC/libs/ardour/revision.cc" ]; then
+        log_info "Ardour ${ARDOUR_TAG} source already present; skipping clone"
+    else
+        command -v git >/dev/null 2>&1 || {
+            log_error "git is required to fetch the Ardour source tree"
+            exit 1
+        }
+        run_privileged rm -rf "$ARDOUR_SRC"
+        log_info "Cloning Ardour ${ARDOUR_TAG} from git.ardour.org"
+        run_privileged git clone --quiet --depth 1 --branch "$ARDOUR_TAG" \
+            https://git.ardour.org/ardour/ardour.git "$ARDOUR_SRC"
+        ardour_rev="$(run_privileged git -C "$ARDOUR_SRC" describe --tags)"
+        if [ "$ardour_rev" != "$ARDOUR_TAG" ]; then
+            log_error "Ardour clone revision is '$ardour_rev', expected '$ARDOUR_TAG'"
+            exit 1
+        fi
+        ardour_date="$(run_privileged git -C "$ARDOUR_SRC" log -1 --pretty=format:%ci | cut -d ' ' -f1)"
+        printf '#include "ardour/revision.h"\nnamespace ARDOUR { const char* revision = "%s"; const char* date = "%s"; }\n' \
+            "$ardour_rev" "$ardour_date" | run_privileged tee "$ARDOUR_SRC/libs/ardour/revision.cc" >/dev/null
+        run_privileged rm -rf "$ARDOUR_SRC/.git"
+        if ! run_privileged chown -R lfs:lfs "$ARDOUR_SRC" 2>/dev/null; then log_warning "Could not chown $ARDOUR_SRC to lfs:lfs"; fi
+        log_info "Ardour ${ARDOUR_TAG} source ready (revision date ${ardour_date})"
+    fi
+else
+    log_info "No audio-plugins token on profile ${PROFILE:-audio-cli}; Ardour source fetch skipped"
 fi
 
 cat <<'INNEREOF' | run_privileged tee "$LFS/build-audio-studio.sh" >/dev/null
@@ -207,6 +249,12 @@ sha256_for() {
             echo "2c95ec7bb219d561ea3db36051b6c732133bcd76426fb836b1dd850dc4b5bb6c" ;;
         dragonfly-reverb-3.2.10-src.tar.xz)
             echo "18af55a9592c9f50c4d5f86c9d5159132735d9ba53d49e9cfe7169b3109f7743" ;;
+        liblo-0.36.tar.gz)
+            echo "c08d14832e8dcf8f06840405824a4f9611a0cb3daed0198946326c740941c8b6" ;;
+        vamp-plugin-sdk-v2.10.tar.gz)
+            echo "b552bc91817294c7f90ea07d70938642ebf15d5e3bafc81cf7d55efab9995399" ;;
+        rubberband-4.0.0.tar.bz2)
+            echo "af050313ee63bc18b35b2e064e5dce05b276aaf6d1aa2b8a82ced1fe2f8028e9" ;;
         *) return 1 ;;
     esac
 }
@@ -258,6 +306,18 @@ is_installed() {
         neuralrack) [ -d /usr/lib/lv2/NeuralRack.lv2 ] ;;
         lsp-plugins) compgen -G '/usr/lib/lv2/lsp-*.lv2' >/dev/null ;;
         dragonfly-reverb) [ -d /usr/lib/lv2/DragonflyHallReverb.lv2 ] ;;
+        fftw) have_pc fftw3 && have_pc fftw3f ;;
+        boost) [ -f /usr/include/boost/version.hpp ] ;;
+        libsigc++) have_pc sigc++-2.0 ;;
+        glibmm) have_pc glibmm-2.4 ;;
+        cairomm) have_pc cairomm-1.0 ;;
+        atkmm) have_pc atkmm-1.6 ;;
+        pangomm) have_pc pangomm-1.4 ;;
+        gtkmm) have_pc gtkmm-3.0 ;;
+        liblo) have_pc liblo ;;
+        vamp-plugin-sdk) have_pc vamp-sdk ;;
+        rubberband) have_pc rubberband ;;
+        ardour) [ -x /usr/bin/ardour9 ] || [ -x /usr/bin/ardour ] ;;
         *) return 1 ;;
     esac
 }
@@ -388,6 +448,155 @@ build_dragonfly_reverb() {
     log_success "Dragonfly Reverb installed"
 }
 
+# ----------------------------------------------------------------------
+# Ardour dependency stack (audio-studio only, token-gated below).
+# fftw, boost and the C++ *mm bindings follow the BLFS book commands;
+# liblo, vamp-plugin-sdk and rubberband have no book page and use
+# their pinned upstream releases.  Ardour itself is built last from
+# the host-side git clone in /sources/ardour-<tag>.
+
+build_fftw() {
+    local dir simd=()
+    if is_installed fftw; then log_info "fftw already installed; skipping"; return 0; fi
+    dir="$(prep_src fftw)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    case "$(uname -m)" in
+        x86_64) simd=(--enable-sse2 --enable-avx --enable-avx2) ;;
+    esac
+    # BLFS book: double precision first, then the single precision
+    # flavour (libfftw3f) that Ardour links against.
+    ./configure --prefix=/usr --enable-shared --disable-static \
+        --enable-threads "${simd[@]}"
+    make -j"$JOBS"
+    make install
+    make clean
+    ./configure --prefix=/usr --enable-shared --disable-static \
+        --enable-threads --enable-float "${simd[@]}"
+    make -j"$JOBS"
+    make install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for fftw)"
+    log_success "fftw installed (double + single precision)"
+}
+
+build_boost() {
+    local dir
+    if is_installed boost; then log_info "boost already installed; skipping"; return 0; fi
+    dir="$(prep_src boost)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    # BLFS book commands
+    ./bootstrap.sh --prefix=/usr --with-python=python3
+    ./b2 stage -j"$JOBS" threading=multi link=shared
+    ./b2 install threading=multi link=shared
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for boost)"
+    log_success "boost installed"
+}
+
+# sigc++/glibmm/cairomm/atkmm/pangomm/gtkmm3: plain meson installs
+# per the BLFS book (no documentation / test options enabled).
+mm_build() {
+    local pkg="$1" dir
+    if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    rm -rf bld
+    meson setup bld --prefix=/usr --buildtype=release
+    ninja -C bld
+    ninja -C bld install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg installed"
+}
+
+build_liblo() {
+    local dir
+    if is_installed liblo; then log_info "liblo already installed; skipping"; return 0; fi
+    dir="$(prep_src liblo)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    ./configure --prefix=/usr
+    make -j"$JOBS"
+    make install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for liblo)"
+    log_success "liblo installed"
+}
+
+build_vamp_plugin_sdk() {
+    local dir
+    if is_installed vamp-plugin-sdk; then log_info "vamp-plugin-sdk already installed; skipping"; return 0; fi
+    dir="$(prep_src vamp-plugin-sdk)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    ./configure --prefix=/usr
+    make -j"$JOBS"
+    make install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for vamp-plugin-sdk)"
+    log_success "vamp-plugin-sdk installed"
+}
+
+build_rubberband() {
+    local dir
+    if is_installed rubberband; then log_info "rubberband already installed; skipping"; return 0; fi
+    if ! have_pc fftw3; then
+        log_error "rubberband needs fftw3; build fftw first"
+        return 1
+    fi
+    dir="$(prep_src rubberband)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    rm -rf bld
+    # FFT backend pinned to fftw (built above); the builtin resampler
+    # keeps the dependency list closed.
+    meson setup bld --prefix=/usr --buildtype=release -Dfft=fftw
+    ninja -C bld
+    ninja -C bld install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for rubberband)"
+    log_success "rubberband installed"
+}
+
+build_ardour() {
+    local dir="ardour-${ARDOUR_TAG:-9.8}" pc
+    if is_installed ardour; then log_info "Ardour already installed; skipping"; return 0; fi
+    for pc in gtkmm-3.0 glibmm-2.4 fftw3f rubberband vamp-sdk liblo sndfile; do
+        if ! have_pc "$pc"; then
+            log_error "Ardour prerequisite missing: $pc"
+            return 1
+        fi
+    done
+    if [ ! -f "$dir/wscript" ]; then
+        log_error "Ardour source tree missing (/sources/$dir) - host-side git clone failed?"
+        return 1
+    fi
+    if [ ! -f "$dir/libs/ardour/revision.cc" ]; then
+        log_error "Ardour revision.cc missing; refusing to build without a pinned revision"
+        return 1
+    fi
+    log_info "Building Ardour ${ARDOUR_TAG:-9.8} from /sources/$dir" >&2
+    pushd "$dir" >/dev/null || return 1
+    # --no-phone-home: no update checks; --no-nls: no itstool/intltool
+    # needed; --no-lxvst/--no-vst3/--no-lrdf: GPL-clean, no VST/LRDF
+    # stack required.  JACK/ALSA/Pulse backends are auto-detected.
+    ./waf configure --prefix=/usr \
+        --no-phone-home \
+        --no-nls \
+        --no-lrdf \
+        --no-lxvst \
+        --no-vst3
+    ./waf -j"$JOBS"
+    ./waf install
+    popd >/dev/null
+    rm -rf "$dir"
+    touch "$(marker_for ardour)"
+    log_success "Ardour ${ARDOUR_TAG:-9.8} installed"
+}
+
 # Best-effort Neural Amp Modeler starter content.  NeuralRack loads .nam
 # models; any model pre-downloaded into /sources (add a pinned .nam URL
 # to packages/custom-sources.list) is installed into the shared models
@@ -456,14 +665,38 @@ else
     log_info "Skipping plugin packs (no audio-plugins token on profile ${PROFILE:-audio-cli})"
 fi
 
-log_info "Phase 5: Neural Amp Modeler starter models (best-effort)"
+log_info "Phase 5: Ardour dependency stack (fftw, boost, *mm bindings, liblo, vamp, rubberband)"
+if has_pkg audio-plugins; then
+    build_fftw
+    build_boost
+    mm_build libsigc++
+    mm_build glibmm
+    mm_build cairomm
+    mm_build atkmm
+    mm_build pangomm
+    mm_build gtkmm
+    build_liblo
+    build_vamp_plugin_sdk
+    build_rubberband
+else
+    log_info "Skipping Ardour dependency stack (no audio-plugins token on profile ${PROFILE:-audio-cli})"
+fi
+
+log_info "Phase 6: Ardour ${ARDOUR_TAG:-9.8} (DAW)"
+if has_pkg audio-plugins; then
+    build_ardour
+else
+    log_info "Skipping Ardour (no audio-plugins token on profile ${PROFILE:-audio-cli})"
+fi
+
+log_info "Phase 7: Neural Amp Modeler starter models (best-effort)"
 if has_pkg audio-plugins; then
     install_nam_models
 else
     log_info "Skipping NAM starter models (no audio-plugins token)"
 fi
 
-log_info "Phase 6: realtime audio tuning (audio group + limits + sysctl)"
+log_info "Phase 8: realtime audio tuning (audio group + limits + sysctl)"
 realtime_tuning
 
 log_success "Audio studio stack build complete"
@@ -474,6 +707,7 @@ run_privileged chroot "$LFS" /usr/bin/env -i \
     HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
     PROFILE="${PROFILE:-audio-studio}" \
     LFS_PROFILE_PACKAGES="${LFS_PROFILE_PACKAGES:-}" \
+    ARDOUR_TAG="$ARDOUR_TAG" \
     /bin/bash /build-audio-studio.sh
 
 log_success "Audio studio stack built successfully"

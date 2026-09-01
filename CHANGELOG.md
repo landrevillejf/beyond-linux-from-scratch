@@ -4,6 +4,31 @@
 
 ### Added
 
+- **Ardour 9.8 DAW for the audio-studio profile**
+  (`blfs/27-audio-studio.sh`, `packages/custom-sources.list`)
+  - Stage 27 now builds the Ardour 9.8 digital audio workstation when
+    the `audio-plugins` token is present (audio-studio).  New phases 5
+    and 6 install its dependency stack first: fftw (book commands,
+    double + single precision for `fftw3f`), boost, the
+    libsigc++/glibmm/cairomm/atkmm/pangomm/gtkmm3 C++ binding chain
+    (all BLFS book commands), then liblo 0.36, vamp-plugin-sdk 2.10
+    and rubberband 4.0.0 (no book page; sha256-pinned upstream
+    releases, same pattern as NeuralRack).  Ardour itself is built
+    with `./waf configure --prefix=/usr --no-phone-home --no-nls
+    --no-lrdf --no-lxvst --no-vst3` (JACK/ALSA/Pulse backends
+    auto-detected) and installed as `/usr/bin/ardour9`
+  - Book deviation: Ardour ships no usable release tarball.  GitHub
+    tag archives of Ardour/ardour are placeholder stubs (see the
+    mirror's README-GITHUB.txt) and git.ardour.org's archive endpoint
+    requires login, so the stage clones
+    `https://git.ardour.org/ardour/ardour.git` at the pinned `9.8`
+    tag on the host side.  The LFS chroot ships no git, therefore the
+    clone's `git describe` revision is baked into
+    `libs/ardour/revision.cc` (wscript tarball path) before `.git` is
+    dropped
+  - audio-cli keeps its console-only promise: both phases skip when
+    the token is absent
+
 - **LV2 plugin packs for the audio-studio profile**
   (`blfs/27-audio-studio.sh`, `packages/custom-sources.list`)
   - The `audio-plugins` package token was declared on audio-studio but
@@ -60,6 +85,31 @@
     realtime/PREEMPT_RT groundwork above are the first increment
 
 ### Fixed
+
+- **vala configure aborts without graphviz (nightly #195)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - All nine desktop matrix jobs died in blfs-libs: vala 0.56's
+    configure hard-checks `libgvc >= 2.16` and no stage builds
+    graphviz.  The book's `--disable-valadoc` flag is now passed
+    whenever pkg-config cannot find libgvc
+
+- **server stage built apache from the Apache Ant tarball
+  (nightly #195)** (`blfs/25-server.sh`)
+  - `prep_src` resolved the `apache` prefix first, and the
+    apache-ant/-maven/-tomcat tarballs restored to the source list
+    by the nightly #194 fix matched it; the tier-2 `-src` preference
+    then selected `apache-ant-1.10.15-src.tar.xz`, which of course
+    has no `support/apxs.in`.  The `httpd-*` tarball is resolved
+    first now
+
+- **apr, apr-util and pcre2 missing before apache (nightly #195)**
+  (`blfs/25-server.sh`)
+  - The BLFS book lists Apr-Util and pcre2 as required dependencies
+    of Apache HTTPD, but no headless profile stage built them
+    (blfs-libs is skipped), so httpd's configure would fail next.
+    Phase 1 of the server stage now builds apr, apr-util and pcre2
+    with the book commands before apache; `book_install` skips them
+    when a desktop profile already provided them
 
 - **Sources list dedup evicted tarballs in favour of patches (nightly #194)**
   (`builder.py`)

@@ -682,7 +682,13 @@ build_commands_libxslt() {
 build_vala() { book_install vala build_commands_vala; }
 
 build_commands_vala() {
-    ./configure --prefix=/usr &&
+    # BLFS book: --disable-valadoc is required when Graphviz is not
+    # installed.  No stage builds graphviz, so without the flag
+    # configure aborts on the libgvc pkg-config check (Nightly #195).
+    valadoc=
+    have_pc libgvc || valadoc=--disable-valadoc
+    # shellcheck disable=SC2086  # word splitting is intended here
+    ./configure --prefix=/usr $valadoc &&
     make -j"$JOBS" && make install
 }
 

@@ -90,7 +90,7 @@ class TestProfileManager:
         profile = ProfileManager.get_profile('audio-studio')
         assert profile.get("desktop") == "xfce" or profile.get("desktop") == "gnome"
         assert profile['init_system'] == 'systemd'
-        assert profile['size_gb'] == 8
+        assert profile['size_gb'] == 9
         assert profile['live_system'] is True
 
     def test_get_profile_kde(self):
