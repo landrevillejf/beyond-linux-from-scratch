@@ -1286,12 +1286,14 @@ log_info "Phase 7: Development tools"
 # libxslt – depends on libxml2 (blfs-base)
 run_build required libxslt
 
-# vala – depends on glib2
-run_build required vala
-
 # gobject-introspection – depends on glib2, python3; no standalone page
 # in the BLFS book (built inside glib there), generic meson build.
+# Must precede vala: vala's configure reads girdir from
+# gobject-introspection-1.0.pc and aborts without it (Nightly #197).
 run_build required gobject-introspection
+
+# vala – depends on glib2 and gobject-introspection
+run_build required vala
 
 log_info "Phase 8: Application-specific dependencies"
 

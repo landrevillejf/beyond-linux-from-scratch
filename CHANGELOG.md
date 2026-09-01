@@ -86,6 +86,23 @@
 
 ### Fixed
 
+- **vala built before gobject-introspection (nightly #197)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - With the nightly #196 vala fix in place, all nine desktop jobs
+    reached vala 0.56.18 and died in configure with `Unable to
+    retrieve girdir from gobject-introspection-1.0.pc`: vala
+    requires gobject-introspection, which the stage built right
+    after it.  The two builds are swapped
+
+- **mariadb tries to download fmt from GitHub offline (nightly #197)**
+  (`blfs/25-server.sh`)
+  - apache and the httpd layout patch now build cleanly, so every
+    job reached mariadb, whose cmake ExternalProject fetches
+    `fmt-11.1.4.zip` from github.com; the chroot has no DNS, so
+    all six download attempts fail.  Phase 2 now builds the book's
+    fmt 11.2.0 first, letting mariadb's `WITH_LIBFMT=auto` check
+    pass with the system headers and skip the download
+
 - **httpd BLFS layout patch never applied (nightly #196)**
   (`blfs/25-server.sh`)
   - After the nightly #195 fix apache correctly picked

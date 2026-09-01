@@ -187,6 +187,7 @@ is_installed() {
         apr) have_cmd apr-1-config ;;
         apr-util) have_cmd apu-1-config ;;
         pcre2) have_cmd pcre2-config ;;
+        fmt) [ -f /usr/include/fmt/format.h ] ;;
         mariadb) have_cmd mariadbd || have_cmd mysqld ;;
         postgresql) have_cmd postgres ;;
         sqlite) have_cmd sqlite3 ;;
@@ -349,6 +350,20 @@ build_commands_apache() {
                 --with-suexec-userdir=public_html       \
                 --with-suexec-logfile=/var/log/httpd/suexec.log &&
     make -j"$JOBS" && make install
+}
+
+# BLFS general/fmt – required before MariaDB: the build is offline
+# (no DNS in the chroot), so MariaDB's ExternalProject cannot fetch
+# fmt from GitHub and falls back on the system copy (Nightly #197).
+build_fmt() { book_install fmt build_commands_fmt; }
+build_commands_fmt() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr   \
+          -D CMAKE_INSTALL_LIBDIR=/usr/lib \
+          -D BUILD_SHARED_LIBS=ON        \
+          -D FMT_TEST=OFF                \
+          -G Ninja .. &&
+    ninja && ninja install
 }
 
 # BLFS server/mariadb
@@ -633,6 +648,10 @@ run_build required pcre2
 run_build required apache
 
 log_info "Phase 2: Database servers"
+
+# fmt – header-only check lets MariaDB use the system libfmt instead
+# of downloading fmt-11.1.4.zip from GitHub (impossible offline).
+run_build required fmt
 
 # mariadb – MariaDB database server (MySQL compatible)
 run_build required mariadb
