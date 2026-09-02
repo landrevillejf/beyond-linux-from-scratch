@@ -195,6 +195,8 @@ is_installed() {
         mariadb) have_cmd mariadbd || have_cmd mysqld ;;
         postgresql) have_cmd postgres ;;
         sqlite) have_cmd sqlite3 ;;
+        lmdb) [ -f /usr/lib/liblmdb.so ] ;;
+        cyrus-sasl) [ -f /usr/lib/libsasl2.so ] ;;
         openldap) have_cmd slapd ;;
         bind) have_cmd named ;;
         postfix) have_cmd postfix || have_cmd sendmail ;;
@@ -443,6 +445,48 @@ build_commands_sqlite() {
     make -j"$JOBS" && make install
 }
 
+# BLFS server/lmdb – the tarball extracts to
+# openldap-LMDB_<ver>-<hash> and the book build lives in
+# libraries/liblmdb.  cyrus-sasl is configured --with-dblib=lmdb
+# and openldap's mdb backend needs it too (Nightly #199).
+build_lmdb() { book_install lmdb build_commands_lmdb; }
+build_commands_lmdb() {
+    cd libraries/liblmdb &&
+    make &&
+    sed -i 's| liblmdb.a||' Makefile &&
+    make prefix=/usr install
+}
+
+# BLFS postlfs/cyrus-sasl – openldap's book commands pass
+# --with-cyrus-sasl, so its configure aborts with "Could not locate
+# Cyrus SASL" when the library is missing (Nightly #199).
+build_cyrus_sasl() { book_install cyrus-sasl build_commands_cyrus_sasl; }
+build_commands_cyrus_sasl() {
+    local p
+    # gcc15 fixes patch is REQUIRED by the book; apply when present.
+    for p in ../cyrus-sasl-*-gcc15_fixes-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+        autoreconf -fiv || return 1
+    done
+    # gcc-14 build fixes (book).
+    sed '/saslint/a #include <time.h>'       -i lib/saslutil.c &&
+    sed '/plugin_common/a #include <time.h>' -i plugins/cram.c &&
+    ./configure --prefix=/usr                       \
+                --sysconfdir=/etc                   \
+                --enable-auth-sasldb                \
+                --with-dblib=lmdb                   \
+                --with-dbpath=/var/lib/sasl/sasldb2 \
+                --with-sphinx-build=no              \
+                --with-saslauthd=/var/run/saslauthd &&
+    make -j1 &&
+    make install &&
+    install -v -dm755 "/usr/share/doc/$dir/html" &&
+    install -v -m644 saslauthd/LDAP_SASLAUTHD "/usr/share/doc/$dir" &&
+    install -v -m644 doc/legacy/*.html "/usr/share/doc/$dir/html" &&
+    install -v -dm700 /var/lib/sasl
+}
+
 # BLFS server/openldap – the book builds the tree twice: a client-only
 # pass first, then the full server pass on a fresh tree.
 build_openldap() { book_install openldap build_commands_openldap; }
@@ -684,6 +728,15 @@ run_build required postgresql
 run_build required sqlite
 
 log_info "Phase 3: Directory server"
+
+# lmdb – required by cyrus-sasl's --with-dblib=lmdb and openldap's
+# mdb backend; the tarball extracts to openldap-LMDB_*-<hash>
+run_build required lmdb
+
+# cyrus-sasl – the openldap book commands pass --with-cyrus-sasl, so
+# configure aborts with "Could not locate Cyrus SASL" without it
+# (Nightly #199)
+run_build required cyrus-sasl
 
 # openldap – OpenLDAP directory server
 run_build required openldap

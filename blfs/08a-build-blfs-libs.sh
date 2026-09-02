@@ -1012,18 +1012,22 @@ build_commands_libgudev() {
 build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
 
 build_commands_libxkbcommon() {
-    # libxcb is only "recommended" by the book but meson defaults
-    # enable-x11 to true and aborts without xcb-xkb >= 1.10; the
-    # xorg stage (08b) builds libxcb later and rebuilds this package
-    # with X11 support (Nightly #198).
+    # libxcb and wayland are only "recommended" by the book but meson
+    # defaults enable-x11/enable-wayland to true and aborts without
+    # xcb-xkb >= 1.10 or wayland-client/wayland-protocols; the xorg
+    # stage (08b) builds libxcb later and rebuilds this package with
+    # X11 support (Nightly #198/#199).  The wayland option only builds
+    # the xkbcli tools, so it stays off until the wayland stage runs.
     x11=
+    wayland=
     have_pc xcb-xkb || x11="-D enable-x11=false"
+    have_pc wayland-client || wayland="-D enable-wayland=false"
     # shellcheck disable=SC2086  # word splitting is intended here
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D enable-docs=false $x11 &&
+          -D enable-docs=false $x11 $wayland &&
     ninja && ninja install
 }
 

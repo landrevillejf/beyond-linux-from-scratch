@@ -86,6 +86,28 @@
 
 ### Fixed
 
+- **libxkbcommon aborts without wayland-protocols (nightly #199)**
+  (`blfs/08a-build-blfs-libs.sh`, `blfs/08b-build-xorg.sh`)
+  - The nightly #198 fix only disabled `enable-x11`; every desktop
+    job died again at meson with `The Wayland xkbcli programs
+    require wayland-client and wayland-protocols which were not
+    found`, because meson also defaults `enable-wayland` to true and
+    the wayland stage (08c) runs after blfs-libs.  Both the 08a
+    build and the 08b rebuild now pass `-D enable-wayland=false`
+    when `wayland-client.pc` is absent; the option only builds the
+    xkbcli tools, so no library consumer is affected
+
+- **openldap configure: Could not locate Cyrus SASL (nightly #199)**
+  (`blfs/25-server.sh`)
+  - With postgresql unblocked, every headless job died at openldap:
+    the book server build passes `--with-cyrus-sasl` but no stage
+    ever built Cyrus SASL.  Phase 3 now builds lmdb (book commands
+    in `libraries/liblmdb`, tarball extracts to
+    `openldap-LMDB_*-<hash>`) and cyrus-sasl (book commands,
+    `--with-dblib=lmdb`, `make -j1`, gcc15 patch applied when
+    present) before openldap; both tarballs were already downloaded
+    by the official wget-list
+
 - **libxkbcommon aborts without libxcb (nightly #198)**
   (`blfs/08a-build-blfs-libs.sh`, `blfs/08b-build-xorg.sh`)
   - With vala unblocked, every desktop job died at libxkbcommon:

@@ -393,11 +393,20 @@ build_commands_libxcb() {
 # consumers such as mutter get libxkbcommon-x11 (Nightly #198).
 build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
 build_commands_libxkbcommon() {
+    # Same guards as blfs-libs (08a): X11 can now be enabled because
+    # libxcb provides xcb-xkb, but wayland-client only exists after
+    # the wayland stage (08c), so wayland stays disabled here too
+    # (Nightly #199).
+    x11=
+    wayland=
+    have_pc xcb-xkb || x11="-D enable-x11=false"
+    have_pc wayland-client || wayland="-D enable-wayland=false"
+    # shellcheck disable=SC2086  # word splitting is intended here
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D enable-docs=false &&
+          -D enable-docs=false $x11 $wayland &&
     ninja && ninja install
 }
 

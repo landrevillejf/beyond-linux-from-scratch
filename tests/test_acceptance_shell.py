@@ -1266,6 +1266,7 @@ class TestBLFSErrorPolicyGuardrails:
         'apache': ['httpd'],
         'qt6': ['qt-everywhere-src'],
         'networkmanager': ['NetworkManager'],
+        'lmdb': ['LMDB_0.9.33'],
     }
 
     # Packages provided by another stage or by the LFS base system.
@@ -1755,6 +1756,56 @@ class TestProfilePromiseGuardrails:
         assert 'libtirpc) have_pc libtirpc ;;' in content
         assert 'rpcsvc-proto) have_cmd rpcgen ;;' in content
         assert 'rpcbind) have_cmd rpcbind ;;' in content
+
+    def test_libxkbcommon_disables_protocols_missing_at_stage_time(self):
+        """libxkbcommon meson must not hard-require libxcb/wayland.
+
+        Nightly #198 (all desktop jobs) died at meson with "X11
+        support requires xcb-xkb >= 1.10"; nightly #199 died again
+        with "The Wayland xkbcli programs require wayland-client and
+        wayland-protocols which were not found".  The BLFS book lists
+        libxcb and Wayland/wayland-protocols as recommended only, but
+        meson defaults enable-x11/enable-wayland to true and the xorg
+        (08b) and wayland (08c) stages run after blfs-libs (08a).
+        Both the 08a build and the 08b rebuild must disable each
+        feature only when its pkg-config file is absent.
+        """
+        for script in ('blfs/08a-build-blfs-libs.sh',
+                       'blfs/08b-build-xorg.sh'):
+            content = Path(script).read_text()
+            fn = content.index('build_commands_libxkbcommon()')
+            body = content[fn:fn + 1200]
+            assert 'have_pc xcb-xkb || x11="-D enable-x11=false"' in body, \
+                f"{script} must disable x11 when xcb-xkb is missing"
+            assert 'have_pc wayland-client || ' \
+                'wayland="-D enable-wayland=false"' in body, \
+                f"{script} must disable wayland when wayland-client " \
+                "is missing (nightly #199)"
+
+    def test_server_stage_builds_sasl_chain_before_openldap(self):
+        """lmdb and cyrus-sasl must precede openldap in stage 25.
+
+        Nightly #199 (all headless jobs) died at openldap configure
+        with "Could not locate Cyrus SASL": the book server build
+        passes --with-cyrus-sasl, but no stage ever built Cyrus SASL.
+        The Cyrus SASL book build in turn passes --with-dblib=lmdb,
+        so lmdb must be built first.  Both tarballs
+        (LMDB_0.9.33.tar.bz2, cyrus-sasl-2.1.28.tar.gz) are already
+        downloaded into /sources by the official wget-list.
+        """
+        content = Path('blfs/25-server.sh').read_text()
+        ldap_pos = content.index('run_build required openldap')
+        for pkg in ('lmdb', 'cyrus-sasl'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 25"
+            assert pos < ldap_pos, \
+                f"{pkg} must be built before openldap (nightly #199)"
+        assert 'build_commands_lmdb' in content
+        assert 'build_commands_cyrus_sasl' in content
+        assert '--with-cyrus-sasl' in content
+        assert '--with-dblib=lmdb' in content
+        assert 'lmdb) [ -f /usr/lib/liblmdb.so ] ;;' in content
+        assert 'cyrus-sasl) [ -f /usr/lib/libsasl2.so ] ;;' in content
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image
