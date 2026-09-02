@@ -387,6 +387,20 @@ build_commands_libxcb() {
     make install
 }
 
+# BLFS general/libxkbcommon – blfs-libs (08a) builds it with
+# -D enable-x11=false because libxcb does not exist at that point;
+# Phase 2 below rebuilds it once xcb-xkb is available so X11
+# consumers such as mutter get libxkbcommon-x11 (Nightly #198).
+build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
+build_commands_libxkbcommon() {
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D enable-docs=false &&
+    ninja && ninja install
+}
+
 # BLFS x/x7lib loop case for libpciaccess – meson build
 build_libpciaccess() { book_install libpciaccess build_commands_libpciaccess; }
 build_commands_libpciaccess() {
@@ -626,6 +640,22 @@ run_build required libXdmcp
 run_build required xcb-proto
 run_build required libxcb
 run_build required libX11
+
+# libxkbcommon – rebuild with X11 support now that libxcb provides
+# xcb-xkb; book_install would skip it, so extract and rebuild
+# explicitly when libxkbcommon-x11 is missing (Nightly #198).
+if have_pc xkbcommon && ! have_pc xkbcommon-x11; then
+    log_info "Rebuilding libxkbcommon with X11 support"
+    if dir="$(prep_src libxkbcommon)" && pushd "$dir" >/dev/null; then
+        if build_commands_libxkbcommon; then
+            log_success "libxkbcommon reinstalled with X11 support"
+        else
+            log_error "libxkbcommon X11 rebuild failed"
+        fi
+        popd >/dev/null
+        rm -rf "$dir"
+    fi
+fi
 
 # ======================================================================
 # Phase 3: Extension libraries

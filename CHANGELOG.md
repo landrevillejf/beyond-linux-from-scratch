@@ -86,6 +86,34 @@
 
 ### Fixed
 
+- **libxkbcommon aborts without libxcb (nightly #198)**
+  (`blfs/08a-build-blfs-libs.sh`, `blfs/08b-build-xorg.sh`)
+  - With vala unblocked, every desktop job died at libxkbcommon:
+    meson defaults `enable-x11` to true and aborts with `X11
+    support requires xcb-xkb >= 1.10`, but libxcb is only built by
+    the later xorg stage.  blfs-libs now passes
+    `-D enable-x11=false` when xcb-xkb is absent (the book lists
+    libxcb as recommended), and the xorg stage rebuilds the package
+    with X11 support right after libX11 so consumers such as mutter
+    still get libxkbcommon-x11
+
+- **postgresql configure: ICU library not found (nightly #198)**
+  (`blfs/25-server.sh`)
+  - With mariadb unblocked, every headless job died at postgresql:
+    its configure requires ICU, which only blfs-libs builds and
+    headless profiles skip that stage.  Phase 2 of the server stage
+    now builds ICU (book commands, `icu4c-*-src.tgz` resolved via a
+    dedicated `prep_src` case) before postgresql; `book_install`
+    skips it when a desktop profile already provided it
+
+- **find_archive -src tier picked the oldest archive (nightly #198)**
+  (`blfs/25-server.sh`)
+  - The fallback tier returned the first `*-src*` glob match, so a
+    stale packages-cache copy (`icu4c-76_1-src.tgz`) would shadow
+    the book version (`icu4c-77_1-src.tgz`).  The tier now sorts
+    candidates with `sort -V` and keeps the newest, mirroring the
+    tier-1 rule from nightly #174
+
 - **vala built before gobject-introspection (nightly #197)**
   (`blfs/08a-build-blfs-libs.sh`)
   - With the nightly #196 vala fix in place, all nine desktop jobs

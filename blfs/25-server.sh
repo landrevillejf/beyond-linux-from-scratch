@@ -146,12 +146,15 @@ find_archive() {
     fi
     for f in "${tier2[@]}"; do
         case "$f" in
-            *-src*)
-                printf '%s\n' "$f"
-                return 0
-                ;;
+            *-src*) filtered+=("$f") ;;
         esac
     done
+    if [ "${#filtered[@]}" -gt 0 ]; then
+        # Newest -src archive wins: stale packages-cache copies (e.g.
+        # icu4c-76_1) must never shadow the book version (nightly #198).
+        printf '%s\n' "${filtered[@]}" | sort -V | tail -n 1
+        return 0
+    fi
     filtered=()
     for f in "${tier2[@]}"; do
         case "$f" in
@@ -188,6 +191,7 @@ is_installed() {
         apr-util) have_cmd apu-1-config ;;
         pcre2) have_cmd pcre2-config ;;
         fmt) [ -f /usr/include/fmt/format.h ] ;;
+        icu) have_cmd icu-config ;;
         mariadb) have_cmd mariadbd || have_cmd mysqld ;;
         postgresql) have_cmd postgres ;;
         sqlite) have_cmd sqlite3 ;;
@@ -214,6 +218,9 @@ prep_src() {
         # the "apache" prefix and their -src archive would otherwise
         # shadow httpd through find_archive's fallback tier.
         apache) archive="$(find_archive httpd)" ;;
+        # ICU ships as icu4c-<ver>-src.tgz; resolve the real prefix so
+        # the -src tier cannot pick an unrelated archive (Nightly #198).
+        icu)    archive="$(find_archive icu4c)" ;;
         *)      archive="$(find_archive "$pkg")" ;;
     esac
     if [ -z "$archive" ]; then
@@ -364,6 +371,16 @@ build_commands_fmt() {
           -D FMT_TEST=OFF                \
           -G Ninja .. &&
     ninja && ninja install
+}
+
+# BLFS general/icu – configure lives in the source/ subdirectory.
+# PostgreSQL fails with "ICU library not found" without it and
+# headless profiles never run blfs-libs (Nightly #198).
+build_icu() { book_install icu build_commands_icu; }
+build_commands_icu() {
+    cd source &&
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" && make install
 }
 
 # BLFS server/mariadb
@@ -655,6 +672,10 @@ run_build required fmt
 
 # mariadb – MariaDB database server (MySQL compatible)
 run_build required mariadb
+
+# icu – required by postgresql's configure; skipped when a desktop
+# profile already built it in blfs-libs.
+run_build required icu
 
 # postgresql – PostgreSQL database server
 run_build required postgresql

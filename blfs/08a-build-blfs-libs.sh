@@ -1012,11 +1012,18 @@ build_commands_libgudev() {
 build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
 
 build_commands_libxkbcommon() {
+    # libxcb is only "recommended" by the book but meson defaults
+    # enable-x11 to true and aborts without xcb-xkb >= 1.10; the
+    # xorg stage (08b) builds libxcb later and rebuilds this package
+    # with X11 support (Nightly #198).
+    x11=
+    have_pc xcb-xkb || x11="-D enable-x11=false"
+    # shellcheck disable=SC2086  # word splitting is intended here
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D enable-docs=false &&
+          -D enable-docs=false $x11 &&
     ninja && ninja install
 }
 
