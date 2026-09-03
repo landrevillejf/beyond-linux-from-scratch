@@ -86,6 +86,40 @@
 
 ### Fixed
 
+- **mesa meson: rustc required by the Nouveau Vulkan driver (nightly #208)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - With glslang unblocked, every desktop job (gnome, kde, lxqt, full,
+    java-dev) died at mesa: the book's `-D vulkan-drivers=auto` pulls
+    in the Nouveau driver (nak), which meson hard-requires `rustc` for
+    and which the book notes needs an Internet connection to fetch its
+    Rust crates, plus the Intel driver (anv), which needs ply.  The
+    chroot is offline and ships neither rustc nor ply, so mesa now
+    enumerates the drivers that build offline
+    (`-D vulkan-drivers=amd,swrast`, i.e. radv + lavapipe).
+    glslangValidator is still required to compile their shaders, so the
+    #207 SPIRV/glslang chain stays
+
+- **samba aborts when the offline venv cannot pip-install cryptography
+  (nightly #208)** (`blfs/25-server.sh`)
+  - Every headless job (server, minimal, arm64) died at samba: the book
+    creates a python venv and pip-installs cryptography/pyasn1/iso8601
+    for the AD DC features, but the chroot has no network so pip fails
+    with `No matching distribution found for cryptography`, and the
+    `|| return 1` guard turned that into a fatal stage abort.  Since
+    the build already passes `--without-ad-dc`, a failed venv now
+    degrades to the system python3 with a warning instead of aborting
+
+- **freedesktop.org HTTP 418 treated as a permanent download error
+  (nightly #208)** (`builder.py`)
+  - The xfce jobs died in blfs-libs with `no source archive found for
+    libevdev`: freedesktop.org's CDN answers parallel CI download bursts
+    with `418 I'm a teapot`, which `download()` lumped in with permanent
+    4xx errors, so it gave up on the first response instead of backing
+    off.  418 now falls through to the same exponential-backoff retry as
+    429, which also covers the other freedesktop.org packages
+    (accountsservice, AppStream, colord, pulseaudio, ...) that
+    intermittently 418 under load
+
 - **mesa meson: glslangValidator not found (nightly #207)**
   (`blfs/08a-build-blfs-libs.sh`)
   - With libxkbcommon unblocked, every desktop job died at mesa:

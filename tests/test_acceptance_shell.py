@@ -1815,12 +1815,12 @@ class TestProfilePromiseGuardrails:
 
         Nightly #207 (all desktop jobs) died at mesa meson with
         "Program 'glslangValidator' not found or not executable":
-        the stage passes the book's -D vulkan-drivers=auto, which
-        makes meson hard-require glslangValidator, and the book
-        lists Glslang as recommended (required for Vulkan support).
-        Glslang in turn requires SPIRV-Tools (book REQUIRED), which
-        requires SPIRV-Headers.  All three tarballs were already
-        downloaded into /sources by the official wget-list.
+        building any Vulkan driver makes meson hard-require
+        glslangValidator, and the book lists Glslang as recommended
+        (required for Vulkan support).  Glslang in turn requires
+        SPIRV-Tools (book REQUIRED), which requires SPIRV-Headers.
+        All three tarballs were already downloaded into /sources by
+        the official wget-list.
         """
         content = Path('blfs/08a-build-blfs-libs.sh').read_text()
         mesa_pos = content.index('run_build required mesa')
@@ -1839,6 +1839,36 @@ class TestProfilePromiseGuardrails:
         assert 'glslang)             have_cmd glslang ;;' in content
         assert 'ALLOW_EXTERNAL_SPIRV_TOOLS=ON' in content
         assert 'SPIRV-Headers_SOURCE_DIR=/usr' in content
+
+    def test_libs_stage_mesa_vulkan_drivers_are_offline_safe(self):
+        """mesa must not enable Vulkan drivers that need Rust/ply/network.
+
+        Nightly #208 (all desktop jobs) died at mesa meson with
+        "Unknown compiler(s): [['rustc']]": the book's
+        -D vulkan-drivers=auto pulls in the Nouveau driver (nak), which
+        hard-requires rustc plus an Internet connection for its Rust
+        crates, and the Intel driver (anv), which needs ply.  The chroot
+        is offline and ships neither, so the stage enumerates the drivers
+        that build offline (radv + lavapipe) instead of using auto.
+        """
+        import re
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        # Comment lines may quote the book's default; only the actual
+        # meson invocation matters.
+        code = "\n".join(
+            ln for ln in content.splitlines()
+            if not ln.lstrip().startswith('#')
+        )
+        assert '-D vulkan-drivers=auto' not in code, \
+            "mesa must not use vulkan-drivers=auto offline (nightly #208)"
+        match = re.search(r'-D vulkan-drivers=([a-z,]+)', code)
+        assert match, "mesa vulkan-drivers option not found"
+        drivers = match.group(1).split(',')
+        assert drivers == ['amd', 'swrast'], \
+            f"expected offline-safe radv+lavapipe, got {drivers}"
+        for bad in ('nouveau', 'intel', 'auto'):
+            assert bad not in drivers, \
+                f"{bad} Vulkan driver cannot build in the offline chroot"
 
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.
@@ -1863,6 +1893,23 @@ class TestProfilePromiseGuardrails:
             in content
         assert 'liburcu) have_pc liburcu ;;' in content
         assert 'libuv) have_pc libuv ;;' in content
+
+    def test_server_stage_samba_venv_failure_is_non_fatal(self):
+        """samba must fall back to system python3 when the venv pip fails.
+
+        Nightly #208 (all headless jobs) died at samba with "No matching
+        distribution found for cryptography": the book creates a venv and
+        pip-installs cryptography/pyasn1/iso8601 for the AD DC features,
+        but the chroot is offline so pip cannot reach PyPI.  Since the
+        build already passes --without-ad-dc, a failed venv must degrade
+        to the system python3 instead of `return 1`-ing the whole stage.
+        """
+        content = Path('blfs/25-server.sh').read_text()
+        assert 'build_commands_samba' in content
+        assert 'install cryptography pyasn1 iso8601 || return 1' not in content, \
+            "samba venv pip failure must be non-fatal (nightly #208)"
+        assert 'building with system python3' in content
+        assert '--without-ad-dc' in content
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image

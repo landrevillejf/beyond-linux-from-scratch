@@ -252,6 +252,30 @@ https://git.savannah.gnu.org/git/guix.git
         assert result is True
         assert mock_sleep.call_count == 1
 
+    @patch('builder.time.sleep')
+    def test_download_http_418_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+        """HTTP 418 (freedesktop.org anti-abuse) is transient and retried.
+
+        Nightly #208: freedesktop.org's CDN answers parallel CI download
+        bursts with "418 I'm a teapot".  It was lumped in with permanent
+        4xx errors, so libevdev gave up on the first response and aborted
+        blfs-libs for the xfce jobs.  418 must fall through to the same
+        backoff retry as 429.
+        """
+        downloader = SourceDownloader(sources_dir, mock_logger)
+
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            mock_retrieve.side_effect = [
+                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
+                                       msg="I'm a teapot", hdrs=None, fp=None),
+                MagicMock(),
+            ]
+            result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=2)
+
+        assert result is True
+        assert mock_retrieve.call_count == 2
+        assert mock_sleep.call_count == 1
+
     def test_download_from_list_retry_pass_recovers(self, tmp_path):
         """Test that download_from_list retry pass recovers failed downloads."""
         list_file = tmp_path / "sources.list"

@@ -1085,11 +1085,11 @@ build_commands_spirv_tools() {
     ninja && ninja install
 }
 
-# BLFS x/glslang – mesa is configured with the book's
-# -D vulkan-drivers=auto, which makes meson hard-require
-# glslangValidator ("Program 'glslangValidator' not found or not
-# executable", nightly #207).  glslang installs that legacy-named
-# symlink next to the glslang binary (StandAlone/CMakeLists.txt).
+# BLFS x/glslang – mesa builds Vulkan drivers (radv/lavapipe), which
+# makes meson hard-require glslangValidator to compile their shaders
+# ("Program 'glslangValidator' not found or not executable", nightly
+# #207).  glslang installs that legacy-named symlink next to the
+# glslang binary (StandAlone/CMakeLists.txt).
 build_glslang() { book_install glslang build_commands_glslang; }
 
 build_commands_glslang() {
@@ -1103,7 +1103,17 @@ build_commands_glslang() {
     ninja && ninja install
 }
 
-# BLFS x/mesa – xdemos patch applied only when shipped
+# BLFS x/mesa – xdemos patch applied only when shipped.
+#
+# The book passes -D vulkan-drivers=auto, but "auto" pulls in the
+# Nouveau Vulkan driver (nak), which meson hard-requires rustc for and
+# which the book notes needs an Internet connection to fetch its Rust
+# crates, plus the Intel driver (anv), which needs ply.  The chroot is
+# offline and ships neither rustc nor ply, so meson aborts with
+# "Unknown compiler(s): [['rustc']]" (Nightly #208).  Enumerate the
+# drivers that build offline instead: radv (amd) and lavapipe (swrast).
+# glslangValidator is still required to compile their shaders, so the
+# SPIRV/glslang chain built before mesa stays.
 build_mesa() { book_install mesa build_commands_mesa; }
 
 build_commands_mesa() {
@@ -1116,7 +1126,7 @@ build_commands_mesa() {
           --buildtype=release \
           -D platforms=x11,wayland \
           -D gallium-drivers=auto \
-          -D vulkan-drivers=auto \
+          -D vulkan-drivers=amd,swrast \
           -D valgrind=disabled \
           -D video-codecs=all \
           -D libunwind=disabled &&
@@ -1470,8 +1480,8 @@ run_build required libevdev
 run_build required libdrm
 
 # spirv-headers / spirv-tools / glslang – the Vulkan shader chain;
-# mesa is configured with the book's -D vulkan-drivers=auto and meson
-# aborts without glslangValidator (nightly #207)
+# mesa's Vulkan drivers (radv/lavapipe) make meson abort without
+# glslangValidator (nightly #207)
 run_build required spirv-headers
 run_build required spirv-tools
 run_build required glslang

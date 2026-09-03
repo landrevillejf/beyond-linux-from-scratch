@@ -660,8 +660,13 @@ build_commands_proftpd() {
     make -j"$JOBS" && make install
 }
 
-# BLFS basicnet/samba – --without-systemd is the sysvinit book variant;
-# the python venv is created only when python3 and pip3 are available.
+# BLFS basicnet/samba – --without-systemd is the sysvinit book variant.
+# The book installs cryptography/pyasn1/iso8601 into a venv for the AD DC
+# features, but the chroot is offline so pip cannot reach PyPI, and
+# --without-ad-dc below disables those features anyway.  A failed venv is
+# therefore non-fatal: fall back to the system python3 instead of aborting
+# the stage (Nightly #208: "No matching distribution found for
+# cryptography" killed every headless job at samba).
 build_samba() { book_install samba build_commands_samba; }
 build_commands_samba() {
     local sd_opts="" pypath=""
@@ -669,11 +674,15 @@ build_commands_samba() {
         sd_opts="--without-systemd"
     fi
     if have_cmd python3 && python3 -m pip --version >/dev/null 2>&1; then
-        python3 -m venv --system-site-packages pyvenv || return 1
-        ./pyvenv/bin/pip3 install cryptography pyasn1 iso8601 || return 1
-        pypath="PYTHON=$PWD/pyvenv/bin/python3 PATH=$PWD/pyvenv/bin:$PATH"
+        if python3 -m venv --system-site-packages pyvenv &&
+           ./pyvenv/bin/pip3 install cryptography pyasn1 iso8601; then
+            pypath="PYTHON=$PWD/pyvenv/bin/python3 PATH=$PWD/pyvenv/bin:$PATH"
+        else
+            log_warning "samba: python venv unavailable (offline?); building with system python3"
+            rm -rf pyvenv
+        fi
     else
-        log_warning "samba: python3 venv unavailable; building without it"
+        log_warning "samba: python3/pip3 unavailable; building with system python3"
     fi
     # shellcheck disable=SC2086
     $pypath ./configure                    \

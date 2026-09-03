@@ -715,9 +715,10 @@ class SourceDownloader:
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with exponential-backoff retry.
 
-        Transient errors (timeouts, connection resets, 5xx, 429) are retried
-        with increasing delays.  Permanent client errors (4xx except 429) fail
-        immediately to avoid wasting time.
+        Transient errors (timeouts, connection resets, 5xx, 429 and the
+        418 anti-abuse response freedesktop.org's CDN returns under load)
+        are retried with increasing delays.  Permanent client errors
+        (other 4xx) fail immediately to avoid wasting time.
         """
         if filename is None:
             filename = url.split('/')[-1]
@@ -751,8 +752,13 @@ class SourceDownloader:
             except urllib.error.HTTPError as e:
                 if dest.exists():
                     dest.unlink()
-                # Permanent client errors – do not retry
-                if 400 <= e.code < 500 and e.code != 429:
+                # Permanent client errors – do not retry.  429 (rate
+                # limit) and 418 (freedesktop.org's anti-abuse "I'm a
+                # teapot") are transient: a single rate-limit window must
+                # not fail the whole stage, so both fall through to the
+                # backoff retry below (Nightly #208: libevdev 418 aborted
+                # blfs-libs for the xfce jobs).
+                if 400 <= e.code < 500 and e.code not in (418, 429):
                     self.logger.error(f"Permanent error downloading {url}: {e}")
                     return False
                 # Retryable server errors and rate limits
