@@ -239,6 +239,9 @@ is_installed() {
         libwacom)            have_pc libwacom ;;
         libevdev)            have_pc libevdev ;;
         libdrm)              have_pc libdrm ;;
+        spirv-headers)       [ -d /usr/include/spirv ] ;;
+        spirv-tools)         [ -f /usr/lib/libSPIRV-Tools.so ] ;;
+        glslang)             have_cmd glslang ;;
         mesa)                have_pc egl ;;
         libva)               have_pc libva ;;
         libvdpau)            have_pc vdpau ;;
@@ -1056,6 +1059,50 @@ build_commands_libdrm() {
     ninja && ninja install
 }
 
+# BLFS general/spirv-headers – required by SPIRV-Tools; header-only,
+# installs /usr/include/spirv and its cmake package files.
+build_spirv_headers() { book_install spirv-headers build_commands_spirv_headers; }
+
+build_commands_spirv_headers() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr -G Ninja .. &&
+    ninja && ninja install
+}
+
+# BLFS general/spirv-tools – REQUIRED by glslang; the book points
+# SPIRV-Headers_SOURCE_DIR at /usr so the system headers are used.
+build_spirv_tools() { book_install spirv-tools build_commands_spirv_tools; }
+
+build_commands_spirv_tools() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr     \
+          -D CMAKE_BUILD_TYPE=Release      \
+          -D SPIRV_WERROR=OFF              \
+          -D BUILD_SHARED_LIBS=ON          \
+          -D SPIRV_TOOLS_BUILD_STATIC=OFF  \
+          -D SPIRV-Headers_SOURCE_DIR=/usr \
+          -G Ninja .. &&
+    ninja && ninja install
+}
+
+# BLFS x/glslang – mesa is configured with the book's
+# -D vulkan-drivers=auto, which makes meson hard-require
+# glslangValidator ("Program 'glslangValidator' not found or not
+# executable", nightly #207).  glslang installs that legacy-named
+# symlink next to the glslang binary (StandAlone/CMakeLists.txt).
+build_glslang() { book_install glslang build_commands_glslang; }
+
+build_commands_glslang() {
+    mkdir build && cd build &&
+    cmake -D CMAKE_INSTALL_PREFIX=/usr     \
+          -D CMAKE_BUILD_TYPE=Release      \
+          -D ALLOW_EXTERNAL_SPIRV_TOOLS=ON \
+          -D BUILD_SHARED_LIBS=ON          \
+          -D GLSLANG_TESTS=ON              \
+          -G Ninja .. &&
+    ninja && ninja install
+}
+
 # BLFS x/mesa – xdemos patch applied only when shipped
 build_mesa() { book_install mesa build_commands_mesa; }
 
@@ -1421,6 +1468,13 @@ run_build required libevdev
 
 # libdrm – Direct Rendering Manager (Mesa dependency)
 run_build required libdrm
+
+# spirv-headers / spirv-tools / glslang – the Vulkan shader chain;
+# mesa is configured with the book's -D vulkan-drivers=auto and meson
+# aborts without glslangValidator (nightly #207)
+run_build required spirv-headers
+run_build required spirv-tools
+run_build required glslang
 
 # mesa – 3D graphics library
 run_build required mesa

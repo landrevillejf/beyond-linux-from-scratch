@@ -86,6 +86,27 @@
 
 ### Fixed
 
+- **mesa meson: glslangValidator not found (nightly #207)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - With libxkbcommon unblocked, every desktop job died at mesa:
+    the stage passes the book's `-D vulkan-drivers=auto`, which
+    makes meson hard-require `glslangValidator`, but no stage ever
+    built Glslang.  blfs-libs now builds the full Vulkan shader
+    chain with book commands before mesa: SPIRV-Headers (header-only
+    cmake install), SPIRV-Tools (with `SPIRV-Headers_SOURCE_DIR=/usr`)
+    and Glslang (which installs the legacy `glslangValidator`
+    symlink).  All three tarballs were already downloaded by the
+    official wget-list
+
+- **bind configure: liburcu/libuv not found (nightly #207)**
+  (`blfs/25-server.sh`)
+  - With openldap unblocked, every headless job died at bind: the
+    book lists liburcu and libuv as REQUIRED bind dependencies but
+    no stage built them.  Phase 4 now builds liburcu (tarball ships
+    as `userspace-rcu-*`, resolved via a `prep_src` case) and libuv
+    (`sh autogen.sh` first — the GitHub archive ships no configure
+    script) before bind
+
 - **libxkbcommon aborts without wayland-protocols (nightly #199)**
   (`blfs/08a-build-blfs-libs.sh`, `blfs/08b-build-xorg.sh`)
   - The nightly #198 fix only disabled `enable-x11`; every desktop

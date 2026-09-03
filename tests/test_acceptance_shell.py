@@ -1267,6 +1267,9 @@ class TestBLFSErrorPolicyGuardrails:
         'qt6': ['qt-everywhere-src'],
         'networkmanager': ['NetworkManager'],
         'lmdb': ['LMDB_0.9.33'],
+        'liburcu': ['userspace-rcu'],
+        'spirv-headers': ['SPIRV-Headers'],
+        'spirv-tools': ['SPIRV-Tools'],
     }
 
     # Packages provided by another stage or by the LFS base system.
@@ -1806,6 +1809,60 @@ class TestProfilePromiseGuardrails:
         assert '--with-dblib=lmdb' in content
         assert 'lmdb) [ -f /usr/lib/liblmdb.so ] ;;' in content
         assert 'cyrus-sasl) [ -f /usr/lib/libsasl2.so ] ;;' in content
+
+    def test_libs_stage_builds_vulkan_shader_chain_before_mesa(self):
+        """spirv-headers, spirv-tools and glslang must precede mesa.
+
+        Nightly #207 (all desktop jobs) died at mesa meson with
+        "Program 'glslangValidator' not found or not executable":
+        the stage passes the book's -D vulkan-drivers=auto, which
+        makes meson hard-require glslangValidator, and the book
+        lists Glslang as recommended (required for Vulkan support).
+        Glslang in turn requires SPIRV-Tools (book REQUIRED), which
+        requires SPIRV-Headers.  All three tarballs were already
+        downloaded into /sources by the official wget-list.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        mesa_pos = content.index('run_build required mesa')
+        for pkg in ('spirv-headers', 'spirv-tools', 'glslang'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 08a"
+            assert pos < mesa_pos, \
+                f"{pkg} must be built before mesa (nightly #207)"
+        assert 'build_commands_spirv_headers' in content
+        assert 'build_commands_spirv_tools' in content
+        assert 'build_commands_glslang' in content
+        assert 'spirv-headers)       [ -d /usr/include/spirv ] ;;' \
+            in content
+        assert 'spirv-tools)         [ -f /usr/lib/libSPIRV-Tools.so ] ;;' \
+            in content
+        assert 'glslang)             have_cmd glslang ;;' in content
+        assert 'ALLOW_EXTERNAL_SPIRV_TOOLS=ON' in content
+        assert 'SPIRV-Headers_SOURCE_DIR=/usr' in content
+
+    def test_server_stage_builds_liburcu_libuv_before_bind(self):
+        """liburcu and libuv must precede bind in stage 25.
+
+        Nightly #207 (all headless jobs) died at bind configure with
+        "Package requirements (liburcu >= 0.10.0 liburcu-cds >=
+        0.10.0) were not met"; the book lists liburcu and libuv as
+        REQUIRED bind dependencies, but no stage built them.  The
+        liburcu tarball ships as userspace-rcu-<version>, so
+        prep_src must resolve that prefix.
+        """
+        content = Path('blfs/25-server.sh').read_text()
+        bind_pos = content.index('run_build required bind')
+        for pkg in ('liburcu', 'libuv'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 25"
+            assert pos < bind_pos, \
+                f"{pkg} must be built before bind (nightly #207)"
+        assert 'build_commands_liburcu' in content
+        assert 'build_commands_libuv' in content
+        assert 'liburcu) archive="$(find_archive userspace-rcu)" ;;' \
+            in content
+        assert 'liburcu) have_pc liburcu ;;' in content
+        assert 'libuv) have_pc libuv ;;' in content
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image

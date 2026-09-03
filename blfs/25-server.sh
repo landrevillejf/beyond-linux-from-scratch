@@ -198,6 +198,8 @@ is_installed() {
         lmdb) [ -f /usr/lib/liblmdb.so ] ;;
         cyrus-sasl) [ -f /usr/lib/libsasl2.so ] ;;
         openldap) have_cmd slapd ;;
+        liburcu) have_pc liburcu ;;
+        libuv) have_pc libuv ;;
         bind) have_cmd named ;;
         postfix) have_cmd postfix || have_cmd sendmail ;;
         dovecot) have_cmd dovecot ;;
@@ -223,6 +225,9 @@ prep_src() {
         # ICU ships as icu4c-<ver>-src.tgz; resolve the real prefix so
         # the -src tier cannot pick an unrelated archive (Nightly #198).
         icu)    archive="$(find_archive icu4c)" ;;
+        # liburcu ships as userspace-rcu-<version>; resolve the real
+        # prefix (Nightly #207).
+        liburcu) archive="$(find_archive userspace-rcu)" ;;
         *)      archive="$(find_archive "$pkg")" ;;
     esac
     if [ -z "$archive" ]; then
@@ -541,6 +546,28 @@ build_commands_openldap() {
     make -j"$JOBS" && make install
 }
 
+# BLFS general/liburcu – bind 9.20 hard-requires liburcu >= 0.10 at
+# configure time ("Package 'liburcu' not found", nightly #207); the
+# tarball ships as userspace-rcu (prep_src resolves it).
+build_liburcu() { book_install liburcu build_commands_liburcu; }
+build_commands_liburcu() {
+    ./configure --prefix=/usr    \
+                --disable-static \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS general/libuv – REQUIRED by bind; the GitHub archive ships no
+# configure script, so the book runs autogen.sh first.  The chroot
+# runs with env -i, so the ACLOCAL clash the book warns about cannot
+# happen here.
+build_libuv() { book_install libuv build_commands_libuv; }
+build_commands_libuv() {
+    sh autogen.sh &&
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
 # BLFS server/bind
 build_bind() { book_install bind build_commands_bind; }
 build_commands_bind() {
@@ -742,6 +769,12 @@ run_build required cyrus-sasl
 run_build required openldap
 
 log_info "Phase 4: DNS server"
+
+# liburcu / libuv – both are REQUIRED bind dependencies per the book;
+# bind 9.20 configure aborts on the missing pkg-config files
+# (Nightly #207)
+run_build required liburcu
+run_build required libuv
 
 # bind – BIND DNS server
 run_build required bind
