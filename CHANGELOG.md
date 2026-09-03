@@ -86,6 +86,41 @@
 
 ### Fixed
 
+- **mesa meson: libclc required by the radv/lavapipe Vulkan drivers
+  (nightly #210)** (`blfs/08a-build-blfs-libs.sh`)
+  - The #208 fix (`-D vulkan-drivers=amd,swrast`) cleared the rustc
+    abort, but every desktop job (xfce, gnome, kde, lxqt, full,
+    java-dev, audio-studio) then died at mesa meson with `Run-time
+    dependency libclc found: NO`: radv/lavapipe enable mesa's OpenCL
+    path, which hard-requires libclc, and libclc needs a full
+    LLVM/clang toolchain that no stage builds (the llvm/libclc
+    tarballs download but are never compiled).  mesa now builds
+    software-only: `-D gallium-drivers=softpipe` (the book's no-LLVM
+    gallium driver), `-D vulkan-drivers=""` and `-D llvm=disabled`,
+    with the optional `-D video-codecs=all` dropped since softpipe has
+    no video backend.  This needs no libclc, rustc, ply or
+    glslangValidator and adds zero packages; the #207 SPIRV/glslang
+    chain is left in place (it builds cleanly and removing it would
+    churn the proven-good library order)
+
+- **samba configure: GnuTLS not found; krb5/Parse-Yapp never built
+  (nightly #210)** (`blfs/25-server.sh`)
+  - The #208 venv fix let samba's configure run, but all three headless
+    jobs (server, minimal sysvinit/systemd) then died at `Checking for
+    GnuTLS >= 3.6.13 : not found`.  The headless profiles skip
+    blfs-libs (08a), so nothing provides GnuTLS or its Required nettle
+    dependency.  Phase 8 now builds nettle and GnuTLS first (offline
+    switches `--without-p11-kit --with-included-unistring`; GnuTLS
+    falls back on the libtasn1 bundled in its tarball).  Two further
+    Required samba deps that only surface past GnuTLS are built too:
+    Parse-Yapp (samba's pidl IDL compiler, needed at make time and not
+    probed by configure) and MIT krb5 (the book's
+    `--with-system-mitkrb5` is mandatory alongside `--without-ad-dc`,
+    but the krb5 tarball was downloaded and never compiled).  nettle
+    and gnutls stay required; Parse-Yapp, krb5 and samba itself are
+    optional so a residual offline issue can never again block an
+    otherwise-good server build
+
 - **mesa meson: rustc required by the Nouveau Vulkan driver (nightly #208)**
   (`blfs/08a-build-blfs-libs.sh`)
   - With glslang unblocked, every desktop job (gnome, kde, lxqt, full,

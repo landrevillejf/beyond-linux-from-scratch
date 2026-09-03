@@ -1085,11 +1085,15 @@ build_commands_spirv_tools() {
     ninja && ninja install
 }
 
-# BLFS x/glslang – mesa builds Vulkan drivers (radv/lavapipe), which
-# makes meson hard-require glslangValidator to compile their shaders
-# ("Program 'glslangValidator' not found or not executable", nightly
-# #207).  glslang installs that legacy-named symlink next to the
-# glslang binary (StandAlone/CMakeLists.txt).
+# BLFS x/glslang – Vulkan shader compiler.  Added in nightly #207
+# because mesa's radv/lavapipe drivers made meson hard-require
+# glslangValidator to compile their shaders.  mesa is now built
+# software-only (softpipe, no Vulkan drivers; see build_mesa below) so
+# it no longer needs glslangValidator, but this SPIRV/glslang chain is
+# left in place: it builds cleanly and removing it would churn the
+# proven-good library order for no functional gain.  glslang installs
+# the legacy glslangValidator symlink next to the glslang binary
+# (StandAlone/CMakeLists.txt).
 build_glslang() { book_install glslang build_commands_glslang; }
 
 build_commands_glslang() {
@@ -1105,15 +1109,21 @@ build_commands_glslang() {
 
 # BLFS x/mesa – xdemos patch applied only when shipped.
 #
-# The book passes -D vulkan-drivers=auto, but "auto" pulls in the
-# Nouveau Vulkan driver (nak), which meson hard-requires rustc for and
-# which the book notes needs an Internet connection to fetch its Rust
-# crates, plus the Intel driver (anv), which needs ply.  The chroot is
-# offline and ships neither rustc nor ply, so meson aborts with
-# "Unknown compiler(s): [['rustc']]" (Nightly #208).  Enumerate the
-# drivers that build offline instead: radv (amd) and lavapipe (swrast).
-# glslangValidator is still required to compile their shaders, so the
-# SPIRV/glslang chain built before mesa stays.
+# The book passes -D gallium-drivers=auto -D vulkan-drivers=auto, but
+# every hardware and Vulkan path needs something the offline chroot
+# cannot supply: the Nouveau Vulkan driver (nak) hard-requires rustc
+# plus an Internet connection for its Rust crates, the Intel drivers
+# need ply, and radv/lavapipe/iris pull in libclc, which itself needs
+# a full LLVM/clang toolchain that no stage builds.  Enumerating
+# amd,swrast cleared the rustc abort (Nightly #208) but then died on
+# "Run-time dependency libclc found: NO" (Nightly #210).  Build the
+# pure-software rasteriser instead: softpipe (the book's no-LLVM
+# gallium driver, x/mesa "softpipe ... use it unless LLVM is not
+# available"), no Vulkan drivers and LLVM disabled.  This needs no
+# libclc, rustc, ply or glslangValidator, adds zero packages and is the
+# most reliable configuration for CI.  video-codecs is dropped: the
+# book marks -D video-codecs=all optional/removable and softpipe has no
+# video backend to accelerate.
 build_mesa() { book_install mesa build_commands_mesa; }
 
 build_commands_mesa() {
@@ -1125,10 +1135,10 @@ build_commands_mesa() {
           --prefix=/usr \
           --buildtype=release \
           -D platforms=x11,wayland \
-          -D gallium-drivers=auto \
-          -D vulkan-drivers=amd,swrast \
+          -D gallium-drivers=softpipe \
+          -D vulkan-drivers="" \
+          -D llvm=disabled \
           -D valgrind=disabled \
-          -D video-codecs=all \
           -D libunwind=disabled &&
     ninja && ninja install
 }
@@ -1479,9 +1489,11 @@ run_build required libevdev
 # libdrm – Direct Rendering Manager (Mesa dependency)
 run_build required libdrm
 
-# spirv-headers / spirv-tools / glslang – the Vulkan shader chain;
-# mesa's Vulkan drivers (radv/lavapipe) make meson abort without
-# glslangValidator (nightly #207)
+# spirv-headers / spirv-tools / glslang – the Vulkan shader chain,
+# added for mesa's radv/lavapipe drivers (nightly #207).  mesa is now
+# software-only so it no longer needs glslangValidator, but the chain
+# is left in place (see build_glslang) to avoid churning the
+# proven-good library order.
 run_build required spirv-headers
 run_build required spirv-tools
 run_build required glslang

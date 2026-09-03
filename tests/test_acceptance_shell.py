@@ -1840,18 +1840,21 @@ class TestProfilePromiseGuardrails:
         assert 'ALLOW_EXTERNAL_SPIRV_TOOLS=ON' in content
         assert 'SPIRV-Headers_SOURCE_DIR=/usr' in content
 
-    def test_libs_stage_mesa_vulkan_drivers_are_offline_safe(self):
-        """mesa must not enable Vulkan drivers that need Rust/ply/network.
+    def test_libs_stage_mesa_is_software_only_offline_safe(self):
+        """mesa must build software-only: softpipe, no Vulkan, no LLVM.
 
         Nightly #208 (all desktop jobs) died at mesa meson with
-        "Unknown compiler(s): [['rustc']]": the book's
-        -D vulkan-drivers=auto pulls in the Nouveau driver (nak), which
-        hard-requires rustc plus an Internet connection for its Rust
-        crates, and the Intel driver (anv), which needs ply.  The chroot
-        is offline and ships neither, so the stage enumerates the drivers
-        that build offline (radv + lavapipe) instead of using auto.
+        "Unknown compiler(s): [['rustc']]": -D vulkan-drivers=auto pulls
+        in the Nouveau driver (nak, needs rustc + network) and the Intel
+        driver (anv, needs ply).  Enumerating amd,swrast cleared that,
+        but Nightly #210 then died on "Run-time dependency libclc found:
+        NO" because radv/lavapipe pull in libclc, which needs a full
+        LLVM/clang toolchain that no stage builds.  The offline chroot
+        can only build the pure-software rasteriser, so the stage uses
+        softpipe (the book's no-LLVM gallium driver), empty
+        vulkan-drivers and -D llvm=disabled, and drops the optional
+        -D video-codecs=all (softpipe has no video backend).
         """
-        import re
         content = Path('blfs/08a-build-blfs-libs.sh').read_text()
         # Comment lines may quote the book's default; only the actual
         # meson invocation matters.
@@ -1861,14 +1864,16 @@ class TestProfilePromiseGuardrails:
         )
         assert '-D vulkan-drivers=auto' not in code, \
             "mesa must not use vulkan-drivers=auto offline (nightly #208)"
-        match = re.search(r'-D vulkan-drivers=([a-z,]+)', code)
-        assert match, "mesa vulkan-drivers option not found"
-        drivers = match.group(1).split(',')
-        assert drivers == ['amd', 'swrast'], \
-            f"expected offline-safe radv+lavapipe, got {drivers}"
-        for bad in ('nouveau', 'intel', 'auto'):
-            assert bad not in drivers, \
-                f"{bad} Vulkan driver cannot build in the offline chroot"
+        assert '-D gallium-drivers=auto' not in code, \
+            "mesa must not use gallium-drivers=auto offline (nightly #210)"
+        assert '-D video-codecs=all' not in code, \
+            "mesa must drop video-codecs (softpipe has no video backend)"
+        assert '-D gallium-drivers=softpipe' in code, \
+            "mesa must use the no-LLVM softpipe driver (nightly #210)"
+        assert '-D vulkan-drivers=""' in code, \
+            "mesa must build no Vulkan drivers offline (nightly #210)"
+        assert '-D llvm=disabled' in code, \
+            "mesa must disable LLVM so libclc is never required (#210)"
 
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.
@@ -1910,6 +1915,46 @@ class TestProfilePromiseGuardrails:
             "samba venv pip failure must be non-fatal (nightly #208)"
         assert 'building with system python3' in content
         assert '--without-ad-dc' in content
+
+    def test_server_stage_builds_gnutls_chain_before_samba(self):
+        """nettle, gnutls, Parse-Yapp and krb5 must precede samba (stage 25).
+
+        Nightly #210 (all headless jobs) died at samba configure with
+        "Checking for GnuTLS >= 3.6.13 : not found": the headless
+        profiles skip blfs-libs (08a), so nothing provides GnuTLS, and
+        GnuTLS in turn requires nettle.  Once GnuTLS is satisfied two
+        further Required samba deps surface: Parse-Yapp (samba's pidl
+        IDL compiler, needed at make time and not probed by configure)
+        and MIT krb5 (the book's --with-system-mitkrb5 is mandatory
+        alongside --without-ad-dc).  nettle/gnutls stay required; the
+        samba-only pieces and samba itself are optional so a residual
+        offline issue can never again block an otherwise-good build.
+        """
+        content = Path('blfs/25-server.sh').read_text()
+        assert 'run_build optional samba' in content, \
+            "samba must be optional so a residual dep cannot block (#210)"
+        samba_pos = content.index('run_build optional samba')
+        for pkg in ('nettle', 'gnutls'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 25"
+            assert pos < samba_pos, \
+                f"{pkg} must be built before samba (nightly #210)"
+        for pkg in ('parse-yapp', 'krb5'):
+            pos = content.find(f'run_build optional {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 25"
+            assert pos < samba_pos, \
+                f"{pkg} must be built before samba (nightly #210)"
+        assert 'build_commands_nettle' in content
+        assert 'build_commands_gnutls' in content
+        assert 'build_commands_parse_yapp' in content
+        assert 'build_commands_krb5' in content
+        assert '--with-included-unistring' in content
+        assert '--without-p11-kit' in content
+        assert '--with-system-mitkrb5' in content
+        assert 'nettle) have_pc nettle ;;' in content
+        assert 'gnutls) have_pc gnutls ;;' in content
+        assert 'krb5) have_cmd krb5-config ;;' in content
+        assert 'perl -MParse::Yapp::Driver -e1' in content
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image

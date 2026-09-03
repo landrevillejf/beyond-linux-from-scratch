@@ -206,6 +206,10 @@ is_installed() {
         openssh) have_cmd sshd ;;
         vsftpd) have_cmd vsftpd ;;
         proftpd) have_cmd proftpd ;;
+        nettle) have_pc nettle ;;
+        gnutls) have_pc gnutls ;;
+        parse-yapp) perl -MParse::Yapp::Driver -e1 >/dev/null 2>&1 ;;
+        krb5) have_cmd krb5-config ;;
         samba) have_cmd smbd ;;
         *) return 1 ;;
     esac
@@ -660,6 +664,67 @@ build_commands_proftpd() {
     make -j"$JOBS" && make install
 }
 
+# BLFS postlfs/nettle – REQUIRED by GnuTLS.  The headless profiles skip
+# blfs-libs (08a), where nettle is otherwise built, so samba's GnuTLS
+# dependency has no provider in this stage (Nightly #210).  gmp comes
+# from the LFS base.
+build_nettle() { book_install nettle build_commands_nettle; }
+build_commands_nettle() {
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS postlfs/gnutls – samba's configure aborts on "Checking for
+# GnuTLS >= 3.6.13 : not found" (Nightly #210).  Offline-safe: the
+# chroot ships neither p11-kit nor libunistring, so use the book's
+# --without-p11-kit and --with-included-unistring switches; when the
+# system libtasn1 is absent GnuTLS falls back on the copy bundled in
+# its tarball (book note), so no extra package is needed.
+build_gnutls() { book_install gnutls build_commands_gnutls; }
+build_commands_gnutls() {
+    ./configure --prefix=/usr \
+                --docdir="/usr/share/doc/$dir" \
+                --without-p11-kit \
+                --with-included-unistring \
+                --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# Parse-Yapp – samba's pidl IDL compiler needs Parse::Yapp at build
+# time.  The book lists it as a Required samba dependency but no BLFS
+# stage installs it, and samba's configure does not probe for it, so
+# the failure only surfaces once configure gets past GnuTLS.  Pure
+# Perl module (ExtUtils::MakeMaker); perl is in the LFS base.
+build_parse_yapp() { book_install parse-yapp build_commands_parse_yapp; }
+build_commands_parse_yapp() {
+    perl Makefile.PL &&
+    make && make install
+}
+
+# BLFS postlfs/mitkrb – samba is configured --without-ad-dc together
+# with the book's --with-system-mitkrb5, which makes a system MIT
+# Kerberos mandatory: samba will not fall back to its bundled Heimdal
+# once the AD DC is disabled.  The krb5 tarball ships in sources but no
+# stage builds it.  Only Optional deps per the book; libverto is
+# bundled via --with-system-verto=no and et/ss come from the LFS
+# e2fsprogs.  Built from the src/ subdirectory exactly as the book
+# specifies; the sed drops a db2 test that is known to fail.
+build_krb5() { book_install krb5 build_commands_krb5; }
+build_commands_krb5() {
+    cd src &&
+    sed -i -e '/eq 0/{N;s/12 //}' plugins/kdb/db2/libdb2/test/run.test &&
+    ./configure --prefix=/usr            \
+                --sysconfdir=/etc        \
+                --localstatedir=/var/lib \
+                --runstatedir=/run       \
+                --with-system-et         \
+                --with-system-ss         \
+                --with-system-verto=no   \
+                --enable-dns-for-realm   \
+                --disable-rpath &&
+    make -j"$JOBS" && make install
+}
+
 # BLFS basicnet/samba – --without-systemd is the sysvinit book variant.
 # The book installs cryptography/pyasn1/iso8601 into a venv for the AD DC
 # features, but the chroot is offline so pip cannot reach PyPI, and
@@ -811,8 +876,21 @@ run_build required proftpd
 
 log_info "Phase 8: File sharing"
 
+# samba's dependency chain, built here because the headless profiles
+# skip blfs-libs.  nettle + gnutls satisfy samba's Required GnuTLS (the
+# confirmed Nightly #210 abort) and are useful system crypto libraries,
+# so they stay required.  Parse-Yapp (pidl) and MIT krb5
+# (--with-system-mitkrb5) are the remaining Required deps that only
+# surface once configure passes GnuTLS; they, and samba itself, are
+# optional so a residual offline issue can never again block an
+# otherwise-good server build.
+run_build required nettle
+run_build required gnutls
+run_build optional parse-yapp
+run_build optional krb5
+
 # samba – Samba SMB/CIFS file sharing
-run_build required samba
+run_build optional samba
 
 log_success "BLFS Server build complete"
 INNEREOF
