@@ -86,6 +86,81 @@
 
 ### Fixed
 
+- **libinput built before libevdev, and build_pkg hid the failure
+  (nightly #213)** (`blfs/08a-build-blfs-libs.sh`,
+  `blfs/08b-build-xorg.sh`, `blfs/08c-build-wayland.sh`)
+  - The gnome and audio-studio jobs died in blfs-libs with
+    `Dependency "libevdev" not found` at libinput's meson: the stage
+    built libinput before libevdev, its REQUIRED dependency.  Worse,
+    `run_build` calls the generic `build_pkg` from an `if` condition,
+    which suspends `set -e` for the whole call, so the failed
+    `meson setup` fell through to `log_success "$pkg installed"` and
+    reported libinput as built.  blfs-libs now builds libevdev before
+    libinput, and `build_pkg` in all three stages chains every build
+    branch with `&&`, captures a non-zero `rc` and returns it, so a
+    failed meson/ninja/configure can never again masquerade as success
+
+- **mesa built by blfs-libs before wayland-scanner existed
+  (nightly #213)** (`blfs/08a-build-blfs-libs.sh`,
+  `blfs/08b-build-xorg.sh`, `blfs/08c-build-wayland.sh`)
+  - Six desktop jobs died at mesa's meson with `Dependency
+    "wayland-scanner" not found`: mesa was built by blfs-libs (08a),
+    long before the wayland stage (08c) provided wayland-scanner and
+    before the xorg stage (08b) provided the Xorg Libraries the book
+    lists as a REQUIRED mesa dependency.  mesa now builds in 08b right
+    after libdrm, and 08a builds wayland and wayland-protocols early
+    (wayland first: wayland-protocols' meson looks up wayland-scanner)
+    so libxkbcommon's wayland option and mesa's wayland platform
+    resolve; 08c then skips both through is_installed
+
+- **xorg stage never built the x7lib chapter or xorg-server's deps
+  (nightly #213)** (`blfs/08b-build-xorg.sh`,
+  `packages/custom-sources.list`)
+  - An ordering audit found the xorg stage skipped the whole x7lib
+    chapter (xtrans, libFS, libICE, libSM, libXt, libXmu, libXaw,
+    libXfont2, libXft, libXxf86dga, libxshmfence, libXpresent) plus
+    libxcvt and font-util, both REQUIRED by xorg-server, and built
+    libepoxy (which feeds the server's glamor module) only in Phase 8,
+    after xorg-server.  The stage now builds xtrans first (its
+    xtrans.m4 macros are included by libFS/libICE/libSM/libXt/
+    libXfont2), then the remaining x7lib libraries, libxcvt and
+    font-util, and moves libepoxy ahead of the server.  cairo and pango
+    are rebuilt once libX11/libXrender/libXft exist so cairo gains its
+    xlib backend (GTK+3 hard-requires cairo-xlib) and pango its Xft
+    backend.  None of these tarballs is in the official wget-list
+    snapshot, so all fourteen are pinned in custom-sources.list
+
+- **glib2 introspection data never generated (nightly #213)**
+  (`blfs/08a-build-blfs-libs.sh`)
+  - libgudev died with `Couldn't find include 'GObject-2.0.gir'` (and
+    gtk4 would have next): the book reinstalls glib2 a second time
+    "for the introspection data" right after gobject-introspection is
+    built, but the stage only installed glib2 once.  A `glib2-gir`
+    second pass now re-extracts the glib2 tarball and rebuilds it after
+    gobject-introspection, so `/usr/share/gir-1.0/GObject-2.0.gir`
+    exists for every later introspection consumer
+
+- **freedesktop.org 418 lost libevdev; no second mirror tier
+  (nightly #213)** (`builder.py`)
+  - The #212 conglomeration fallback was not enough: freedesktop.org
+    answered `418 I'm a teapot` to every libevdev request for the whole
+    run and the BLFS conglomeration tree carries no libevdev directory,
+    so the gnome and audio-studio jobs aborted with `no source archive
+    found for libevdev`.  `download()` gained a second mirror tier keyed
+    by the archive stem on the Void Linux sources mirror
+    (`sources.voidlinux.org/<stem>/<file>`, byte-identical to upstream),
+    tried after the conglomeration mirror, recovering hosts the BLFS
+    tree does not carry
+
+- **lpm repos.d write failed for the unprivileged CI user
+  (nightly #213)** (`blfs/19-lpm.sh`)
+  - Both minimal jobs died installing lpm: `install_lpm_stage` created
+    `/etc/lpm/repos.d` as root, then wrote `default.conf` with a bare
+    `cat >` redirection that fails with `Permission denied` when the
+    stage runs as the unprivileged CI user.  The write now goes through
+    the `$run_privileged tee` wrapper like every other root-owned path
+    in the stage
+
 - **mesa meson: the Mako and PyYAML python modules were never built
   (nightly #212)** (`blfs/08a-build-blfs-libs.sh`)
   - With the #210 libclc fix in place, every desktop job (xfce, gnome,

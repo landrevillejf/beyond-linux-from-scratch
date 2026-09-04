@@ -672,6 +672,17 @@ class SourceDownloader:
     CONGLOMERATION_MIRRORS = (
         'https://ftp2.osuosl.org/pub/blfs/conglomeration',
     )
+
+    # Void Linux keeps every upstream tarball it packages in a flat tree
+    # keyed by the archive stem (<mirror>/<stem>/<file>), byte-identical
+    # to the original.  It is the second fallback for the hosts the
+    # conglomeration tree does not carry: Nightly #213 lost the gnome and
+    # audio-studio jobs because freedesktop.org answered 418 to every
+    # libevdev request for the whole run and conglomeration has no
+    # libevdev directory at all.
+    VOID_MIRRORS = (
+        'https://sources.voidlinux.org',
+    )
     RETRY_BACKOFF_CAP = 30
     RATE_LIMIT_BACKOFF_CAP = 240
     MIRROR_RETRIES = 2
@@ -755,6 +766,24 @@ class SourceDownloader:
             return []
         return [f"{base}/{package}/{filename}" for base in self.CONGLOMERATION_MIRRORS]
 
+    def _void_candidates(self, url: str) -> List[str]:
+        """Return Void Linux mirror URLs for one source archive.
+
+        The tree is keyed by the whole archive stem, so no package name
+        has to be guessed.  Stems without a trailing version are skipped
+        for the same reason as in _mirror_candidates: the layout is
+        <name>-<version> and anything else would only buy extra 404s.
+        """
+        filename = Path(urlparse(url).path).name
+        match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
+        if not match:
+            return []
+        stem = match.group(1)
+        package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
+        if not package or package == stem:
+            return []
+        return [f"{base}/{stem}/{filename}" for base in self.VOID_MIRRORS]
+
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with backoff retries and a BLFS mirror fallback.
 
@@ -762,8 +791,9 @@ class SourceDownloader:
         418 anti-abuse response freedesktop.org's CDN returns under load)
         are retried with increasing delays.  Permanent client errors
         (other 4xx) fail immediately to avoid wasting time.  Once the
-        primary host has given up, the conglomeration mirrors are tried
-        before the source is declared missing.
+        primary host has given up, the conglomeration mirrors and then
+        the Void Linux mirror are tried before the source is declared
+        missing.
         """
         if filename is None:
             filename = url.split('/')[-1]
@@ -781,7 +811,7 @@ class SourceDownloader:
         if self._download_attempt(url, dest, filename, retries):
             return True
 
-        for mirror_url in self._mirror_candidates(url):
+        for mirror_url in self._mirror_candidates(url) + self._void_candidates(url):
             self.logger.warning(f"Primary host failed for {filename}, trying mirror: {mirror_url}")
             if self._download_attempt(mirror_url, dest, filename, self.MIRROR_RETRIES):
                 return True

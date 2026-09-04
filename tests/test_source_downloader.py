@@ -390,9 +390,9 @@ class TestNightly212DownloadResilience:
                 'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz', retries=1)
 
         assert result is False
-        # A 404 is permanent on both hosts, so each attempt gives up after
-        # a single request: one primary plus one mirror.
-        assert mock_retrieve.call_count == 2
+        # A 404 is permanent on every host, so each attempt gives up after
+        # a single request: primary plus both mirror tiers.
+        assert mock_retrieve.call_count == 3
         assert not (sources_dir / 'gegl-0.4.62.tar.xz').exists()
 
     @patch('builder.time.sleep')
@@ -408,9 +408,9 @@ class TestNightly212DownloadResilience:
                 'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz', retries=1)
 
         assert result is False
-        assert mock_retrieve.call_count == 1 + SourceDownloader.MIRROR_RETRIES
+        assert mock_retrieve.call_count == 1 + 2 * SourceDownloader.MIRROR_RETRIES
         assert mock_retrieve.call_args[0][0] == (
-            'https://ftp2.osuosl.org/pub/blfs/conglomeration/gegl/gegl-0.4.62.tar.xz'
+            'https://sources.voidlinux.org/gegl-0.4.62/gegl-0.4.62.tar.xz'
         )
         assert mock_sleep.called
 
@@ -449,3 +449,81 @@ class TestNightly212DownloadResilience:
                 'http://example.com/f.tar.gz', 'f.tar.gz', retries=2) is True
 
         assert mock_sleep.call_args[0][0] == 8.0
+
+
+class TestNightly213VoidMirrorFallback:
+    """Regression tests for the Nightly #213 libevdev loss.
+
+    freedesktop.org answered "418 I'm a teapot" to every request from the
+    runner for the whole run, and the BLFS conglomeration tree carries no
+    libevdev directory, so the gnome and audio-studio jobs aborted the
+    blfs-libs stage with "no source archive found for libevdev".  A second
+    mirror tier (Void Linux, keyed by archive stem) recovers those hosts.
+    """
+
+    def test_void_candidates_uses_the_archive_stem(self, sources_dir, mock_logger):
+        """The Void tree is keyed <mirror>/<stem>/<file>."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._void_candidates(
+            'https://www.freedesktop.org/software/libevdev/releases/'
+            'libevdev-1.13.4/libevdev-1.13.4.tar.xz'
+        ) == ['https://sources.voidlinux.org/libevdev-1.13.4/libevdev-1.13.4.tar.xz']
+        # A trailing revision tag stays part of the stem.
+        assert downloader._void_candidates(
+            'https://www.imagemagick.org/archive/releases/ImageMagick-7.1.2-1.tar.xz'
+        ) == ['https://sources.voidlinux.org/'
+              'ImageMagick-7.1.2-1/ImageMagick-7.1.2-1.tar.xz']
+
+    def test_void_candidates_skips_names_without_a_trailing_version(
+            self, sources_dir, mock_logger):
+        """Guessing a stem would only buy extra 404s."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        for url in (
+            'https://example.com/noversion.tar.gz',
+            'https://example.com/python-3.13.7-docs-html.tar.bz2',
+            'https://example.com/tcl8.6.16-src.tar.gz',
+            'https://www.linuxfromscratch.org/patches/lfs/12.4/coreutils-9.7-i18n-1.patch',
+            'https://example.com/',
+        ):
+            assert downloader._void_candidates(url) == [], url
+
+    def test_download_falls_back_to_void_when_conglomeration_404s(
+            self, sources_dir, mock_logger):
+        """The libevdev #213 path: 418 upstream, 404 on conglomeration."""
+        dest = sources_dir / 'libevdev-1.13.4.tar.xz'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            if 'freedesktop.org' in url:
+                raise urllib.error.HTTPError(url=url, code=418,
+                                             msg="I'm a teapot", hdrs=None, fp=None)
+            if 'conglomeration' in url:
+                raise urllib.error.HTTPError(url=url, code=404,
+                                             msg='Not Found', hdrs=None, fp=None)
+            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('builder.time.sleep'), \
+                patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(
+                'https://www.freedesktop.org/software/libevdev/releases/'
+                'libevdev-1.13.4/libevdev-1.13.4.tar.xz', retries=1)
+
+        assert result is True
+        assert seen[-1] == (
+            'https://sources.voidlinux.org/libevdev-1.13.4/libevdev-1.13.4.tar.xz'
+        )
+        assert dest.exists()
+        mock_logger.warning.assert_any_call(
+            'Primary host failed for libevdev-1.13.4.tar.xz, trying mirror: '
+            'https://sources.voidlinux.org/libevdev-1.13.4/libevdev-1.13.4.tar.xz'
+        )
+
+    def test_conglomeration_is_tried_before_void(self, sources_dir, mock_logger):
+        """The BLFS mirror stays the preferred fallback."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        url = 'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz'
+        candidates = downloader._mirror_candidates(url) + downloader._void_candidates(url)
+        assert candidates[0].startswith('https://ftp2.osuosl.org/pub/blfs/conglomeration/')
+        assert candidates[-1].startswith('https://sources.voidlinux.org/')

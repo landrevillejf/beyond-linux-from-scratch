@@ -2245,7 +2245,12 @@ install_lpm_stage() {
     # Configure default remote repositories. The manifest is published
     # by the release pipeline (blfs/14-create-base-packages.sh exports
     # lpm-repo/packages.list, uploaded as a GitHub release asset).
-    cat >"$target/etc/lpm/repos.d/default.conf" <<'REPOS'
+    #
+    # The write must go through the privileged wrapper: the directories
+    # above were created by root, so a bare redirection fails with
+    # "Permission denied" when the stage runs as the unprivileged CI
+    # user (Nightly #213, both minimal jobs died here).
+    $run_privileged tee "$target/etc/lpm/repos.d/default.conf" >/dev/null <<'REPOS'
 # LPM default remote repositories
 # Format: name=url
 # The first matching repo is tried first; falls back to the next.

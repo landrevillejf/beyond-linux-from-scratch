@@ -1253,6 +1253,10 @@ class TestBLFSErrorPolicyGuardrails:
     # Tarball base names that differ from the script package name.
     ALIASES = {
         'glib2': ['glib'],
+        # glib2-gir is the book's second glib2 install pass (the
+        # introspection data); it re-extracts the very same glib
+        # tarball, so it resolves through the glib base name.
+        'glib2-gir': ['glib'],
         'icu': ['icu4c'],
         'libelf': ['elfutils'],
         'libyaml': ['yaml'],
@@ -1313,10 +1317,25 @@ class TestBLFSErrorPolicyGuardrails:
 
     def test_required_packages_have_sources(self):
         """Every required package must resolve to a tarball listed in
-        packages/stable/12.4/sources.list."""
+        packages/stable/12.4/sources.list or its override companion
+        packages/custom-sources.list.
+
+        The stable list is generated from the official wget-lists and is
+        a curated subset, so packages the BLFS book needs but the
+        wget-list omits (the x7lib chapter: xtrans, libFS, libICE,
+        libSM, libXt, libXmu, libXaw, libXfont2, libXft, libXxf86dga,
+        libxshmfence, libXpresent and font-util) are pinned in
+        custom-sources.list instead.  builder.py merges both files
+        (custom entries win) into the generated packages/sources.list
+        the downloader consumes, so a pin in either file means the
+        archive is fetched (Nightly #213).
+        """
         import re
 
-        sources = Path('packages/stable/12.4/sources.list').read_text()
+        sources = (
+            Path('packages/stable/12.4/sources.list').read_text()
+            + Path('packages/custom-sources.list').read_text()
+        )
         call_re = re.compile(r'run_build\s+required\s+(\S+)')
         loop_re = re.compile(
             r'for pkg in ([^;\n]+); do\n\s*run_build required "\$pkg"')
@@ -1387,6 +1406,153 @@ class TestBLFSErrorPolicyGuardrails:
                     f"{script}:\n{result.stdout}"
             finally:
                 os.unlink(tmp_path)
+
+
+class TestNightly213StageGuardrails:
+    """Guardrails for the Nightly #213 blfs-libs / xorg ordering fixes.
+
+    Run #213 lost six jobs to three independent ordering and
+    error-reporting defects:
+
+    * mesa was built by blfs-libs (08a) before wayland-scanner existed,
+      so meson aborted with "Dependency wayland-scanner not found";
+    * libinput was built before libevdev, and the generic build_pkg
+      swallowed the meson failure behind a bogus "installed" message;
+    * the xorg stage never built the x7lib chapter (libFS, libICE,
+      libSM, libXt, libXmu, libXaw, libXfont2, libXft, libXxf86dga,
+      libxshmfence, libXpresent), libxcvt, font-util, or libepoxy
+      before xorg-server.
+
+    These tests pin the corrected ordering so a future reshuffle cannot
+    silently reintroduce the failures.
+    """
+
+    LIBS = Path('blfs/08a-build-blfs-libs.sh')
+    XORG = Path('blfs/08b-build-xorg.sh')
+    WAYLAND = Path('blfs/08c-build-wayland.sh')
+    SOURCES = Path('packages/custom-sources.list')
+
+    # x7lib chapter libraries the xorg stage gained in Nightly #213.
+    X7LIB = ('xtrans', 'libFS', 'libICE', 'libSM', 'libXt', 'libXmu',
+             'libXaw', 'libXfont2', 'libXft', 'libXxf86dga',
+             'libxshmfence', 'libXpresent')
+
+    @staticmethod
+    def _body(content, name):
+        """Return the source of a shell function definition.
+
+        The leading newline keeps rebuild_pkg() from matching build_pkg
+        and the closing brace line ends the slice.
+        """
+        start = content.index(f'\n{name}() {{')
+        end = content.index('\n}\n', start)
+        return content[start:end]
+
+    def test_libevdev_precedes_libinput(self):
+        """libinput's meson build hard-requires libevdev (Nightly #213:
+        "Dependency libevdev not found")."""
+        content = self.LIBS.read_text()
+        evdev = content.find('run_build required libevdev\n')
+        libinput = content.find('run_build required libinput\n')
+        assert evdev != -1, "libevdev build missing from blfs-libs"
+        assert libinput != -1, "libinput build missing from blfs-libs"
+        assert evdev < libinput, \
+            "libevdev must be built before libinput (Nightly #213)"
+
+    def test_wayland_precedes_wayland_protocols(self):
+        """wayland-protocols' meson build looks up wayland-scanner, so
+        wayland must be installed first (Nightly #213)."""
+        content = self.LIBS.read_text()
+        wayland = content.find('run_build required wayland\n')
+        protocols = content.find('run_build required wayland-protocols\n')
+        assert wayland != -1, "wayland build missing from blfs-libs"
+        assert protocols != -1, \
+            "wayland-protocols build missing from blfs-libs"
+        assert wayland < protocols, \
+            "wayland must be built before wayland-protocols (#213)"
+
+    def test_mesa_not_built_by_blfs_libs(self):
+        """mesa belongs to the xorg stage (08b): the book lists the Xorg
+        Libraries as a REQUIRED mesa dependency and its wayland platform
+        needs wayland-scanner.  Building it in 08a aborted meson with
+        "Dependency wayland-scanner not found" (Nightly #213)."""
+        content = self.LIBS.read_text()
+        assert 'run_build required mesa' not in content, \
+            "mesa must be built by the xorg stage (08b), not blfs-libs"
+        assert 'build_commands_mesa()' not in content, \
+            "the mesa build function must live in the xorg stage (08b)"
+
+    def test_glib2_gir_second_pass_follows_first(self):
+        """The book reinstalls glib2 for its introspection data; without
+        GObject-2.0.gir, libgudev and gtk4 die with "Couldn't find
+        include 'GObject-2.0.gir'" (Nightly #213).  gobject-introspection
+        must sit between the two glib2 passes."""
+        content = self.LIBS.read_text()
+        assert 'build_glib2_gir()' in content
+        first = content.find('run_build required glib2\n')
+        gir = content.find('run_build required glib2-gir\n')
+        introspection = content.find(
+            'run_build required gobject-introspection\n')
+        assert first != -1 and gir != -1 and introspection != -1
+        assert first < introspection < gir, \
+            "gobject-introspection must run between the glib2 passes"
+
+    def test_xorg_stage_builds_x7lib_chapter(self):
+        """The xorg stage must build the x7lib libraries mesa and the
+        toolkits link against; they were missing entirely before the
+        Nightly #213 ordering audit."""
+        content = self.XORG.read_text()
+        for pkg in self.X7LIB:
+            assert f'run_build required {pkg}\n' in content, \
+                f"{pkg} missing from the xorg stage (Nightly #213)"
+
+    def test_xorg_server_deps_precede_server(self):
+        """libxcvt and font-util are REQUIRED by xorg-server and libepoxy
+        feeds its glamor module; all three must be built before the
+        server (Nightly #213)."""
+        content = self.XORG.read_text()
+        server = content.find('run_build required xorg-server\n')
+        assert server != -1, "xorg-server build missing from the stage"
+        for pkg in ('libxcvt', 'font-util', 'libepoxy'):
+            pos = content.find(f'run_build required {pkg}\n')
+            assert pos != -1, \
+                f"{pkg} build missing from the xorg stage"
+            assert pos < server, \
+                f"{pkg} must be built before xorg-server (Nightly #213)"
+
+    def test_new_xorg_tarballs_are_pinned(self):
+        """The x7lib chapter, libxcvt and font-util are absent from the
+        official wget-list snapshot, so they must be pinned in
+        custom-sources.list for the downloader to fetch them
+        (Nightly #213)."""
+        import re
+
+        content = self.SOURCES.read_text()
+        for pkg in self.X7LIB + ('libxcvt', 'font-util'):
+            assert re.search(rf'/{re.escape(pkg)}-\d', content), \
+                f"{pkg} tarball not pinned in custom-sources.list"
+
+    def test_build_pkg_propagates_failures(self):
+        """run_build calls build_pkg from an "if" condition, which
+        suspends set -e for the whole call; every build branch must
+        chain with && and record a non-zero rc, or a failed meson/ninja
+        falls through to log_success.  Nightly #213 hid libinput's
+        "Dependency libevdev not found" behind a bogus success."""
+        for script in (self.LIBS, self.XORG, self.WAYLAND):
+            fn = self._body(script.read_text(), 'build_pkg')
+            assert 'rc=1' in fn, \
+                f"{script}: build_pkg must capture the failure rc"
+            assert 'if [ "$rc" -ne 0 ]; then' in fn, \
+                f"{script}: build_pkg must return non-zero on failure"
+
+    def test_lpm_repos_write_is_privileged(self):
+        """The repos.d directories are root-owned, so the unprivileged CI
+        user must write default.conf through the privileged wrapper; a
+        bare redirection died with "Permission denied" (Nightly #213)."""
+        content = Path('blfs/19-lpm.sh').read_text()
+        assert '$run_privileged tee "$target/etc/lpm/repos.d/default.conf"' \
+            in content, \
+            "the repos.d default.conf write must go through run_privileged"
 
 
 class TestAudioStudioStageGuardrails:
@@ -1868,14 +2034,23 @@ class TestProfilePromiseGuardrails:
         SPIRV-Tools (book REQUIRED), which requires SPIRV-Headers.
         All three tarballs were already downloaded into /sources by
         the official wget-list.
+
+        Nightly #213 moved mesa to the xorg stage (08b) because the
+        book lists the Xorg Libraries as a REQUIRED mesa dependency.
+        The shader chain stays in blfs-libs (08a), which runs before
+        08b, so it still precedes mesa; mesa is software-only now and
+        no longer needs glslangValidator, but the proven-good chain is
+        left in place.
         """
         content = Path('blfs/08a-build-blfs-libs.sh').read_text()
-        mesa_pos = content.index('run_build required mesa')
+        assert 'run_build required mesa' not in content, \
+            "mesa moved to the xorg stage 08b (nightly #213)"
+        assert 'run_build required mesa' in \
+            Path('blfs/08b-build-xorg.sh').read_text(), \
+            "mesa must be built by the later xorg stage (08b)"
         for pkg in ('spirv-headers', 'spirv-tools', 'glslang'):
             pos = content.find(f'run_build required {pkg}')
             assert pos != -1, f"{pkg} build missing from stage 08a"
-            assert pos < mesa_pos, \
-                f"{pkg} must be built before mesa (nightly #207)"
         assert 'build_commands_spirv_headers' in content
         assert 'build_commands_spirv_tools' in content
         assert 'build_commands_glslang' in content
@@ -1887,7 +2062,7 @@ class TestProfilePromiseGuardrails:
         assert 'ALLOW_EXTERNAL_SPIRV_TOOLS=ON' in content
         assert 'SPIRV-Headers_SOURCE_DIR=/usr' in content
 
-    def test_libs_stage_mesa_is_software_only_offline_safe(self):
+    def test_xorg_stage_mesa_is_software_only_offline_safe(self):
         """mesa must build software-only: softpipe, no Vulkan, no LLVM.
 
         Nightly #208 (all desktop jobs) died at mesa meson with
@@ -1901,8 +2076,13 @@ class TestProfilePromiseGuardrails:
         softpipe (the book's no-LLVM gallium driver), empty
         vulkan-drivers and -D llvm=disabled, and drops the optional
         -D video-codecs=all (softpipe has no video backend).
+
+        Nightly #213 moved mesa from blfs-libs (08a) to the xorg stage
+        (08b): the book lists the Xorg Libraries as a REQUIRED mesa
+        dependency and its wayland platform needs wayland-scanner, so
+        these software-only flags now live in 08b.
         """
-        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        content = Path('blfs/08b-build-xorg.sh').read_text()
         # Comment lines may quote the book's default; only the actual
         # meson invocation matters.
         code = "\n".join(
@@ -2015,14 +2195,17 @@ class TestProfilePromiseGuardrails:
         The chroot is offline, so the three modules are installed with
         the book's pip3 wheel / pip3 install --no-index idiom and never
         contact PyPI.
+
+        Nightly #213 moved mesa to the xorg stage (08b); the modules
+        stay in blfs-libs (08a), which runs first, so they still
+        precede mesa and 08b picks them up through pkg-config/python.
         """
         content = Path('blfs/08a-build-blfs-libs.sh').read_text()
-        mesa_pos = content.index('run_build required mesa')
+        assert 'run_build required mesa' not in content, \
+            "mesa moved to the xorg stage 08b (nightly #213)"
         for pkg in ('mako', 'cython', 'pyyaml'):
             pos = content.find(f'run_build required {pkg}')
             assert pos != -1, f"{pkg} build missing from stage 08a"
-            assert pos < mesa_pos, \
-                f"{pkg} must be built before mesa (nightly #212)"
         assert content.index('run_build required libyaml') < \
             content.index('run_build required pyyaml'), \
             "libyaml must precede pyyaml (its C extension links to it)"

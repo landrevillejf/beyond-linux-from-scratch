@@ -238,6 +238,8 @@ is_installed() {
         libinput)            have_pc libinput ;;
         libwacom)            have_pc libwacom ;;
         libevdev)            have_pc libevdev ;;
+        wayland)             have_pc wayland-client ;;
+        wayland-protocols)   [ -d /usr/share/wayland-protocols ] || have_pc wayland-protocols ;;
         libdrm)              have_pc libdrm ;;
         spirv-headers)       [ -d /usr/include/spirv ] ;;
         spirv-tools)         [ -f /usr/lib/libSPIRV-Tools.so ] ;;
@@ -245,7 +247,6 @@ is_installed() {
         mako)                python3 -c 'import mako' >/dev/null 2>&1 ;;
         cython)              python3 -c 'import Cython' >/dev/null 2>&1 ;;
         pyyaml)              python3 -c 'import yaml' >/dev/null 2>&1 ;;
-        mesa)                have_pc egl ;;
         libva)               have_pc libva ;;
         libvdpau)            have_pc vdpau ;;
         libass)              have_pc libass ;;
@@ -346,38 +347,48 @@ book_install() {
 # auto-detect meson vs autotools vs cmake.  Returns non-zero on any
 # failure, including a missing source archive.
 build_pkg() {
-    local pkg="$1" dir extra_opts=""
+    local pkg="$1" dir extra_opts="" rc=0
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     dir="$(prep_src "$pkg")" || return 1
     pushd "$dir" >/dev/null || return 1
+    # run_build invokes this function from an "if" condition, which
+    # suspends set -e for the whole call.  Without the && chains below a
+    # failed meson/ninja used to fall through to log_success and report
+    # the package as installed (Nightly #213: libinput was logged as a
+    # success even though meson aborted on "Dependency libevdev not
+    # found", hiding the real error behind the next package's failure).
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
-        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts
-        ninja -C builddir
-        ninja -C builddir install
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts &&
+        ninja -C builddir &&
+        ninja -C builddir install || rc=1
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
-        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+        make -j"$JOBS" &&
+        make install || rc=1
     elif [ -x ./autogen.sh ]; then
         # shellcheck disable=SC2086
-        ./autogen.sh --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./autogen.sh --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+        make -j"$JOBS" &&
+        make install || rc=1
     elif [ -f CMakeLists.txt ]; then
         # shellcheck disable=SC2086
-        cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts
-        cmake --build builddir -j"$JOBS"
-        cmake --install builddir
+        cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts &&
+        cmake --build builddir -j"$JOBS" &&
+        cmake --install builddir || rc=1
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
     rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg failed to build or install"
+        return 1
+    fi
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
 }
@@ -483,8 +494,11 @@ build_commands_fontconfig() {
     make -j"$JOBS" && make install
 }
 
-# BLFS general/glib2 – introspection stays disabled; gobject-introspection
-# is built standalone later in this stage.
+# BLFS general/glib2 – installed twice, exactly as the book prescribes:
+# a first pass with introspection disabled (gobject-introspection does
+# not exist yet), then a second pass with introspection enabled once
+# gobject-introspection has been built and installed (see
+# build_glib2_gir below).
 build_glib2() { book_install glib2 build_commands_glib2; }
 
 build_commands_glib2() {
@@ -494,15 +508,49 @@ build_commands_glib2() {
     if [ "${SKIP_MAN_PAGES:-false}" != true ] && command -v rst2man >/dev/null 2>&1; then
         man_pages=enabled
     fi
+    # Introspection follows gobject-introspection's availability so the same
+    # function serves both installation passes of the book.
+    intro=disabled
+    have_pc gobject-introspection-1.0 && intro=enabled
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D introspection=disabled \
+          -D introspection="$intro" \
           -D glib_debug=disabled \
           -D man-pages="$man_pages" \
           -D sysprof=disabled &&
     ninja && ninja install
+}
+
+# Second installation pass of BLFS general/glib2: "As the root user,
+# install this package again for the introspection data".  Without it
+# /usr/share/gir-1.0/GObject-2.0.gir never exists and every later
+# package that enables introspection dies with "Couldn't find include
+# 'GObject-2.0.gir'" (Nightly #213: libgudev, and gtk4 in the xorg
+# stage).  book_install would skip glib2 as already installed, so the
+# source tree is extracted and rebuilt explicitly.
+build_glib2_gir() {
+    local dir rc=0
+    if [ -f /usr/share/gir-1.0/GObject-2.0.gir ]; then
+        log_info "glib2 introspection data present; skipping the second pass"
+        return 0
+    fi
+    if ! have_pc gobject-introspection-1.0; then
+        log_error "gobject-introspection is missing; cannot generate the glib2 GIR data"
+        return 1
+    fi
+    dir="$(prep_src glib2)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    JOBS="$JOBS" dir="$dir" HAVE_SYSTEMD="$HAVE_SYSTEMD" build_commands_glib2 || rc=1
+    popd >/dev/null
+    rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_error "glib2 introspection rebuild failed"
+        return 1
+    fi
+    touch "$(marker_for glib2)"
+    log_success "glib2 reinstalled with its introspection data"
 }
 
 # BLFS x/graphene
@@ -1014,6 +1062,31 @@ build_commands_libgudev() {
     ninja && ninja install
 }
 
+# BLFS x/wayland and x/wayland-protocols – built here rather than by the
+# wayland stage (08c) because two packages of this stage and of the xorg
+# stage need them earlier: libxkbcommon's wayland option and mesa's
+# wayland platform (Nightly #213: mesa aborted with "Dependency
+# wayland-scanner not found").  08c skips both through is_installed.
+# wayland comes first: wayland-protocols' meson needs wayland-scanner.
+build_wayland() { book_install wayland build_commands_wayland; }
+
+build_commands_wayland() {
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D documentation=false &&
+    ninja && ninja install
+}
+
+build_wayland_protocols() { book_install wayland-protocols build_commands_wayland_protocols; }
+
+build_commands_wayland_protocols() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
 # BLFS general/libxkbcommon
 build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
 
@@ -1091,7 +1164,8 @@ build_commands_spirv_tools() {
 # BLFS x/glslang – Vulkan shader compiler.  Added in nightly #207
 # because mesa's radv/lavapipe drivers made meson hard-require
 # glslangValidator to compile their shaders.  mesa is now built
-# software-only (softpipe, no Vulkan drivers; see build_mesa below) so
+# software-only (softpipe, no Vulkan drivers; see build_commands_mesa in
+# the xorg stage, 08b) so
 # it no longer needs glslangValidator, but this SPIRV/glslang chain is
 # left in place: it builds cleanly and removing it would churn the
 # proven-good library order for no functional gain.  glslang installs
@@ -1143,41 +1217,14 @@ build_commands_pyyaml() {
     pip3 install --no-index --find-links dist --no-user PyYAML
 }
 
-# BLFS x/mesa – xdemos patch applied only when shipped.
-#
-# The book passes -D gallium-drivers=auto -D vulkan-drivers=auto, but
-# every hardware and Vulkan path needs something the offline chroot
-# cannot supply: the Nouveau Vulkan driver (nak) hard-requires rustc
-# plus an Internet connection for its Rust crates, the Intel drivers
-# need ply, and radv/lavapipe/iris pull in libclc, which itself needs
-# a full LLVM/clang toolchain that no stage builds.  Enumerating
-# amd,swrast cleared the rustc abort (Nightly #208) but then died on
-# "Run-time dependency libclc found: NO" (Nightly #210).  Build the
-# pure-software rasteriser instead: softpipe (the book's no-LLVM
-# gallium driver, x/mesa "softpipe ... use it unless LLVM is not
-# available"), no Vulkan drivers and LLVM disabled.  This needs no
-# libclc, rustc, ply or glslangValidator, adds zero packages and is the
-# most reliable configuration for CI.  video-codecs is dropped: the
-# book marks -D video-codecs=all optional/removable and softpipe has no
-# video backend to accelerate.
-build_mesa() { book_install mesa build_commands_mesa; }
-
-build_commands_mesa() {
-    for p in ../mesa-add_xdemos-*.patch; do
-        [ -f "$p" ] && patch -Np1 -i "$p"
-    done
-    mkdir build && cd build &&
-    meson setup .. \
-          --prefix=/usr \
-          --buildtype=release \
-          -D platforms=x11,wayland \
-          -D gallium-drivers=softpipe \
-          -D vulkan-drivers="" \
-          -D llvm=disabled \
-          -D valgrind=disabled \
-          -D libunwind=disabled &&
-    ninja && ninja install
-}
+# BLFS x/mesa is NOT built by this stage.  The book lists the Xorg
+# Libraries as a REQUIRED mesa dependency and those are installed by the
+# xorg stage (08b), which builds mesa right after libdrm; the wayland
+# platform additionally needs wayland-scanner.  Building it here made
+# meson abort with "Dependency wayland-scanner not found" and took six
+# nightly jobs down (Nightly #213).  The Mako/Cython/PyYAML modules the
+# book also lists as required stay here: they are leaf packages and 08b
+# picks them up through pkg-config/python.
 
 # BLFS multimedia/libva – tarball ships an empty build/ directory
 build_libva() { book_install libva build_commands_libva; }
@@ -1334,17 +1381,44 @@ run_build required freetype
 # fontconfig – depends on freetype, expat
 run_build required fontconfig
 
-log_info "Phase 3: GLib ecosystem"
+log_info "Phase 3: GLib ecosystem and GObject Introspection"
 
 # pcre2 – BLFS general/pcre2; no LFS stage builds it, and glib2
 # hard-requires it, so it must precede the GLib ecosystem
 # (nightly #183).  book_install skips it when already present.
 run_build required pcre2
 
-# glib2 – depends on pcre2, libffi (LFS)
+# glib2 – depends on pcre2, libffi (LFS); first installation pass, with
+# introspection still disabled
 run_build required glib2
 
-# graphene – GTK 4 dependency
+# libyaml / Mako / Cython / PyYAML – leaf packages whose only dependency
+# is python3 (PyYAML's C extension also wants libyaml and Cython).  They
+# are built before gobject-introspection because g-ir-scanner renders its
+# GIR/doc templates with Mako, and before mesa (08b) because the book
+# lists Mako and PyYAML as REQUIRED there (Nightly #212).  All three are
+# installed offline from their tarballs.
+run_build required libyaml
+run_build required mako
+run_build required cython
+run_build required pyyaml
+
+# gobject-introspection – no standalone page in the BLFS book: it is
+# built inside glib2 (general/glib2, "Build GObject Introspection") right
+# after the first glib2 install, so it must precede every package that
+# generates GIR data.  It must also precede vala: vala's configure reads
+# girdir from gobject-introspection-1.0.pc and aborts without it
+# (Nightly #197).
+run_build required gobject-introspection
+
+# glib2 second pass – the book's "install this package again for the
+# introspection data"; generates GObject-2.0.gir and friends
+# (Nightly #213: libgudev died with "Couldn't find include
+# 'GObject-2.0.gir'").
+run_build required glib2-gir
+
+# graphene – GTK 4 dependency; built after the glib2 GIR pass so gtk4
+# finds graphene-gobject-1.0
 run_build required graphene
 
 # harfbuzz – depends on glib2, freetype, fontconfig
@@ -1400,10 +1474,9 @@ log_info "Phase 7: Development tools"
 # libxslt – depends on libxml2 (blfs-base)
 run_build required libxslt
 
-# gobject-introspection – depends on glib2, python3; no standalone page
-# in the BLFS book (built inside glib there), generic meson build.
-# Must precede vala: vala's configure reads girdir from
-# gobject-introspection-1.0.pc and aborts without it (Nightly #197).
+# gobject-introspection is built in phase 3, following the book's glib2
+# page; the second call here is a book_install no-op when present and
+# covers resume-from runs that restart the stage mid-list.
 run_build required gobject-introspection
 
 # vala – depends on glib2 and gobject-introspection
@@ -1446,7 +1519,8 @@ log_info "Phase 9: Additional general libraries from BLFS"
 # libarchive – archive manipulation (tar, cpio, etc.)
 run_build required libarchive
 
-# libyaml – YAML parsing
+# libyaml is built in phase 3, before PyYAML; this second call is a
+# book_install no-op when present and covers resume-from runs.
 run_build required libyaml
 
 # libusb – USB library
@@ -1507,42 +1581,52 @@ run_build optional libnotify
 # libsecret – password storage
 run_build optional libsecret
 
-# libgudev – GObject wrapper for udev
+# wayland and wayland-protocols – built here because libxkbcommon's
+# wayland option, mesa's wayland platform (08b) and gtk4's wayland
+# backend all need them; the wayland stage (08c) then skips both.
+run_build required wayland
+run_build required wayland-protocols
+
+# libgudev – GObject wrapper for udev; needs the glib2 GIR data
 run_build optional libgudev
 
 # libxkbcommon – keyboard handling library (Wayland input)
 run_build required libxkbcommon
 
-# libinput – input device handling (Wayland); no BLFS book page
-run_build required libinput
+# libevdev – evdev wrapper; REQUIRED by libinput's meson build, so it
+# must precede it (Nightly #213: libinput aborted with "Dependency
+# libevdev not found", and the generic build_pkg used to hide that
+# failure behind a bogus success message)
+run_build required libevdev
 
-# libwacom – tablet support
+# libwacom – tablet support (optional libinput extra, needs libgudev)
 run_build optional libwacom
 
-# libevdev – evdev wrapper (libinput dependency); no BLFS book page
-run_build required libevdev
+# libinput – input device handling (Wayland and Xorg); no BLFS book page
+run_build required libinput
 
 # libdrm – Direct Rendering Manager (Mesa dependency)
 run_build required libdrm
 
 # spirv-headers / spirv-tools / glslang – the Vulkan shader chain,
-# added for mesa's radv/lavapipe drivers (nightly #207).  mesa is now
-# software-only so it no longer needs glslangValidator, but the chain
-# is left in place (see build_glslang) to avoid churning the
-# proven-good library order.
+# added for mesa's radv/lavapipe drivers (nightly #207).  mesa is built
+# software-only by the xorg stage (08b) so it no longer needs
+# glslangValidator, but the chain is left in place (see build_glslang)
+# to avoid churning the proven-good library order.
 run_build required spirv-headers
 run_build required spirv-tools
 run_build required glslang
 
-# Mako / Cython / PyYAML – the Python modules mesa's meson.build
-# hard-requires (Nightly #212).  libyaml, needed by PyYAML, is built in
-# phase 9; both modules are installed offline from their tarballs.
+# Mako / Cython / PyYAML are built in phase 3, before
+# gobject-introspection; these second calls are no-ops when present and
+# cover resume-from runs that restart the stage mid-list.
 run_build required mako
 run_build required cython
 run_build required pyyaml
 
-# mesa – 3D graphics library
-run_build required mesa
+# mesa is built by the xorg stage (08b): the book lists the Xorg
+# Libraries as a REQUIRED mesa dependency and they do not exist yet at
+# this point (Nightly #213).
 
 # libva – Video Acceleration API
 run_build optional libva

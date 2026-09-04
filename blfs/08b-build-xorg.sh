@@ -214,6 +214,22 @@ is_installed() {
         libXxf86vm)         have_pc xxf86vm ;;
         libXres)            have_pc xres ;;
         libXpm)             have_pc xpm ;;
+        xtrans)             [ -f /usr/share/pkgconfig/xtrans.pc ] ;;
+        libFS)              [ -f /usr/lib/libFS.so ] || [ -f /usr/lib64/libFS.so ] ;;
+        libICE)             have_pc ice ;;
+        libSM)              have_pc sm ;;
+        libXt)              have_pc xt ;;
+        libXmu)             have_pc xmu ;;
+        libXaw)             have_pc xaw7 ;;
+        libXfont2)          have_pc xfont2 ;;
+        libXft)             have_pc xft ;;
+        libXxf86dga)        have_pc xxf86dga ;;
+        libxshmfence)       have_pc xshmfence ;;
+        libXpresent)        have_pc xpresent ;;
+        libxcvt)            have_pc libxcvt ;;
+        font-util)          have_pc font-util ;;
+        cairo)              have_pc cairo ;;
+        pango)              have_pc pango ;;
         libpciaccess)       have_pc pciaccess ;;
         libdrm)             have_pc libdrm ;;
         mesa)               have_pc gl ;;
@@ -289,33 +305,41 @@ book_install() {
 # Generic fallback for packages that have no BLFS book page:
 # auto-detect meson vs autotools vs cmake.
 build_pkg() {
-    local pkg="$1" dir extra_opts=""
+    local pkg="$1" dir extra_opts="" rc=0
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     dir="$(prep_src "$pkg")" || return 1
     pushd "$dir" >/dev/null || return 1
+    # run_build invokes this function from an "if" condition, which
+    # suspends set -e for the whole call: without the && chains below a
+    # failed meson/ninja used to fall through to log_success and report
+    # the package as installed (Nightly #213).
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
-        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc $extra_opts
-        ninja -C builddir
-        ninja -C builddir install
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc $extra_opts &&
+        ninja -C builddir &&
+        ninja -C builddir install || rc=1
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
-        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+        make -j"$JOBS" &&
+        make install || rc=1
     elif [ -f CMakeLists.txt ]; then
         # shellcheck disable=SC2086
-        cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts
-        cmake --build builddir -j"$JOBS"
-        cmake --install builddir
+        cmake -B builddir -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_BUILD_TYPE=Release $extra_opts &&
+        cmake --build builddir -j"$JOBS" &&
+        cmake --install builddir || rc=1
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
     rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg failed to build or install"
+        return 1
+    fi
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
 }
@@ -344,12 +368,42 @@ build_commands_xorg_lib() {
         *)
             ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
                 --disable-static --docdir="/usr/share/doc/$dir" ;;
-    esac
-    make -j"$JOBS"
+    esac &&
+    make -j"$JOBS" &&
     make install
 }
 build_xorg_lib() {
     book_install "$1" build_commands_xorg_lib
+}
+
+# BLFS x/libxcvt – REQUIRED by xorg-server; meson build, so the autotools
+# loop of the x7lib chapter does not apply.
+build_libxcvt() { book_install libxcvt build_commands_libxcvt; }
+build_commands_libxcvt() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# Rebuild an already installed package with dependencies that only
+# became available in this stage.  book_install skips installed
+# packages, so this bypasses the check the same way the libxkbcommon
+# rebuild in Phase 2 does.
+rebuild_pkg() {
+    local pkg="$1" dir rc=0
+    dir="$(prep_src "$pkg")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    # pkg, dir, JOBS and HAVE_SYSTEMD are already visible to the called
+    # function (locals are dynamically scoped, the other two are globals).
+    "build_commands_${pkg//-/_}" || rc=1
+    popd >/dev/null
+    rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg rebuild failed"
+        return 1
+    fi
+    touch "$(marker_for "$pkg")"
+    log_success "$pkg rebuilt"
 }
 
 # BLFS x/util-macros – configure only, no compilation
@@ -430,21 +484,45 @@ build_commands_libdrm() {
     ninja && ninja install
 }
 
-# BLFS x/mesa
+# BLFS x/mesa – xdemos patch applied only when shipped.  mesa belongs to
+# this stage and not to blfs-libs (08a): the book lists the Xorg
+# Libraries as a REQUIRED dependency, and building it there made meson
+# abort with "Dependency wayland-scanner not found", taking six nightly
+# jobs down (Nightly #213).
+#
+# The book passes -D gallium-drivers=auto -D vulkan-drivers=auto, but
+# every hardware and Vulkan path needs something the offline chroot
+# cannot supply: the Nouveau Vulkan driver (nak) hard-requires rustc
+# plus an Internet connection for its Rust crates, the Intel drivers
+# need ply, and radv/lavapipe/iris pull in libclc, which itself needs a
+# full LLVM/clang toolchain that no stage builds.  Enumerating
+# amd,swrast cleared the rustc abort (Nightly #208) but then died on
+# "Run-time dependency libclc found: NO" (Nightly #210).  Build the
+# pure-software rasteriser instead: softpipe (the book's no-LLVM gallium
+# driver, x/mesa "softpipe ... use it unless LLVM is not available"), no
+# Vulkan drivers and LLVM disabled.  This needs no libclc, rustc, ply or
+# glslangValidator, adds zero packages and is the most reliable
+# configuration for CI.  video-codecs is dropped: the book marks
+# -D video-codecs=all optional/removable and softpipe has no video
+# backend to accelerate.  The wayland platform is only requested when
+# wayland-scanner exists (built by 08a, but a --resume-from xorg run can
+# start from a tree where 08c has not executed either).
 build_mesa() { book_install mesa build_commands_mesa; }
 build_commands_mesa() {
     for p in ../mesa-add_xdemos-*.patch; do
         [ -f "$p" ] && patch -Np1 -i "$p"
     done
+    platforms=x11
+    have_pc wayland-scanner && platforms=x11,wayland
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D platforms=x11,wayland \
-          -D gallium-drivers=auto \
-          -D vulkan-drivers=auto \
+          -D platforms="$platforms" \
+          -D gallium-drivers=softpipe \
+          -D vulkan-drivers="" \
+          -D llvm=disabled \
           -D valgrind=disabled \
-          -D video-codecs=all \
           -D libunwind=disabled &&
     ninja && ninja install
 }
@@ -545,6 +623,31 @@ build_commands_libepoxy() {
     ninja && ninja install
 }
 
+# BLFS x/cairo and x/pango are first built by blfs-libs (08a) long
+# before any Xorg library exists, so cairo has no xlib backend and pango
+# no Xft backend.  GTK+3 hard-requires cairo-xlib and the book
+# recommends the Xorg Libraries for both packages, so Phase 8 rebuilds
+# them once libX11/libXrender/libXft are installed.
+build_cairo() { book_install cairo build_commands_cairo; }
+build_commands_cairo() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+build_pango() { book_install pango build_commands_pango; }
+build_commands_pango() {
+    intro=disabled
+    have_pc gobject-introspection-1.0 && intro=enabled
+    mkdir build && cd build &&
+    meson setup .. \
+              --prefix=/usr \
+              --buildtype=release \
+              --wrap-mode=nofallback \
+              -D introspection="$intro" &&
+    ninja && ninja install
+}
+
 # BLFS x/gtk3 – the wayland backend is only enabled when the wayland
 # stack already exists (this stage may run before 08c).
 build_gtk3() { book_install gtk3 build_commands_gtk3; }
@@ -598,7 +701,7 @@ run_build() {
         if "$fn" "$@"; then return 0; fi
     else
         case "$pkg" in
-            libX*|libfontenc|libxkbfile|xcb-util*|xeyes)
+            libX*|libFS|libICE|libSM|libfontenc|libxkbfile|libxshmfence|font-util|xtrans|xcb-util*|xeyes)
                 if build_xorg_lib "$pkg" "$@"; then return 0; fi ;;
             *)
                 if build_pkg "$pkg" "$@"; then return 0; fi ;;
@@ -670,6 +773,10 @@ fi
 # Phase 3: Extension libraries
 # ======================================================================
 log_info "Phase 3: Extension libraries"
+# xtrans ships the transport macros (xtrans.m4) that libFS, libICE,
+# libSM, libXt and libXfont2 include at build time; the book lists it
+# first in lib-7.md5.
+run_build required xtrans
 run_build required libXext
 run_build required libXrender
 run_build required libXfixes
@@ -690,17 +797,44 @@ run_build required libXxf86vm
 run_build required libXres
 run_build required libXpm
 
+# Remaining libraries of the book's x7lib chapter.  They were missing
+# from this stage, so mesa (its x11 platform needs libxshmfence and
+# libXpresent) and every toolkit linking against libXt/libXmu/libXaw had
+# nothing to build against (Nightly #213 ordering audit).
+run_build required libFS
+run_build required libICE
+run_build required libSM
+run_build required libXt
+run_build required libXmu
+run_build required libXaw
+run_build required libXfont2
+run_build required libXft
+run_build required libXxf86dga
+run_build required libxshmfence
+run_build required libXpresent
+
+# libxcvt and font-util are REQUIRED by the Xorg server (x/xorg-server:
+# "Required: libxcvt, Pixman, Xorg Fonts (only font-util)").
+run_build required libxcvt
+run_build required font-util
+
 # ======================================================================
-# Phase 4: DRM, Mesa (GL), and XCB utilities
+# Phase 4: DRM, Mesa (GL) and libepoxy
 # ======================================================================
-log_info "Phase 4: DRM and Mesa"
+log_info "Phase 4: DRM, Mesa and libepoxy"
 
 run_build required libpciaccess
 run_build required libdrm
 
-# Mesa follows the book flags (auto drivers); already built by 08a in
-# most configurations and skipped through is_installed.
+# Mesa follows the software-only flags explained in build_commands_mesa;
+# it is built here and not in blfs-libs (08a) because the book lists the
+# Xorg Libraries above as a REQUIRED mesa dependency (Nightly #213).
 run_build required mesa
+
+# libepoxy needs mesa's GL/EGL headers and xorg-server's glamor module
+# needs libepoxy, so it must precede the server (it used to sit in
+# Phase 8, after xorg-server).
+run_build required libepoxy
 
 # XCB utility libraries
 log_info "Phase 5: XCB utilities"
@@ -746,15 +880,32 @@ run_build optional xclock
 run_build optional xeyes
 
 # ======================================================================
-# Phase 8: GL-dependent libraries (libepoxy, GTK+3, GTK4)
+# Phase 8: GL-dependent libraries (GTK+3, GTK4)
 # These need Mesa/GL headers from the Xorg build above.
 # ======================================================================
-log_info "Phase 8: GL-dependent libraries (libepoxy, GTK)"
+log_info "Phase 8: GL-dependent libraries (GTK)"
 
-run_build required libepoxy
+# cairo and pango were built by blfs-libs (08a) before any Xorg library
+# existed, so cairo has no xlib backend and pango no Xft backend.
+# GTK+3 hard-requires cairo-xlib, so rebuild both now that libX11,
+# libXrender and libXft are installed (same trick as the libxkbcommon
+# rebuild of Phase 2).
+if have_pc cairo && ! have_pc cairo-xlib; then
+    log_info "Rebuilding cairo with X11 support"
+    if ! rebuild_pkg cairo; then
+        log_error "Required package cairo rebuild failed – aborting stage"
+        exit 1
+    fi
+fi
+if have_pc pango && ! have_pc pangoxft; then
+    log_info "Rebuilding pango with Xft support"
+    if ! rebuild_pkg pango; then
+        log_warning "[OPTIONAL] pango Xft rebuild failed – continuing"
+    fi
+fi
 
-# GTK+3: requires glib2, cairo, pango, at-spi2-core, gdk-pixbuf, libepoxy,
-# and X11 libraries (all built above).
+# GTK+3: requires glib2, cairo (with X support), pango, at-spi2-core,
+# gdk-pixbuf, libepoxy and the X11 libraries (all built above).
 run_build required gtk3
 
 # GTK4: requires glib2, cairo, pango, graphene, gdk-pixbuf, libepoxy.

@@ -223,28 +223,36 @@ book_install() {
 
 # Generic fallback for packages that have no BLFS book page.
 build_pkg() {
-    local pkg="$1" dir extra_opts=""
+    local pkg="$1" dir extra_opts="" rc=0
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     dir="$(prep_src "$pkg")" || return 1
     pushd "$dir" >/dev/null || return 1
+    # run_build invokes this function from an "if" condition, which
+    # suspends set -e for the whole call: without the && chains below a
+    # failed meson/ninja used to fall through to log_success and report
+    # the package as installed (Nightly #213).
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
-        meson setup builddir --prefix=/usr --buildtype=release $extra_opts
-        ninja -C builddir
-        ninja -C builddir install
+        meson setup builddir --prefix=/usr --buildtype=release $extra_opts &&
+        ninja -C builddir &&
+        ninja -C builddir install || rc=1
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
-        ./configure --prefix=/usr --sysconfdir=/etc --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./configure --prefix=/usr --sysconfdir=/etc --disable-static $extra_opts &&
+        make -j"$JOBS" &&
+        make install || rc=1
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
     rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg failed to build or install"
+        return 1
+    fi
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
 }
@@ -275,11 +283,19 @@ build_commands_wayland() {
 # BLFS general/libxkbcommon
 build_libxkbcommon() { book_install libxkbcommon build_commands_libxkbcommon; }
 build_commands_libxkbcommon() {
+    # Same guards as blfs-libs (08a) and the xorg stage (08b): meson
+    # defaults enable-x11/enable-wayland to true and aborts when the
+    # matching protocol dependency is missing (Nightly #198/#199).
+    x11=
+    wayland=
+    have_pc xcb-xkb || x11="-D enable-x11=false"
+    have_pc wayland-client || wayland="-D enable-wayland=false"
+    # shellcheck disable=SC2086  # word splitting is intended here
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D enable-docs=false &&
+          -D enable-docs=false $x11 $wayland &&
     ninja && ninja install
 }
 
@@ -321,11 +337,12 @@ verify_prerequisites
 
 log_info "Building Wayland protocol and libraries"
 
-# wayland-protocols: protocol definitions (no build, just install)
-run_build required wayland-protocols
-
-# wayland: core library
+# wayland and wayland-protocols are normally installed by blfs-libs
+# (08a) already, because libxkbcommon and mesa need them earlier; both
+# calls are book_install no-ops then.  wayland comes first: the
+# wayland-protocols meson build looks up wayland-scanner.
 run_build required wayland
+run_build required wayland-protocols
 
 # libxkbcommon: keyboard handling for Wayland
 run_build required libxkbcommon
