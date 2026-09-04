@@ -51,8 +51,10 @@ https://mirrors.kernel.org/gnu/findutils/findutils-4.10.0.tar.xz
 # postfix
 https://mirrors.mit.edu/macports/distfiles/postfix/postfix-3.10.4.tar.gz
 
-# ImageMagick
-https://download.imagemagick.org/archive/releases/ImageMagick-7.1.2-27.tar.gz
+# ImageMagick -- deliberately NO override: this host no longer answers
+# and the book's own www.imagemagick.org URL 404s (upstream purges old
+# point releases).  SourceDownloader falls back on the BLFS
+# conglomeration mirror, which still serves ImageMagick-7.1.2-1.tar.xz.
 
 # man-db
 https://download-mirror.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz
@@ -77,8 +79,8 @@ http://rsync.belnet.be/mirror/ftp.frugalware.org/ftp/pub/frugalware/frugalware-s
 # Zsh - version 5.9
 http://mirror.dotsrc.org/kali/pool/main/z/zsh/zsh_5.9.orig.tar.xz
 
-# Enscript - miroir GNU
-https://mirrors.hust.edu.cn/gnu/enscript/enscript-1.6.6.tar.gz
+# Enscript -- deliberately NO override: the hust.edu.cn mirror drops the
+# connection mid-download; the official ftp.gnu.org URL is live.
 
 # Paxmirabilis
 https://ftp2.osuosl.org/pub/blfs/conglomeration/pax/paxmirabilis-20240817.tgz
@@ -132,8 +134,8 @@ https://www.mpfr.org/mpfr-4.2.1/mpfr-4.2.1.tar.xz
 # libpng
 https://downloads.sourceforge.net/libpng/libpng-1.6.47.tar.xz
 
-# libjpeg-turbo
-https://downloads.sourceforge.net/libjpeg-turbo/libjpeg-turbo-3.1.1.tar.gz
+# libjpeg-turbo -- 3.1.1 was never published (404); the live 3.0.1 pin
+# below is the book version.
 
 # giflib
 https://downloads.sourceforge.net/giflib/giflib-5.2.2.tar.gz
@@ -196,8 +198,7 @@ https://gitlab.freedesktop.org/xdg/shared-mime-info/-/archive/2.4/shared-mime-in
 # hicolor-icon-theme
 https://icon-theme.freedesktop.org/releases/hicolor-icon-theme-0.18.tar.xz
 
-# json-glib
-https://download.gnome.org/sources/json-glib/1.10/json-glib-1.10.4.tar.xz
+# json-glib -- GNOME removed 1.10.4 (404); the live 1.10.8 pin below wins.
 
 # libgee
 https://download.gnome.org/sources/libgee/0.20/libgee-0.20.7.tar.xz
@@ -217,8 +218,8 @@ https://download.gnome.org/sources/gobject-introspection/1.82/gobject-introspect
 # Xorg (08b-build-xorg.sh)
 # ============================================================================
 
-# xorgproto
-https://xorg.freedesktop.org/archive/individual/proto/xorgproto-2024.1.1.tar.xz
+# xorgproto -- 2024.1.1 was never published (404); the book's 2024.1 is
+# pinned below and also present in the official wget-list.
 
 # util-macros
 https://xorg.freedesktop.org/archive/individual/util/util-macros-1.20.2.tar.xz
@@ -229,8 +230,8 @@ https://xorg.freedesktop.org/archive/individual/lib/libXau-1.0.12.tar.xz
 # libXdmcp
 https://xorg.freedesktop.org/archive/individual/lib/libXdmcp-1.1.5.tar.xz
 
-# xcb-proto
-https://xorg.freedesktop.org/archive/individual/proto/xcb-proto-1.18.0.tar.xz
+# xcb-proto -- 1.18.0 is not in the xorg archive (404); 1.17.0 below is
+# the book version.
 
 # libxcb
 https://xorg.freedesktop.org/archive/individual/lib/libxcb-1.17.0.tar.xz
@@ -292,8 +293,8 @@ https://xorg.freedesktop.org/archive/individual/lib/libXres-1.2.3.tar.xz
 # libXpm
 https://xorg.freedesktop.org/archive/individual/lib/libXpm-3.5.18.tar.xz
 
-# libdrm
-https://dri.freedesktop.org/libdrm/libdrm-2.4.174.tar.xz
+# libdrm -- 2.4.174 is not published on dri.freedesktop.org (404); the
+# live 2.4.134 pin below is used instead.
 
 # xcb-util
 https://xorg.freedesktop.org/archive/individual/xcb/xcb-util-0.4.1.tar.xz
@@ -325,8 +326,8 @@ https://xorg.freedesktop.org/archive/individual/driver/xf86-video-amdgpu-23.0.0.
 # xf86-video-ati
 https://xorg.freedesktop.org/archive/individual/driver/xf86-video-ati-22.0.0.tar.xz
 
-# xf86-video-fbdev
-https://xorg.freedesktop.org/archive/individual/driver/xf86-video-fbdev-0.5.0.tar.xz
+# xf86-video-fbdev -- the xorg archive only ships a .tar.gz for 0.5.0
+# (the .tar.xz 404s); pinned below.
 
 # xf86-video-vesa
 https://xorg.freedesktop.org/archive/individual/driver/xf86-video-vesa-2.6.0.tar.xz
@@ -349,30 +350,29 @@ https://xorg.freedesktop.org/archive/individual/app/xinit-1.4.3.tar.xz
 # xclock
 https://xorg.freedesktop.org/archive/individual/app/xclock-1.1.1.tar.xz
 
-# xeyes
-https://xorg.freedesktop.org/archive/individual/app/xeyes-1.2.0.tar.xz
+# xeyes -- the xorg archive only ships a .tar.gz for 1.2.0 (the .tar.xz
+# 404s); pinned below.
 
 # libepoxy
 https://download.gnome.org/sources/libepoxy/1.5/libepoxy-1.5.10.tar.xz
 
-# gtk+3
-https://download.gnome.org/sources/gtk+/3.24/gtk+-3.24.43.tar.xz
-
-# gtk4
-https://download.gnome.org/sources/gtk/4.18/gtk-4.18.4.tar.xz
+# gtk3 / gtk4 -- deliberately NO override: the official BLFS wget-list
+# serves the book versions (gtk-3.24.50 and gtk-4.18.6), which 08b
+# resolves through the explicit 'gtk-3.*' / 'gtk-4.*' globs.  The old
+# gtk+-3.24.43 pin never matched those globs, and gtk-4.18.4 collided
+# with the 4.18.6 pin near the end of this file (same dedup key).
 
 # ============================================================================
 # Wayland (08c-build-wayland.sh)
 # ============================================================================
 
-# wayland-protocols
-https://gitlab.freedesktop.org/wayland/wayland-protocols/-/releases/1.44/downloads/wayland-protocols-1.44.tar.xz
-
-# wayland
-https://gitlab.freedesktop.org/wayland/wayland/-/releases/1.23/downloads/wayland-1.23.1.tar.xz
-
-# libxkbcommon (see also newer version below)
-https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.11.0.tar.gz
+# wayland / wayland-protocols / libxkbcommon -- deliberately NO
+# override: a gitlab release link points at a single release directory
+# and 1.23.1 now 404s.  Custom entries are applied last, so that dead
+# pin evicted the book's live wayland-1.24.0 from the generated list
+# (Nightly #212 left 08c with no wayland tarball at all).  The github
+# xkbcommon-* archives were dead weight too: find_archive looks for
+# 'libxkbcommon-*', which the official wget-list already provides.
 
 # weston
 https://gitlab.freedesktop.org/wayland/weston/-/releases/14.0.2/downloads/weston-14.0.2.tar.xz
@@ -384,8 +384,8 @@ https://gitlab.freedesktop.org/wayland/weston/-/releases/14.0.2/downloads/weston
 # polkit
 https://gitlab.freedesktop.org/polkit/polkit/-/archive/125/polkit-125.tar.xz
 
-# accountsservice
-https://www.freedesktop.org/software/accountsservice/accountsservice-23.13.92.tar.xz
+# accountsservice -- 23.13.92 does not exist (404, a typo for 23.13.9)
+# and evicted the book's live tarball; the official wget-list is used.
 
 # lightdm
 https://github.com/canonical/lightdm/releases/download/1.32.0/lightdm-1.32.0.tar.xz
@@ -405,8 +405,10 @@ https://github.com/Xubuntu/lightdm-gtk-greeter/releases/download/lightdm-gtk-gre
 # with a stale systemd-221)
 https://gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.54.tar.bz2
 https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.1.tar.bz2
-https://github.com/seccomp/libseccomp/releases/download/v2.6.0/libseccomp-2.6.0.tar.xz
-https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.tar.xz
+# libseccomp: GitHub only publishes a .tar.gz for v2.6.0 (the .tar.xz
+# 404s) and the official wget-list already carries it.
+# kmod: pinned once below (34.2); the duplicate 34 entry hashed to the
+# same dedup key and only wasted a download.
 
 # OpenRC
 https://github.com/OpenRC/openrc/archive/refs/tags/0.55.1.tar.gz
@@ -418,17 +420,21 @@ http://smarden.org/runit/runit-2.2.0.tar.gz
 # Application-specific dependencies (Phase 4)
 # ============================================================================
 
-# hunspell (LibreOffice spell checker)
-https://github.com/hunspell/hunspell/releases/download/v5.2.3/hunspell-5.2.3.tar.gz
+# hunspell (LibreOffice spell checker) -- there is no 5.2.3 release
+# (404); the live 1.7.3 pin below is the current upstream release.
 
-# poppler (LibreOffice PDF rendering)
-https://poppler.freedesktop.org/poppler-25.6.0.tar.xz
+# poppler (LibreOffice PDF rendering) -- 25.6.0 was never published
+# (404) and, sharing the dedup key of the book's poppler-25.08.0, it
+# evicted a live URL.  No override: the official wget-list version wins.
 
-# babl (GIMP pixel format translation)
-https://download.gimp.org/pub/babl/0.1.110/babl-0.1.110.tar.xz
+# babl (GIMP pixel format translation) -- gimp.org publishes every 0.1.x
+# release in a single directory, so the 0.1.110 URL 404s and the stale
+# 0.1.98 pin that shadowed it downgraded babl below what gegl-0.4.62
+# needs.  The official wget-list serves the book's babl-0.1.114.
 
-# gegl (GIMP Generic Graphics Library)
-https://download.gimp.org/pub/gegl/0.4.50/gegl-0.4.50.tar.xz
+# gegl (GIMP Generic Graphics Library) -- same layout as babl: the
+# 0.4.50 URL 404s and evicted the book's live gegl-0.4.62 (identical
+# dedup key).  No override: 08a builds the official wget-list version.
 
 # taglib (VLC audio metadata)
 https://taglib.org/releases/taglib-2.0.2.tar.gz
@@ -461,10 +467,6 @@ https://xorg.freedesktop.org/archive/individual/driver/xf86-video-fbdev-0.5.0.ta
 
 https://xorg.freedesktop.org/archive/individual/app/xeyes-1.2.0.tar.gz
 
-https://download.gimp.org/pub/babl/0.1/babl-0.1.98.tar.xz
-
-https://download.gimp.org/pub/gegl/0.4/gegl-0.4.8.tar.bz2
-
 https://download.gnome.org/sources/json-glib/1.10/json-glib-1.10.8.tar.xz
 
 https://github.com/ubuntu/lightdm/archive/refs/tags/1.33.1.tar.gz
@@ -479,13 +481,13 @@ https://sourceforge.net/projects/libjpeg-turbo/files/3.0.1/libjpeg-turbo-3.0.1.t
 
 https://dri.freedesktop.org/libdrm/libdrm-2.4.134.tar.xz
 
-https://gitlab.freedesktop.org/wayland/wayland/-/archive/1.26.0/wayland-1.26.0.tar.gz
-
-https://poppler.freedesktop.org/poppler-26.08.0.tar.xz
-
-https://github.com/xkbcommon/libxkbcommon/archive/refs/tags/xkbcommon-1.13.2.tar.gz
-
-https://gitlab.freedesktop.org/accountsservice/accountsservice/-/archive/26.27.3/accountsservice-26.27.3.tar.gz
+# wayland / poppler / libxkbcommon / accountsservice: the gitlab and
+# github archive pins that used to sit here dragged in a non-book major
+# version (wayland-1.26.0, poppler-26.08.0, xkbcommon-1.13.2,
+# accountsservice-26.27.3).  They hash to a different dedup key than the
+# book tarball, so both were downloaded and find_archive's "newest wins"
+# rule silently built the non-book one.  The official BLFS wget-list is
+# authoritative.
 
 https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
 https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
@@ -588,7 +590,11 @@ https://ftp2.osuosl.org/pub/blfs/conglomeration/inkscape/inkscape-1.4.2.tar.xz
 
 # Optional BLFS dependencies
 https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.6/wxWidgets-3.2.6.tar.bz2
-https://sourceforge.net/projects/linuxwacom/files/libwacom/libwacom-0.29.tar.bz2
+# libwacom -- deliberately NO override: the 0.29 pin (2018) is still
+# downloadable but the book builds 2.16.1, and both archives land in
+# /sources, so find_archive's "newest wins" rule is the only thing
+# keeping the ancient one out of the build.  The official wget-list is
+# authoritative.
 https://github.com/libass/libass/releases/download/0.17.3/libass-0.17.3.tar.xz
 https://sourceforge.net/projects/modplug-xmms/files/libmodplug/0.8.9.0/libmodplug-0.8.9.0.tar.gz
 
