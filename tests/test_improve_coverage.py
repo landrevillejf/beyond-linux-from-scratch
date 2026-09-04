@@ -807,7 +807,13 @@ https://custom.url/source2.tar.xz
         assert len(lines) == 2
 
     def test_source_key_regex_strips_entire_filename(self, tmp_path, monkeypatch):
-        """Vérifie que source_key gère le cas où le regex supprime tout le nom de fichier."""
+        """Vérifie que source_key gère le cas où le regex ne laisse rien d'utilisable.
+
+        Depuis le correctif Nightly #212 le chiffre majeur est conservé
+        dans la clé : '-5.3.2.tar.xz' donne désormais '-5.tar.xz' et ne
+        déclenche plus l'avertissement.  Seul un nom réduit à son
+        extension ('.tar.gz') tombe dans la branche de secours.
+        """
         from builder import LFSBuilder, LFSConfig
         from unittest.mock import patch, MagicMock
 
@@ -824,7 +830,8 @@ https://custom.url/source2.tar.xz
         builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
         builder.config = config
 
-        fake_content = b"""https://example.com/-5.3.2.tar.xz
+        fake_content = b"""https://example.com/.tar.gz
+        https://example.com/-5.3.2.tar.xz
         https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
         """
 
@@ -843,6 +850,8 @@ https://custom.url/source2.tar.xz
         assert sources_file.exists()
         content = sources_file.read_text()
 
+        assert 'https://example.com/.tar.gz' in content
+        # Le majeur est préservé, donc pas d'avertissement pour celui-ci
         assert 'https://example.com/-5.3.2.tar.xz' in content
         assert 'linux-6.16.1.tar.xz' in content
         mock_warning.assert_called_once()

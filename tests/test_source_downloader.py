@@ -315,3 +315,137 @@ https://git.savannah.gnu.org/git/guix.git
 
         # The file exists so the retry pass skips it → all good
         assert result is True
+
+
+class TestNightly212DownloadResilience:
+    """Regression tests for the Nightly #212 download failures.
+
+    Every x86_64 job lost sources that the build could not recover from:
+    freedesktop.org answered "418 I'm a teapot" to each libevdev attempt
+    (the 30 s backoff cap re-entered the same throttle window) and
+    several wget-list archives now 404 upstream (exim, ImageMagick), so
+    a mirror fallback and a longer rate-limit backoff are required.
+    """
+
+    def test_mirror_candidates_derives_blfs_package_dir(self, sources_dir, mock_logger):
+        """The conglomeration tree is keyed <mirror>/<package>/<file>."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._mirror_candidates(
+            'https://ftp.exim.org/pub/exim/exim4/exim-4.98.2.tar.xz'
+        ) == ['https://ftp2.osuosl.org/pub/blfs/conglomeration/exim/exim-4.98.2.tar.xz']
+        # A trailing revision tag belongs to the version, not the package.
+        assert downloader._mirror_candidates(
+            'https://www.imagemagick.org/archive/releases/ImageMagick-7.1.2-1.tar.xz'
+        ) == ['https://ftp2.osuosl.org/pub/blfs/conglomeration/'
+              'ImageMagick/ImageMagick-7.1.2-1.tar.xz']
+
+    def test_mirror_candidates_skips_names_without_a_version(self, sources_dir, mock_logger):
+        """Guessing a directory would only buy extra 404s."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        for url in (
+            'https://example.com/noversion.tar.gz',
+            'https://example.com/python-3.13.7-docs-html.tar.bz2',
+            'https://example.com/tcl8.6.16-src.tar.gz',
+            'https://www.linuxfromscratch.org/patches/lfs/12.4/coreutils-9.7-i18n-1.patch',
+            'https://example.com/',
+        ):
+            assert downloader._mirror_candidates(url) == [], url
+
+    def test_download_falls_back_to_conglomeration_mirror(self, sources_dir, mock_logger):
+        """A dead upstream URL must be retried on the BLFS mirror."""
+        dest = sources_dir / 'exim-4.98.2.tar.xz'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            if len(seen) == 1:
+                raise urllib.error.HTTPError(url=url, code=404,
+                                             msg='Not Found', hdrs=None, fp=None)
+            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(
+                'https://ftp.exim.org/pub/exim/exim4/exim-4.98.2.tar.xz', retries=1)
+
+        assert result is True
+        assert seen == [
+            'https://ftp.exim.org/pub/exim/exim4/exim-4.98.2.tar.xz',
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/exim/exim-4.98.2.tar.xz',
+        ]
+        assert dest.exists()
+        mock_logger.warning.assert_any_call(
+            'Primary host failed for exim-4.98.2.tar.xz, trying mirror: '
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/exim/exim-4.98.2.tar.xz'
+        )
+
+    def test_download_returns_false_when_the_mirror_also_fails(self, sources_dir, mock_logger):
+        """The fallback must not turn a missing source into a success."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            mock_retrieve.side_effect = urllib.error.HTTPError(
+                url='https://example.com/gegl-0.4.62.tar.xz', code=404,
+                msg='Not Found', hdrs=None, fp=None)
+            result = downloader.download(
+                'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz', retries=1)
+
+        assert result is False
+        # A 404 is permanent on both hosts, so each attempt gives up after
+        # a single request: one primary plus one mirror.
+        assert mock_retrieve.call_count == 2
+        assert not (sources_dir / 'gegl-0.4.62.tar.xz').exists()
+
+    @patch('builder.time.sleep')
+    def test_mirror_gets_its_own_retry_budget_on_transient_errors(
+            self, mock_sleep, sources_dir, mock_logger):
+        """A 5xx on the mirror must exhaust MIRROR_RETRIES, not one shot."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            mock_retrieve.side_effect = urllib.error.HTTPError(
+                url='https://example.com/gegl-0.4.62.tar.xz', code=503,
+                msg='Service Unavailable', hdrs=None, fp=None)
+            result = downloader.download(
+                'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz', retries=1)
+
+        assert result is False
+        assert mock_retrieve.call_count == 1 + SourceDownloader.MIRROR_RETRIES
+        assert mock_retrieve.call_args[0][0] == (
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/gegl/gegl-0.4.62.tar.xz'
+        )
+        assert mock_sleep.called
+
+    def test_download_attempt_with_no_retries_fails(self, sources_dir, mock_logger):
+        """retries=0 must not loop at all."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            assert downloader._download_attempt(
+                'https://example.com/f.tar.gz', sources_dir / 'f.tar.gz',
+                'f.tar.gz', 0) is False
+        mock_retrieve.assert_not_called()
+
+    def test_backoff_delay_is_longer_for_rate_limits(self, sources_dir, mock_logger):
+        """A 418/429 throttle window outlives the plain retry cap."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('builder.random.uniform', return_value=0.0):
+            assert downloader._backoff_delay(0) == 1.0
+            assert downloader._backoff_delay(0, rate_limited=True) == 8.0
+            assert downloader._backoff_delay(30) <= downloader.RETRY_BACKOFF_CAP
+            assert downloader._backoff_delay(30, rate_limited=True) <= \
+                downloader.RATE_LIMIT_BACKOFF_CAP
+
+    @patch('builder.time.sleep')
+    @patch('builder.random.uniform', return_value=0.0)
+    def test_418_uses_the_rate_limit_backoff(self, mock_uniform, mock_sleep,
+                                             sources_dir, mock_logger):
+        """freedesktop.org's 418 must wait out the throttle window."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve') as mock_retrieve:
+            mock_retrieve.side_effect = [
+                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
+                                       msg="I'm a teapot", hdrs=None, fp=None),
+                MagicMock(),
+            ]
+            assert downloader.download(
+                'http://example.com/f.tar.gz', 'f.tar.gz', retries=2) is True
+
+        assert mock_sleep.call_args[0][0] == 8.0

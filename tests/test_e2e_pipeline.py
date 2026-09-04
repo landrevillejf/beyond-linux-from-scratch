@@ -293,9 +293,15 @@ class TestDownloadResilience:
         import logging
         import time
         downloader = SourceDownloader(tmp_path, logging.getLogger(), timeout=5, retries=3)
-        # Verify the download method contains time.sleep for backoff
+        # Verify the download path contains time.sleep for backoff.  The
+        # retry loop lives in _download_attempt and the delay/jitter in
+        # _backoff_delay since download() also grew a mirror fallback.
         import inspect
-        source = inspect.getsource(downloader.download)
+        source = ''.join(inspect.getsource(m) for m in (
+            downloader.download,
+            downloader._download_attempt,
+            downloader._backoff_delay,
+        ))
         assert 'time.sleep' in source, "Download missing backoff delay"
         assert 'random' in source or 'uniform' in source, "Download missing jitter"
 

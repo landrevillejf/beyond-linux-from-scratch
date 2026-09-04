@@ -1712,3 +1712,56 @@ class TestNightly194Fixes:
         assert observed[1] is builder_module._ipv4_only_getaddrinfo
         # The original resolver is restored once the download settles.
         assert socket.getaddrinfo is not builder_module._ipv4_only_getaddrinfo
+
+
+class TestNightly212SourceKey:
+    """Regression tests for the Nightly #212 sources.list collisions."""
+
+    def _generate(self, tmp_path, monkeypatch, official, custom):
+        """Run _update_sources_list with faked wget-lists and custom pins."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'config.json'
+        config_file.write_text(json.dumps({
+            'repositories': ['https://example.com/wget-list'],
+        }))
+        builder = LFSBuilder(profile='minimal',
+                             output_dir=tmp_path / 'out',
+                             config_file=config_file)
+        builder.logger = MagicMock()
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir(exist_ok=True)
+        (packages_dir / 'custom-sources.list').write_text(custom)
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = official.encode('utf-8')
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            assert builder._update_sources_list() is True
+        return builder._generated_sources_list.read_text()
+
+    def test_source_key_keeps_major_series_distinct(self, tmp_path, monkeypatch):
+        """gtk-3 and gtk-4 tarballs must not share a dedup key.
+
+        Nightly #212: stripping the whole version token made the custom
+        gtk-4.18.6 pin hash to the same key as the official
+        gtk-3.24.50 tarball and silently evict it, while
+        blfs/08b-build-xorg.sh resolves its REQUIRED gtk3 build with
+        `compgen -G 'gtk-3.*.tar.*'`.
+        """
+        content = self._generate(
+            tmp_path, monkeypatch,
+            'https://download.gnome.org/sources/gtk/3.24/gtk-3.24.50.tar.xz\n',
+            'https://download.gnome.org/sources/gtk/4.18/gtk-4.18.6.tar.xz\n')
+        assert 'gtk-3.24.50.tar.xz' in content
+        assert 'gtk-4.18.6.tar.xz' in content
+
+    def test_source_key_still_overrides_the_same_series(self, tmp_path, monkeypatch):
+        """A custom pin inside the same major series must still win."""
+        content = self._generate(
+            tmp_path, monkeypatch,
+            'https://ftp.gnu.org/gnu/gawk/gawk-5.3.2.tar.xz\n',
+            'https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz\n')
+        assert 'gawk-5.4.0.tar.xz' in content
+        assert 'gawk-5.3.2.tar.xz' not in content

@@ -663,6 +663,19 @@ def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
 class SourceDownloader:
     """Download and verify LFS/BLFS sources"""
 
+    # BLFS keeps its own copy of every book tarball in a "conglomeration"
+    # tree laid out as <mirror>/<package>/<filename>.  It is the only
+    # fallback that keeps a build alive when an upstream host drops an
+    # archive or throttles CI runners (Nightly #212: freedesktop.org
+    # answered 418 to every libevdev request and killed all twelve
+    # x86_64 jobs; several wget-list URLs now 404 outright).
+    CONGLOMERATION_MIRRORS = (
+        'https://ftp2.osuosl.org/pub/blfs/conglomeration',
+    )
+    RETRY_BACKOFF_CAP = 30
+    RATE_LIMIT_BACKOFF_CAP = 240
+    MIRROR_RETRIES = 2
+
     def __init__(self, sources_dir: Path, logger: logging.Logger, timeout: int = 30, retries: int = 2):
         self.sources_dir = sources_dir
         self.logger = logger
@@ -712,13 +725,45 @@ class SourceDownloader:
             return False
         return any(header.startswith(m) for m in expected)
 
+    def _backoff_delay(self, attempt: int, rate_limited: bool = False) -> float:
+        """Exponential backoff, far more patient on rate-limit answers.
+
+        A 418/429 means the host is deliberately throttling us, so coming
+        back a second later only re-enters the same block window (Nightly
+        #212: every libevdev attempt hit freedesktop.org's 418 window and
+        took the whole blfs-libs stage down with it).
+        """
+        cap = self.RATE_LIMIT_BACKOFF_CAP if rate_limited else self.RETRY_BACKOFF_CAP
+        base = 2 ** attempt * (8 if rate_limited else 1)
+        return min(base + random.uniform(0, 1), cap)
+
+    def _mirror_candidates(self, url: str) -> List[str]:
+        """Return BLFS conglomeration mirror URLs for one source archive.
+
+        The tree is keyed by package directory, so strip the archive
+        suffix and the trailing version to recover its name.  Filenames
+        without a recognisable version yield no candidate: guessing a
+        directory would only buy extra 404s.
+        """
+        filename = Path(urlparse(url).path).name
+        match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
+        if not match:
+            return []
+        stem = match.group(1)
+        package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
+        if not package or package == stem:
+            return []
+        return [f"{base}/{package}/{filename}" for base in self.CONGLOMERATION_MIRRORS]
+
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
-        """Download a file with exponential-backoff retry.
+        """Download a file with backoff retries and a BLFS mirror fallback.
 
         Transient errors (timeouts, connection resets, 5xx, 429 and the
         418 anti-abuse response freedesktop.org's CDN returns under load)
         are retried with increasing delays.  Permanent client errors
-        (other 4xx) fail immediately to avoid wasting time.
+        (other 4xx) fail immediately to avoid wasting time.  Once the
+        primary host has given up, the conglomeration mirrors are tried
+        before the source is declared missing.
         """
         if filename is None:
             filename = url.split('/')[-1]
@@ -733,6 +778,17 @@ class SourceDownloader:
             self.logger.warning(f"Existing file is not a valid archive, re-downloading: {filename}")
             dest.unlink()
 
+        if self._download_attempt(url, dest, filename, retries):
+            return True
+
+        for mirror_url in self._mirror_candidates(url):
+            self.logger.warning(f"Primary host failed for {filename}, trying mirror: {mirror_url}")
+            if self._download_attempt(mirror_url, dest, filename, self.MIRROR_RETRIES):
+                return True
+        return False
+
+    def _download_attempt(self, url: str, dest: Path, filename: str, retries: int) -> bool:
+        """Fetch one URL, alternating resolvers and backing off between tries."""
         for attempt in range(retries):
             self.logger.info(f"Downloading: {filename} (attempt {attempt + 1}/{retries})")
             # Alternate dual-stack and IPv4-only resolution: the IPv6
@@ -758,13 +814,14 @@ class SourceDownloader:
                 # not fail the whole stage, so both fall through to the
                 # backoff retry below (Nightly #208: libevdev 418 aborted
                 # blfs-libs for the xfce jobs).
-                if 400 <= e.code < 500 and e.code not in (418, 429):
+                rate_limited = e.code in (418, 429)
+                if 400 <= e.code < 500 and not rate_limited:
                     self.logger.error(f"Permanent error downloading {url}: {e}")
                     return False
                 # Retryable server errors and rate limits
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < retries - 1:
-                    delay = min(2 ** attempt + random.uniform(0, 1), 30)
+                    delay = self._backoff_delay(attempt, rate_limited)
                     self.logger.info(f"Retrying in {delay:.1f}s...")
                     time.sleep(delay)
                     continue
@@ -775,7 +832,7 @@ class SourceDownloader:
                     dest.unlink()
                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
                 if attempt < retries - 1:
-                    delay = min(2 ** attempt + random.uniform(0, 1), 30)
+                    delay = self._backoff_delay(attempt)
                     self.logger.info(f"Retrying in {delay:.1f}s...")
                     time.sleep(delay)
                     continue
@@ -783,6 +840,7 @@ class SourceDownloader:
                 return False
             finally:
                 socket.getaddrinfo = previous_getaddrinfo
+        return False
 
     def download_from_list(self, list_file: Path, parallel: int = 4,
                            retry_passes: int = 2) -> bool:
@@ -1878,14 +1936,19 @@ class LFSBuilder:
         def source_key(url: str) -> str:
             filename = Path(urlparse(url).path).name
             if filename:
-                # Strip only the first version token and keep the revision
-                # tag plus extension in the key.  Stripping everything after
-                # the version made a tarball and its companion patch hash to
-                # the same key, so the custom gcc15 patch silently evicted
-                # the libtirpc tarball from the generated list (Nightly
-                # #194); it also collapsed distinct patches of the same
-                # package (coreutils i18n vs upstream_fix).
-                base = re.sub(r'[-_][v]?\d+(?:[.+]\d+)*', '', filename, count=1)
+                # Strip the minor/revision digits of the FIRST version token
+                # but keep its separator, major digit and extension in the
+                # key.  Stripping the whole token made a tarball and its
+                # companion patch hash to the same key, so the custom gcc15
+                # patch silently evicted the libtirpc tarball from the
+                # generated list (Nightly #194) and collapsed distinct
+                # patches of the same package (coreutils i18n vs
+                # upstream_fix).  Stripping the major digit too made two
+                # co-installable series collide: the custom gtk-4.18.6
+                # tarball evicted the official gtk-3.24.50 one, so the xorg
+                # stage lost the archive its required gtk3 build looks for
+                # (Nightly #212).
+                base = re.sub(r'([-_][v]?)(\d+)(?:[.+]\d+)*', r'\1\2', filename, count=1)
                 if not base or base.startswith('.'):
                     self.logger.warning(
                         f"source_key: regex stripped entire filename '{filename}'; "
