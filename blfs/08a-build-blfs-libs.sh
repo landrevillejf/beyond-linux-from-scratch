@@ -242,6 +242,9 @@ is_installed() {
         spirv-headers)       [ -d /usr/include/spirv ] ;;
         spirv-tools)         [ -f /usr/lib/libSPIRV-Tools.so ] ;;
         glslang)             have_cmd glslang ;;
+        mako)                python3 -c 'import mako' >/dev/null 2>&1 ;;
+        cython)              python3 -c 'import Cython' >/dev/null 2>&1 ;;
+        pyyaml)              python3 -c 'import yaml' >/dev/null 2>&1 ;;
         mesa)                have_pc egl ;;
         libva)               have_pc libva ;;
         libvdpau)            have_pc vdpau ;;
@@ -1107,6 +1110,39 @@ build_commands_glslang() {
     ninja && ninja install
 }
 
+# BLFS general/python-modules (Mako) – mesa's meson.build aborts with
+# "Python (3.x) mako module >= 0.8.0 required to build mesa" (Nightly
+# #212).  The book lists Mako as a REQUIRED mesa dependency.  LFS
+# installs Python with ensurepip, so pip3 is available in the chroot,
+# and the book's offline idiom is used: build a wheel from the local
+# tarball, then install it with --no-index so pip never contacts PyPI.
+build_mako() { book_install mako build_commands_mako; }
+
+build_commands_mako() {
+    pip3 wheel -w dist --no-build-isolation --no-deps --no-cache-dir "$PWD" &&
+    pip3 install --no-index --find-links dist --no-user Mako
+}
+
+# BLFS general/python-modules (Cython) – REQUIRED to build PyYAML's C
+# extension, which mesa's meson.build probes right after mako
+# ("Python (3.x) yaml module (PyYAML) required to build mesa").
+build_cython() { book_install cython build_commands_cython; }
+
+build_commands_cython() {
+    pip3 wheel -w dist --no-build-isolation --no-deps --no-cache-dir "$PWD" &&
+    pip3 install --no-index --find-links dist --no-user Cython
+}
+
+# BLFS general/python-modules (PyYAML) – REQUIRED by mesa.  The book
+# lists Cython and libyaml as its own required dependencies; libyaml is
+# built in phase 9 of this stage, Cython just above.
+build_pyyaml() { book_install pyyaml build_commands_pyyaml; }
+
+build_commands_pyyaml() {
+    pip3 wheel -w dist --no-build-isolation --no-deps --no-cache-dir "$PWD" &&
+    pip3 install --no-index --find-links dist --no-user PyYAML
+}
+
 # BLFS x/mesa – xdemos patch applied only when shipped.
 #
 # The book passes -D gallium-drivers=auto -D vulkan-drivers=auto, but
@@ -1497,6 +1533,13 @@ run_build required libdrm
 run_build required spirv-headers
 run_build required spirv-tools
 run_build required glslang
+
+# Mako / Cython / PyYAML – the Python modules mesa's meson.build
+# hard-requires (Nightly #212).  libyaml, needed by PyYAML, is built in
+# phase 9; both modules are installed offline from their tarballs.
+run_build required mako
+run_build required cython
+run_build required pyyaml
 
 # mesa – 3D graphics library
 run_build required mesa

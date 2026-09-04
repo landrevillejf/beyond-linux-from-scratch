@@ -207,6 +207,7 @@ is_installed() {
         vsftpd) have_cmd vsftpd ;;
         proftpd) have_cmd proftpd ;;
         nettle) have_pc nettle ;;
+        libtasn1) have_pc libtasn1 ;;
         gnutls) have_pc gnutls ;;
         parse-yapp) perl -MParse::Yapp::Driver -e1 >/dev/null 2>&1 ;;
         krb5) have_cmd krb5-config ;;
@@ -674,18 +675,37 @@ build_commands_nettle() {
     make -j"$JOBS" && make install
 }
 
+# BLFS general/libtasn1 – GnuTLS configure aborts with "Libtasn1 4.9
+# was not found. To use the included one, use --with-included-libtasn1"
+# unless the system library is present (Nightly #212 killed every
+# headless profile at gnutls).  blfs-libs (08a) builds it for the
+# desktop profiles; the headless profiles skip that stage, so build it
+# here too.  The book lists it as a Recommended GnuTLS dependency.
+build_libtasn1() { book_install libtasn1 build_commands_libtasn1; }
+build_commands_libtasn1() {
+    ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
 # BLFS postlfs/gnutls – samba's configure aborts on "Checking for
 # GnuTLS >= 3.6.13 : not found" (Nightly #210).  Offline-safe: the
 # chroot ships neither p11-kit nor libunistring, so use the book's
-# --without-p11-kit and --with-included-unistring switches; when the
-# system libtasn1 is absent GnuTLS falls back on the copy bundled in
-# its tarball (book note), so no extra package is needed.
+# --without-p11-kit and --with-included-unistring switches.  libtasn1
+# is built just above; should its tarball ever be missing, fall back on
+# the copy bundled in the GnuTLS tarball instead of aborting the stage.
 build_gnutls() { book_install gnutls build_commands_gnutls; }
 build_commands_gnutls() {
+    local tasn1=""
+    if ! have_pc libtasn1; then
+        log_warning "gnutls: system libtasn1 missing, using the included copy"
+        tasn1="--with-included-libtasn1"
+    fi
+    # shellcheck disable=SC2086
     ./configure --prefix=/usr \
                 --docdir="/usr/share/doc/$dir" \
                 --without-p11-kit \
                 --with-included-unistring \
+                $tasn1 \
                 --disable-static &&
     make -j"$JOBS" && make install
 }
@@ -877,13 +897,14 @@ run_build required proftpd
 log_info "Phase 8: File sharing"
 
 # samba's dependency chain, built here because the headless profiles
-# skip blfs-libs.  nettle + gnutls satisfy samba's Required GnuTLS (the
-# confirmed Nightly #210 abort) and are useful system crypto libraries,
-# so they stay required.  Parse-Yapp (pidl) and MIT krb5
-# (--with-system-mitkrb5) are the remaining Required deps that only
-# surface once configure passes GnuTLS; they, and samba itself, are
-# optional so a residual offline issue can never again block an
-# otherwise-good server build.
+# skip blfs-libs.  libtasn1 + nettle + gnutls satisfy samba's Required
+# GnuTLS (the confirmed Nightly #210 abort, then the Nightly #212
+# libtasn1 abort) and are useful system crypto libraries, so they stay
+# required.  Parse-Yapp (pidl) and MIT krb5 (--with-system-mitkrb5) are
+# the remaining Required deps that only surface once configure passes
+# GnuTLS; they, and samba itself, are optional so a residual offline
+# issue can never again block an otherwise-good server build.
+run_build required libtasn1
 run_build required nettle
 run_build required gnutls
 run_build optional parse-yapp

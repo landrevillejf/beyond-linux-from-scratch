@@ -1714,6 +1714,53 @@ class TestProfilePromiseGuardrails:
         listed = self._listed_filenames()
         assert listed.count('jack2-1.9.22.tar.gz') == 0
 
+    # Nightly #212: every pin below was either a permanent 404 or a
+    # non-book version.  Custom entries are applied last and share the
+    # dedup key of the book tarball, so a dead pin silently evicted a
+    # live source (08c ended up with no wayland tarball at all) and a
+    # non-book major let find_archive's "newest wins" rule build the
+    # wrong tree.  The official wget-list is authoritative for all of
+    # them; each removal is documented where the pin used to sit.
+    RETIRED_PINS = (
+        'ImageMagick-7.1.2-27.tar.gz',
+        'accountsservice-23.13.92.tar.xz',
+        'accountsservice-26.27.3.tar.gz',
+        'babl-0.1.110.tar.xz',
+        'babl-0.1.98.tar.xz',
+        'enscript-1.6.6.tar.gz',
+        'gegl-0.4.50.tar.xz',
+        'gegl-0.4.8.tar.bz2',
+        'gtk+-3.24.43.tar.xz',
+        'gtk-4.18.4.tar.xz',
+        'hunspell-5.2.3.tar.gz',
+        'json-glib-1.10.4.tar.xz',
+        'kmod-34.tar.xz',
+        'libdrm-2.4.174.tar.xz',
+        'libjpeg-turbo-3.1.1.tar.gz',
+        'libseccomp-2.6.0.tar.xz',
+        'libwacom-0.29.tar.bz2',
+        'poppler-25.6.0.tar.xz',
+        'poppler-26.08.0.tar.xz',
+        'wayland-1.23.1.tar.xz',
+        'wayland-1.26.0.tar.gz',
+        'wayland-protocols-1.44.tar.xz',
+        'xcb-proto-1.18.0.tar.xz',
+        'xeyes-1.2.0.tar.xz',
+        'xf86-video-fbdev-0.5.0.tar.xz',
+        'xkbcommon-1.11.0.tar.gz',
+        'xkbcommon-1.13.2.tar.gz',
+        'xorgproto-2024.1.1.tar.xz',
+    )
+
+    def test_retired_nightly_212_pins_stay_out_of_the_list(self):
+        """The pins retired by the nightly #212 source audit must not
+        come back: each one costs a live book URL."""
+        listed = self._listed_filenames()
+        resurrected = [pin for pin in self.RETIRED_PINS if pin in listed]
+        assert not resurrected, \
+            f"retired pins are back (they evict the live book URL " \
+            f"sharing their dedup key): {resurrected}"
+
     def test_dbus_glib_override_does_not_downgrade_to_0_112(self):
         """dbus-glib 0.112 no longer compiles against the current glib
         headers (the G_TYPE_VALUE_ARRAY deprecation is a hard
@@ -1955,6 +2002,65 @@ class TestProfilePromiseGuardrails:
         assert 'gnutls) have_pc gnutls ;;' in content
         assert 'krb5) have_cmd krb5-config ;;' in content
         assert 'perl -MParse::Yapp::Driver -e1' in content
+
+    def test_libs_stage_builds_mesa_python_modules_before_mesa(self):
+        """mako, cython and pyyaml must precede mesa in stage 08a.
+
+        Nightly #212 (every desktop job) died at mesa meson with
+        "../meson.build:958:2: ERROR: Problem encountered: Python (3.x)
+        mako module >= 0.8.0 required to build mesa."; the book lists
+        Mako AND PyYAML as REQUIRED mesa dependencies (meson.build:967
+        aborts on the yaml module right after mako), and PyYAML in turn
+        requires Cython plus libyaml, which phase 9 of this stage builds.
+        The chroot is offline, so the three modules are installed with
+        the book's pip3 wheel / pip3 install --no-index idiom and never
+        contact PyPI.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        mesa_pos = content.index('run_build required mesa')
+        for pkg in ('mako', 'cython', 'pyyaml'):
+            pos = content.find(f'run_build required {pkg}')
+            assert pos != -1, f"{pkg} build missing from stage 08a"
+            assert pos < mesa_pos, \
+                f"{pkg} must be built before mesa (nightly #212)"
+        assert content.index('run_build required libyaml') < \
+            content.index('run_build required pyyaml'), \
+            "libyaml must precede pyyaml (its C extension links to it)"
+        for fn in ('build_commands_mako', 'build_commands_cython',
+                   'build_commands_pyyaml'):
+            assert fn in content, f"{fn} missing from stage 08a"
+        assert '--no-build-isolation' in content
+        assert '--no-index --find-links dist' in content, \
+            "the offline pip3 idiom must never reach PyPI"
+        assert "mako)                python3 -c 'import mako' " \
+            ">/dev/null 2>&1 ;;" in content
+        assert "cython)              python3 -c 'import Cython' " \
+            ">/dev/null 2>&1 ;;" in content
+        assert "pyyaml)              python3 -c 'import yaml' " \
+            ">/dev/null 2>&1 ;;" in content
+
+    def test_server_stage_builds_libtasn1_before_gnutls(self):
+        """libtasn1 must precede gnutls in stage 25.
+
+        Nightly #212 (every headless job) died at gnutls configure with
+        "checking for libtasn1 >= 4.9... no" followed by "*** Libtasn1
+        4.9 was not found. To use the included one, use
+        --with-included-libtasn1": GnuTLS does NOT fall back on its
+        bundled copy on its own, it aborts.  The book lists libtasn1 as
+        a Recommended GnuTLS dependency; 08a builds it for the desktop
+        profiles but the headless ones skip that stage.
+        """
+        content = Path('blfs/25-server.sh').read_text()
+        gnutls_pos = content.index('run_build required gnutls')
+        pos = content.find('run_build required libtasn1')
+        assert pos != -1, "libtasn1 build missing from stage 25"
+        assert pos < gnutls_pos, \
+            "libtasn1 must be built before gnutls (nightly #212)"
+        assert 'build_commands_libtasn1' in content
+        assert 'libtasn1) have_pc libtasn1 ;;' in content
+        assert '--with-included-libtasn1' in content, \
+            "gnutls must fall back on its bundled copy when the " \
+            "system libtasn1 is missing"
 
     def test_java_dev_stage_has_no_silent_skip_guards(self):
         """The old `if ls <tarball>` guards logged success on an image
