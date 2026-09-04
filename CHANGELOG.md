@@ -86,6 +86,81 @@
 
 ### Fixed
 
+- **mesa meson: the Mako and PyYAML python modules were never built
+  (nightly #212)** (`blfs/08a-build-blfs-libs.sh`)
+  - With the #210 libclc fix in place, every desktop job (xfce, gnome,
+    kde, lxqt, full, java-dev, audio-studio) died one step later at
+    mesa's meson with `Python (3.x) mako module >= 0.8.0 required to
+    build mesa` and, right after it, the same abort for PyYAML.  The
+    book lists both as REQUIRED mesa dependencies and PyYAML in turn
+    requires Cython and libyaml, but no stage ever built Mako, Cython
+    or PyYAML and the offline chroot cannot pip-install them from PyPI.
+    blfs-libs now builds all three with the book's offline python
+    module idiom (`pip3 wheel -w dist --no-build-isolation --no-deps
+    --no-cache-dir "$PWD"`, then `pip3 install --no-index --find-links
+    dist --no-user <Module>`) immediately before mesa.  libyaml is
+    already built in phase 9 and Mako's own MarkupSafe import is
+    provided by the LFS system build, so no other package is added
+
+- **GnuTLS configure aborts: Libtasn1 not found (nightly #212)**
+  (`blfs/25-server.sh`)
+  - The #210 fix assumed GnuTLS would silently fall back on the
+    libtasn1 copy bundled in its tarball; it does not.  All three
+    headless jobs (server, minimal sysvinit and systemd) died at
+    `Libtasn1 4.9 was not found. To use the included one, use
+    --with-included-libtasn1`.  The desktop profiles get libtasn1 from
+    blfs-libs (08a), which the headless profiles skip, so phase 8 now
+    builds it with book commands before nettle and GnuTLS.
+    `build_commands_gnutls` additionally passes
+    `--with-included-libtasn1` when `libtasn1.pc` is absent, so a
+    missing tarball degrades to the bundled copy instead of aborting
+
+- **source_key collapsed the gtk3 and gtk4 series into one entry
+  (nightly #212)** (`builder.py`)
+  - The #194 dedup key stripped the whole first version token, so
+    `gtk-3.24.50.tar.xz` and `gtk-4.18.6.tar.xz` both hashed to
+    `pkg:gtk.tar.xz`.  Custom sources are applied last, so the
+    gtk-4.18.6 pin evicted the official gtk-3.24.50 tarball from the
+    generated list and the xorg stage lost the archive its required
+    gtk3 build resolves through the explicit `gtk-3.*` glob.  The key
+    now keeps the major digit (`pkg:gtk-3.tar.xz` versus
+    `pkg:gtk-4.tar.xz`) while still stripping the minor and revision
+    digits: co-installable series both survive, and a same-series
+    override (gawk 5.3.2 to 5.4.0) still replaces the official URL
+
+- **dead custom source pins evicted live book URLs (nightly #212)**
+  (`packages/custom-sources.list`)
+  - Auditing all 324 custom pins against the official LFS 12.4 and
+    BLFS 13.0 wget-lists found 15 that 404 upstream (wayland-1.23.1,
+    accountsservice-23.13.92 -- a typo for 23.13.9, poppler-25.6.0,
+    babl-0.1.110, gegl-0.4.50, hunspell-5.2.3, libjpeg-turbo-3.1.1,
+    json-glib-1.10.4, xorgproto-2024.1.1, xcb-proto-1.18.0,
+    libdrm-2.4.174, the .tar.xz variants of libseccomp-2.6.0,
+    xf86-video-fbdev-0.5.0 and xeyes-1.2.0, ImageMagick-7.1.2-27),
+    stale pins dragging in a non-book major (wayland-1.26.0,
+    poppler-26.08.0, xkbcommon-1.13.2, accountsservice-26.27.3,
+    libwacom-0.29) and duplicates (gtk+-3.24.43, gtk-4.18.4,
+    kmod-34).  A dead pin shares the dedup key of the book tarball and
+    is applied last, so each one silently removed a downloadable
+    source: 08c was left with no wayland tarball at all.  All of them
+    are dropped (296 pins remain) and replaced by a comment stating
+    why the official wget-list is authoritative for that package
+
+- **downloads gave up on a throttled or dead upstream host
+  (nightly #212)** (`builder.py`)
+  - freedesktop.org answered `418 I'm a teapot` to every libevdev
+    request from the runners: #208 did make 418 retryable, but the 30 s
+    backoff cap re-entered the same throttle window on each attempt.
+    Rate-limit answers (418 and 429) now back off eight times longer,
+    capped at 240 s, while ordinary retries keep the 30 s cap.
+    `download()` also gained a fallback on the BLFS conglomeration
+    mirror (`ftp2.osuosl.org/pub/blfs/conglomeration/<package>/<file>`,
+    the only one of the probed mirrors still serving that tree), so an
+    archive dropped by its upstream host no longer fails the stage
+    (ImageMagick-7.1.2-1 is 404 on imagemagick.org but present on the
+    mirror).  The retry loop moved into `_download_attempt()` so the
+    primary URL and each mirror get their own retry budget
+
 - **mesa meson: libclc required by the radv/lavapipe Vulkan drivers
   (nightly #210)** (`blfs/08a-build-blfs-libs.sh`)
   - The #208 fix (`-D vulkan-drivers=amd,swrast`) cleared the rustc
