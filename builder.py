@@ -1074,11 +1074,21 @@ class ScriptExecutor:
 
     def resume_from(self, resume_stage: str, stages: List[Tuple[str, str]]) -> bool:
         """Resume build from a specific stage"""
-        start_index = 0
-        for i, (stage_name, _) in enumerate(stages):
-            if stage_name == resume_stage:
-                start_index = i
-                break
+        # An unmatched name used to leave start_index at 0 and rebuild
+        # everything from the top, so a typo in --resume-from silently cost
+        # a full multi-hour build instead of reporting an error.
+        start_index = next(
+            (i for i, (stage_name, _) in enumerate(stages)
+             if stage_name == resume_stage),
+            None
+        )
+        if start_index is None:
+            self.logger.error(f"Unknown resume stage: {resume_stage}")
+            self.logger.error(
+                "Available stages for this profile: "
+                + ", ".join(name for name, _ in stages)
+            )
+            return False
 
         self.logger.info(f"Resuming build from stage: {resume_stage}")
 
@@ -2117,7 +2127,8 @@ class LFSBuilder:
         self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom) -> {sources_file}")
         return True
 
-    def build(self, resume_from: Optional[str] = None, use_cache: bool = False, cache_only: bool = False) -> bool:
+    def build(self, resume_from: Optional[str] = None, use_cache: bool = False,
+              cache_only: bool = False, stop_after: Optional[str] = None) -> bool:
         self.logger.info("=" * 70)
         self.logger.info(f"LFS Builder v{__version__}")
         self.logger.info(f"Profile: {self.profile}")
@@ -2166,6 +2177,27 @@ class LFSBuilder:
         # --- Resume or full build ---
         stages = self.get_build_stages()
 
+        # Truncate before the resume branch so --stop-after and
+        # --resume-from compose: the base-cache publisher stops once
+        # lfs-system is done, while a resumed nightly job stops nowhere.
+        if stop_after:
+            stop_index = next(
+                (i for i, (stage_name, _) in enumerate(stages)
+                 if stage_name == stop_after),
+                None
+            )
+            if stop_index is None:
+                self.logger.error(f"--stop-after: unknown stage '{stop_after}' for this profile")
+                self.logger.error(
+                    "Available stages for this profile: "
+                    + ", ".join(name for name, _ in stages)
+                )
+                return False
+            stages = stages[:stop_index + 1]
+            self.logger.info(
+                f"Stage list truncated after '{stop_after}' ({len(stages)} stages)"
+            )
+
         if resume_from:
             return self.executor.resume_from(resume_from, stages)
 
@@ -2178,7 +2210,12 @@ class LFSBuilder:
                 return False
 
         self.logger.info("=" * 70)
-        self.logger.info("BUILD COMPLETED SUCCESSFULLY!")
+        if stop_after:
+            # A truncated run produces no ISO; report what stopped instead
+            # of implying a finished, bootable system.
+            self.logger.info(f"BUILD STOPPED AFTER STAGE: {stop_after}")
+        else:
+            self.logger.info("BUILD COMPLETED SUCCESSFULLY!")
         self.logger.info("=" * 70)
 
         iso_name = self.get_iso_name()
@@ -2419,6 +2456,9 @@ Examples:
 
     parser.add_argument('--resume-from',
                         help='Resume build from specific stage')
+
+    parser.add_argument('--stop-after',
+                        help='Stop the build once this stage has completed')
 
     parser.add_argument('--write-usb', metavar='DEVICE',
                         help='Write ISO to USB device (e.g., /dev/sdb)')
@@ -2673,11 +2713,16 @@ def main():
     if not builder.prepare_environment():
         sys.exit(1)
 
-    if not args.resume_from:
-        if not builder.download_sources():
-            sys.exit(1)
+    # Sources are downloaded on resume as well.  A resumed job still needs
+    # everything the skipped stages never fetched - notably the kernel
+    # tarball, which the nightly workflow deletes on purpose to force a
+    # fresh one - and download() returns early for any archive that already
+    # exists and validates, so the extra pass costs a checksum sweep.
+    if not builder.download_sources():
+        sys.exit(1)
 
-    if not builder.build(resume_from=args.resume_from, use_cache=args.use_cache, cache_only=args.cache_only):
+    if not builder.build(resume_from=args.resume_from, use_cache=args.use_cache,
+                         cache_only=args.cache_only, stop_after=args.stop_after):
         sys.exit(1)
 
     # Post-build: generate SBOM if requested

@@ -294,7 +294,8 @@ python3 builder.py --generate-sources-list
 | `--download-timeout` | Timeout in seconds for each download (default: from config or 300) |
 | `--download-retries` | Number of retries for failed downloads (default: from config or 3) |
 | `--stage-timeout` | Timeout in seconds for each build stage (default: 7200; raise for qemu-emulated cross builds) |
-| `--resume-from` | Resume from a specific stage |
+| `--resume-from` | Resume from a specific stage. Sources are still validated and downloaded first, and an unknown stage name is a hard error rather than a silent restart |
+| `--stop-after` | Stop once this stage has completed (used to publish the base prefix cache) |
 | `--write-usb <device>` | Write generated ISO to a USB device |
 | `--list-profiles` | Print available profiles |
 | `--profile-info <profile>` | Print profile details |
@@ -566,6 +567,11 @@ python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 ```bash
 python3 builder.py --resume-from <stage-name> --profile <profile> --output <output-dir>
 ```
+
+The stage name must be one the selected profile actually runs; an unknown
+name aborts with the valid list instead of rebuilding from the top. Sources
+are re-validated on resume, which is cheap because any archive that already
+exists and matches its checksum is skipped.
 
 ### Regenerate source list
 
