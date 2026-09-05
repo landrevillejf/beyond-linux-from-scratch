@@ -357,3 +357,46 @@ class TestBasePrefixCache:
         workflow = self._read("build-base-cache.yml")
         assert "init: [sysvinit, systemd]" in workflow
         assert "arch: [x86_64]" in workflow
+
+    @staticmethod
+    def _indent(line):
+        return len(line) - len(line.lstrip())
+
+    def _continuations(self, workflow):
+        """Yield (lineno, line, next line) for each backslash continuation."""
+        lines = workflow.split("\n")
+        for i, line in enumerate(lines[:-1]):
+            nxt = lines[i + 1]
+            if line.rstrip().endswith("\\") and nxt.strip():
+                yield i + 1, line, nxt
+
+    def test_shell_continuations_use_the_repository_indent(self):
+        """Every workflow indents a backslash continuation by 0 or 2 spaces.
+
+        Ragged deltas - and a continuation that dedents below the command it
+        belongs to - read as broken indentation in review even though YAML
+        and bash both accept them, so they survive every other gate.
+        """
+        offenders = []
+        for name in ("nightly.yml", "build-base-cache.yml"):
+            for lineno, line, nxt in self._continuations(self._read(name)):
+                delta = self._indent(nxt) - self._indent(line)
+                if delta not in (0, 2):
+                    offenders.append(f"{name}:{lineno} delta {delta:+d}")
+        assert offenders == [], offenders
+
+    def test_sidecar_metadata_is_written_without_a_heredoc(self):
+        """A heredoc body has to sit at the shell's own column to survive
+        the YAML block dedent, which is indistinguishable from an
+        indentation mistake.  printf in a brace group avoids the ambiguity.
+
+        The version also has to come from the authoritative VERSION file by
+        absolute path: the step used to cd into /tmp/base-cache and import
+        builder, which is not on sys.path from there.
+        """
+        step = self._step(self._read("build-base-cache.yml"),
+                          "Write cache metadata sidecar")
+        assert "<<EOF" not in step
+        assert "from builder import" not in step
+        assert "cat /tmp/lfs-build/VERSION" in step
+        assert '} > "/tmp/base-cache/${PREFIX}.json"' in step

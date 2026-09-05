@@ -242,17 +242,17 @@ jobs:
           cd /tmp/base-cache
           echo "Looking for ${PREFIX} in base-cache-latest"
           if gh release download base-cache-latest \
-               --repo ${{ github.repository }} \
-               --pattern "${PREFIX}.tar.zst.part-*" \
-               --pattern "${PREFIX}.sha256"; then
+            --repo ${{ github.repository }} \
+            --pattern "${PREFIX}.tar.zst.part-*" \
+            --pattern "${PREFIX}.sha256"; then
             # Verify before extracting.  The package-cache step above
             # downloads SHA256SUMS and never checks it; do not repeat that.
             if sha256sum -c "${PREFIX}.sha256"; then
               df -h /tmp
               sudo mkdir -p /tmp/lfs-build/build-release
               if cat $(ls -v "${PREFIX}".tar.zst.part-*) \
-                   | sudo tar --zstd --numeric-owner --xattrs \
-                       -xf - -C /tmp/lfs-build/build-release; then
+                | sudo tar --zstd --numeric-owner --xattrs \
+                  -xf - -C /tmp/lfs-build/build-release; then
                 # The lfs uid is not guaranteed identical across runners,
                 # and builder.py writes build_info.json, logs/ and
                 # sources/ as lfs.
@@ -573,3 +573,6 @@ jobs:
                   gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag || true
                 fi
               done
+
+metadata:
+  name:

@@ -185,24 +185,30 @@ jobs:
 
       - name: Write cache metadata sidecar
         run: |
-          cd /tmp/base-cache || exit 1
           PREFIX="${{ steps.key.outputs.prefix }}"
-          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          # VERSION is authoritative and lives in the checkout copy, not in
+          # /tmp/base-cache, so read it by absolute path.
+          BUILDER_VERSION=$(cat /tmp/lfs-build/VERSION)
           CREATED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          cat > "${PREFIX}.json" <<EOF
+          # printf in a brace group rather than a heredoc: a heredoc body
+          # has to sit at the shell's own column to survive the YAML block
+          # dedent, which reads as broken indentation in the workflow file.
           {
-            "base_stage": "$BASE_STAGE",
-            "resume_stage": "$RESUME_STAGE",
-            "profile": "minimal",
-            "init_system": "${{ matrix.init }}",
-            "architecture": "${{ matrix.arch }}",
-            "base_key": "${{ steps.key.outputs.base_key }}",
-            "builder_version": "$BUILDER_VERSION",
-            "git_sha": "${{ github.sha }}",
-            "created": "$CREATED"
-          }
-          EOF
-          cat "${PREFIX}.json"
+            printf '{\n'
+            printf '  "base_stage": "%s",\n' "$BASE_STAGE"
+            printf '  "resume_stage": "%s",\n' "$RESUME_STAGE"
+            printf '  "profile": "minimal",\n'
+            printf '  "init_system": "%s",\n' "${{ matrix.init }}"
+            printf '  "architecture": "%s",\n' "${{ matrix.arch }}"
+            printf '  "base_key": "%s",\n' "${{ steps.key.outputs.base_key }}"
+            printf '  "builder_version": "%s",\n' "$BUILDER_VERSION"
+            printf '  "git_sha": "%s",\n' "${{ github.sha }}"
+            printf '  "created": "%s"\n' "$CREATED"
+            printf '}\n'
+          } > "/tmp/base-cache/${PREFIX}.json"
+          python3 -c 'import json,sys; json.load(open(sys.argv[1]))' \
+            "/tmp/base-cache/${PREFIX}.json"
+          cat "/tmp/base-cache/${PREFIX}.json"
 
       - name: Prune superseded assets for this init/arch pair
         env:
@@ -212,9 +218,9 @@ jobs:
           # grow by one full prefix every time the key changes.
           KEY="${{ steps.key.outputs.base_key }}"
           STALE=$(gh release view base-cache-latest --json assets \
-                    -q '.assets[].name' 2>/dev/null \
-                  | grep "^base-${{ matrix.init }}-${{ matrix.arch }}-" \
-                  | grep -v -- "-${KEY}\." || true)
+            -q '.assets[].name' 2>/dev/null \
+            | grep "^base-${{ matrix.init }}-${{ matrix.arch }}-" \
+            | grep -v -- "-${KEY}\." || true)
           if [ -z "$STALE" ]; then
             echo "No superseded assets to prune"
             exit 0
@@ -277,3 +283,6 @@ jobs:
             echo "- key: \`${{ steps.key.outputs.base_key }}\`"
             echo "- assets: \`${{ steps.key.outputs.prefix }}.*\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+metadata:
+  name:
