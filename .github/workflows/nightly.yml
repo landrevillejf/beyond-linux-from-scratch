@@ -254,13 +254,11 @@ jobs:
                 | sudo tar --zstd --numeric-owner --xattrs \
                   -xf - -C /tmp/lfs-build/build-release; then
                 # The lfs uid is not guaranteed identical across runners,
-                # and builder.py writes build_info.json, logs/ and
-                # sources/ as lfs.
-                sudo chown lfs:lfs /tmp/lfs-build /tmp/lfs-build/build-release
-                if [ -d /tmp/lfs-build/build-release/home/lfs ]; then
-                  sudo chown -R "$(id -u lfs):$(id -g lfs)" \
-                    /tmp/lfs-build/build-release/home/lfs
-                fi
+                # and the resumed build must be able to write anywhere in the
+                # restored rootfs, not just in the top-level scaffolding.
+                sudo chown lfs:lfs /tmp/lfs-build
+                sudo chown -R "$(id -u lfs):$(id -g lfs)" \
+                  /tmp/lfs-build/build-release
                 HIT=true
               else
                 echo "Base cache extraction failed - building from scratch"
