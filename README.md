@@ -475,6 +475,7 @@ graph TD
     A --> A2["xfce-systemd-x86_64-build-cache.yml"]
     A --> A3["build-rootfs-cache.yml"]
     A --> A4["cache-packages.yml"]
+    A --> A5["build-base-cache.yml"]
 
     B["ISO release workflows"] --> B1["xfce-live-boot-iso.yml"]
     B --> B2["release.yml"]
@@ -511,12 +512,41 @@ graph TD
 | `xfce-live-boot-iso.yml` | Full live ISO release pipeline | Yes | Yes | Yes | No |
 | `release.yml` | Tagged release build pipeline | Yes | Yes | Yes | No |
 | `nightly.yml` | Scheduled profile matrix builds | Artifact upload | Yes | Yes | No |
+| `build-base-cache.yml` | Build the shared LFS base prefix | Yes (parts) | No | No | Yes |
 
 All release-capable workflows explicitly verify:
 
 1. ISO presence and non-empty file
 2. Kernel artifact presence (`image/boot/vmlinuz*`)
 3. SHA256 checksum generation for published assets
+
+### Base prefix cache
+
+The first stages of every profile (`host-check` through `lfs-system`) take
+2h15m and are identical across profiles: nothing in `host/`, `lfs/05a` or
+`lfs/05b` reads the profile, and `lfs/05b` branches only on the init system
+and the kernel type. `build-base-cache.yml` builds that prefix once per
+`(init, arch)` pair and publishes it to the `base-cache-latest` release as
+split zstd parts; `nightly.yml` restores it and resumes from `disk-image`.
+
+The cache is keyed on its inputs rather than on trust:
+
+```bash
+BASE_KEY=$(git ls-tree -r HEAD -- host \
+    lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+    config packages/sources.list packages/custom-sources.list \
+    builder.py VERSION | sha256sum | cut -c1-12)
+```
+
+`git ls-tree -r` emits blob SHAs, so any edit under those paths changes the
+key on its own. A change confined to `blfs/`, `final/` or `profiles/`
+correctly reuses the cache.
+
+`minimal / sysvinit / x86_64` stays an **uncached canary**: it is the
+cheapest complete from-scratch build (3h47m to bootloader) and it re-proves
+the whole prefix every night. Any other job that misses the cache simply
+falls back to a normal from-scratch build - the restore step never fails a
+job.
 
 ## Testing and quality gates
 

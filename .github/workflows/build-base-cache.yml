@@ -1,0 +1,279 @@
+name: Build Base Prefix Cache
+
+# Every nightly job rebuilds the same 2h15m prefix (host-check through
+# lfs-system) before it can do anything profile-specific.  This workflow
+# builds that prefix once per (init, arch) pair and publishes it to the
+# base-cache-latest release; nightly.yml restores it and resumes from the
+# next stage.
+#
+# The prefix is genuinely shared: host/04-build-toolchain.sh has no profile
+# or LFS_PROFILE_* references, and lfs/05a and lfs/05b branch only on
+# INIT_SYSTEM and KERNEL_TYPE.  aarch64 is deliberately absent - its
+# lfs-system alone ran 4h04m and failed, so it can neither produce nor fit
+# inside a cache.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 90 minutes ahead of the nightly cron so the cache is warm when the
+    # matrix starts.
+    - cron: '30 1 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'host/**'
+      - 'lfs/05a-build-lfs-basic.sh'
+      - 'lfs/05b-build-lfs-system.sh'
+      - 'config/**'
+      - 'packages/sources.list'
+      - 'packages/custom-sources.list'
+      - 'builder.py'
+      - 'VERSION'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  # The boundary is a variable, not a hardcoded stage name: moving it to
+  # display-manager once a nightly proves xorg and wayland complete is a
+  # one-line change here plus the matching RESUME_STAGE in nightly.yml.
+  BASE_STAGE: lfs-system
+  RESUME_STAGE: init-system
+
+jobs:
+  build-base:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        init: [sysvinit, systemd]
+        arch: [x86_64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: true
+
+      - name: Free disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check LFS compatibility of shell scripts
+        run: python3 lfs_check.py --shellcheck
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
+            libssl-dev libelf-dev squashfs-tools ca-certificates zstd \
+            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Generate sources.list
+        run: python3 builder.py --generate-sources-list
+
+      - name: Create lfs user
+        run: |
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs touch /home/lfs/.bashrc
+
+      - name: Prepare lfs build directory
+        run: |
+          sudo rm -rf /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build
+          sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
+          sudo chown -R lfs:lfs /tmp/lfs-build
+
+      - name: Compute base cache key
+        id: key
+        run: |
+          # git ls-tree -r emits blob SHAs, so any edit under these paths
+          # changes the key on its own - no second hashing pass, and no way
+          # for a nightly to restore a base built from different inputs.
+          # Paths outside the list (blfs/, final/, profiles/) intentionally
+          # keep the cache valid.
+          BASE_KEY=$(git ls-tree -r HEAD -- host \
+            lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            config packages/sources.list packages/custom-sources.list \
+            builder.py VERSION | sha256sum | cut -c1-12)
+          test -n "$BASE_KEY"
+          echo "base_key=$BASE_KEY" >> "$GITHUB_OUTPUT"
+          echo "prefix=base-${{ matrix.init }}-${{ matrix.arch }}-$BASE_KEY" >> "$GITHUB_OUTPUT"
+          echo "BASE_KEY=$BASE_KEY"
+
+      - name: Build base prefix (${{ matrix.init }} / ${{ matrix.arch }})
+        run: |
+          cd /tmp/lfs-build
+          # minimal is the cheapest profile that still runs the whole
+          # prefix; the prefix content does not depend on it.
+          sudo -u lfs python3 builder.py \
+            --profile minimal \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --stop-after "$BASE_STAGE" \
+            --download-timeout 600 \
+            --download-retries 5 \
+            --stage-timeout 18000
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
+      - name: Verify the base prefix is real
+        run: |
+          cd /tmp/lfs-build/build-release || exit 1
+          # Fail here rather than publish a hollow cache: a truncated
+          # prefix would poison every nightly job that restores it.
+          test -x usr/bin/gcc
+          test -x bin/bash
+          test -f etc/passwd
+          # lfs/05b removes /tools once the system is self-hosting, so its
+          # absence proves the last chapter of the prefix really ran.
+          test ! -d tools
+          ls -l usr/bin/gcc bin/bash etc/passwd
+          du -sh .
+
+      - name: Pack the base prefix into split parts
+        run: |
+          PREFIX="${{ steps.key.outputs.prefix }}"
+          mkdir -p /tmp/base-cache
+          # Release assets are capped at 2 GB, so stream the zstd tarball
+          # into split parts - the same convention cache-packages uses.
+          # The build scaffolding shares $LFS with the rootfs and has to be
+          # excluded by name; sources/ and logs/ alone are several GB.
+          # Parts land outside the tree being read so the archive never
+          # contains itself.
+          df -h /tmp
+          sudo tar --numeric-owner --xattrs \
+            --use-compress-program='zstd -19 -T0' \
+            -C /tmp/lfs-build/build-release -cf - \
+            --exclude=./sources --exclude=./logs --exclude=./cache \
+            --exclude=./backups --exclude=./live --exclude=./image \
+            --exclude=./tools --exclude=./packages --exclude=./lpm-repo \
+            --exclude=./build_info.json --exclude=./sbom.spdx.json \
+            --exclude=./proc --exclude=./sys --exclude=./dev \
+            --exclude=./run --exclude=./lost+found \
+            . | split -b 1900m -d -a 2 - "/tmp/base-cache/${PREFIX}.tar.zst.part-"
+          cd /tmp/base-cache || exit 1
+          sha256sum "${PREFIX}".tar.zst.part-* > "${PREFIX}.sha256"
+          ls -lh "${PREFIX}".tar.zst.part-*
+          df -h /tmp
+
+      - name: Write cache metadata sidecar
+        run: |
+          cd /tmp/base-cache || exit 1
+          PREFIX="${{ steps.key.outputs.prefix }}"
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          CREATED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          cat > "${PREFIX}.json" <<EOF
+          {
+            "base_stage": "$BASE_STAGE",
+            "resume_stage": "$RESUME_STAGE",
+            "profile": "minimal",
+            "init_system": "${{ matrix.init }}",
+            "architecture": "${{ matrix.arch }}",
+            "base_key": "${{ steps.key.outputs.base_key }}",
+            "builder_version": "$BUILDER_VERSION",
+            "git_sha": "${{ github.sha }}",
+            "created": "$CREATED"
+          }
+          EOF
+          cat "${PREFIX}.json"
+
+      - name: Prune superseded assets for this init/arch pair
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # base-cache-latest is a rolling tag: without pruning it would
+          # grow by one full prefix every time the key changes.
+          KEY="${{ steps.key.outputs.base_key }}"
+          STALE=$(gh release view base-cache-latest --json assets \
+                    -q '.assets[].name' 2>/dev/null \
+                  | grep "^base-${{ matrix.init }}-${{ matrix.arch }}-" \
+                  | grep -v -- "-${KEY}\." || true)
+          if [ -z "$STALE" ]; then
+            echo "No superseded assets to prune"
+            exit 0
+          fi
+          echo "$STALE" | while IFS= read -r asset; do
+            echo "Pruning $asset"
+            gh release delete-asset base-cache-latest "$asset" --yes || true
+          done
+
+      - name: Publish base prefix to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: base-cache-latest
+          name: LFS Base Prefix Cache
+          body: |
+            Rolling cache of the shared LFS prefix (`host-check` through
+            `lfs-system`), published per `(init, arch)` pair and keyed on the
+            blob SHAs of the inputs that can change it.
+
+            Assets are named
+            `base-<init>-<arch>-<key>.{tar.zst.part-NN,sha256,json}`.
+
+            Restore with:
+
+            ```bash
+            gh release download base-cache-latest \
+              --pattern "base-<init>-<arch>-<key>.tar.zst.part-*" \
+              --pattern "base-<init>-<arch>-<key>.sha256"
+            sha256sum -c "base-<init>-<arch>-<key>.sha256"
+            cat $(ls -v *.part-*) | sudo tar --zstd --numeric-owner --xattrs \
+              -xf - -C "$LFS"
+            ```
+          prerelease: true
+          draft: false
+          generate_release_notes: false
+          files: |
+            /tmp/base-cache/${{ steps.key.outputs.prefix }}.tar.zst.part-*
+            /tmp/base-cache/${{ steps.key.outputs.prefix }}.sha256
+            /tmp/base-cache/${{ steps.key.outputs.prefix }}.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload logs on failure
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: base-cache-logs-${{ matrix.init }}-${{ matrix.arch }}
+          path: /tmp/lfs-build/build-release/logs/
+          if-no-files-found: ignore
+
+      - name: Summary
+        run: |
+          {
+            echo "## Base prefix cache published"
+            echo ""
+            echo "- init: \`${{ matrix.init }}\`"
+            echo "- arch: \`${{ matrix.arch }}\`"
+            echo "- base stage: \`$BASE_STAGE\`"
+            echo "- resume stage: \`$RESUME_STAGE\`"
+            echo "- key: \`${{ steps.key.outputs.base_key }}\`"
+            echo "- assets: \`${{ steps.key.outputs.prefix }}.*\`"
+          } >> "$GITHUB_STEP_SUMMARY"
