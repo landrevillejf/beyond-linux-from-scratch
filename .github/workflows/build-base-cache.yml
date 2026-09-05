@@ -253,6 +253,10 @@ jobs:
             cat $(ls -v *.part-*) | sudo tar --zstd --numeric-owner --xattrs \
               -xf - -C "$LFS"
             ```
+
+            Consumers that also expect `build-release.img` must recreate it
+            after the restore by re-running the workflow's image stage
+            (`disk-image` in nightly.yml) before resuming later stages.
           prerelease: true
           draft: false
           generate_release_notes: false
