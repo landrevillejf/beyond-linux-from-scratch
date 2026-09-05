@@ -246,11 +246,13 @@ jobs:
             Restore with:
 
             ```bash
+            PREFIX="base-<init>-<arch>-<key>"
             gh release download base-cache-latest \
-              --pattern "base-<init>-<arch>-<key>.tar.zst.part-*" \
-              --pattern "base-<init>-<arch>-<key>.sha256"
-            sha256sum -c "base-<init>-<arch>-<key>.sha256"
-            cat $(ls -v *.part-*) | sudo tar --zstd --numeric-owner --xattrs \
+              --pattern "${PREFIX}.tar.zst.part-*" \
+              --pattern "${PREFIX}.sha256"
+            sha256sum -c "${PREFIX}.sha256"
+            cat $(ls -v "${PREFIX}".tar.zst.part-*) \
+              | sudo tar --zstd --numeric-owner --xattrs \
               -xf - -C "$LFS"
             ```
 
