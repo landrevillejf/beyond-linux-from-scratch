@@ -39,8 +39,8 @@ permissions:
 
 env:
   # The boundary is a variable, not a hardcoded stage name: moving it to
-  # display-manager once a nightly proves xorg and wayland complete is a
-  # one-line change here plus the matching RESUME_STAGE in nightly.yml.
+  # display-manager once a nightly proves xorg and wayland complete means
+  # updating these two lines plus the matching nightly resume/image stages.
   BASE_STAGE: lfs-system
   RESUME_STAGE: init-system
 
@@ -283,6 +283,3 @@ jobs:
             echo "- key: \`${{ steps.key.outputs.base_key }}\`"
             echo "- assets: \`${{ steps.key.outputs.prefix }}.*\`"
           } >> "$GITHUB_STEP_SUMMARY"
-
-metadata:
-  name:

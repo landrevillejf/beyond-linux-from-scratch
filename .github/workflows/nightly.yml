@@ -573,6 +573,3 @@ jobs:
                   gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag || true
                 fi
               done
-
-metadata:
-  name:

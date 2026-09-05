@@ -95,8 +95,12 @@ polkit, accountsservice, lightdm and lightdm-gtk-greeter unconditionally
 with no gdm/sddm branch, so the whole display stack is shareable across
 xfce, gnome, kde, lxqt and full. That is worth roughly another 1h50m per
 desktop job. Enable it by editing `BASE_STAGE`/`RESUME_STAGE` in
-`build-base-cache.yml` and `BASE_CACHE_RESUME_STAGE` in `nightly.yml` - no
-code changes - but only once a nightly proves `xorg` through
+`build-base-cache.yml`, `BASE_CACHE_RESUME_STAGE` in `nightly.yml`, and
+`BASE_CACHE_IMAGE_STAGE` to the stage that recreates `build-release.img`.
+With the current workflow that image-recreation stage is `disk-image`, so
+changing only the first three variables would move the cache boundary
+without restoring the image artifact the nightly checks expect. No code
+changes are needed, but only once a nightly proves `xorg` through
 `display-manager` completes.
 
 With tier 1 alone the projected wall times are about 1h30m for minimal,
