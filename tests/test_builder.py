@@ -1932,7 +1932,7 @@ class TestStopAfter:
         assert any('lfs-system' in e for e in errors)
 
     def test_stop_after_composes_with_resume_from(self, builder):
-        """resume_from receives the already-truncated list."""
+        """resume_from receives the already-truncated list and shares logging."""
         builder.logger = MagicMock()
         with patch.object(builder, 'get_build_stages',
                           return_value=list(self.STAGES)), \
@@ -1945,6 +1945,9 @@ class TestStopAfter:
         assert resume.call_args.args[0] == 'toolchain'
         assert [name for name, _ in resume.call_args.args[1]] == [
             'host-check', 'disk-image', 'toolchain', 'lfs-system']
+        infos = self._infos(builder)
+        assert 'BUILD STOPPED AFTER STAGE: lfs-system' in infos
+        assert 'BUILD COMPLETED SUCCESSFULLY!' not in infos
 
     def test_stop_after_logs_stopped_not_completed(self, builder):
         """A truncated run has no bootable system; do not claim one."""

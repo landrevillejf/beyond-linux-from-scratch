@@ -105,6 +105,7 @@ python3 builder.py --write-usb /dev/sdb
 | `--output` | Output directory (default: `./lfs-build`). |
 | `--config` | Configuration file path (default: `config/build.conf`). |
 | `--resume-from` | Resume build from a specific stage (e.g., `desktop`). |
+| `--stop-after` | Stop after a specific stage completes (used for cache builds). |
 | `--write-usb` | Write the generated ISO to a USB device (e.g., `/dev/sdb`). |
 | `--list-profiles` | List all available profiles. |
 | `--profile-info` | Show detailed information about a specific profile. |

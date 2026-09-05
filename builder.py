@@ -2199,15 +2199,20 @@ class LFSBuilder:
             )
 
         if resume_from:
-            return self.executor.resume_from(resume_from, stages)
+            build_succeeded = self.executor.resume_from(resume_from, stages)
+        else:
+            total_stages = len(stages)
+            build_succeeded = True
+            for idx, (stage_name, script_path) in enumerate(stages, 1):
+                self.logger.info(f"[{idx}/{total_stages}] Processing stage: {stage_name}")
+                if not self.executor.run_script(script_path, stage_name):
+                    self.logger.error(f"Build failed at stage: {stage_name}")
+                    self.logger.info(f"You can resume with: --resume-from {stage_name}")
+                    build_succeeded = False
+                    break
 
-        total_stages = len(stages)
-        for idx, (stage_name, script_path) in enumerate(stages, 1):
-            self.logger.info(f"[{idx}/{total_stages}] Processing stage: {stage_name}")
-            if not self.executor.run_script(script_path, stage_name):
-                self.logger.error(f"Build failed at stage: {stage_name}")
-                self.logger.info(f"You can resume with: --resume-from {stage_name}")
-                return False
+        if not build_succeeded:
+            return False
 
         self.logger.info("=" * 70)
         if stop_after:
