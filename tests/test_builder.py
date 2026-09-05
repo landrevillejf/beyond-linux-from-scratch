@@ -1862,3 +1862,169 @@ class TestNightly212SourceKey:
             'https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz\n')
         assert 'gawk-5.4.0.tar.xz' in content
         assert 'gawk-5.3.2.tar.xz' not in content
+
+
+class TestStopAfter:
+    """--stop-after truncates the stage list so a prefix cache can be built.
+
+    The base-cache publisher runs host-check .. lfs-system and stops there;
+    the nightly jobs restore that prefix and resume from disk-image.  Both
+    depend on build() truncating *before* the resume branch, so the two
+    flags compose instead of one silently cancelling the other.
+    """
+
+    STAGES = [
+        ('host-check', 'host/01-check-host.sh'),
+        ('disk-image', 'host/03-create-disk-image.sh'),
+        ('toolchain', 'host/04-build-toolchain.sh'),
+        ('lfs-system', 'lfs/05b-build-lfs-system.sh'),
+        ('blfs-base', 'blfs/08-build-blfs-base.sh'),
+        ('build-kernel', 'lfs/09-build-kernel.sh'),
+    ]
+
+    def _run(self, builder, **kwargs):
+        """Run build() over a fixed stage list, returning what executed."""
+        builder.logger = MagicMock()
+        with patch.object(builder, 'get_build_stages',
+                          return_value=list(self.STAGES)), \
+                patch.object(builder.executor, 'run_script',
+                             return_value=True) as run_script:
+            result = builder.build(**kwargs)
+        executed = [c.args[1] for c in run_script.call_args_list]
+        return result, executed
+
+    def _infos(self, builder):
+        return [c.args[0] for c in builder.logger.info.call_args_list]
+
+    def _errors(self, builder):
+        return [c.args[0] for c in builder.logger.error.call_args_list]
+
+    def test_stop_after_runs_the_boundary_stage_and_nothing_later(self, builder):
+        """The boundary stage itself must run - it is the cache content."""
+        result, executed = self._run(builder, stop_after='lfs-system')
+
+        assert result is True
+        assert executed == ['host-check', 'disk-image', 'toolchain', 'lfs-system']
+
+    def test_stop_after_reports_the_truncated_stage_count(self, builder):
+        self._run(builder, stop_after='lfs-system')
+
+        assert "Stage list truncated after 'lfs-system' (4 stages)" \
+            in self._infos(builder)
+
+    def test_stop_after_last_stage_runs_the_whole_list(self, builder):
+        """Naming the final stage is a no-op, not an off-by-one."""
+        result, executed = self._run(builder, stop_after='build-kernel')
+
+        assert result is True
+        assert executed == [name for name, _ in self.STAGES]
+
+    def test_stop_after_unknown_stage_fails_without_running_anything(self, builder):
+        """A typo must abort, not quietly run the full multi-hour build."""
+        result, executed = self._run(builder, stop_after='no-such-stage')
+
+        assert result is False
+        assert executed == []
+        errors = self._errors(builder)
+        assert any("unknown stage 'no-such-stage'" in e for e in errors)
+        # The error names the valid stages so the operator does not have to
+        # read get_build_stages() to work out what they mistyped.
+        assert any('lfs-system' in e for e in errors)
+
+    def test_stop_after_composes_with_resume_from(self, builder):
+        """resume_from receives the already-truncated list and shares logging."""
+        builder.logger = MagicMock()
+        with patch.object(builder, 'get_build_stages',
+                          return_value=list(self.STAGES)), \
+                patch.object(builder.executor, 'resume_from',
+                             return_value=True) as resume:
+            result = builder.build(resume_from='toolchain',
+                                   stop_after='lfs-system')
+
+        assert result is True
+        assert resume.call_args.args[0] == 'toolchain'
+        assert [name for name, _ in resume.call_args.args[1]] == [
+            'host-check', 'disk-image', 'toolchain', 'lfs-system']
+        infos = self._infos(builder)
+        assert 'BUILD STOPPED AFTER STAGE: lfs-system' in infos
+        assert 'BUILD COMPLETED SUCCESSFULLY!' not in infos
+
+    def test_stop_after_logs_stopped_not_completed(self, builder):
+        """A truncated run has no bootable system; do not claim one."""
+        self._run(builder, stop_after='lfs-system')
+
+        infos = self._infos(builder)
+        assert 'BUILD STOPPED AFTER STAGE: lfs-system' in infos
+        assert 'BUILD COMPLETED SUCCESSFULLY!' not in infos
+
+    def test_stop_after_reports_no_installer_iso(self, builder):
+        """The ISO reporting block stays silent when nothing produced one."""
+        self._run(builder, stop_after='lfs-system')
+
+        assert not any(m.startswith('Installer ISO:') for m in self._infos(builder))
+        assert not (builder.output_dir / 'SHA256SUMS').exists()
+
+    def test_full_build_still_logs_completed(self, builder):
+        """The new branch must not change an ordinary build's reporting."""
+        self._run(builder)
+
+        infos = self._infos(builder)
+        assert 'BUILD COMPLETED SUCCESSFULLY!' in infos
+        assert not any(m.startswith('BUILD STOPPED AFTER STAGE') for m in infos)
+
+    def test_resume_from_unknown_stage_lists_the_valid_names(self, tmp_path):
+        """The old fallback rebuilt everything from host-check on a typo."""
+        logger = MagicMock()
+        executor = ScriptExecutor({}, tmp_path, logger)
+
+        result = executor.resume_from('nope', list(self.STAGES))
+
+        assert result is False
+        errors = [c.args[0] for c in logger.error.call_args_list]
+        assert any('Unknown resume stage: nope' in e for e in errors)
+        assert any('host-check' in e and 'build-kernel' in e for e in errors)
+
+
+class TestStopAfterCLI:
+    """The flag has to survive the parser and reach build() unchanged."""
+
+    def _main(self, tmp_path, extra_args):
+        config_file = tmp_path / 'test.conf'
+        config_file.write_text('{}')
+        argv = ['builder.py', '--profile', 'minimal',
+                '--output', str(tmp_path),
+                '--config', str(config_file)] + extra_args
+        with patch('sys.argv', argv), \
+                patch.object(LFSBuilder, 'check_prerequisites', return_value=True), \
+                patch.object(LFSBuilder, 'prepare_environment', return_value=True), \
+                patch.object(LFSBuilder, 'download_sources',
+                             return_value=True) as mock_dl, \
+                patch.object(LFSBuilder, 'build', return_value=True) as mock_build:
+            main()
+        return mock_build, mock_dl
+
+    def test_main_passes_stop_after_to_build(self, tmp_path):
+        mock_build, _ = self._main(tmp_path, ['--stop-after', 'lfs-system'])
+
+        assert mock_build.call_args.kwargs['stop_after'] == 'lfs-system'
+        assert mock_build.call_args.kwargs['resume_from'] is None
+
+    def test_main_downloads_sources_even_when_resuming(self, tmp_path):
+        """--resume-from must not skip the download pass.
+
+        The nightly deletes the cached kernel tarball on purpose and the
+        package-cache release can be weeks old, so a resumed job that skips
+        download_sources() reaches build-kernel with no sources at all.
+        """
+        mock_build, mock_dl = self._main(tmp_path, ['--resume-from', 'disk-image'])
+
+        mock_dl.assert_called_once()
+        assert mock_build.call_args.kwargs['resume_from'] == 'disk-image'
+
+    def test_main_passes_both_flags_together(self, tmp_path):
+        mock_build, _ = self._main(
+            tmp_path, ['--resume-from', 'toolchain', '--stop-after', 'blfs-base'])
+
+        kwargs = mock_build.call_args.kwargs
+        assert kwargs['resume_from'] == 'toolchain'
+        assert kwargs['stop_after'] == 'blfs-base'

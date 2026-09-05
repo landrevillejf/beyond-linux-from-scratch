@@ -246,12 +246,18 @@ class TestRemainingCoverageLines:
                                  '--config', str(config_file), '--resume-from', 'toolchain']):
             with patch.object(LFSBuilder, 'check_prerequisites', return_value=True):
                 with patch.object(LFSBuilder, 'prepare_environment', return_value=True):
-                    with patch.object(LFSBuilder, 'build', return_value=True) as mock_build:
-                        main()
-                        # Should be called with resume_from
-                        assert mock_build.called
-                        call_kwargs = mock_build.call_args.kwargs
-                        assert call_kwargs.get('resume_from') == 'toolchain'
+                    # Resuming no longer skips the download pass: the skipped
+                    # stages never fetched the sources the remaining ones need
+                    # (the kernel tarball above all), so download_sources must
+                    # run and its archive-exists short circuit keeps it cheap.
+                    with patch.object(LFSBuilder, 'download_sources', return_value=True) as mock_dl:
+                        with patch.object(LFSBuilder, 'build', return_value=True) as mock_build:
+                            main()
+                            # Should be called with resume_from
+                            assert mock_build.called
+                            call_kwargs = mock_build.call_args.kwargs
+                            assert call_kwargs.get('resume_from') == 'toolchain'
+                            mock_dl.assert_called_once()
 
     def test_script_executor_resume_from_correct_stage(self, tmp_path):
         """Test ScriptExecutor.resume_from starts at correct stage"""

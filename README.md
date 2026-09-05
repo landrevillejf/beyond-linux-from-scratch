@@ -294,7 +294,8 @@ python3 builder.py --generate-sources-list
 | `--download-timeout` | Timeout in seconds for each download (default: from config or 300) |
 | `--download-retries` | Number of retries for failed downloads (default: from config or 3) |
 | `--stage-timeout` | Timeout in seconds for each build stage (default: 7200; raise for qemu-emulated cross builds) |
-| `--resume-from` | Resume from a specific stage |
+| `--resume-from` | Resume from a specific stage. Sources are still validated and downloaded first, and an unknown stage name is a hard error rather than a silent restart |
+| `--stop-after` | Stop once this stage has completed (used to publish the base prefix cache) |
 | `--write-usb <device>` | Write generated ISO to a USB device |
 | `--list-profiles` | Print available profiles |
 | `--profile-info <profile>` | Print profile details |
@@ -474,6 +475,7 @@ graph TD
     A --> A2["xfce-systemd-x86_64-build-cache.yml"]
     A --> A3["build-rootfs-cache.yml"]
     A --> A4["cache-packages.yml"]
+    A --> A5["build-base-cache.yml"]
 
     B["ISO release workflows"] --> B1["xfce-live-boot-iso.yml"]
     B --> B2["release.yml"]
@@ -510,12 +512,41 @@ graph TD
 | `xfce-live-boot-iso.yml` | Full live ISO release pipeline | Yes | Yes | Yes | No |
 | `release.yml` | Tagged release build pipeline | Yes | Yes | Yes | No |
 | `nightly.yml` | Scheduled profile matrix builds | Artifact upload | Yes | Yes | No |
+| `build-base-cache.yml` | Build the shared LFS base prefix | Yes (parts) | No | No | Yes |
 
 All release-capable workflows explicitly verify:
 
 1. ISO presence and non-empty file
 2. Kernel artifact presence (`image/boot/vmlinuz*`)
 3. SHA256 checksum generation for published assets
+
+### Base prefix cache
+
+The first stages of every profile (`host-check` through `lfs-system`) take
+2h15m and are identical across profiles: nothing in `host/`, `lfs/05a` or
+`lfs/05b` reads the profile, and `lfs/05b` branches only on the init system
+and the kernel type. `build-base-cache.yml` builds that prefix once per
+`(init, arch)` pair and publishes it to the `base-cache-latest` release as
+split zstd parts; `nightly.yml` restores it and resumes from `disk-image`.
+
+The cache is keyed on its inputs rather than on trust:
+
+```bash
+BASE_KEY=$(git ls-tree -r HEAD -- host \
+    lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+    config packages/sources.list packages/custom-sources.list \
+    builder.py VERSION | sha256sum | cut -c1-12)
+```
+
+`git ls-tree -r` emits blob SHAs, so any edit under those paths changes the
+key on its own. A change confined to `blfs/`, `final/` or `profiles/`
+correctly reuses the cache.
+
+`minimal / sysvinit / x86_64` stays an **uncached canary**: it is the
+cheapest complete from-scratch build (3h47m to bootloader) and it re-proves
+the whole prefix every night. Any other job that misses the cache simply
+falls back to a normal from-scratch build - the restore step never fails a
+job.
 
 ## Testing and quality gates
 
@@ -566,6 +597,11 @@ python3 -m pytest tests/ --cov=builder --cov-report=term-missing
 ```bash
 python3 builder.py --resume-from <stage-name> --profile <profile> --output <output-dir>
 ```
+
+The stage name must be one the selected profile actually runs; an unknown
+name aborts with the valid list instead of rebuilding from the top. Sources
+are re-validated on resume, which is cheap because any archive that already
+exists and matches its checksum is skipped.
 
 ### Regenerate source list
 

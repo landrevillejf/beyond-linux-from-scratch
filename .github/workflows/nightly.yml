@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# Without a group, two overlapping dispatches push 26 jobs against the
+# 20-job limit and silently queue; the second run must wait, not cancel
+# a build that has already burned hours.
+concurrency:
+  group: nightly-builds
+  cancel-in-progress: false
+
 jobs:
   check_changes:
     runs-on: ubuntu-latest
@@ -30,7 +37,10 @@ jobs:
     needs: check_changes
     if: needs.check_changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 480
+    # 480 sits above GitHub's hard 6 h per-job cap, so a runaway job was
+    # killed by the platform rather than by us and never reached the
+    # log-upload step.  5h30m produces a clean cancelled() instead.
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +77,17 @@ jobs:
       # Empty-string check on a secret is allowed in expressions; the
       # signing step below skips entirely until the repo secrets exist.
       HAVE_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+      # minimal/sysvinit/x86_64 stays an uncached canary: it is the
+      # cheapest complete from-scratch build (3h47m to bootloader) and it
+      # re-proves the whole prefix every night.  An expression avoids
+      # restructuring the profile x init x arch cross-product just to hang
+      # a per-entry flag on one cell.
+      USE_BASE_CACHE: ${{ !(matrix.profile == 'minimal' && matrix.init == 'sysvinit' && matrix.arch == 'x86_64') }}
+      # Where the published base prefix ends, expressed as the stage this
+      # job picks up at.  Moving the boundary means editing these two
+      # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
+      BASE_CACHE_RESUME_STAGE: init-system
+      BASE_CACHE_IMAGE_STAGE: disk-image
     steps:
       - uses: actions/checkout@v4
         with:
@@ -173,6 +194,10 @@ jobs:
             sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
             sudo chown -R lfs:lfs /tmp/lfs-build/build-release
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+            # The copy above duplicates several GB of tarballs; the base
+            # prefix restore that follows needs the room.
+            sudo rm -rf /tmp/lfs-sources
+            df -h /tmp
           fi
 
       - name: Ensure fresh kernel
@@ -192,6 +217,96 @@ jobs:
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
+      # ------- BASE PREFIX CACHE -------
+      - name: Restore base prefix cache
+        id: base_cache
+        if: env.USE_BASE_CACHE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A cache miss must degrade to today's from-scratch build, never
+          # break the job: every failure path below leaves hit=false and
+          # the step still succeeds.
+          INIT="${{ matrix.init }}"
+          ARCH="${{ matrix.arch }}"
+          # Same key the publisher computes: git ls-tree -r emits blob
+          # SHAs, so a nightly can never restore a base built from
+          # different inputs.
+          BASE_KEY=$(git ls-tree -r HEAD -- host \
+            lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            config packages/sources.list packages/custom-sources.list \
+            builder.py VERSION | sha256sum | cut -c1-12)
+          PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
+          HIT=false
+          mkdir -p /tmp/base-cache
+          cd /tmp/base-cache
+          echo "Looking for ${PREFIX} in base-cache-latest"
+          if gh release download base-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "${PREFIX}.tar.zst.part-*" \
+            --pattern "${PREFIX}.sha256"; then
+            # Verify before extracting.  The package-cache step above
+            # downloads SHA256SUMS and never checks it; do not repeat that.
+            if sha256sum -c "${PREFIX}.sha256"; then
+              df -h /tmp
+              sudo mkdir -p /tmp/lfs-build/build-release
+              if cat $(ls -v "${PREFIX}".tar.zst.part-*) \
+                | sudo tar --zstd --numeric-owner --xattrs \
+                  -xf - -C /tmp/lfs-build/build-release; then
+                # The lfs uid is not guaranteed identical across runners,
+                # and the resumed build must be able to write anywhere in the
+                # restored rootfs, not just in the top-level scaffolding.
+                sudo chown lfs:lfs /tmp/lfs-build
+                sudo chown -R "$(id -u lfs):$(id -g lfs)" \
+                  /tmp/lfs-build/build-release
+                HIT=true
+              else
+                echo "Base cache extraction failed - building from scratch"
+              fi
+            else
+              echo "Base cache checksum mismatch - building from scratch"
+            fi
+          else
+            echo "No base cache published for ${PREFIX} - building from scratch"
+          fi
+          # The parts are several GB and the runner disk is tight; they are
+          # useless once extracted.
+          rm -f "${PREFIX}".tar.zst.part-* "${PREFIX}.sha256"
+          df -h /tmp
+          du -sh /tmp/lfs-build/build-release 2>/dev/null || true
+          echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
+          echo "Base prefix cache hit: ${HIT}"
+
+      - name: Recreate disk image after cache restore
+        if: steps.base_cache.outputs.hit == 'true'
+        run: |
+          cd /tmp/lfs-build
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+          # host/03 umounts the loop partition when the stage exits, so
+          # re-running it hides nothing: it recreates build-release.img,
+          # which the headless-profile artifact check and the QEMU smoke
+          # test both look for, and leaves the restored rootfs untouched.
+          # Resuming and stopping on the same stage runs host/03 alone -
+          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
+          # the system is self-hosting.
+          sudo -u lfs python3 builder.py \
+            --profile "$PROFILE" \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --resume-from "$BASE_CACHE_IMAGE_STAGE" \
+            --stop-after "$BASE_CACHE_IMAGE_STAGE" \
+            --download-timeout 600 \
+            --download-retries 5 \
+            --stage-timeout 18000
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
       # ------- BUILD -------
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
@@ -205,6 +320,14 @@ jobs:
             PROFILE="${{ matrix.profile }}"
           fi
 
+          # Only a verified cache hit may skip the prefix; anything else
+          # runs the full build exactly as before.
+          RESUME_ARGS=""
+          if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
+            RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
+            echo "♻️ Base cache hit: resuming from $BASE_CACHE_RESUME_STAGE"
+          fi
+
           sudo -u lfs python3 builder.py \
             --profile "$PROFILE" \
             --init ${{ matrix.init }} \
@@ -213,6 +336,7 @@ jobs:
             --verbose \
             --nightly \
             --sbom \
+            $RESUME_ARGS \
             --stage-timeout 18000 \
             --download-timeout 600 \
             --download-retries 5
@@ -239,7 +363,11 @@ jobs:
         run: |
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
           ISO="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
-          KERNEL_SRC=$(find /tmp/lfs-build/build-release/image/boot -name "vmlinuz*" | head -n1)
+          # builder.py sets LFS to the resolved output directory, so the
+          # rootfs *is* build-release/ and every stage script installs the
+          # kernel into $LFS/boot.  build-release/image/ is created empty
+          # by prepare_environment() and populated by nothing.
+          KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
           test -n "$KERNEL_SRC"
           # Headless profiles (minimal, server) ship a disk image instead
           # of a live ISO; accept either as the boot artifact.
@@ -304,8 +432,27 @@ jobs:
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
           # Release assets are capped at 2 GB: stream the zstd tarball
           # straight into split parts, same convention as cache-packages.
-          sudo bash -c "cd /tmp/lfs-build/build-release && tar --zstd -cf - -C image . | split -b 1900m -d -a 2 - rootfs-${SUFFIX}.tar.zst.part-"
+          #
+          # Tar build-release/ itself, not build-release/image/: $LFS is
+          # build-release/, image/ is created empty and never populated, so
+          # the old export shipped a zero-byte archive.  The build
+          # scaffolding and the release artifacts share that directory and
+          # are excluded by name.  Parts are written to the parent while tar
+          # reads, then moved in, so the archive never contains itself.
+          sudo tar --zstd -cf - -C /tmp/lfs-build/build-release \
+            --exclude=./sources --exclude=./logs --exclude=./cache \
+            --exclude=./backups --exclude=./live --exclude=./image \
+            --exclude=./tools --exclude=./packages --exclude=./lpm-repo \
+            --exclude=./proc --exclude=./sys --exclude=./dev \
+            --exclude=./run --exclude=./lost+found \
+            --exclude=./build_info.json --exclude=./sbom.spdx.json \
+            --exclude=./*.iso --exclude=./*.iso.sig \
+            --exclude=./vmlinuz-* --exclude=./SHA256SUMS-* \
+            --exclude=./lfs-installer.iso.pointer \
+            . | sudo split -b 1900m -d -a 2 - "/tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-"
+          sudo mv /tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-* /tmp/lfs-build/build-release/
           cd /tmp/lfs-build/build-release || exit 1
+          sudo chown lfs:lfs rootfs-${SUFFIX}.tar.zst.part-*
           sha256sum rootfs-${SUFFIX}.tar.zst.part-* >> "SHA256SUMS-${SUFFIX}"
           du -h rootfs-${SUFFIX}.tar.zst.part-*
 
@@ -354,8 +501,11 @@ jobs:
           if [ -f "$ISO_PATH" ]; then
             bash tools/qemu-boot-smoke.sh "$ISO_PATH"
           elif [ -f /tmp/lfs-build/build-release.img ]; then
+            # The image is formatted but empty - host/03 umounts the loop
+            # partition when the stage exits - so the kernel and initramfs
+            # come from the rootfs tree, which is build-release/ itself.
             bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \
-              /tmp/lfs-build/build-release/image
+              /tmp/lfs-build/build-release
           else
             echo "No bootable artifact (ISO or disk image) found" >&2
             exit 1

@@ -104,7 +104,8 @@ python3 builder.py --write-usb /dev/sdb
 | `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`. |
 | `--output` | Output directory (default: `./lfs-build`). |
 | `--config` | Configuration file path (default: `config/build.conf`). |
-| `--resume-from` | Resume build from a specific stage (e.g., `desktop`). |
+| `--resume-from` | Resume from a specific stage. Sources are still validated and downloaded first, and an unknown stage name is a hard error rather than a silent restart. |
+| `--stop-after` | Stop after a specific stage completes (used for cache builds). |
 | `--write-usb` | Write the generated ISO to a USB device (e.g., `/dev/sdb`). |
 | `--list-profiles` | List all available profiles. |
 | `--profile-info` | Show detailed information about a specific profile. |

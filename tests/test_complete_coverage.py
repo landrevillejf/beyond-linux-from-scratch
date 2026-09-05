@@ -367,7 +367,11 @@ class TestScriptExecutorResumeFrom:
     """Test ScriptExecutor resume_from method"""
 
     def test_resume_from_stage_not_found(self, tmp_path):
-        """Test resume_from when stage is not found (incomplete search)"""
+        """An unknown stage must fail loudly instead of rebuilding everything.
+
+        The old fallback left start_index at 0, so a typo in --resume-from
+        silently restarted a multi-hour build from host-check.
+        """
         logger = logging.getLogger('test')
         env = {}
         executor = ScriptExecutor(env, tmp_path, logger)
@@ -379,8 +383,8 @@ class TestScriptExecutorResumeFrom:
 
         with patch.object(executor, 'run_script', return_value=True):
             result = executor.resume_from('nonexistent', stages)
-            # Should start from the beginning since stage not found
-            assert executor.run_script.called
+            assert result is False
+            assert not executor.run_script.called
 
 
 class TestCrossCompileEnvironment:
@@ -568,7 +572,9 @@ class TestLFSBuilderMissingISO:
                 mock_instance.build.return_value = True
                 main()
                 # assert that build was called with use_cache=True
-                mock_instance.build.assert_called_once_with(resume_from=None, use_cache=True, cache_only=False)
+                mock_instance.build.assert_called_once_with(
+                    resume_from=None, use_cache=True, cache_only=False,
+                    stop_after=None)
 
     def test_main_cache_only_flag(self, capsys):
         with patch('sys.argv', ['builder.py', '--profile', 'minimal', '--use-cache', '--cache-only']):
@@ -579,7 +585,9 @@ class TestLFSBuilderMissingISO:
                 mock_instance.download_sources.return_value = True
                 mock_instance.build.return_value = True
                 main()
-                mock_instance.build.assert_called_once_with(resume_from=None, use_cache=True, cache_only=True)
+                mock_instance.build.assert_called_once_with(
+                    resume_from=None, use_cache=True, cache_only=True,
+                    stop_after=None)
 
     def test_main_cache_url_flag(self, capsys):
         url = "https://my-custom/metadata.json"

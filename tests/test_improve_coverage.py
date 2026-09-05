@@ -108,14 +108,21 @@ class TestScriptExecutorCoverage:
                 assert mock_logger.info.call_count >= 1
 
     def test_resume_from_stage_not_found(self, output_dir, mock_logger):
-        """Test reprise depuis un stage qui n'existe pas"""
+        """Test reprise depuis un stage qui n'existe pas
+
+        Un nom de stage inconnu doit echouer: l'ancien comportement
+        recommencait tout depuis le debut, donc une faute de frappe dans
+        --resume-from coutait silencieusement un build complet de plusieurs
+        heures.
+        """
         executor = ScriptExecutor({}, output_dir, mock_logger)
         stages = [("stage1", "script1.sh"), ("stage2", "script2.sh")]
 
-        with patch.object(executor, 'run_script', return_value=True):
+        with patch.object(executor, 'run_script', return_value=True) as run_script:
             result = executor.resume_from("nonexistent", stages)
-            # Doit commencer du début car stage non trouvé
-            assert result is True
+            assert result is False
+            assert not run_script.called
+            mock_logger.error.assert_called()
 
 
 class TestUSBWriterCoverage:

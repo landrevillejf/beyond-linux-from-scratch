@@ -150,3 +150,253 @@ class TestNightlyCoverageAndBootSmoke:
         must fall back to the disk image instead of failing."""
         workflow = self._read("nightly.yml")
         assert "build-release.img" in workflow
+
+
+class TestNightlyRootfsPaths:
+    """builder.py sets LFS to the resolved output directory, so the rootfs
+    *is* build-release/.  build-release/image/ is created empty by
+    prepare_environment() and populated by nothing, yet nightly.yml used it
+    for the kernel lookup, the rootfs export and the QEMU smoke test.
+    """
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def test_no_command_references_the_phantom_image_dir(self):
+        workflow = self._read("nightly.yml")
+        offenders = [
+            line.strip() for line in workflow.splitlines()
+            if "build-release/image" in line and not line.strip().startswith("#")
+        ]
+        assert offenders == [], f"phantom image/ path still used: {offenders}"
+
+    def test_kernel_lookup_uses_the_real_boot_dir(self):
+        """final/13, final/14, final/15 and final/16 all install into
+        $LFS/boot; looking anywhere else finds no kernel."""
+        workflow = self._read("nightly.yml")
+        assert 'find /tmp/lfs-build/build-release/boot -name "vmlinuz*"' \
+            in workflow
+
+    def test_rootfs_export_tars_the_rootfs_and_skips_scaffolding(self):
+        workflow = self._read("nightly.yml")
+        assert "-C /tmp/lfs-build/build-release \\" in workflow
+        for excluded in ("sources", "logs", "live", "image"):
+            assert f"--exclude=./{excluded}" in workflow, excluded
+        # Parts must be written outside the tree tar is reading, otherwise
+        # the archive tries to contain its own growing output.
+        assert workflow.index('"/tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-"') \
+            < workflow.index("sudo mv /tmp/lfs-build/rootfs-")
+
+    def test_qemu_smoke_points_at_the_rootfs_tree(self):
+        workflow = self._read("nightly.yml")
+        assert "bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \\\n" \
+            "              /tmp/lfs-build/build-release\n" in workflow
+
+
+class TestBasePrefixCache:
+    """Guardrails for the nightly base prefix cache.
+
+    All thirteen nightly jobs rebuilt the same 2h15m prefix (host-check
+    through lfs-system) before any of them could do anything
+    profile-specific.  build-base-cache.yml publishes that prefix once per
+    (init, arch) pair; nightly.yml restores it and resumes.  Each assertion
+    below protects one way this could quietly stop being true.
+    """
+
+    KEY_PATHS = (
+        "host",
+        "lfs/05a-build-lfs-basic.sh",
+        "lfs/05b-build-lfs-system.sh",
+        "config",
+        "packages/sources.list",
+        "packages/custom-sources.list",
+        "builder.py",
+        "VERSION",
+    )
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, workflow, name):
+        """Slice out one step so ordering assertions stay local to it."""
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def _key_block(self, workflow):
+        start = workflow.index("git ls-tree -r HEAD --")
+        return workflow[start:workflow.index("cut -c1-12", start)]
+
+    def test_publisher_and_consumer_hash_identical_inputs(self):
+        """A nightly must never restore a base built from other inputs.
+
+        The two key computations are byte-identical on purpose: if one
+        drifts, every job silently misses the cache and nobody notices
+        until the wall-clock budget is gone again.
+        """
+        publisher = self._read("build-base-cache.yml")
+        nightly = self._read("nightly.yml")
+        for name, workflow in (("publisher", publisher), ("nightly", nightly)):
+            assert "| sha256sum | cut -c1-12" in workflow, name
+            block = self._key_block(workflow)
+            for path in self.KEY_PATHS:
+                assert path in block, f"{path} missing from the {name} key"
+        assert self._key_block(publisher) == self._key_block(nightly)
+
+    def test_both_workflows_agree_on_the_boundary_stage(self):
+        publisher = self._read("build-base-cache.yml")
+        nightly = self._read("nightly.yml")
+        assert "BASE_STAGE: lfs-system" in publisher
+        assert '--stop-after "$BASE_STAGE"' in publisher
+        published_resume = publisher.split("RESUME_STAGE: ")[1].splitlines()[0]
+        consumed_resume = nightly.split("BASE_CACHE_RESUME_STAGE: ")[1].splitlines()[0]
+        assert published_resume.strip() == consumed_resume.strip() == "init-system"
+
+    def test_canary_excludes_exactly_minimal_sysvinit_x86_64(self):
+        """One job must keep proving the from-scratch path every night,
+        otherwise a broken publisher would go unnoticed until everything
+        depended on it."""
+        workflow = self._read("nightly.yml")
+        assert "USE_BASE_CACHE: ${{ !(matrix.profile == 'minimal' " \
+            "&& matrix.init == 'sysvinit' && matrix.arch == 'x86_64') }}" \
+            in workflow
+        assert "if: env.USE_BASE_CACHE == 'true'" in workflow
+
+    def test_restore_verifies_the_checksum_before_extracting(self):
+        """The package-cache step downloads SHA256SUMS and never checks it;
+        an unverified multi-GB rootfs is not an acceptable repeat."""
+        step = self._step(self._read("nightly.yml"), "Restore base prefix cache")
+        assert 'sha256sum -c "${PREFIX}.sha256"' in step
+        assert "--xattrs" in step
+        assert step.index("sha256sum -c") < step.index("sudo tar --zstd")
+
+    def test_restore_extracts_into_the_rootfs_not_the_phantom_dir(self):
+        step = self._step(self._read("nightly.yml"), "Restore base prefix cache")
+        assert "-xf - -C /tmp/lfs-build/build-release" in step
+        # The lfs uid is not guaranteed identical across runners.
+        assert "sudo chown -R \"$(id -u lfs):$(id -g lfs)\"" in step
+
+    def test_cache_miss_degrades_to_a_full_build(self):
+        """A missing, corrupt or superseded cache must cost wall time, not
+        the nightly itself."""
+        step = self._step(self._read("nightly.yml"), "Restore base prefix cache")
+        assert "HIT=false" in step
+        assert 'echo "hit=${HIT}" >> "$GITHUB_OUTPUT"' in step
+        assert "exit 1" not in step
+
+    def test_resume_is_gated_on_a_verified_hit(self):
+        step = self._step(
+            self._read("nightly.yml"),
+            "Build release profile ${{ matrix.profile }} / ${{ matrix.init }}"
+            " / ${{ matrix.arch }}")
+        assert 'RESUME_ARGS=""' in step
+        guard = 'if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then'
+        assert guard in step
+        assert step.index(guard) < step.index('RESUME_ARGS="--resume-from')
+        assert step.count("--resume-from") == 1
+        assert "$RESUME_ARGS \\" in step
+
+    def test_disk_image_is_recreated_after_a_restore(self):
+        """Headless profiles verify and smoke-boot build-release.img, which
+        only host/03 creates; a restored rootfs does not contain it.
+
+        Resuming and stopping on the same stage runs host/03 alone.
+        Letting host/02 run as well would rebuild $LFS/tools, which
+        lfs/05b removes once the system is self-hosting.
+        """
+        workflow = self._read("nightly.yml")
+        step = self._step(workflow, "Recreate disk image after cache restore")
+        assert "if: steps.base_cache.outputs.hit == 'true'" in step
+        assert '--resume-from "$BASE_CACHE_IMAGE_STAGE"' in step
+        assert '--stop-after "$BASE_CACHE_IMAGE_STAGE"' in step
+        assert "BASE_CACHE_IMAGE_STAGE: disk-image" in workflow
+        # The image must exist before the real build resumes past the
+        # prefix, otherwise the job rebuilds what it just restored.
+        assert workflow.index("Recreate disk image after cache restore") \
+            < workflow.index("Build release profile")
+
+    def test_publisher_verifies_the_prefix_before_publishing(self):
+        """A hollow cache would poison every job that restores it."""
+        workflow = self._read("build-base-cache.yml")
+        for check in ("test -x usr/bin/gcc", "test -x bin/bash",
+                      "test -f etc/passwd", "test ! -d tools"):
+            assert check in workflow, check
+        assert workflow.index("test ! -d tools") \
+            < workflow.index("softprops/action-gh-release@v2")
+
+    def test_publisher_excludes_the_build_scaffolding(self):
+        """sources/ and logs/ share $LFS with the rootfs and are several GB
+        of tarballs the consumer re-downloads anyway."""
+        workflow = self._read("build-base-cache.yml")
+        for excluded in ("sources", "logs", "cache", "backups", "live",
+                         "image", "tools", "packages"):
+            assert f"--exclude=./{excluded}" in workflow, excluded
+
+    def test_publisher_prunes_superseded_assets(self):
+        """base-cache-latest is a rolling tag; without pruning it grows by
+        one full prefix every time the key changes."""
+        workflow = self._read("build-base-cache.yml")
+        assert "gh release delete-asset base-cache-latest" in workflow
+        assert "tag_name: base-cache-latest" in workflow
+        assert "prerelease: true" in workflow
+
+    def test_nightly_budget_guards(self):
+        """480 sits above GitHub's hard 6 h cap, so the platform killed
+        runaway jobs before the log-upload step could run."""
+        workflow = self._read("nightly.yml")
+        assert "timeout-minutes: 480" not in workflow
+        assert "timeout-minutes: 330" in workflow
+        assert "group: nightly-builds" in workflow
+        assert "cancel-in-progress: false" in workflow
+
+    def test_publisher_covers_both_init_systems(self):
+        """lfs/05b branches on INIT_SYSTEM, so one prefix cannot serve
+        both; the matrix has to publish each separately."""
+        workflow = self._read("build-base-cache.yml")
+        assert "init: [sysvinit, systemd]" in workflow
+        assert "arch: [x86_64]" in workflow
+
+    @staticmethod
+    def _indent(line):
+        return len(line) - len(line.lstrip())
+
+    def _continuations(self, workflow):
+        """Yield (lineno, line, next line) for each backslash continuation."""
+        lines = workflow.split("\n")
+        for i, line in enumerate(lines[:-1]):
+            nxt = lines[i + 1]
+            if line.rstrip().endswith("\\") and nxt.strip():
+                yield i + 1, line, nxt
+
+    def test_shell_continuations_use_the_repository_indent(self):
+        """Every workflow indents a backslash continuation by 0 or 2 spaces.
+
+        Ragged deltas - and a continuation that dedents below the command it
+        belongs to - read as broken indentation in review even though YAML
+        and bash both accept them, so they survive every other gate.
+        """
+        offenders = []
+        for name in ("nightly.yml", "build-base-cache.yml"):
+            for lineno, line, nxt in self._continuations(self._read(name)):
+                delta = self._indent(nxt) - self._indent(line)
+                if delta not in (0, 2):
+                    offenders.append(f"{name}:{lineno} delta {delta:+d}")
+        assert offenders == [], offenders
+
+    def test_sidecar_metadata_is_written_without_a_heredoc(self):
+        """A heredoc body has to sit at the shell's own column to survive
+        the YAML block dedent, which is indistinguishable from an
+        indentation mistake.  printf in a brace group avoids the ambiguity.
+
+        The version also has to come from the authoritative VERSION file by
+        absolute path: the step used to cd into /tmp/base-cache and import
+        builder, which is not on sys.path from there.
+        """
+        step = self._step(self._read("build-base-cache.yml"),
+                          "Write cache metadata sidecar")
+        assert "<<EOF" not in step
+        assert "from builder import" not in step
+        assert "cat /tmp/lfs-build/VERSION" in step
+        assert '} > "/tmp/base-cache/${PREFIX}.json"' in step
