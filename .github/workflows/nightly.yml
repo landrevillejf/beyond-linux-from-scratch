@@ -239,7 +239,11 @@ jobs:
         run: |
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
           ISO="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
-          KERNEL_SRC=$(find /tmp/lfs-build/build-release/image/boot -name "vmlinuz*" | head -n1)
+          # builder.py sets LFS to the resolved output directory, so the
+          # rootfs *is* build-release/ and every stage script installs the
+          # kernel into $LFS/boot.  build-release/image/ is created empty
+          # by prepare_environment() and populated by nothing.
+          KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
           test -n "$KERNEL_SRC"
           # Headless profiles (minimal, server) ship a disk image instead
           # of a live ISO; accept either as the boot artifact.
@@ -304,8 +308,27 @@ jobs:
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
           # Release assets are capped at 2 GB: stream the zstd tarball
           # straight into split parts, same convention as cache-packages.
-          sudo bash -c "cd /tmp/lfs-build/build-release && tar --zstd -cf - -C image . | split -b 1900m -d -a 2 - rootfs-${SUFFIX}.tar.zst.part-"
+          #
+          # Tar build-release/ itself, not build-release/image/: $LFS is
+          # build-release/, image/ is created empty and never populated, so
+          # the old export shipped a zero-byte archive.  The build
+          # scaffolding and the release artifacts share that directory and
+          # are excluded by name.  Parts are written to the parent while tar
+          # reads, then moved in, so the archive never contains itself.
+          sudo tar --zstd -cf - -C /tmp/lfs-build/build-release \
+            --exclude=./sources --exclude=./logs --exclude=./cache \
+            --exclude=./backups --exclude=./live --exclude=./image \
+            --exclude=./tools --exclude=./packages --exclude=./lpm-repo \
+            --exclude=./proc --exclude=./sys --exclude=./dev \
+            --exclude=./run --exclude=./lost+found \
+            --exclude=./build_info.json --exclude=./sbom.spdx.json \
+            --exclude=./*.iso --exclude=./*.iso.sig \
+            --exclude=./vmlinuz-* --exclude=./SHA256SUMS-* \
+            --exclude=./lfs-installer.iso.pointer \
+            . | sudo split -b 1900m -d -a 2 - "/tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-"
+          sudo mv /tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-* /tmp/lfs-build/build-release/
           cd /tmp/lfs-build/build-release || exit 1
+          sudo chown lfs:lfs rootfs-${SUFFIX}.tar.zst.part-*
           sha256sum rootfs-${SUFFIX}.tar.zst.part-* >> "SHA256SUMS-${SUFFIX}"
           du -h rootfs-${SUFFIX}.tar.zst.part-*
 
@@ -354,8 +377,11 @@ jobs:
           if [ -f "$ISO_PATH" ]; then
             bash tools/qemu-boot-smoke.sh "$ISO_PATH"
           elif [ -f /tmp/lfs-build/build-release.img ]; then
+            # The image is formatted but empty - host/03 umounts the loop
+            # partition when the stage exits - so the kernel and initramfs
+            # come from the rootfs tree, which is build-release/ itself.
             bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \
-              /tmp/lfs-build/build-release/image
+              /tmp/lfs-build/build-release
           else
             echo "No bootable artifact (ISO or disk image) found" >&2
             exit 1
