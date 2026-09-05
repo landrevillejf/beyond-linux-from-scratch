@@ -307,7 +307,7 @@ python3 builder.py --generate-sources-list
 | `--config` | Configuration file path (`config/build.conf`) |
 | `--download-timeout` | Timeout in seconds for each download (default: from config or 300) |
 | `--download-retries` | Number of retries for failed downloads (default: from config or 3) |
-| `--resume-from` | Resume from a specific stage |
+| `--resume-from` | Resume from a specific stage. Sources are still validated and downloaded first, and an unknown stage name is a hard error rather than a silent restart |
 | `--stop-after` | Stop once this stage has completed |
 | `--write-usb <device>` | Write generated ISO to a USB device |
 | `--list-profiles` | Print available profiles |
