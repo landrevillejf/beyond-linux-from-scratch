@@ -1267,6 +1267,19 @@ class LFSBuilder:
     # Backward-compatible symlink name (always points to the actual ISO)
     ISO_COMPAT_NAME = 'lfs-installer.iso'
 
+    # Sources the official wget-lists carry but no stage ever builds, and that
+    # only burn CI time.  ftp.math.utah.edu resets every connection from the
+    # runners, so each multi-gigabyte texlive tarball consumes the full
+    # download timeout on every retry and pass; docbook.org's XML 5.0 zip has
+    # been gone for good.  Nightly #214: retrying them ate roughly an hour of
+    # GitHub's hard six-hour job cap and the server and arm64 jobs were
+    # cancelled mid-build as a result.
+    UNUSED_SOURCE_PATTERNS = (
+        r'/texlive-[^/]*\.tar\.xz$',
+        r'/install-tl-unx\.tar\.gz$',
+        r'^https://docbook\.org/xml/[^/]*/docbook-[^/]*\.zip$',
+    )
+
     def __init__(self, profile: str, output_dir: Path, config_file: Path,
                  cache_url: Optional[str] = None,
                  download_timeout: Optional[int] = None,
@@ -1936,6 +1949,10 @@ class LFSBuilder:
 
         return stages
 
+    def _is_unused_source(self, url: str) -> bool:
+        """Return True for sources no stage builds, which only cost CI time."""
+        return any(re.search(pattern, url) for pattern in self.UNUSED_SOURCE_PATTERNS)
+
     def _update_sources_list(self) -> bool:
         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""
         repo_sources_file = Path('packages/sources.list')
@@ -2070,12 +2087,19 @@ class LFSBuilder:
                             override_count += 1
                         urls_by_key[key] = line
 
-        # 4. Si aucune URL, on retourne False
+        # 4. Drop the sources no stage builds (see UNUSED_SOURCE_PATTERNS).
+        #    Done after the custom overrides so a deliberate custom pin for one
+        #    of these packages could never be silently discarded by the filter.
+        unused_keys = [k for k, u in urls_by_key.items() if self._is_unused_source(u)]
+        for key in unused_keys:
+            self.logger.info(f"Skipping unused source (never built by any stage): {urls_by_key.pop(key)}")
+
+        # 5. Si aucune URL, on retourne False
         if not urls_by_key:
             self.logger.error("No URLs found from official or custom sources")
             return False
 
-        # 5. Créer le répertoire parent et écrire le fichier
+        # 6. Créer le répertoire parent et écrire le fichier
         sources_file.parent.mkdir(parents=True, exist_ok=True)
         with open(sources_file, 'w') as f:
             f.write("# LFS Sources - Automatically generated from official wget-lists\n")

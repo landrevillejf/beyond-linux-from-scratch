@@ -5,6 +5,7 @@ Exécute les vrais scripts LFS/BLFS dans un environnement contrôlé
 """
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -1553,6 +1554,89 @@ class TestNightly213StageGuardrails:
         assert '$run_privileged tee "$target/etc/lpm/repos.d/default.conf"' \
             in content, \
             "the repos.d default.conf write must go through run_privileged"
+
+
+class TestNightly214StageGuardrails:
+    """Guardrails for the Nightly #214 all-profile failure classes.
+
+    Run #214 lost all thirteen jobs to four independent defects:
+
+    * a stale gobject-introspection 1.82.0 pin in custom-sources.list
+      overrode the book's 1.84.0, and pango 1.56.4 hard-requires
+      >= 1.83.2, so every desktop profile aborted blfs-libs;
+    * the branding stage wrote into the root-owned $LFS tree as the
+      unprivileged builder user and died on its first mkdir, taking
+      both minimal profiles with it (system-updater is the same latent
+      defect one stage later);
+    * expect's 2003-vintage tclconfig/config.guess cannot recognise
+      aarch64, so the native arm64 job aborted lfs-system with
+      "cannot guess build type";
+    * texlive tarballs nobody builds burned ~1h of GitHub's hard
+      six-hour job cap on a host that resets every connection, and the
+      server and arm64 x86_64 jobs were cancelled mid-build.
+    """
+
+    BRANDING = Path('blfs/20-branding.sh')
+    UPDATER = Path('blfs/18-system-updater.sh')
+    LFS_SYSTEM = Path('lfs/05b-build-lfs-system.sh')
+    SOURCES = Path('packages/custom-sources.list')
+    BOOK_SOURCES = Path('packages/stable/12.4/sources.list')
+
+    # pango 1.56.4's meson floor for gobject-introspection-1.0.
+    GI_FLOOR = (1, 83, 2)
+
+    def _root_relaunch_guard(self, path, first_write):
+        """Assert the script re-execs as root before it touches $LFS."""
+        content = path.read_text()
+        guard = content.index('if [ "$EUID" -ne 0 ]; then')
+        write = content.index(first_write)
+        assert guard < write, (
+            f'{path} must re-launch as root before writing into $LFS'
+        )
+        assert 'exec sudo -E "$0" "$@"' in content[guard:write]
+
+    def test_branding_stage_relaunches_as_root(self):
+        self._root_relaunch_guard(
+            self.BRANDING, 'mkdir -p "$LFS/usr/share/themes')
+
+    def test_system_updater_stage_relaunches_as_root(self):
+        self._root_relaunch_guard(self.UPDATER, 'mkdir -pv "$LFS/usr/bin"')
+
+    def test_branding_hands_user_config_back_to_its_owner(self):
+        """Running as root must not leave a root-owned ~/.config behind."""
+        content = self.BRANDING.read_text()
+        assert 'chown -R --reference="$LFS/home/lfsuser"' in content
+
+    def test_expect_configure_pins_a_validated_build_triplet(self):
+        content = self.LFS_SYSTEM.read_text()
+        start = content.index('    expect)\n')
+        end = content.index('    dejagnu)', start)
+        block = content[start:end]
+
+        assert '--build="$build_triplet"' in block
+        # expect's config.sub is as fossilised as its config.guess and
+        # rejects the common aarch64-pc-linux-gnu form, so the triplet
+        # must be validated against it before configure ever sees it.
+        assert 'sh tclconfig/config.sub "$build_triplet"' in block
+        assert '-unknown-linux-gnu' in block
+
+    def test_custom_sources_do_not_downgrade_gobject_introspection(self):
+        """The effective gi version must satisfy pango's 1.83.2 floor.
+
+        A custom pin overrides the book version, so a stale pin here is
+        what aborted blfs-libs for all eight desktop profiles in #214.
+        """
+        pattern = r'gobject-introspection-(\d+\.\d+\.\d+)\.tar\.xz'
+        book = re.findall(pattern, self.BOOK_SOURCES.read_text())
+        custom = re.findall(pattern, self.SOURCES.read_text())
+
+        assert book, 'the book list must carry gobject-introspection'
+        effective = custom[-1] if custom else book[0]
+        version = tuple(int(part) for part in effective.split('.'))
+        assert version >= self.GI_FLOOR, (
+            f'gobject-introspection {effective} is below the '
+            f'{".".join(str(p) for p in self.GI_FLOOR)} floor pango requires'
+        )
 
 
 class TestAudioStudioStageGuardrails:

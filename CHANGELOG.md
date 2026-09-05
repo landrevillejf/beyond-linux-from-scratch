@@ -86,6 +86,85 @@
 
 ### Fixed
 
+- **stale gobject-introspection pin broke pango (nightly #214)**
+  (`packages/custom-sources.list`)
+  - All eight desktop jobs (xfce sysvinit and systemd, gnome, kde,
+    lxqt, full, java-dev, audio-studio) died in blfs-libs with
+    `Dependency gobject-introspection-1.0 found: NO. Found 1.82.0 but
+    need: '>= 1.83.2'`, then `Dependency 'gobject-introspection-1.0' is
+    required but not found` in pango's meson.  custom-sources.list
+    still pinned 1.82.0 behind a bare `# gobject-introspection` label
+    with no justification; custom pins are applied last and win, so the
+    pin evicted the book's 1.84.0 from the generated list while pango
+    1.56.4 (also from the book) hard-requires >= 1.83.2.  This is the
+    same stale-pin trap documented for vala directly above it.  The
+    override is dropped in favour of the official BLFS wget-list, which
+    carries 1.84.0 -- the release built against the glib 2.84.4 the
+    same file pins -- and replaced by a comment stating why the package
+    must not be pinned again
+
+- **branding and system-updater wrote to $LFS unprivileged
+  (nightly #214)** (`blfs/20-branding.sh`, `blfs/18-system-updater.sh`)
+  - Both minimal jobs got past every library stage and died in branding
+    on its very first write: `mkdir: cannot create directory
+    '/tmp/lfs-build/build-release/usr/share/themes': Permission
+    denied`.  CI runs `sudo -u lfs python3 builder.py`, and the branding
+    stage performs some twenty `mkdir -p "$LFS/..."`, fifteen `cp` and
+    seven `cat >"$LFS/..."` heredocs against a tree whose /usr and /etc
+    were populated as root, yet used neither the `run_privileged`
+    wrapper (blfs/19-lpm.sh) nor the whole-stage sudo re-exec that
+    final/12-create-initramfs.sh and lfs/08-build-kernel.sh already use
+    -- despite needing root anyway for its `chroot "$LFS"` plymouth
+    call.  Both stages now re-exec through `sudo -E "$0" "$@"` when
+    `$EUID` is not zero, ahead of their first `$LFS` write.
+    18-system-updater.sh is fixed in the same pass: it was never
+    reached this run (minimal sets `system_updater: false`) but is the
+    identical latent failure for every profile that enables it.  The
+    branding stage also hands `$LFS/home/lfsuser/.config` back to the
+    owner of the home directory with `chown -R --reference`, so running
+    as root cannot lock the desktop user out of its own configuration
+
+- **expect could not guess the build type on arm64 (nightly #214)**
+  (`lfs/05b-build-lfs-system.sh`)
+  - The native aarch64 job died in lfs-system right after tcl installed
+    cleanly: `tclconfig/config.guess: unable to guess system type`,
+    `config.guess timestamp = 2003-10-07`, then `configure: error:
+    cannot guess build type; you must specify one`.  expect ships
+    tclconfig/config.guess AND config.sub from 2003, both of which
+    predate aarch64 entirely (zero aarch64 patterns), so its TEA
+    configure has nothing to fall back on.  dejagnu's config.guess is
+    2021-05-20 and aarch64-aware, so it is left alone.  expect's
+    configure now receives an explicit `--build`, but the triplet is
+    validated against that same fossil config.sub first: it REJECTS the
+    `aarch64-pc-linux-gnu` that `gcc -dumpmachine` commonly reports
+    ("machine `aarch64-pc' not recognized") and accepts only
+    `aarch64-unknown-linux-gnu`, so forwarding `-dumpmachine` blindly
+    would have swapped one failure for another.  An invalid or empty
+    triplet falls back to `$(uname -m)-unknown-linux-gnu`; all eight
+    dumpmachine/uname combinations were checked against the real 2003
+    config.sub and are accepted
+
+- **never-built texlive and docbook sources ate the six-hour job cap
+  (nightly #214)** (`builder.py`)
+  - The server-sysvinit and arm64-sysvinit-x86_64 jobs produced no
+    failure line at all: they were cancelled mid-build at exactly
+    6h0m36s, GitHub's hard per-job limit on hosted runners, which
+    overrides `timeout-minutes: 480` in nightly.yml.  All thirteen
+    profiles lost the same five downloads -- three multi-gigabyte
+    texlive tarballs from ftp.math.utah.edu (which resets every
+    connection from the runners, so each one burns the full 300 s
+    timeout on every retry and on both retry passes, roughly an hour in
+    total), install-tl-unx, and docbook.org's XML 5.0 zip, gone for
+    good.  No stage script builds texlive or install-tl at all, and
+    docbook is only ever referenced as `-D docbook=false` and as
+    wpa_supplicant man-page paths, so `_update_sources_list()` now drops
+    them through a new `UNUSED_SOURCE_PATTERNS` filter applied after
+    the custom overrides (a deliberate custom pin can never be silently
+    discarded by it).  The patterns are surgical: the rolling
+    `ncurses-6.5-20250809.tgz` snapshot is the LFS wget-list's only
+    ncurses entry and is kept, as are all docbook-xsl, docbook-dsssl,
+    docbk31 and docs.oasis-open docbook-4.5 archives
+
 - **libinput built before libevdev, and build_pkg hid the failure
   (nightly #213)** (`blfs/08a-build-blfs-libs.sh`,
   `blfs/08b-build-xorg.sh`, `blfs/08c-build-wayland.sh`)

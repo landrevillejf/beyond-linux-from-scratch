@@ -3,6 +3,15 @@
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
+# Re-launch with sudo if not root (preserve environment).  Every write below
+# lands inside $LFS, whose /usr, /etc and /var were populated as root by the
+# earlier stages, so the unprivileged builder user cannot create them.  Same
+# class as the branding stage (Nightly #214).
+if [ "$EUID" -ne 0 ]; then
+    echo "[INFO] Relaunching with sudo..."
+    exec sudo -E "$0" "$@"
+fi
+
 LFS=${LFS:-/output/image}
 
 log_info() { echo "[INFO] $*"; }

@@ -768,6 +768,103 @@ class TestLFSBuilder:
         content = sources_file.read_text()
         assert "https://custom.url/src.tar.gz" in content
 
+    def test_unused_source_patterns_are_surgical(self, tmp_path, monkeypatch):
+        """The never-built filter must drop the dead weight and nothing else.
+
+        Nightly #214 lost roughly an hour of GitHub's hard six-hour job cap
+        retrying texlive tarballs whose host resets every connection, and the
+        server and arm64 jobs were cancelled mid-build as a result.
+        """
+        monkeypatch.chdir(tmp_path)
+        from builder import LFSBuilder, LFSConfig
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', [])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        unused = [
+            'https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/'
+            'texlive-20250308-source.tar.xz',
+            'https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/'
+            'texlive-20250308-texmf.tar.xz',
+            'https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/'
+            'texlive-20250308-extra.tar.xz',
+            'https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz',
+            'https://docbook.org/xml/5.0/docbook-5.0.zip',
+        ]
+        for url in unused:
+            assert builder._is_unused_source(url) is True, url
+
+        # Everything below is either built by a stage or cheap to fetch; losing
+        # any of them would break the very build the filter exists to save.
+        still_used = [
+            # the LFS book's only ncurses entry plus the custom stable pin
+            'https://invisible-mirror.net/archives/ncurses/current/'
+            'ncurses-6.5-20250809.tgz',
+            'https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz',
+            # the other docbook flavours are live and small
+            'https://docs.oasis-open.org/docbook/sgml/4.5/docbook-4.5.zip',
+            'https://www.docbook.org/sgml/3.1/docbk31.zip',
+            'https://github.com/docbook/xslt10-stylesheets/releases/download/'
+            'release/1.79.2/docbook-xsl-1.79.2.tar.bz2',
+            'https://downloads.sourceforge.net/docbook/docbook-dsssl-1.79.tar.bz2',
+            # expect, whose fossil config.guess broke the arm64 job
+            'https://prdownloads.sourceforge.net/expect/expect5.45.4.tar.gz',
+            'https://download.gnome.org/sources/gobject-introspection/1.84/'
+            'gobject-introspection-1.84.0.tar.xz',
+        ]
+        for url in still_used:
+            assert builder._is_unused_source(url) is False, url
+
+    def test_update_sources_list_drops_unused_sources(self, tmp_path, monkeypatch):
+        """Unused sources must never reach the generated list (Nightly #214)."""
+        monkeypatch.chdir(tmp_path)
+        from builder import LFSBuilder, LFSConfig
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir()
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        official = (
+            "https://ftp.math.utah.edu/pub/tex/historic/systems/texlive/2025/"
+            "texlive-20250308-texmf.tar.xz\n"
+            "https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz\n"
+            "https://docbook.org/xml/5.0/docbook-5.0.zip\n"
+            "https://download.gnome.org/sources/gobject-introspection/1.84/"
+            "gobject-introspection-1.84.0.tar.xz\n"
+            "https://invisible-mirror.net/archives/ncurses/current/"
+            "ncurses-6.5-20250809.tgz\n"
+        )
+        mock_response = MagicMock()
+        mock_response.read.return_value = official.encode('utf-8')
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            result = builder._update_sources_list()
+
+        assert result is True
+        content = (packages_dir / 'sources.list').read_text()
+        assert 'texlive' not in content
+        assert 'install-tl-unx' not in content
+        assert 'docbook.org/xml' not in content
+        # the book's gi 1.84.0 and its ncurses snapshot survive the filter
+        assert 'gobject-introspection-1.84.0.tar.xz' in content
+        assert 'ncurses-6.5-20250809.tgz' in content
+
     def test_source_downloader_download_retries_zero(self, sources_dir, mock_logger):
         """Couvre le return False final de download lorsque retries=0."""
         from builder import SourceDownloader

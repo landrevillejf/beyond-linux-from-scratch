@@ -577,7 +577,22 @@ EOF
     expect)
         extract "$(find_archive expect)"
         patch -Np1 -i ../expect-5.45.4-gcc15-1.patch
+        # expect ships tclconfig/config.guess AND config.sub from 2003-10-07,
+        # which predate aarch64 entirely: config.guess cannot guess the build
+        # type and configure aborts with "cannot guess build type; you must
+        # specify one" on the native arm64 runners (Nightly #214).  Spell the
+        # triplet out instead, but validate it against the same fossil
+        # config.sub first - that script rejects the common
+        # aarch64-pc-linux-gnu form ("machine `aarch64-pc' not recognized")
+        # while accepting aarch64-unknown-linux-gnu, so a blindly forwarded
+        # `gcc -dumpmachine` would only swap one failure for another.
+        build_triplet="$(gcc -dumpmachine 2>/dev/null || true)"
+        if [ -z "$build_triplet" ] ||
+           ! sh tclconfig/config.sub "$build_triplet" >/dev/null 2>&1; then
+            build_triplet="$(uname -m)-unknown-linux-gnu"
+        fi
         ./configure --prefix=/usr \
+            --build="$build_triplet" \
             --with-tcl=/usr/lib \
             --enable-shared \
             --disable-rpath \

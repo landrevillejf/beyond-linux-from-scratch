@@ -3,6 +3,16 @@
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
+# Re-launch with sudo if not root (preserve environment).  Every write below
+# lands inside $LFS, whose /usr and /etc were populated as root by the earlier
+# stages, so running as the unprivileged builder user dies on the very first
+# mkdir with "Permission denied" (Nightly #214, minimal profiles).  The stage
+# also chroots into $LFS for plymouth, which needs root anyway.
+if [ "$EUID" -ne 0 ]; then
+    echo "[INFO] Relaunching with sudo..."
+    exec sudo -E "$0" "$@"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LFS="${LFS:-/mnt/lfs}"
 
@@ -325,6 +335,13 @@ EOF
 
     cp "$LFS/etc/skel/.config/lfs-branding.conf" "$LFS/home/lfsuser/.config/lfs-branding.conf" 2>/dev/null || true
     cp "$LFS/etc/skel/.config/lfs-branding.conf" "$LFS/root/.config/lfs-branding.conf" 2>/dev/null || true
+
+    # This stage runs as root, so hand the copy back to whoever owns the home
+    # directory: a root-owned ~/.config locks the desktop user out of its own
+    # configuration.  /root and /etc/skel deliberately stay root-owned.
+    if [ -d "$LFS/home/lfsuser" ]; then
+        chown -R --reference="$LFS/home/lfsuser" "$LFS/home/lfsuser/.config" 2>/dev/null || true
+    fi
 }
 
 install_branding_assets() {

@@ -211,8 +211,12 @@ https://download.gnome.org/sources/libxslt/1.1/libxslt-1.1.43.tar.xz
 # vala-0.56.9 (last in file) won, then failed to compile against
 # glib 2.84 (Nightly #196).
 
-# gobject-introspection
-https://download.gnome.org/sources/gobject-introspection/1.82/gobject-introspection-1.82.0.tar.xz
+# gobject-introspection -- deliberately NO override: the 1.82.0 pin is older
+# than the book's 1.84.0 and pango 1.56.4 hard-requires gobject-introspection
+# >= 1.83.2, so every desktop profile aborted blfs-libs with "Dependency
+# 'gobject-introspection-1.0' is required but not found" (Nightly #214).  The
+# official BLFS wget-list already carries 1.84.0, and glib is pinned to 2.84.4
+# above, which is the release 1.84.0 is built against.
 
 # ============================================================================
 # Xorg (08b-build-xorg.sh)
