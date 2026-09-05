@@ -1596,14 +1596,36 @@ run_build required libxkbcommon
 # libevdev – evdev wrapper; REQUIRED by libinput's meson build, so it
 # must precede it (Nightly #213: libinput aborted with "Dependency
 # libevdev not found", and the generic build_pkg used to hide that
-# failure behind a bogus success message)
-run_build required libevdev
+# failure behind a bogus success message).
+#
+# libevdev declares 'tests' and 'documentation' as features defaulting
+# to 'enabled' and resolves both with `required: get_option(...)`, so a
+# missing dependency aborts meson setup instead of degrading (Nightly
+# #215: 'Dependency "check" not found' at meson.build:137).  check is an
+# LFS temp-tools package that no BLFS stage rebuilds, and doxygen is
+# deliberately never installed by this builder (see --without-doxygen in
+# 08b and -D doxygen=false in 24).
+run_build required libevdev -Dtests=disabled -Ddocumentation=disabled
 
-# libwacom – tablet support (optional libinput extra, needs libgudev)
-run_build optional libwacom
+# libwacom – tablet support (optional libinput extra, needs libgudev).
+# Same 'tests' trap as libevdev; the BLFS general/libwacom page passes
+# -D tests=disabled for exactly this reason.
+run_build optional libwacom -Dtests=disabled
 
-# libinput – input device handling (Wayland and Xorg); no BLFS book page
-run_build required libinput
+# libinput – input device handling (Wayland and Xorg); no BLFS book page.
+# Four boolean options default to true and three of them cannot be
+# satisfied this early: mtdev is built by no stage at all, debug-gui
+# hard-requires GTK 3/4 which only arrives with the desktop stages, and
+# tests reaches for the same absent check.  libwacom is a hard
+# requirement as well, but it is built as optional immediately above, so
+# follow what actually got installed rather than aborting a required
+# package over an optional tablet-support extra (Nightly #215).
+if is_installed libwacom; then
+    libinput_wacom="-Dlibwacom=true"
+else
+    libinput_wacom="-Dlibwacom=false"
+fi
+run_build required libinput -Dmtdev=false -Ddebug-gui=false -Dtests=false "$libinput_wacom"
 
 # libdrm – Direct Rendering Manager (Mesa dependency)
 run_build required libdrm

@@ -108,6 +108,66 @@
 
 ### Fixed
 
+- **libevdev/libwacom/libinput aborted blfs-libs on absent optional
+  dependencies (nightly #215)**
+  (`blfs/08a-build-blfs-libs.sh`, `tests/test_acceptance_shell.py`)
+  - With the #214 gobject-introspection fix in place, blfs-libs got
+    past pango for the first time and all eight desktop jobs (xfce
+    sysvinit and systemd, gnome, kde, lxqt, full, java-dev,
+    audio-studio) died on the next package:
+    `meson.build:137:12: ERROR: Dependency "check" not found, tried
+    pkgconfig and cmake`, then `[ERROR] Required package libevdev
+    failed - aborting stage`
+  - libevdev declares `tests` and `documentation` as `type: 'feature'`
+    defaulting to `'enabled'` and resolves both with
+    `required: get_option(...)`, so a missing dependency aborts meson
+    setup instead of degrading.  `check` is an LFS temp-tools package
+    that no BLFS stage rebuilds and that is absent from the BLFS
+    wget-list; doxygen is deliberately never installed by this builder
+    (`--without-doxygen` in 08b, `-D doxygen=false` in 24).  Both are
+    now disabled, matching the `-D tests=disabled` the BLFS
+    general/libwacom page itself passes
+  - Fixing libevdev alone would have exposed three more traps one
+    package later, so they are repaired in the same pass: libinput's
+    `mtdev`, `debug-gui` and `tests` are `type: 'boolean'` defaulting
+    to `true`, `mtdev` is built by no stage at all, and `debug-gui`
+    hard-requires GTK 3/4 which only arrives with the desktop stages -
+    all three declared with no `required: false`
+  - libinput's `libwacom` boolean is a hard requirement too, but
+    libwacom is built as *optional* immediately above, so the flag is
+    now derived from `is_installed libwacom` instead of being
+    hard-coded: tablet support is used when it did install and a
+    required package no longer aborts over an optional extra
+  - `test_libevdev_precedes_libinput` matched the bare
+    `run_build required libevdev\n` form and so broke the moment that
+    call grew options; ordering assertions now ignore the flags
+
+- **bootloader stage chrooted without root and died writing grub.cfg
+  (nightly #215)**
+  (`final/13-create-bootloader.sh`)
+  - The five headless jobs (server, minimal sysvinit and systemd, arm64
+    sysvinit and aarch64) reached the bootloader stage - further than
+    any previous nightly - and all died identically:
+    `chroot: cannot change root directory to
+    '/tmp/lfs-build/build-release': Operation not permitted`, then
+    `line 56: .../boot/grub/grub.cfg: No such file or directory`
+  - The stage bind-mounts /dev, /proc and /sys and then chroots to run
+    `grub-install`, but unlike `final/12-create-initramfs.sh` it never
+    re-launched as root.  As the unprivileged CI builder the mounts
+    failed silently (they are `|| true` guarded) and chroot returned
+    EPERM, which `|| echo "GRUB BIOS install skipped"` swallowed - so
+    the real cause never surfaced and `/boot/grub` was never created,
+    making the grub.cfg redirect fatal
+  - Now re-execs with `sudo -E "$0" "$@"` before its first privileged
+    operation, and creates `$LFS/boot/grub` before the redirect because
+    `grub-install` is legitimately skipped whenever no target disk can
+    be probed, which is always the case in CI where the image is a
+    plain file
+  - Confirmed by the same run: branding and system-updater both
+    re-launched as root and completed, so the #214 privilege fixes
+    hold, and system-updater executed for the first time ever now that
+    the minimal profile ships it
+
 - **stale gobject-introspection pin broke pango (nightly #214)**
   (`packages/custom-sources.list`)
   - All eight desktop jobs (xfce sysvinit and systemd, gnome, kde,

@@ -3,6 +3,17 @@
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
+# Re-launch with sudo if not root (preserve environment).  This stage
+# bind-mounts /dev, /proc and /sys into $LFS and then chroots to run
+# grub-install; as the unprivileged builder user the mounts fail silently
+# (they are `|| true` guarded) and chroot dies with "Operation not
+# permitted" (Nightly #215, server profile).  Same pattern as
+# final/12-create-initramfs.sh.
+if [ "$EUID" -ne 0 ]; then
+    echo "[INFO] Relaunching with sudo..."
+    exec sudo -E "$0" "$@"
+fi
+
 LFS="${LFS:-/mnt/lfs}"
 if [ ! -d "$LFS" ]; then
     echo "[ERROR] LFS directory not found"
@@ -52,6 +63,11 @@ grub)
         GRUB_TEMPLATE="$REPO_ROOT/config/grub.cfg"
         if [ -f "$GRUB_TEMPLATE" ]; then
             echo "[INFO] Using GRUB config template: $GRUB_TEMPLATE"
+            # grub-install normally creates /boot/grub, but it is skipped when
+            # no target disk can be probed (always the case in CI, where the
+            # image is a plain file), so the redirect below used to die with
+            # "No such file or directory" (Nightly #215).
+            mkdir -p "$LFS/boot/grub"
             # Substitute build-time variables into the template
             sed -e "s|\${LFS_CONFIG_BOOTLOADER_TIMEOUT}|${LFS_CONFIG_BOOTLOADER_TIMEOUT:-5}|g" \
                 -e "s|\${LFS_ROOT_DEVICE}|$ROOT_DEVICE|g" \

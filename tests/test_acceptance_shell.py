@@ -1449,12 +1449,25 @@ class TestNightly213StageGuardrails:
         end = content.index('\n}\n', start)
         return content[start:end]
 
+    @staticmethod
+    def _build_pos(content, mode, pkg):
+        """Return the offset of a run_build call, ignoring its options.
+
+        Matching the bare 'run_build <mode> <pkg>\\n' form made the
+        ordering assertions break the moment a package needed extra
+        meson options, which Nightly #215 added to libevdev, libwacom
+        and libinput.  The ordering is what matters, not the flags.
+        """
+        match = re.search(rf'^run_build {mode} {re.escape(pkg)}\b',
+                          content, re.MULTILINE)
+        return match.start() if match else -1
+
     def test_libevdev_precedes_libinput(self):
         """libinput's meson build hard-requires libevdev (Nightly #213:
         "Dependency libevdev not found")."""
         content = self.LIBS.read_text()
-        evdev = content.find('run_build required libevdev\n')
-        libinput = content.find('run_build required libinput\n')
+        evdev = self._build_pos(content, 'required', 'libevdev')
+        libinput = self._build_pos(content, 'required', 'libinput')
         assert evdev != -1, "libevdev build missing from blfs-libs"
         assert libinput != -1, "libinput build missing from blfs-libs"
         assert evdev < libinput, \
@@ -1637,6 +1650,113 @@ class TestNightly214StageGuardrails:
             f'gobject-introspection {effective} is below the '
             f'{".".join(str(p) for p in self.GI_FLOOR)} floor pango requires'
         )
+
+
+class TestNightly215StageGuardrails:
+    """Guardrails for the Nightly #215 all-profile failure classes.
+
+    Run #215 confirmed the #214 fixes held - branding and system-updater
+    both re-launched as root and completed - and uncovered two new
+    defects further down the pipeline:
+
+    * eight desktop profiles aborted blfs-libs on libevdev.  Its
+      meson_options.txt defaults 'tests' and 'documentation' to
+      'enabled' and resolves both with `required: get_option(...)`, so
+      setup aborted with 'Dependency "check" not found' instead of
+      degrading: check is an LFS temp-tools package no BLFS stage
+      rebuilds and doxygen is deliberately never installed;
+    * the server profile reached the bootloader stage, which chroots
+      into $LFS without ever re-launching as root.  chroot died with
+      "Operation not permitted", the `|| echo` swallowed it, and
+      /boot/grub was therefore never created, so writing grub.cfg
+      aborted the stage.
+    """
+
+    LIBS = Path('blfs/08a-build-blfs-libs.sh')
+    BOOTLOADER = Path('final/13-create-bootloader.sh')
+
+    @pytest.fixture(scope='class')
+    def libs(self):
+        return self.LIBS.read_text()
+
+    @staticmethod
+    def _opts(libs, mode, pkg):
+        """Return everything a run_build call passes after the package."""
+        match = re.search(
+            rf'^run_build {mode} {re.escape(pkg)}(.*)$', libs, re.MULTILINE)
+        assert match, f'{pkg} is not built by run_build {mode} in 08a'
+        return match.group(1)
+
+    def test_libevdev_disables_its_default_enabled_features(self, libs):
+        """Both are `type: feature` defaulting to 'enabled', so they take
+        'disabled' - and both are resolved with required: get_option()."""
+        opts = self._opts(libs, 'required', 'libevdev')
+        assert '-Dtests=disabled' in opts, (
+            'libevdev tests must be disabled: check is an LFS temp-tools '
+            'package that no BLFS stage rebuilds (Nightly #215)')
+        assert '-Ddocumentation=disabled' in opts, (
+            'libevdev documentation must be disabled: it hard-requires '
+            'doxygen, which this builder never installs')
+
+    def test_libwacom_disables_tests_like_the_book_does(self, libs):
+        """The BLFS general/libwacom page passes -D tests=disabled."""
+        opts = self._opts(libs, 'optional', 'libwacom')
+        assert '-Dtests=disabled' in opts, (
+            'libwacom has the same default-enabled tests feature as '
+            'libevdev; the book disables it')
+
+    def test_libinput_disables_the_deps_no_stage_provides(self, libs):
+        """libinput's options are `type: boolean`, so they take 'false'.
+
+        mtdev is built by no stage at all and debug-gui hard-requires
+        GTK 3/4, which only arrives with the desktop stages - both are
+        declared with no `required: false`, so leaving them at their
+        default true aborts meson setup the moment libevdev resolves.
+        """
+        opts = self._opts(libs, 'required', 'libinput')
+        for flag in ('-Dmtdev=false', '-Ddebug-gui=false', '-Dtests=false'):
+            assert flag in opts, (
+                f'libinput must pass {flag}; the boolean defaults to true '
+                f'and the dependency is unavailable at blfs-libs time')
+
+    def test_libinput_follows_whether_libwacom_installed(self, libs):
+        """libwacom is optional but libinput hard-requires it if enabled.
+
+        A literal -Dlibwacom=true would abort a required package over an
+        optional tablet-support extra, so the flag must be derived from
+        is_installed and evaluated after libwacom was attempted.
+        """
+        opts = self._opts(libs, 'required', 'libinput')
+        assert '"$libinput_wacom"' in opts, (
+            'libinput must take its libwacom flag from the probe variable')
+        assert '-Dlibwacom=' not in opts, (
+            'the libwacom flag must not be hard-coded on the run_build line')
+
+        probe = libs.index('if is_installed libwacom; then')
+        call = libs.index('run_build required libinput')
+        attempted = libs.index('run_build optional libwacom')
+        assert attempted < probe < call, (
+            'the libwacom probe must run after libwacom was attempted and '
+            'before libinput is configured')
+
+    def test_bootloader_stage_relaunches_as_root(self):
+        """chroot and the bind mounts both need real root privileges."""
+        content = self.BOOTLOADER.read_text()
+        guard = content.index('if [ "$EUID" -ne 0 ]; then')
+        assert 'exec sudo -E "$0" "$@"' in content[guard:guard + 200]
+        for op in ('mount --bind /dev', 'chroot "$LFS"'):
+            assert guard < content.index(op), (
+                f'final/13-create-bootloader.sh must re-launch as root '
+                f'before "{op}" (Nightly #215)')
+
+    def test_bootloader_creates_boot_grub_before_writing_config(self):
+        """grub-install is skipped whenever no target disk can be probed,
+        which is always true in CI, so nothing else creates /boot/grub."""
+        content = self.BOOTLOADER.read_text()
+        mkdir = content.index('mkdir -p "$LFS/boot/grub"')
+        write = content.index('> "$LFS/boot/grub/grub.cfg"')
+        assert mkdir < write, (
+            'the grub.cfg redirect needs its parent directory to exist')
 
 
 class TestAudioStudioStageGuardrails:
