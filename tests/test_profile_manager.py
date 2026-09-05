@@ -183,6 +183,22 @@ class TestProfileManager:
         for name in expected:
             assert name in profiles, f"Profile '{name}' missing from list_profiles()"
 
+    def test_every_profile_ships_the_system_updater(self):
+        """No profile may opt out of lfs-update.
+
+        minimal used to be the only profile carrying
+        `system_updater: False`, and the net effect was that the
+        system-updater stage never ran anywhere: minimal excluded it by
+        profile while every other job died in an earlier stage.  A
+        shipped system with no way to update itself is not
+        production-ready, and lfs-update only delegates to the lpm that
+        every profile already installs.
+        """
+        for name in ProfileManager.list_profiles():
+            profile = ProfileManager.get_profile(name)
+            assert profile.get('system_updater') is True, \
+                f"profile '{name}' must ship the system updater"
+
     def test_get_profile_not_exists(self):
         """Test getting non-existent profile raises error"""
         with pytest.raises(ValueError) as exc_info:

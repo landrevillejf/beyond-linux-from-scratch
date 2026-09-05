@@ -84,6 +84,28 @@
     deferred to a dedicated follow-up; the plugin packs, NeuralRack and
     realtime/PREEMPT_RT groundwork above are the first increment
 
+### Changed
+
+- **the system updater now ships on every profile**
+  (`builder.py`, `config/build.conf`, `config/default.json`)
+  - `minimal` was the only profile carrying `system_updater: False`, and
+    the practical effect was that the `system-updater` stage had never
+    once run in CI: minimal excluded it by profile while all twelve
+    other jobs died in an earlier stage, so no nightly artifact has ever
+    contained a `system-updater.log`.  A shipped system with no way to
+    update itself is not production-ready, and `lfs-update` only
+    delegates to the lpm that minimal already installs, so the profile
+    now enables it too and minimal grows from 21 to 22 stages
+  - `config/build.conf` and `config/default.json` also said
+    `system_updater.enabled: false` while `config/build.conf.json`,
+    `LFSConfig`'s built-in default and the test fixture all said true.
+    All five sources now agree.  That key is inert -- `builder.py`
+    overwrites it from the active profile and no stage script reads
+    `LFS_CONFIG_SYSTEM_UPDATER_*` -- so the disagreement never had a
+    runtime effect, but it is exactly the kind of drift that misleads
+    whoever edits the file next.  The profile stays the single source of
+    truth
+
 ### Fixed
 
 - **stale gobject-introspection pin broke pango (nightly #214)**

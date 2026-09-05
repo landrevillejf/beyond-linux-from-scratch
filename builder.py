@@ -350,7 +350,10 @@ class ProfileManager:
             'security_hardening': False,
             'privacy_tools': False,
             'live_system': False,
-            'system_updater': False,
+            # Every shipped system needs a way to update itself, and lfs-update
+            # only delegates to the lpm this profile already installs, so the
+            # updater is no longer optional on the lean profile either.
+            'system_updater': True,
             'desktop_options': ['none'],
             'init_options': ['sysvinit', 'systemd', 'openrc'],
             'audio_options': ['none']

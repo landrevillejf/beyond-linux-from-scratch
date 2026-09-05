@@ -69,6 +69,26 @@ class TestLFSConfig:
         for section in required_sections:
             assert section in lfs_config.data
 
+    def test_system_updater_enabled_agrees_across_config_sources(self, temp_dir):
+        """Every checked-in preset must match the code default.
+
+        config/build.conf and config/default.json carried
+        `system_updater.enabled: false` while config/build.conf.json,
+        LFSConfig's built-in default and the test fixture all said true.
+        Nothing reads the key today - builder.py overwrites it from the
+        profile and no stage script consumes LFS_CONFIG_SYSTEM_UPDATER_*
+        - which is exactly why the disagreement survived unnoticed and
+        why it is worth pinning down.
+        """
+        generated = LFSConfig(temp_dir / "fresh.conf")
+        assert generated.data['system_updater']['enabled'] is True
+
+        for name in ('config/build.conf', 'config/build.conf.json',
+                     'config/default.json'):
+            data = json.loads(Path(name).read_text())
+            assert data['system_updater']['enabled'] is True, \
+                f"{name} disagrees with the code default on system_updater"
+
     def test_init_system_choices(self, lfs_config):
         """Test init system configuration"""
         init_system = lfs_config.get('init_system')
