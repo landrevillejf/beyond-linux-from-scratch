@@ -4,6 +4,53 @@
 
 ### Added
 
+- **base prefix cache for the nightly matrix**
+  (`.github/workflows/build-base-cache.yml`,
+  `.github/workflows/nightly.yml`, `README.md`, `docs/stage-timings.md`)
+  - All thirteen nightly jobs rebuilt the same 2h15m prefix
+    (`host-check` through `lfs-system`) before any of them could do
+    anything profile-specific, which is what pushed the desktop
+    profiles towards GitHub's hard 6 h per-job cap.  The prefix is
+    genuinely shared: `host/04-build-toolchain.sh` has no `$PROFILE` or
+    `LFS_PROFILE_*` reference, `lfs/05a` and `lfs/05b` branch only on
+    `INIT_SYSTEM` and `KERNEL_TYPE`, and `--arch x86_64` forces
+    `cross_compile=false` and `bootloader.type=grub`, so every x86_64
+    job schedules an identical stage list up to the boundary
+  - `build-base-cache.yml` builds that prefix once per `(init, arch)`
+    pair with `--profile minimal --stop-after lfs-system`, verifies it
+    is real (`usr/bin/gcc` and `bin/bash` executable, `etc/passwd`
+    present, `tools/` gone -- `lfs/05b` removes it once the system is
+    self-hosting), then publishes split zstd parts, a `.sha256` and a
+    JSON sidecar to the rolling `base-cache-latest` release, pruning
+    the assets each new key supersedes
+  - `nightly.yml` recomputes the key, verifies the checksum before
+    extracting, restores into `build-release/`, re-runs `host/03` alone
+    so `build-release.img` still exists for the headless artifact check
+    and the QEMU smoke test, and resumes at `init-system`.  A miss, a
+    mismatch or a failed extraction leaves `hit=false` and the job
+    builds from scratch exactly as before
+  - The key is `git ls-tree -r HEAD` over `host/`, the two LFS system
+    scripts, `config/`, both source lists, `builder.py` and `VERSION`,
+    hashed.  `ls-tree` emits blob SHAs, so a nightly can never restore
+    a base built from different inputs, while a change confined to
+    `blfs/`, `final/` or `profiles/` correctly reuses it
+  - `minimal / sysvinit / x86_64` stays an uncached canary: it is the
+    cheapest complete from-scratch build (3h47m to bootloader) and it
+    re-proves the whole prefix every night.  `aarch64` is excluded --
+    its `lfs-system` alone ran 4h04m and then failed, so it can neither
+    produce a prefix nor fit inside one
+
+- **`--stop-after STAGE`** (`builder.py`, `README.md`)
+  - Stops the build once the named stage has completed.  The stage list
+    is truncated before the resume branch, so `--stop-after` and
+    `--resume-from` compose: the publisher uses
+    `--stop-after lfs-system`, the restored nightly job uses
+    `--resume-from init-system`, and the image refresh in between passes
+    `disk-image` to both flags to run that one script and no more.  An
+    unknown stage name is a hard error that lists the valid ones, and a
+    truncated run logs `BUILD STOPPED AFTER STAGE: <name>` instead of
+    `BUILD COMPLETED SUCCESSFULLY!` because it produced no installer ISO
+
 - **Ardour 9.8 DAW for the audio-studio profile**
   (`blfs/27-audio-studio.sh`, `packages/custom-sources.list`)
   - Stage 27 now builds the Ardour 9.8 digital audio workstation when
@@ -86,6 +133,21 @@
 
 ### Changed
 
+- **nightly job budget and concurrency**
+  (`.github/workflows/nightly.yml`)
+  - `timeout-minutes` drops from 480 to 330.  480 sits above GitHub's
+    hard 6 h per-job cap, so a runaway job was killed by the platform
+    rather than by the workflow and never reached the
+    `if: failure() || cancelled()` log-upload step; 5h30m produces a
+    clean `cancelled()` that the step already handles
+  - A top-level `concurrency: nightly-builds` group with
+    `cancel-in-progress: false` is added.  nightly.yml had none, so two
+    overlapping dispatches pushed 26 jobs against the 20-job limit and
+    silently queued
+  - `/tmp/lfs-sources` is removed once the package cache has been
+    copied into `build-release/sources/`; the base prefix restore that
+    follows needs the several GB back
+
 - **the system updater now ships on every profile**
   (`builder.py`, `config/build.conf`, `config/default.json`)
   - `minimal` was the only profile carrying `system_updater: False`, and
@@ -107,6 +169,46 @@
     truth
 
 ### Fixed
+
+- **nightly artifacts pointed at the empty `image/` directory**
+  (`.github/workflows/nightly.yml`)
+  - `builder.py` sets `LFS` to the resolved output directory, so the
+    rootfs *is* `build-release/`; `build-release/image/` is created
+    empty by `prepare_environment()` and populated by nothing, while
+    every stage script installs into `$LFS/boot`.  Three nightly steps
+    still used the phantom path and would have failed any job that
+    finally completed: the kernel lookup
+    (`find .../build-release/image/boot`), the rootfs export
+    (`tar --zstd -cf - -C image .`, which shipped a zero-byte archive)
+    and the QEMU smoke test's rootfs argument.  All three now use
+    `build-release/`, and the export names the scaffolding it must skip
+    (`sources`, `logs`, `cache`, `backups`, `live`, `image`, `tools`,
+    `packages`, `lpm-repo`) plus the release artifacts sharing the
+    directory.  Split parts are written to the parent and moved in
+    afterwards so the archive never contains its own growing output
+  - The same phantom path is still read by `build-rootfs-cache.yml`,
+    `xfce-sysvinit-x86_64-build-cache.yml`,
+    `xfce-systemd-x86_64-build-cache.yml`, `build-iso-from-cache.yml`,
+    `build.yml`, `arm64-xfce.yml`, `cross-compile.yml`, `release.yml`
+    and `weekly-full.yml`.  Those are a separate decision and are not
+    touched here
+
+- **`--resume-from` skipped the source download pass** (`builder.py`)
+  - `main()` gated `download_sources()` behind `if not args.resume_from`,
+    so a resumed job reached `build-kernel` with no kernel tarball:
+    `nightly.yml` deletes the cached one on purpose to force a fresh
+    download, and the `packages-cache-latest` release can be weeks old.
+    The call is now unconditional.  The extra cost is a checksum sweep,
+    because `SourceDownloader.download()` returns early for any archive
+    that already exists and validates
+
+- **an unknown `--resume-from` silently rebuilt everything**
+  (`builder.py`)
+  - `ScriptExecutor.resume_from()` left `start_index` at 0 when the name
+    matched nothing, so a typo restarted a multi-hour build from
+    `host-check` and still reported success.  It now logs the offending
+    name together with the stages the selected profile actually runs,
+    and returns False
 
 - **libevdev/libwacom/libinput aborted blfs-libs on absent optional
   dependencies (nightly #215)**
