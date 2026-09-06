@@ -236,27 +236,51 @@
     metadata that `sudo tar --numeric-owner --xattrs` deliberately
     preserves inside the rootfs
 
-- **the 7200 s default stage timeout cannot survive emulation**
+- **emulated aarch64 cannot finish, at any stage timeout**
   (`.github/workflows/arm64-xfce.yml`,
   `.github/workflows/cross-compile.yml`,
+  `.github/workflows/nightly.yml`, `host/00-setup-qemu.sh`,
   `tests/test_release_workflow.py`)
-  - `ERROR - Stage timed out after 7200 seconds: lfs-system` in both
-    ARM64 XFCE #41 and Cross-Compile ARM64 #106.  Neither workflow
-    passed `--stage-timeout`, so `builder.py` fell back to its 7200 s
-    default, and an emulated aarch64 `lfs-system` consumed all of it:
-    the job started at 03:18:53, `lfs-system` began at 04:19:07 behind a
-    52-minute toolchain, and was killed at 06:19:07
-  - Both now pass `--stage-timeout 10800`, together with
-    `--download-timeout 600 --download-retries 5` to match nightly.yml.
-    3 h is the largest value that still fits GitHub's hard 6 h per-job
-    cap once the toolchain and earlier stages are accounted for; a
-    larger one would trade a self-reported timeout for a platform
-    cancellation that leaves no diagnostics at all
-  - `timeout-minutes: 480` is deliberately left alone here even though
-    nightly.yml dropped to 330.  nightly needed the lower budget to
-    reach its `if: failure() || cancelled()` log-upload step, which
-    these two workflows do not have, so lowering it would only take
-    30 minutes away from an emulated build that needs every minute
+  - Reverts the `--stage-timeout 10800` that main carries in both
+    scheduled aarch64 workflows.  That change reasoned about what fits
+    inside GitHub's hard 6 h per-job cap and never about what
+    `lfs-system` actually needs; the measurement below shows that no
+    budget inside the cap can work
+  - `ERROR - Stage timed out after 7200 seconds: lfs-system` in ARM64
+    XFCE #41 and Cross-Compile ARM64 #106 was the symptom, not the
+    disease.  Nightly #221's aarch64 job was given 5 h 30 m *and*
+    `--stage-timeout 18000`, and was still cancelled mid-stage: it had
+    built 14 of the 86 packages x86_64's `lfs-system` finishes in
+    59 m 33 s -- roughly 27x slower per package -- and was actively
+    compiling zstd when the budget ran out, not hung.  Projecting the
+    stage from its own log volume puts it near 11 h
+  - 10800 therefore converted a 2 h kill into a 3 h kill carrying an
+    equally clear message, and burned an extra hour of CI per run to
+    get there.  Both workflows return to the 7200 s default, which is
+    ample for a native build and still reports a genuinely stuck stage
+  - `arm64-xfce.yml` and nightly's `arm64/aarch64/sysvinit` cell move
+    to `ubuntu-24.04-arm`, free and unlimited for public
+    repositories, where the same profile builds natively.  Nightly
+    derives the runner from `matrix.arch` instead of adding a matrix
+    dimension, because its six `include` entries pin only
+    profile/arch/init and a partial include risks an empty `runs-on`
+  - `cross-compile.yml` stays on x86_64 -- a native ARM runner cannot
+    prove cross-compilation -- and is scoped to `--stop-after
+    toolchain`, the stage it was really exercising.  Its verification
+    step asserted on an image that a truncated run never produces, so
+    it could only ever exit 1; it now mirrors `check_toolchain()` in
+    `host/04-build-toolchain.sh` (same three binaries, same compile
+    probe) and adds a `readelf` check that the output really is
+    AArch64.  `timeout-minutes` drops from 480 to 150 against a
+    measured 29 m of setup plus a 40 m stage
+  - `host/00-setup-qemu.sh` gains a same-arch guard.  `builder.py`
+    sets `cross_compile` for any `--arch` other than x86_64, a host
+    that already is that arch included, so on a native ARM runner the
+    stage demanded a `qemu-aarch64-static` it had no use for, exited 1
+    when it was missing, and registered a `binfmt_misc` handler for
+    the host's own architecture.  The three ARM jobs also stop
+    installing `qemu-user-static`, so a regression into emulation now
+    fails loudly rather than silently running 27x slower
 
 - **a pasted copy of the official wget-list overrode every mirror pin**
   (`packages/custom-sources.list`, `tests/test_acceptance_shell.py`)

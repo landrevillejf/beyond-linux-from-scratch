@@ -10,8 +10,19 @@ permissions:
 
 jobs:
   arm64:
-    runs-on: ubuntu-latest
-    timeout-minutes: 480
+    # Native ARM, not x86_64 plus qemu-user.  Emulated, this build cannot
+    # finish at any stage timeout: lfs-system measured 4h20m for the 14
+    # packages x86_64 builds in under an hour (~27x slower per package),
+    # projecting past 11h against GitHub's hard 6h per-job cap.  ARM64 XFCE
+    # #41 was killed at 2h by the stage timeout and nightly #221's aarch64
+    # job at 5h30m by the workflow one, neither having finished lfs-system.
+    # ubuntu-24.04-arm is the ARM counterpart of ubuntu-latest and is free
+    # for public repositories, so the same profile builds natively at
+    # x86_64-comparable speed (x86_64 lfs-system: 59m33s for 86 packages).
+    runs-on: ubuntu-24.04-arm
+    # 5h30m yields a clean cancelled() ahead of the 6h hard cap, which kills
+    # the job leaving no diagnostics; nightly.yml already uses this value.
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +33,7 @@ jobs:
             wget curl git python3 python3-pip xorriso isolinux \
             mtools dosfstools parted rsync bc cpio kmod \
             libssl-dev libelf-dev \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user-static
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
       - name: Create lfs user
         run: |
@@ -49,16 +60,21 @@ jobs:
       - name: Build ARM64
         run: |
           cd /tmp/lfs-build
-          # The 7200s default stage timeout is too short for an emulated
-          # aarch64 build: lfs-system used the whole 2h and was killed
-          # (ARM64 XFCE #41).  3h is the largest value that still fits
-          # GitHub's hard 6h job cap once the ~3h the toolchain and earlier
-          # stages consume are accounted for, so a slow stage reports its
-          # own timeout instead of the job being cancelled with no
-          # diagnostics at all.  Download flags match nightly.yml.
+          # No --stage-timeout override any more: natively, lfs-system takes
+          # about an hour, so the 7200s default is ample and a genuinely
+          # stuck stage still reports itself promptly rather than after 3h.
+          #
+          # gcc-aarch64-linux-gnu stays - host/05-build-uboot.sh hard-requires
+          # ${CROSS_COMPILE}gcc, and on an arm64 runner that package is the
+          # native compiler under its triplet name, so host/04 derives
+          # LFS_TGT from `uname -m` and builds natively.
+          #
+          # qemu-user-static is deliberately gone: host/00-setup-qemu.sh now
+          # skips when `uname -m` matches the target, so keeping an emulator
+          # installed would only offer a way to regress into a 27x slower
+          # build, and its absence makes such a regression fail loudly.
           sudo -u lfs python3 builder.py --profile arm64 --no-live \
             --output ./build-arm64 \
-            --stage-timeout 10800 \
             --download-timeout 600 \
             --download-retries 5
 
