@@ -6,6 +6,7 @@ Tests for SourceDownloader class
 import pytest
 import hashlib
 import urllib.error
+import urllib.parse
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from builder import SourceDownloader
@@ -488,7 +489,7 @@ class TestNightly213VoidMirrorFallback:
 
         def fake_retrieve(url, path, *args):
             seen.append(url)
-            if 'freedesktop.org' in url:
+            if urllib.parse.urlparse(url).hostname == 'www.freedesktop.org':
                 raise urllib.error.HTTPError(url=url, code=418,
                                              msg="I'm a teapot", hdrs=None, fp=None)
             if 'conglomeration' in url:
