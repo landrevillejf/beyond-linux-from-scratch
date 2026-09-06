@@ -6,6 +6,7 @@ Tests for SourceDownloader class
 import pytest
 import hashlib
 import urllib.error
+from urllib.parse import urlparse
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from builder import SourceDownloader
@@ -603,7 +604,7 @@ class TestBaseCacheRun5GnuMirrorFallback:
 
         def fake_retrieve(url, path, *args):
             seen.append(url)
-            if 'ftpmirror.gnu.org' in url:
+            if urlparse(url).hostname == 'ftpmirror.gnu.org':
                 raise urllib.error.HTTPError(url=url, code=504,
                                              msg='Gateway Time-out', hdrs=None, fp=None)
             Path(path).write_bytes(b'\xfd7zXZ\x00payload')
