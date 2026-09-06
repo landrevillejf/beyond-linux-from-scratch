@@ -170,6 +170,67 @@
 
 ### Fixed
 
+- **a pasted copy of the official wget-list overrode every mirror pin**
+  (`packages/custom-sources.list`, `tests/test_acceptance_shell.py`)
+  - `packages/custom-sources.list` is applied *on top of* the official
+    LFS and BLFS wget-lists that `builder.py` fetches at build time,
+    with a last-line-wins rule keyed by `source_key()`.  84 lines near
+    the end of the file were a verbatim paste of the `downloads/12.4`
+    wget-list, so they silently undid the curated `mirrors.kernel.org/gnu`
+    block at the top of the very same file for 22 core packages -- and,
+    coming after it, also undid the `ftp.gnu.org/gnu/mpc` and
+    `gmplib.org` pins
+  - The paste was not merely redundant, it was a downgrade: the
+    `downloads/12.4` flavour names `ftpmirror.gnu.org` for all 30 GNU
+    tarballs while the `view/stable` list `builder.py` actually fetches
+    names `ftp.gnu.org`.  The two lists carry byte-identical filenames
+    and differ only by host, so deleting the paste moved 29 effective
+    URLs off the redirector and changed no version at all.  Verified by
+    resolving both revisions of the file against the live official
+    lists: 1225 effective URLs before and after, no key lost, no key
+    gained, and every one of the 33 changed keys keeping its filename
+  - Three stray pins the paste had been masking go with it.
+    `www.mpfr.org/mpfr-4.2.1` sat after the curated `mpfr-4.2.2` and
+    would have won the tie-break, downgrading a GCC prerequisite below
+    the book version; `gmplib.org` and `ftp.gnu.org` duplicated gmp and
+    mpc entries already pinned above them
+  - `m4` was pinned to 1.4.21 in the curated block while the book and
+    both `recipes/lfs/*/m4*.lpm` name 1.4.20.  The paste had been hiding
+    the drift by winning the `pkg:m4-1` key; the pin is now the book
+    version
+  - `test_systemd_tarball_is_listed_exactly_once` demanded a systemd pin
+    in this file, which the paste happened to supply.  It becomes
+    `test_systemd_tarball_is_never_listed_twice`: the nightly #173
+    collision it guards against needs two conflicting releases, and the
+    official list supplies the book one on its own.  A new
+    `test_official_wget_list_is_not_pasted_into_the_overrides` keeps the
+    paste from coming back
+
+- **a degraded `ftpmirror.gnu.org` took the core toolchain with it**
+  (`builder.py`, `tests/test_source_downloader.py`)
+  - `build-base-cache` run #5 lost `m4`, `mpc`, `sed` and `readline` to
+    `HTTP Error 504: Gateway Time-out` and `502: Bad Gateway` from
+    `ftpmirror.gnu.org`, a single proxy in front of a rotating set of GNU
+    backends: when it degrades it degrades for every runner at once.
+    Neither fallback tier could recover a GNU tarball -- the BLFS
+    conglomeration tree carries only BLFS-book packages (`404` for all
+    four) and Void Linux has no stem for them either (`404`) -- while
+    `ftp.gnu.org`, `mirrors.kernel.org`, `mirror.team-cymru.com` and
+    `mirrors.ocf.berkeley.edu` all served the same files
+  - `download_sources()` only logs "Some downloads failed, continuing
+    with available sources", so both jobs kept building for another hour
+    towards a toolchain stage that could not possibly succeed
+  - `GNU_MIRRORS` and `_gnu_candidates()` add a third tier ahead of the
+    two existing ones.  It rewrites the `ftpmirror.gnu.org` document root
+    and any `/gnu/`-prefixed path onto the canonical
+    `ftp.gnu.org/gnu/<package>/<file>` layout, skipping whichever mirror
+    the request just failed on.  It runs first because it re-points a
+    path already known to exist instead of deriving a package directory
+    from a filename, and it costs nothing on a genuine `404`, which
+    `_download_attempt()` treats as permanent
+  - The tier also covers the `gnu-hurd` kernel URL, the one remaining
+    `ftpmirror.gnu.org` reference in `builder.py`
+
 - **`lfs-system` unpacked a rotated ncurses snapshot**
   (`builder.py`, `packages/custom-sources.list`,
   `recipes/lfs/system/ncurses.lpm`,
