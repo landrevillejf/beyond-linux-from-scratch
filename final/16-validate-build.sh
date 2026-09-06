@@ -73,8 +73,8 @@ echo ""
 echo "--- Dynamic linker ---"
 log_check "dynamic linker symlink resolves"
 for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
-                 "$LFS/lib/ld-linux-x86-64.so.2" \
-                 "$LFS/tools/lib/ld-linux-x86-64.so.2"; do
+    "$LFS/lib/ld-linux-x86-64.so.2" \
+    "$LFS/tools/lib/ld-linux-x86-64.so.2"; do
     if [ -e "$candidate" ] || [ -L "$candidate" ]; then
         resolved=$(readlink -f "$candidate" 2>/dev/null || true)
         if [ -n "$resolved" ] && [ -f "$resolved" ]; then
@@ -84,11 +84,11 @@ for candidate in "$LFS/lib64/ld-linux-x86-64.so.2" \
     fi
 done
 # If none found, it might be ARM or a different arch
-if [ ! -e "$LFS/lib64/ld-linux-x86-64.so.2" ] && \
-   [ ! -e "$LFS/lib/ld-linux-x86-64.so.2" ] && \
-   [ ! -e "$LFS/tools/lib/ld-linux-x86-64.so.2" ] && \
-   [ ! -e "$LFS/lib/ld-linux-aarch64.so.1" ] && \
-   [ ! -e "$LFS/lib64/ld-linux-aarch64.so.1" ]; then
+if [ ! -e "$LFS/lib64/ld-linux-x86-64.so.2" ] &&
+    [ ! -e "$LFS/lib/ld-linux-x86-64.so.2" ] &&
+    [ ! -e "$LFS/tools/lib/ld-linux-x86-64.so.2" ] &&
+    [ ! -e "$LFS/lib/ld-linux-aarch64.so.1" ] &&
+    [ ! -e "$LFS/lib64/ld-linux-aarch64.so.1" ]; then
     log_warn "No dynamic linker found (may be static-only or different arch)"
 fi
 
@@ -144,7 +144,7 @@ SCRIPT_DIR_FINAL="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 boot_cfg=$(find "$LFS/boot" -maxdepth 1 -name 'config-*' 2>/dev/null | head -n1)
 repo_cfg=""
 for candidate in "$SCRIPT_DIR_FINAL/../config/kernel-config-${PROFILE:-}" \
-                 "$SCRIPT_DIR_FINAL/../config/kernel-config"; do
+    "$SCRIPT_DIR_FINAL/../config/kernel-config"; do
     if [ -f "$candidate" ]; then
         repo_cfg="$candidate"
         break
@@ -287,7 +287,7 @@ if [ -f "$LFS/etc/passwd" ]; then
             user_found=true
             break
         fi
-    done < "$LFS/etc/passwd"
+    done <"$LFS/etc/passwd"
 fi
 if $user_found; then
     log_pass
@@ -302,10 +302,13 @@ if [ -f "$LFS/etc/shadow" ]; then
     while IFS=: read -r uname pass_field _rest; do
         # Valid shadow entries start with $ (hashed) or are locked (* or !)
         case "$pass_field" in
-            '$'*|'!'|'*'|'!!'|'') ;;  # OK: hashed, locked, or empty
-            *) has_plaintext=true; break ;;
+        '$'* | '!' | '*' | '!!' | '') ;; # OK: hashed, locked, or empty
+        *)
+            has_plaintext=true
+            break
+            ;;
         esac
-    done < "$LFS/etc/shadow"
+    done <"$LFS/etc/shadow"
     if $has_plaintext; then
         log_fail "Plaintext password detected in /etc/shadow"
     else
@@ -379,12 +382,23 @@ fi
 # --------------------------------------------------------------------------
 # 12. Disk usage summary
 # --------------------------------------------------------------------------
+# Purely informational, so it must never be able to abort the stage.  du
+# exits non-zero whenever it cannot read one directory of the rootfs (the
+# build user is not root and /root, /var/lib/tor and friends are 0700), and
+# under "set -o pipefail" that status propagates through the awk pipeline.
+# Nightly #218 lost all three validate jobs exactly here: the total was
+# printed, then the script died before the Summary block and before the
+# "[ERROR] ... critical check(s) failed" line, so the stage exited 1 with no
+# explanation anywhere in the log.  "|| true" plus a default keeps du's
+# verdict out of the stage's exit status.
 echo ""
 echo "--- Disk usage ---"
-du -sh "$LFS" 2>/dev/null | awk '{print "  Total rootfs size: " $1}'
-du -sh "$LFS/boot" 2>/dev/null | awk '{print "  /boot size:        " $1}'
+rootfs_size="$(du -sh "$LFS" 2>/dev/null | awk '{print $1}' || true)"
+boot_size="$(du -sh "$LFS/boot" 2>/dev/null | awk '{print $1}' || true)"
+echo "  Total rootfs size: ${rootfs_size:-unknown}"
+echo "  /boot size:        ${boot_size:-unknown}"
 echo ""
-echo "  Installed packages: $(wc -l < "$LFS/var/lib/lpm/installed.list" 2>/dev/null || echo 'unknown')"
+echo "  Installed packages: $(wc -l <"$LFS/var/lib/lpm/installed.list" 2>/dev/null || echo 'unknown')"
 
 # --------------------------------------------------------------------------
 # Summary

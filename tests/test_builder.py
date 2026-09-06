@@ -803,9 +803,9 @@ class TestLFSBuilder:
         # Everything below is either built by a stage or cheap to fetch; losing
         # any of them would break the very build the filter exists to save.
         still_used = [
-            # the LFS book's only ncurses entry plus the custom stable pin
-            'https://invisible-mirror.net/archives/ncurses/current/'
-            'ncurses-6.5-20250809.tgz',
+            # the stable ncurses release pinned in packages/custom-sources.list
+            # (the rolling invisible-mirror snapshot is dropped by the separate
+            # SUPERSEDED_SOURCE_PATTERNS filter, not by this one)
             'https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz',
             # the other docbook flavours are live and small
             'https://docs.oasis-open.org/docbook/sgml/4.5/docbook-4.5.zip',
@@ -820,6 +820,61 @@ class TestLFSBuilder:
         ]
         for url in still_used:
             assert builder._is_unused_source(url) is False, url
+
+    def test_superseded_source_patterns_are_surgical(self, tmp_path, monkeypatch):
+        """Only rolling snapshots with a pinned stable replacement are dropped.
+
+        Nightly #218: the LFS wget-list still carries
+        invisible-mirror.net/archives/ncurses/current/, whose content rotates
+        with every snapshot.  The gnome job got a 200 whose body was not gzip
+        and lfs-system died unpacking it, while the xfce and kde jobs got 404s
+        and silently built the stable GNU tarball instead.
+        """
+        monkeypatch.chdir(tmp_path)
+        from builder import LFSBuilder, LFSConfig
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', [])
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        superseded = [
+            'https://invisible-mirror.net/archives/ncurses/current/'
+            'ncurses-6.5-20250809.tgz',
+            'https://invisible-mirror.net/archives/ncurses/current/'
+            'ncurses-6.6-20260815.tgz',
+        ]
+        for url in superseded:
+            assert builder._is_superseded_source(url) is True, url
+
+        # Every one of these is a real, stable release the build needs; the
+        # filter must not touch them, including the ncurses pin that replaces
+        # the snapshot above and the other invisible-mirror archives that are
+        # not rolling snapshots.
+        still_used = [
+            'https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz',
+            'https://invisible-mirror.net/archives/ncurses/ncurses-6.5.tar.gz',
+            'https://invisible-mirror.net/archives/lynx/tarballs/lynx2.9.2.tar.bz2',
+            'https://invisible-mirror.net/archives/luit/luit-20240910.tgz',
+            'https://invisible-mirror.net/archives/xterm/xterm-401.tgz',
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/ncurses/'
+            'ncurses-6.5-20250809.tgz',
+        ]
+        for url in still_used:
+            assert builder._is_superseded_source(url) is False, url
+
+        # Every superseded pattern must have a stable replacement pinned in
+        # the repository's custom-sources.list, otherwise the filter would
+        # silently drop a package no source can satisfy.
+        repo_custom = Path(__file__).resolve().parents[1] / 'packages' / 'custom-sources.list'
+        pinned = repo_custom.read_text()
+        for pattern in LFSBuilder.SUPERSEDED_SOURCE_PATTERNS:
+            if 'ncurses' in pattern:
+                assert 'gnu/ncurses/ncurses-6.5.tar.gz' in pinned
 
     def test_update_sources_list_drops_unused_sources(self, tmp_path, monkeypatch):
         """Unused sources must never reach the generated list (Nightly #214)."""
@@ -861,9 +916,59 @@ class TestLFSBuilder:
         assert 'texlive' not in content
         assert 'install-tl-unx' not in content
         assert 'docbook.org/xml' not in content
-        # the book's gi 1.84.0 and its ncurses snapshot survive the filter
+        # the book's gobject-introspection 1.84.0 survives the filter
         assert 'gobject-introspection-1.84.0.tar.xz' in content
-        assert 'ncurses-6.5-20250809.tgz' in content
+        # the rolling ncurses snapshot does not (Nightly #218)
+        assert 'ncurses' not in content
+
+    def test_update_sources_list_drops_superseded_snapshot_keeps_pin(
+            self, tmp_path, monkeypatch):
+        """The custom pin must be the only ncurses archive in the list.
+
+        source_key() hashes ncurses-6.5-20250809.tgz and ncurses-6.5.tar.gz to
+        different keys, so the override alone cannot evict the official rolling
+        snapshot: both land in /sources and find_archive()'s "newest wins" rule
+        decides which one the stage unpacks (Nightly #218).
+        """
+        monkeypatch.chdir(tmp_path)
+        from builder import LFSBuilder, LFSConfig
+
+        output_dir = tmp_path / 'lfs-build'
+        output_dir.mkdir()
+        config_file = tmp_path / 'config.json'
+        config = LFSConfig(config_file)
+        config.set('repositories', ['https://example.com/wget-list'])
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir()
+        (packages_dir / 'custom-sources.list').write_text(
+            "https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz\n"
+        )
+
+        builder = LFSBuilder(profile='minimal', output_dir=output_dir, config_file=config_file)
+        builder.config = config
+
+        official = (
+            "https://invisible-mirror.net/archives/ncurses/current/"
+            "ncurses-6.5-20250809.tgz\n"
+            "https://invisible-mirror.net/archives/luit/luit-20240910.tgz\n"
+        )
+        mock_response = MagicMock()
+        mock_response.read.return_value = official.encode('utf-8')
+        mock_response.__enter__.return_value = mock_response
+        mock_response.__exit__.return_value = None
+
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            assert builder._update_sources_list() is True
+
+        lines = [
+            line for line in (packages_dir / 'sources.list').read_text().splitlines()
+            if line and not line.startswith('#')
+        ]
+        assert lines == [
+            'https://invisible-mirror.net/archives/luit/luit-20240910.tgz',
+            'https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz',
+        ]
 
     def test_source_downloader_download_retries_zero(self, sources_dir, mock_logger):
         """Couvre le return False final de download lorsque retries=0."""
@@ -935,6 +1040,86 @@ class TestLFSBuilder:
         with patch('urllib.request.urlretrieve') as mock_dl:
             assert downloader.download('http://example.com/pkg-1.0.tar.gz') is True
         mock_dl.assert_not_called()
+
+    def test_download_attempt_rejects_corrupt_body_and_retries(self, sources_dir, mock_logger):
+        """A 200 whose body is not an archive must be retried, never trusted.
+
+        Nightly #218: invisible-mirror answered the rotated ncurses snapshot
+        with HTTP 200 and a non-gzip body, the downloader stored it, and
+        lfs-system died on "gzip: stdin: not in gzip format".
+        """
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        dest = sources_dir / 'ncurses-6.5-20250809.tgz'
+        bodies = [b'<html>snapshot rotated</html>', b'\x1f\x8b\x08\x00real']
+
+        def fake_retrieve(url, path, *args):
+            with open(path, 'wb') as f:
+                f.write(bodies.pop(0))
+
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve) as mock_dl, \
+                patch('builder.time.sleep'):
+            assert downloader._download_attempt(
+                'https://example.com/ncurses-6.5-20250809.tgz', dest,
+                'ncurses-6.5-20250809.tgz', 2) is True
+        assert mock_dl.call_count == 2
+        assert dest.read_bytes().startswith(b'\x1f\x8b')
+
+    def test_download_attempt_gives_up_on_persistently_corrupt_body(self, sources_dir, mock_logger):
+        """When every attempt serves junk nothing may be left on disk."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        dest = sources_dir / 'ncurses-6.5-20250809.tgz'
+
+        def fake_retrieve(url, path, *args):
+            with open(path, 'wb') as f:
+                f.write(b'<html>snapshot rotated</html>')
+
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve) as mock_dl, \
+                patch('builder.time.sleep'):
+            assert downloader._download_attempt(
+                'https://example.com/ncurses-6.5-20250809.tgz', dest,
+                'ncurses-6.5-20250809.tgz', 2) is False
+        assert mock_dl.call_count == 2
+        assert not dest.exists()
+
+    def test_download_attempt_single_attempt_corrupt_body(self, sources_dir, mock_logger):
+        """retries=1 must leave the loop through the corrupt-body guard."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        dest = sources_dir / 'pkg-1.0.tar.gz'
+
+        def fake_retrieve(url, path, *args):
+            with open(path, 'wb') as f:
+                f.write(b'not an archive')
+
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve) as mock_dl, \
+                patch('builder.time.sleep') as mock_sleep:
+            assert downloader._download_attempt(
+                'https://example.com/pkg-1.0.tar.gz', dest, 'pkg-1.0.tar.gz', 1) is False
+        mock_dl.assert_called_once()
+        mock_sleep.assert_not_called()
+
+    def test_download_falls_back_to_mirror_after_corrupt_body(self, sources_dir, mock_logger):
+        """download() must still try the mirrors when the primary serves junk."""
+        from builder import SourceDownloader
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        url = ('https://invisible-mirror.net/archives/ncurses/current/'
+               'ncurses-6.5-20250809.tgz')
+
+        def fake_retrieve(u, path, *args):
+            body = b'\x1f\x8b\x08\x00real' if 'osuosl' in u else b'<html>rotated</html>'
+            with open(path, 'wb') as f:
+                f.write(body)
+
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve), \
+                patch('builder.time.sleep'):
+            assert downloader.download(url, retries=1) is True
+        assert (sources_dir / 'ncurses-6.5-20250809.tgz').read_bytes().startswith(b'\x1f\x8b')
 
     def test_script_executor_stage_timeout(self, tmp_path):
         """run_script honours the executor-level stage timeout."""

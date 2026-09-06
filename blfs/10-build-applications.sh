@@ -234,7 +234,10 @@ build_firefox() {
     if is_installed "$app"; then log_info "Firefox already installed; skipping"; return 0; fi
     if ! check_deps Firefox cmd:rustc cmd:cbindgen cmd:node cmd:yasm cmd:nasm cmd:python3 cmd:perl cmd:tar cmd:make pc:nspr pc:nss pc:icu-uc; then return 1; fi
     rust_version="$(rustc --version | awk '{print $2}')"
-    if ! python3 -c "import sys; from distutils.version import LooseVersion; sys.exit(0 if LooseVersion('$rust_version') >= LooseVersion('1.76') else 1)"; then log_warning "Firefox requires rustc >= 1.76; found $rust_version; skipping Firefox"; return 1; fi
+    # distutils.version is gone since Python 3.12 and the book builds 3.13, so
+    # the old LooseVersion check died with a ModuleNotFoundError and silently
+    # skipped Firefox on every build that did have a usable rustc.
+    if ! printf '%s' "$rust_version" | awk -F. '{exit !($1 > 1 || ($1 == 1 && $2 >= 76))}'; then log_warning "Firefox requires rustc >= 1.76; found $rust_version; skipping Firefox"; return 1; fi
     archive="$(find_archive 'firefox-*.tar.*')"; [ -n "$archive" ] || { log_warning "Firefox source archive missing; skipping"; return 1; }
     log_info "Building Firefox from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
     cat > .mozconfig <<'EOF'
@@ -322,7 +325,8 @@ build_thunderbird() {
     if is_installed "$app"; then log_info "Thunderbird already installed; skipping"; return 0; fi
     if ! check_deps Thunderbird cmd:rustc cmd:cbindgen cmd:node cmd:yasm cmd:nasm cmd:python3 cmd:perl cmd:tar cmd:make pc:nspr pc:nss pc:icu-uc; then return 1; fi
     rust_version="$(rustc --version | awk '{print $2}')"
-    if ! python3 -c "import sys; from distutils.version import LooseVersion; sys.exit(0 if LooseVersion('$rust_version') >= LooseVersion('1.76') else 1)"; then log_warning "Thunderbird requires rustc >= 1.76; found $rust_version; skipping Thunderbird"; return 1; fi
+    # See build_firefox: distutils.version no longer exists in Python 3.12+.
+    if ! printf '%s' "$rust_version" | awk -F. '{exit !($1 > 1 || ($1 == 1 && $2 >= 76))}'; then log_warning "Thunderbird requires rustc >= 1.76; found $rust_version; skipping Thunderbird"; return 1; fi
     archive="$(find_archive 'thunderbird-*.tar.*')"; [ -n "$archive" ] || { log_warning "Thunderbird source archive missing; skipping"; return 1; }
     log_info "Building Thunderbird from $archive"; dir="$(extract_archive "$archive")"; pushd "$dir" >/dev/null
     cat > .mozconfig <<'EOF'

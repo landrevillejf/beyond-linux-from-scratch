@@ -170,6 +170,103 @@
 
 ### Fixed
 
+- **`lfs-system` unpacked a rotated ncurses snapshot**
+  (`builder.py`, `packages/custom-sources.list`,
+  `recipes/lfs/system/ncurses.lpm`,
+  `recipes/lfs/temp-tools/ncurses-cross.lpm`)
+  - The official LFS stable wget-list still carries
+    `invisible-mirror.net/archives/ncurses/current/ncurses-6.5-20250809.tgz`,
+    a rolling snapshot whose `current/` directory has rotated on to 6.6.
+    In nightly #218 the gnome job got a `200 OK` whose body was not gzip
+    and unpacked it as ncurses; the xfce and kde jobs got a `404` from
+    all three hosts, fell back to the stable GNU tarball pinned in
+    `packages/custom-sources.list` and passed -- which is why one profile
+    died and the others did not
+  - The pin could never evict the snapshot: `source_key()` reduces a
+    filename to `pkg:<name>-<major><ext>`, so the two hash to
+    `pkg:ncurses-6-20250809.tgz` and `pkg:ncurses-6.tar.gz`.  Both were
+    downloaded, and `find_archive`'s "newest wins" `sort -V` then picked
+    the bogus one
+  - `SUPERSEDED_SOURCE_PATTERNS` drops such snapshots inside
+    `_update_sources_list()`, after the custom overrides for the same
+    reason `UNUSED_SOURCE_PATTERNS` runs last, leaving the pinned
+    `gnu/ncurses/ncurses-6.5.tar.gz` as the only ncurses archive.  Every
+    pattern must have a stable replacement pinned and
+    `test_superseded_source_patterns_are_surgical` enforces it.  Both
+    `.lpm` recipes carried the same dead URL and are repointed
+
+- **a `200 OK` body that was not an archive was trusted** (`builder.py`)
+  - `_is_valid_archive()` already re-downloaded a *cached* file whose
+    magic bytes were wrong, but `_download_attempt()` returned `True` the
+    moment `urlretrieve` came back, so an HTML error page or a
+    rotated-snapshot placeholder fetched during the run was written into
+    `/sources` and believed by every later stage
+  - The body is now validated right after the fetch.  A non-archive is
+    unlinked, reported by URL, and treated as a failed attempt: it is
+    retried with the usual backoff and then handed to the conglomeration
+    and Void mirror tiers exactly as a timeout would be
+
+- **`blfs-libs` died on rust's offline stage0 bootstrap**
+  (`blfs/08a-build-blfs-libs.sh`, `packages/custom-sources.list`)
+  - Seven of the thirteen nightly jobs lost the stage here.  rust is its
+    last package and was built inline, so under `set -euo pipefail` a
+    failing `make` took the whole stage down with it -- after everything
+    before it had already succeeded
+  - The BLFS book is explicit that the from-source build "will download a
+    stage0 binary at the start of the build, so you cannot compile it
+    without an Internet connection".  The build chroot has no resolver
+    (no stage copies one in), so curl failed four times on
+    `static.rust-lang.org`, `bootstrap.py` verified the SHA-256 of an
+    empty file and aborted, and `make` followed
+  - rust now builds through a `build_rust()` function: a prebuilt
+    toolchain tarball (which ships `install.sh` and needs no network) is
+    always used, a from-source build is attempted only when
+    `chroot_can_resolve static.rust-lang.org` answers yes, and any
+    failure stays a warning.  Only Firefox and Thunderbird consume rustc
+    and both already skip themselves through `check_deps` when it is
+    missing
+  - The `rustc-1.88.0-src.tar.gz` override in `custom-sources.list` is
+    removed: a 585 MB downgrade of the book's `rustc-1.89.0-src` that
+    `find_archive`'s version sort could never select, so it only cost
+    every job the download
+
+- **a corrupt archive aborted a stage without naming itself**
+  (`lfs/05b-build-lfs-system.sh`, `blfs/08-build-blfs-base.sh`,
+  `blfs/08a-build-blfs-libs.sh`)
+  - `extract()` derived the directory with `tar -tf | head -1 | cut -d/
+    -f1` and never checked the result.  On a non-gzip body `tar` prints
+    nothing, so the gnome log carried an empty `=== Building  ===` header
+    and died on `gzip: stdin: not in gzip format` with no package name
+    anywhere in 2700 lines
+  - All three helpers now refuse an empty archive path, a path that does
+    not exist and an archive `tar` cannot list, and they name the file in
+    the error.  `08a`'s `extract_archive()` keeps `|| true` on the
+    listing pipeline so `set -o pipefail` cannot abort on the SIGPIPE
+    `head -1` sends `tar`
+
+- **`validate` died on an informational `du` pipeline**
+  (`final/16-validate-build.sh`)
+  - The last three nightly jobs exited 1 with no explanation: the log
+    stopped at `Total rootfs size: 26G`.  `du` exits non-zero whenever it
+    cannot read one directory of the rootfs, and the build user is not
+    root while `/root`, `/var/lib/tor` and friends are `0700`.  awk still
+    printed the total, but `set -o pipefail` propagated `du`'s status and
+    `set -e` aborted before the `/boot size` line, before the Summary
+    block and before the `[ERROR] ... critical check(s) failed` line that
+    would have explained anything
+  - Disk usage is purely informational, so it is now collected through
+    `|| true` command substitutions and echoed with a `${var:-unknown}`
+    default.  All three jobs had zero FAILs, so they now exit 0
+
+- **Firefox and Thunderbird never checked their rustc floor**
+  (`blfs/10-build-applications.sh`)
+  - Both guarded the build with `distutils.version.LooseVersion`, which
+    Python 3.12 removed; the chroot ships 3.13.7.  The check raised
+    `ModuleNotFoundError`, so every build that *did* have a usable rustc
+    silently skipped both applications
+  - Replaced with an awk major/minor comparison that carries no
+    interpreter dependency
+
 - **nightly artifacts pointed at the empty `image/` directory**
   (`.github/workflows/nightly.yml`)
   - `builder.py` sets `LFS` to the resolved output directory, so the

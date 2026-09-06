@@ -188,11 +188,28 @@ find_archive() {
     return 0
 }
 
+# A corrupt or truncated archive must abort the stage naming the file.
+# Nightly #218's gnome job fetched a 200 response that was not gzip, so
+# tar printed nothing, $dir stayed empty and the stage died on
+# "gzip: stdin: not in gzip format" under a bare "=== Building  ==="
+# header with no package name anywhere in the log.
 extract() {
     local archive=$1
     local dir
-    dir=$(tar -tf "$archive" | head -1 | cut -d/ -f1)
-    echo "=== Building $dir ==="
+    if [ -z "$archive" ]; then
+        echo "ERROR: extract called with no archive (find_archive found nothing; see the preceding 'no source archive found' line)" >&2
+        exit 1
+    fi
+    if [ ! -f "$archive" ]; then
+        echo "ERROR: extract: source archive '$archive' does not exist" >&2
+        exit 1
+    fi
+    dir=$(tar -tf "$archive" 2>/dev/null | head -1 | cut -d/ -f1)
+    if [ -z "$dir" ]; then
+        echo "ERROR: extract: '$archive' is not a readable archive (corrupt or truncated download)" >&2
+        exit 1
+    fi
+    echo "=== Building $dir from $archive ==="
     rm -rf "$dir"
     tar -xf "$archive"
     cd "$dir"

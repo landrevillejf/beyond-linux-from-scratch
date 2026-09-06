@@ -830,6 +830,7 @@ class SourceDownloader:
             previous_getaddrinfo = socket.getaddrinfo
             if attempt % 2 == 1:
                 socket.getaddrinfo = _ipv4_only_getaddrinfo
+            corrupt_body = False
             try:
                 previous_timeout = socket.getdefaulttimeout()
                 socket.setdefaulttimeout(self.timeout)
@@ -837,7 +838,17 @@ class SourceDownloader:
                     urllib.request.urlretrieve(url, dest)
                 finally:
                     socket.setdefaulttimeout(previous_timeout)
-                return True
+                if self._is_valid_archive(dest):
+                    return True
+                # A 200 whose body is not the advertised archive (an HTML
+                # error page, a placeholder left behind by a rotated
+                # snapshot) must be treated as a failed attempt: Nightly
+                # #218's gnome job stored such a body as ncurses and
+                # lfs-system then died on "gzip: stdin: not in gzip
+                # format" with no package name anywhere in the log.
+                dest.unlink(missing_ok=True)
+                corrupt_body = True
+                self.logger.error(f"Response body from {url} is not a valid archive; discarding")
             except urllib.error.HTTPError as e:
                 if dest.exists():
                     dest.unlink()
@@ -873,6 +884,14 @@ class SourceDownloader:
                 return False
             finally:
                 socket.getaddrinfo = previous_getaddrinfo
+            if corrupt_body:
+                if attempt < retries - 1:
+                    delay = self._backoff_delay(attempt)
+                    self.logger.info(f"Retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                self.logger.error(f"Failed to download a valid archive from {url}")
+                return False
         return False
 
     def download_from_list(self, list_file: Path, parallel: int = 4,
@@ -1291,6 +1310,22 @@ class LFSBuilder:
         r'/texlive-[^/]*\.tar\.xz$',
         r'/install-tl-unx\.tar\.gz$',
         r'^https://docbook\.org/xml/[^/]*/docbook-[^/]*\.zip$',
+    )
+
+    # Rolling upstream snapshots the official wget-lists still carry even
+    # though the directory has rotated away from them.  invisible-mirror.net
+    # serves ncurses from a "current/" directory whose content changes with
+    # every snapshot, so the URL the book was written against stops naming
+    # the book version and eventually stops resolving at all.  Nightly #218:
+    # the gnome job fetched a 200 response whose body was not gzip, unpacked
+    # it as ncurses and killed lfs-system, while the xfce and kde jobs got a
+    # 404 from all three hosts and silently built the stable GNU tarball
+    # pinned in packages/custom-sources.list instead.  Dropping the snapshot
+    # here makes that pin the only ncurses archive, so find_archive's
+    # "newest wins" rule can no longer pick the bogus one.  Every pattern
+    # MUST have a stable replacement pinned in packages/custom-sources.list.
+    SUPERSEDED_SOURCE_PATTERNS = (
+        r'^https://invisible-mirror\.net/archives/ncurses/current/ncurses-[^/]*\.tgz$',
     )
 
     def __init__(self, profile: str, output_dir: Path, config_file: Path,
@@ -1966,6 +2001,10 @@ class LFSBuilder:
         """Return True for sources no stage builds, which only cost CI time."""
         return any(re.search(pattern, url) for pattern in self.UNUSED_SOURCE_PATTERNS)
 
+    def _is_superseded_source(self, url: str) -> bool:
+        """Return True for rolling snapshots a custom pin replaces."""
+        return any(re.search(pattern, url) for pattern in self.SUPERSEDED_SOURCE_PATTERNS)
+
     def _update_sources_list(self) -> bool:
         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""
         repo_sources_file = Path('packages/sources.list')
@@ -2106,6 +2145,15 @@ class LFSBuilder:
         unused_keys = [k for k, u in urls_by_key.items() if self._is_unused_source(u)]
         for key in unused_keys:
             self.logger.info(f"Skipping unused source (never built by any stage): {urls_by_key.pop(key)}")
+
+        # 4b. Drop rolling snapshots a custom pin supersedes.  Same ordering
+        #     rationale as above, and the two filename variants of one package
+        #     hash to different source_key() values, so without this step both
+        #     land in /sources and find_archive() picks between them by
+        #     version sort (see SUPERSEDED_SOURCE_PATTERNS).
+        superseded_keys = [k for k, u in urls_by_key.items() if self._is_superseded_source(u)]
+        for key in superseded_keys:
+            self.logger.info(f"Skipping superseded rolling snapshot (stable release pinned): {urls_by_key.pop(key)}")
 
         # 5. Si aucune URL, on retourne False
         if not urls_by_key:

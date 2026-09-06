@@ -218,6 +218,29 @@ def downloader(temp_dir, mock_logger):
 
 
 @pytest.fixture
+def fake_urlretrieve():
+    """Factory for urlretrieve stand-ins that leave a real archive behind.
+
+    download() validates the response body's magic bytes once urlretrieve
+    returns, so the "success" leg of a retry test has to write an actual
+    file: a bare MagicMock() writes nothing, and the attempt is then
+    reported as a corrupt body instead of a download that worked.  Each
+    argument is raised, in call order, before the first success.
+    """
+    def factory(*failures):
+        seen = []
+
+        def retrieve(url, path, *args, **kwargs):
+            seen.append(url)
+            if len(seen) <= len(failures):
+                raise failures[len(seen) - 1]
+            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+
+        return retrieve
+    return factory
+
+
+@pytest.fixture
 def real_sources_list():
     """Path to real sources.list"""
     sources_list = Path("packages/sources.list")

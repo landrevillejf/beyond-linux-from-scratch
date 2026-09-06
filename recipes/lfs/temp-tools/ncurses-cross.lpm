@@ -1,7 +1,7 @@
 # LFS 13.0 — 6.3. Ncurses-6.5 (cross)
 name="ncurses-cross"
 version="6.5"
-source="https://invisible-mirror.net/archives/ncurses/current/ncurses-6.5-20250809.tgz"
+source="https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz"
 desc="Terminal handling library (temporary)"
 deps="m4-cross"
 

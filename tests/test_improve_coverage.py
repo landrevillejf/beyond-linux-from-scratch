@@ -19,27 +19,24 @@ from builder import (
 class TestSourceDownloaderCoverage:
     """Tests pour SourceDownloader (amélioration couverture)"""
 
-    def test_download_retry_success_after_failure(self, sources_dir, mock_logger):
+    def test_download_retry_success_after_failure(self, sources_dir, mock_logger, fake_urlretrieve):
         """Test téléchargement réussit après échec"""
         downloader = SourceDownloader(sources_dir, mock_logger)
 
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
+        network_error = Exception("Network error")
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(network_error, network_error)) as mock_retrieve:
             # Échoue 2 fois, réussit à la 3ème
-            mock_retrieve.side_effect = [
-                Exception("Network error"),
-                Exception("Network error"),
-                MagicMock()
-            ]
             result = downloader.download("https://example.com/test.tar.gz", "test.tar.gz", retries=3)
             assert result is True
             assert mock_retrieve.call_count == 3
 
-    def test_download_url_without_filename(self, sources_dir, mock_logger):
+    def test_download_url_without_filename(self, sources_dir, mock_logger, fake_urlretrieve):
         """Test extraction automatique du nom de fichier depuis l'URL"""
         downloader = SourceDownloader(sources_dir, mock_logger)
 
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
-            mock_retrieve.return_value = MagicMock()
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve()) as mock_retrieve:
             result = downloader.download("https://example.com/path/to/file-1.2.3.tar.gz")
             assert result is True
             # Vérifier que le nom de fichier a été extrait
