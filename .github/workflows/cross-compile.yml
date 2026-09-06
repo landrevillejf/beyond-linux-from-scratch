@@ -10,8 +10,21 @@ permissions:
 
 jobs:
   cross:
+    # Stays on x86_64 on purpose: this workflow is the cross-compilation
+    # proof, which a native ARM runner could not provide.  It no longer
+    # tries to yield a bootable aarch64 system, because under qemu-user that
+    # cannot finish at any stage timeout - lfs-system measured 4h20m for the
+    # 14 packages x86_64 builds in under an hour (~27x slower per package),
+    # projecting past 11h against GitHub's hard 6h per-job cap.  Raising the
+    # stage timeout to 10800, as this workflow briefly did, only turned a 2h
+    # kill into a 3h one.  arm64-xfce.yml now builds the real aarch64 system
+    # natively; this job asserts the cross toolchain and stops.
     runs-on: ubuntu-latest
-    timeout-minutes: 480
+    # Nightly #221 measured 29m from job start to the toolchain stage and
+    # 40m for the stage itself.  150 covers that plus a fresh (uncached)
+    # source download and slow mirrors, while staying well clear of the 6h
+    # cap where the platform kills the job and no diagnostics survive.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -46,44 +59,73 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r tests/requirements-test.txt
 
-      - name: Build ARM64 (minimal)
+      - name: Build the ARM64 cross toolchain
         run: |
           cd /tmp/lfs-build
-          # The 7200s default stage timeout is too short for an emulated
-          # aarch64 build: lfs-system used the whole 2h and was killed
-          # (Cross-Compile #106).  3h is the largest value that still fits
-          # GitHub's hard 6h job cap once the ~3h the toolchain and earlier
-          # stages consume are accounted for, so a slow stage reports its
-          # own timeout instead of the job being cancelled with no
-          # diagnostics at all.  Download flags match nightly.yml.
+          # --stop-after toolchain is the entire scope of this workflow: it
+          # runs host-check, host-prepare, qemu-setup, disk-image and
+          # toolchain, then stops.  The stage timeout stays at its 7200s
+          # default because the toolchain measured 40m - a longer budget
+          # would only delay the report of a genuinely stuck stage.
+          #
+          # --no-live is redundant next to --stop-after and kept anyway: if
+          # the truncation is ever dropped, this job still must not try to
+          # build a live ISO for a foreign architecture.
+          #
+          # Download flags match nightly.yml.
           sudo -u lfs python3 builder.py --profile arm64 --no-live \
             --output ./build-arm64 \
-            --stage-timeout 10800 \
+            --stop-after toolchain \
             --download-timeout 600 \
             --download-retries 5
 
-      - name: Verify output image
+      - name: Verify the cross toolchain
         run: |
-          if [ -f /tmp/lfs-build/build-arm64/lfs-installer.img ]; then
-            echo "Found lfs-installer.img"
-          elif [ -f /tmp/lfs-build/build-arm64/lfs-arm64.img ]; then
-            echo "Found lfs-arm64.img"
-          elif [ -f /tmp/lfs-build/build-arm64/lfs-installer.iso ]; then
-            echo "Found lfs-installer.iso (fallback)"
-          else
-            echo "No image file found"
-            exit 1
-          fi
-          ls /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+          # A --stop-after toolchain run produces no image, so the image
+          # check this step replaced could only ever exit 1.  What follows
+          # asserts what the stage actually promises, using the same
+          # predicate host/04-build-toolchain.sh's own check_toolchain()
+          # uses to decide the toolchain is already built (same three
+          # binaries, same compile probe), so this job fails on exactly the
+          # condition the build itself treats as "not there".
+          TOOLS=/tmp/lfs-build/build-arm64/tools/bin
+          TGT=aarch64-lfs-linux-gnu
+          for tool in gcc ld as; do
+            if [ ! -x "$TOOLS/$TGT-$tool" ]; then
+              echo "missing $TGT-$tool"
+              exit 1
+            fi
+            "$TOOLS/$TGT-$tool" --version
+          done
 
-      - name: Upload ARM64 artifacts
+          echo 'int main(void){return 0;}' > /tmp/probe.c
+          "$TOOLS/$TGT-gcc" /tmp/probe.c -o /tmp/probe
+
+          # The whole point of a cross toolchain: the output must be
+          # AArch64, not the x86_64 this runner is executing on.
+          readelf -h /tmp/probe | grep 'Machine:.*AArch64'
+
+          # Best effort on purpose.  Executing the probe needs the sysroot's
+          # ELF interpreter resolved through QEMU_LD_PREFIX, which depends
+          # on how far the glibc install got; a warning here must not mask a
+          # toolchain that built and links correctly.
+          if QEMU_LD_PREFIX=/tmp/lfs-build/build-arm64 \
+            qemu-aarch64-static /tmp/probe; then
+            echo "probe executed under qemu-aarch64-static"
+          else
+            echo "::warning::probe did not execute under qemu-aarch64-static"
+          fi
+
+      - name: Upload cross toolchain logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: arm64-cross-build
+          name: cross-toolchain-logs
+          # Scoped to what builder.py writes as the lfs user.  The root-owned
+          # tree under image/ is deliberately excluded: build-base-cache #7
+          # failed on exactly that, walking directories the chroot created
+          # mode 700 as an unprivileged user.
           path: |
-            /tmp/lfs-build/build-arm64/lfs-installer.img
-            /tmp/lfs-build/build-arm64/lfs-arm64.img
-            /tmp/lfs-build/build-arm64/lfs-installer.iso
-            /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+            /tmp/lfs-build/build-arm64/logs/
             /tmp/lfs-build/build-arm64/build_info.json
           if-no-files-found: warn

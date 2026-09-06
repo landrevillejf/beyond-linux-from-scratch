@@ -36,7 +36,19 @@ jobs:
   build-profiles:
     needs: check_changes
     if: needs.check_changes.outputs.has_changes == 'true'
-    runs-on: ubuntu-latest
+    # The runner follows the target arch instead of becoming a fourth matrix
+    # dimension: every include entry below pins profile/arch/init and none of
+    # them a runner, so adding one would leave those entries partial.  Deriving
+    # it here also means a future aarch64 entry lands on ARM unaided.
+    #
+    # aarch64 has to be native.  Emulated on x86_64 it cannot finish at any
+    # timeout: nightly #221's aarch64 job had built 14 of the 86 packages
+    # x86_64's lfs-system does in 59m33s, was still compiling 4h20m into that
+    # stage, and was cancelled at the 5h30m workflow budget.  A log-volume
+    # projection puts the stage near 11h against GitHub's hard 6h per-job cap,
+    # so --stage-timeout 18000 below was never what killed it.
+    # ubuntu-24.04-arm is free for public repositories.
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     # 480 sits above GitHub's hard 6 h per-job cap, so a runaway job was
     # killed by the platform rather than by us and never reached the
     # log-upload step.  5h30m produces a clean cancelled() instead.
@@ -156,9 +168,19 @@ jobs:
       - name: Install ARM64 cross tools
         if: matrix.arch == 'aarch64'
         run: |
+          # builder.py sets cross_compile for any --arch other than x86_64, so
+          # host/05-build-uboot.sh still hard-requires ${CROSS_COMPILE}gcc even
+          # on the native ARM runner this cell now uses - where these two
+          # packages are the native compiler and binutils under their triplet
+          # names, and host/04 derives LFS_TGT from `uname -m` accordingly.
+          #
+          # qemu-user-static and binfmt-support are deliberately gone: with
+          # host/00-setup-qemu.sh now exiting early when `uname -m` matches the
+          # target, keeping an emulator installed would only offer a way to
+          # regress into a build ~27x slower, and its absence makes such a
+          # regression fail loudly instead.
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
-            qemu-user-static binfmt-support
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
       - name: Install Python dependencies
         run: |
@@ -524,9 +546,12 @@ jobs:
           fi
 
       - name: Upload logs on failure
-        # Cancelled jobs (e.g. runner time limits on the aarch64
-        # cross-build) must leave logs behind as well, otherwise the
-        # hang is undiagnosable (Nightly #194).
+        # Cancelled jobs must leave logs behind as well, otherwise a timeout
+        # is undiagnosable (Nightly #194).  This is also the only reason
+        # nightly #221's aarch64 overrun was measurable at all: the job was
+        # cancelled at the 5h30m workflow budget, and the uploaded stage log
+        # is what showed it had built 14 of the 86 packages x86_64 finishes
+        # in 59m33s rather than having hung.
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:

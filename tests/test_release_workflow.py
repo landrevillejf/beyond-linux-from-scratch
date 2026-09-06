@@ -490,30 +490,118 @@ class TestBaseCacheRun7VerifyStep:
             assert step.index(check) < step.index("sudo du -sh ."), check
 
 
-class TestEmulatedArm64StageBudget:
-    """The two scheduled aarch64 workflows invoked builder.py with no
-    --stage-timeout, so lfs-system was killed at the 7200s default having
-    used every second of it (ARM64 XFCE #41, Cross-Compile #106).  Under
-    qemu-user emulation that stage needs far longer than a native one.
+class TestAarch64MovedToNativeRunners:
+    """Emulated aarch64 cannot finish at any stage timeout.
+
+    Nightly #221's aarch64 job built 14 of the 86 packages x86_64's
+    lfs-system does in 59m33s, was still compiling 4h20m into that stage,
+    and was cancelled at the 5h30m workflow budget; a log-volume projection
+    puts the stage near 11h against GitHub's hard 6h per-job cap.  The
+    10800s --stage-timeout this repo briefly shipped in both scheduled
+    aarch64 workflows therefore only turned a 2h kill into a 3h one, so it
+    is gone again and the builds moved to native ARM runners instead.
+
+    cross-compile.yml stays on x86_64 and stops after the toolchain: a
+    native ARM runner cannot prove cross-compilation, and arm64-xfce.yml
+    now covers the real aarch64 system.
     """
 
-    WORKFLOWS = ("arm64-xfce.yml", "cross-compile.yml")
+    ARM64_WORKFLOWS = ("arm64-xfce.yml", "cross-compile.yml")
 
     def _read(self, name):
         return Path(f".github/workflows/{name}").read_text()
 
-    def test_stage_timeout_is_raised_but_still_fits_the_job_cap(self):
-        """10800 leaves room for the remaining stages inside GitHub's hard
-        6h job cap; a larger value would only trade a self-reported stage
-        timeout for a platform cancellation with no diagnostics at all."""
-        for name in self.WORKFLOWS:
-            workflow = self._read(name)
-            assert "--stage-timeout 10800" in workflow, name
+    def _step(self, workflow, name):
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        """The workflow's or step's live lines, with the comments dropped.
+
+        Both workflows name qemu-user-static and --stage-timeout in comments
+        explaining their removal, so a whole-file substring test would fail
+        on accurate documentation instead of on a real regression.
+        """
+        return [line for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+
+    def test_the_reverted_stage_timeout_does_not_survive(self):
+        """Any budget large enough to matter is still far smaller than the
+        ~11h emulation needs, so it buys an extra hour of CI and the same
+        failure with a different number in the message."""
+        for name in self.ARM64_WORKFLOWS:
+            offenders = [line for line in self._commands(self._read(name))
+                         if "--stage-timeout" in line]
+            assert offenders == [], f"{name}: {offenders}"
+
+    def test_arm64_xfce_builds_on_a_native_arm_runner(self):
+        workflow = self._read("arm64-xfce.yml")
+        assert "runs-on: ubuntu-24.04-arm" in workflow
+        # The job budget must stay under the platform's 6h cap, or the job
+        # is killed without ever reaching the log upload.
+        assert "timeout-minutes: 330" in workflow
+
+    def test_cross_compile_stays_on_x86_64_and_stops_at_the_toolchain(self):
+        workflow = self._read("cross-compile.yml")
+        assert "runs-on: ubuntu-latest" in workflow
+        assert "--stop-after toolchain" in workflow
+        # Nightly #221 measured 29m before the toolchain stage and 40m for
+        # it; 150 covers that plus an uncached source download and stays
+        # clear of the cap where the platform kills the job silently.
+        assert "timeout-minutes: 150" in workflow
+        # It genuinely cross-compiles, so the emulator stays installed for
+        # the execution probe - unlike the two native ARM jobs.
+        assert "qemu-user-static" in workflow
+
+    def test_nightly_derives_the_runner_from_the_target_arch(self):
+        """A `runner` matrix dimension would leave the six include entries
+        partial, and an entry resolving to no runner fails the job."""
+        workflow = self._read("nightly.yml")
+        assert ("runs-on: ${{ matrix.arch == 'aarch64' && "
+                "'ubuntu-24.04-arm' || 'ubuntu-latest' }}") in workflow
+        assert "\n        runner:" not in workflow
+
+    def test_no_native_arm_job_installs_an_emulator(self):
+        """host/00-setup-qemu.sh now exits early when `uname -m` matches the
+        target, so an installed emulator would only offer a way to regress
+        into a build ~27x slower - and its absence makes that fail loudly."""
+        for name, step in (("arm64-xfce.yml", "Install dependencies"),
+                           ("nightly.yml", "Install ARM64 cross tools")):
+            body = self._step(self._read(name), step)
+            offenders = [line for line in self._commands(body)
+                         if "qemu-user-static" in line]
+            assert offenders == [], f"{name}: {offenders}"
+
+    def test_cross_compile_verifies_the_toolchain_not_an_image(self):
+        """--stop-after toolchain produces no image, so the image check this
+        step replaced could only ever exit 1."""
+        workflow = self._read("cross-compile.yml")
+        assert "lfs-installer.img" not in workflow
+        step = self._step(workflow, "Verify the cross toolchain")
+        # The same three binaries host/04-build-toolchain.sh's own
+        # check_toolchain() uses to decide the toolchain is already built.
+        assert "for tool in gcc ld as; do" in step
+        assert '[ ! -x "$TOOLS/$TGT-$tool" ]' in step
+        # A cross toolchain that emits x86_64 has proved nothing.
+        assert "readelf -h /tmp/probe | grep 'Machine:.*AArch64'" in step
+
+    def test_cross_compile_logs_survive_a_failure(self):
+        workflow = self._read("cross-compile.yml")
+        step = self._step(workflow, "Upload cross toolchain logs")
+        assert "if: always()" in step
+        assert "build-arm64/logs/" in step
+        # Walking the root-owned tree as the runner user is what failed
+        # build-base-cache #7's verification, so it stays out of the upload.
+        assert "/build-arm64/image" not in workflow
 
     def test_download_resilience_matches_nightly(self):
         """The 30s/3-attempt defaults are what made a degraded GNU mirror
         unrecoverable; nightly.yml already asks for 600s and 5 attempts."""
-        for name in self.WORKFLOWS:
+        for name in self.ARM64_WORKFLOWS:
             workflow = self._read(name)
             assert "--download-timeout 600" in workflow, name
             assert "--download-retries 5" in workflow, name
