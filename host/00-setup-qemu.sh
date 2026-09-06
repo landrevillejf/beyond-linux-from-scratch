@@ -29,6 +29,26 @@ log_info "Target architecture: $TARGET_ARCH"
 log_info "QEMU binary: $QEMU_BIN"
 
 # ----------------------------------------------------------------------------
+# 1a. Skip when the host already runs the target architecture
+# ----------------------------------------------------------------------------
+# Native execution is not merely preferable to qemu-user, it is the difference
+# between a build that finishes and one that cannot: an emulated aarch64
+# lfs-system measured 4h20m for the 14 packages x86_64 builds in under an
+# hour (roughly 27x slower per package), projecting past 11h against
+# GitHub's hard 6h per-job cap.  The arm64 workflows now run on native
+# ubuntu-24.04-arm runners, where this stage has nothing to do.
+#
+# Registering a binfmt_misc handler for the host's own architecture is also a
+# needless risk: binfmt_elf is registered first and wins, so the entry is
+# dead weight today, but were that ever not true the whole build would
+# silently drop back to emulation instead of failing loudly.
+HOST_ARCH="$(uname -m)"
+if [ "$HOST_ARCH" = "$TARGET_ARCH" ]; then
+    log_info "Host is already $HOST_ARCH - building natively, no emulation needed."
+    exit 0
+fi
+
+# ----------------------------------------------------------------------------
 # 2. Installer qemu-user-static si nécessaire (dans Docker ou sur l'hôte)
 # ----------------------------------------------------------------------------
 if [ -f /.dockerenv ]; then

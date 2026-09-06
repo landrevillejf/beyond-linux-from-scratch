@@ -517,3 +517,33 @@ class TestEmulatedArm64StageBudget:
             workflow = self._read(name)
             assert "--download-timeout 600" in workflow, name
             assert "--download-retries 5" in workflow, name
+
+
+class TestSameArchQemuSkip:
+    """host/00-setup-qemu.sh ran whenever CROSS_COMPILE was set, and
+    builder.py sets cross_compile for any --arch other than x86_64 - on a
+    host that already is that arch included.  On a native ARM runner the
+    stage would demand a qemu-aarch64-static it has no use for, exit 1 when
+    it is missing, and register a binfmt_misc handler for the host's own
+    architecture.
+    """
+
+    def _script(self):
+        return Path("host/00-setup-qemu.sh").read_text()
+
+    def test_same_arch_exits_before_any_emulator_work(self):
+        script = self._script()
+        assert 'HOST_ARCH="$(uname -m)"' in script
+        guard = '[ "$HOST_ARCH" = "$TARGET_ARCH" ]'
+        assert guard in script
+        # Ordering is the whole point: a guard placed after the install or
+        # the registration prevents nothing.
+        start = script.index(guard)
+        assert start < script.index("apt-get install -y -qq qemu-user-static")
+        assert start < script.index("binfmt_misc/register")
+        assert start < script.index('command -v "$QEMU_BIN"')
+
+    def test_guard_survives_an_unset_arch(self):
+        """TARGET_ARCH defaults to aarch64, so the guard still fires on an
+        ARM runner if builder.py ever stops exporting ARCH."""
+        assert 'TARGET_ARCH="${ARCH:-aarch64}"' in self._script()
