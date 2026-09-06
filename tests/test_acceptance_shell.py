@@ -1521,6 +1521,25 @@ class TestNightly213StageGuardrails:
             assert f'run_build required {pkg}\n' in content, \
                 f"{pkg} missing from the xorg stage (Nightly #213)"
 
+    def test_xtrans_precedes_libx11(self):
+        """libX11's configure hard-requires the xtrans pkg-config module,
+        so xtrans cannot wait for the extension-library phase: building it
+        after libX11 aborted the xorg stage with "Package requirements
+        (xproto >= 7.0.25 xextproto xtrans ...) were not met: Package
+        'xtrans' not found" and took all eight desktop profiles with it
+        (Nightly #221).  The book reaches the same order from the other
+        direction - xtrans is the first line of lib-7.md5."""
+        content = self.XORG.read_text()
+        xtrans = self._build_pos(content, 'required', 'xtrans')
+        libx11 = self._build_pos(content, 'required', 'libX11')
+        assert xtrans != -1, "xtrans build missing from the xorg stage"
+        assert libx11 != -1, "libX11 build missing from the xorg stage"
+        assert xtrans < libx11, \
+            "xtrans must be built before libX11 (Nightly #221)"
+        # Exactly one build site: a second, later call would satisfy the
+        # ordering assertion while the first one still ran too late.
+        assert content.count('run_build required xtrans') == 1
+
     def test_xorg_server_deps_precede_server(self):
         """libxcvt and font-util are REQUIRED by xorg-server and libepoxy
         feeds its glamor module; all three must be built before the

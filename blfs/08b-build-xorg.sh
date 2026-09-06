@@ -760,6 +760,15 @@ run_build required libXau
 run_build required libXdmcp
 run_build required xcb-proto
 run_build required libxcb
+# xtrans has to come before libX11, not after it: libX11's configure
+# hard-requires the xtrans pkg-config module, so building it later in
+# Phase 3 aborted the stage with "Package requirements (xproto ... xtrans
+# ...) were not met: Package 'xtrans' not found" (Nightly #221, all eight
+# desktop profiles).  The book reaches the same order from the other
+# direction - xtrans is the first line of lib-7.md5 - and it also ships
+# the transport macros (xtrans.m4) that libFS, libICE, libSM, libXt and
+# libXfont2 include at build time.
+run_build required xtrans
 run_build required libX11
 
 # libxkbcommon – rebuild with X11 support now that libxcb provides
@@ -782,10 +791,6 @@ fi
 # Phase 3: Extension libraries
 # ======================================================================
 log_info "Phase 3: Extension libraries"
-# xtrans ships the transport macros (xtrans.m4) that libFS, libICE,
-# libSM, libXt and libXfont2 include at build time; the book lists it
-# first in lib-7.md5.
-run_build required xtrans
 run_build required libXext
 run_build required libXrender
 run_build required libXfixes
