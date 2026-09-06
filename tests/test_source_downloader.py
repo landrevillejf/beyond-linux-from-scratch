@@ -6,6 +6,7 @@ Tests for SourceDownloader class
 import pytest
 import hashlib
 import urllib.error
+from urllib.parse import urlparse
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 from builder import SourceDownloader
@@ -520,3 +521,106 @@ class TestNightly213VoidMirrorFallback:
         candidates = downloader._mirror_candidates(url) + downloader._void_candidates(url)
         assert candidates[0].startswith('https://ftp2.osuosl.org/pub/blfs/conglomeration/')
         assert candidates[-1].startswith('https://sources.voidlinux.org/')
+
+
+class TestBaseCacheRun5GnuMirrorFallback:
+    """Regression tests for the build-base-cache run #5 GNU outage.
+
+    ftpmirror.gnu.org answered 502/504 to every request for m4, mpc, sed
+    and readline while ftp.gnu.org and mirrors.kernel.org served the same
+    files.  The two existing fallback tiers could not help: the BLFS
+    conglomeration tree carries no LFS core package and Void has no stem
+    for them either, so all four sources were declared missing and, since
+    download_sources() only warns, the job kept building towards a
+    toolchain stage that could not succeed.
+    """
+
+    def test_gnu_candidates_repoints_the_redirector(self, sources_dir, mock_logger):
+        """The redirector's document root is the gnu tree itself."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._gnu_candidates(
+            'https://ftpmirror.gnu.org/m4/m4-1.4.20.tar.xz'
+        ) == [
+            'https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz',
+            'https://mirrors.kernel.org/gnu/m4/m4-1.4.20.tar.xz',
+            'https://mirror.team-cymru.com/gnu/m4/m4-1.4.20.tar.xz',
+            'https://mirrors.ocf.berkeley.edu/gnu/m4/m4-1.4.20.tar.xz',
+        ]
+        # gcc nests the tarball one directory deeper; the whole tail must
+        # survive the rewrite.
+        assert downloader._gnu_candidates(
+            'https://ftpmirror.gnu.org/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz'
+        ) == [
+            'https://ftp.gnu.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz',
+            'https://mirrors.kernel.org/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz',
+            'https://mirror.team-cymru.com/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz',
+            'https://mirrors.ocf.berkeley.edu/gnu/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz',
+        ]
+
+    def test_gnu_candidates_drops_the_gnu_prefix_and_the_origin_host(
+            self, sources_dir, mock_logger):
+        """A healthy mirror must not be asked for the file it just failed on."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._gnu_candidates(
+            'https://mirrors.kernel.org/gnu/mpc/mpc-1.3.1.tar.gz'
+        ) == [
+            'https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz',
+            'https://mirror.team-cymru.com/gnu/mpc/mpc-1.3.1.tar.gz',
+            'https://mirrors.ocf.berkeley.edu/gnu/mpc/mpc-1.3.1.tar.gz',
+        ]
+        assert downloader._gnu_candidates(
+            'https://ftp.gnu.org/gnu/sed/sed-4.9.tar.xz'
+        )[0] == 'https://mirrors.kernel.org/gnu/sed/sed-4.9.tar.xz'
+
+    def test_gnu_candidates_skips_urls_that_are_not_gnu_archives(
+            self, sources_dir, mock_logger):
+        """Re-pointing a foreign URL at a GNU mirror only buys extra 404s."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        for url in (
+            'https://download.gimp.org/pub/gegl/0.4/gegl-0.4.62.tar.xz',
+            'https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz',
+            'https://ftpmirror.gnu.org/',
+            'https://ftpmirror.gnu.org/m4/',
+            'https://example.com/gnu/',
+        ):
+            assert downloader._gnu_candidates(url) == [], url
+
+    def test_gnu_tier_is_tried_before_the_guessed_tiers(self, sources_dir, mock_logger):
+        """An exact path rewrite beats a package directory derived from a name."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        url = 'https://ftpmirror.gnu.org/m4/m4-1.4.20.tar.xz'
+        candidates = (downloader._gnu_candidates(url)
+                      + downloader._mirror_candidates(url)
+                      + downloader._void_candidates(url))
+        assert candidates[0] == 'https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz'
+        assert candidates[-1] == 'https://sources.voidlinux.org/m4-1.4.20/m4-1.4.20.tar.xz'
+
+    @patch('builder.time.sleep')
+    def test_download_recovers_a_core_tarball_from_a_gnu_mirror(
+            self, mock_sleep, sources_dir, mock_logger):
+        """The run #5 path: 504 on the redirector, 200 on ftp.gnu.org."""
+        dest = sources_dir / 'm4-1.4.20.tar.xz'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            if urlparse(url).hostname == 'ftpmirror.gnu.org':
+                raise urllib.error.HTTPError(url=url, code=504,
+                                             msg='Gateway Time-out', hdrs=None, fp=None)
+            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(
+                'https://ftpmirror.gnu.org/m4/m4-1.4.20.tar.xz', retries=1)
+
+        assert result is True
+        assert seen == [
+            'https://ftpmirror.gnu.org/m4/m4-1.4.20.tar.xz',
+            'https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz',
+        ]
+        assert dest.exists()
+        mock_logger.warning.assert_any_call(
+            'Primary host failed for m4-1.4.20.tar.xz, trying mirror: '
+            'https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz'
+        )

@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -1985,7 +1986,7 @@ class TestCustomSourcesGuardrails:
 
     SOURCES = Path('packages/custom-sources.list')
 
-    def test_systemd_tarball_is_listed_exactly_once(self):
+    def _systemd_tarballs(self):
         entries = []
         for line in self.SOURCES.read_text().splitlines():
             line = line.strip()
@@ -1996,10 +1997,44 @@ class TestCustomSourcesGuardrails:
             # systemd-man-pages-* helper archive out of the check.
             if name.startswith('systemd-') and name[8:9].isdigit():
                 entries.append(line)
-        assert len(entries) == 1, \
+        return entries
+
+    def test_systemd_tarball_is_never_listed_twice(self):
+        """Two systemd releases in this file resurrect nightly #173.
+
+        The official wget-list builder.py fetches already carries the
+        book release, so no pin here is the normal state; what has to
+        stay impossible is a second, conflicting one overriding it.
+        """
+        entries = self._systemd_tarballs()
+        assert len(entries) <= 1, \
             f"conflicting systemd sources (glob order picks the " \
             f"oldest tree): {entries}"
-        assert 'systemd-257.8' in entries[0], entries
+
+    def test_official_wget_list_is_not_pasted_into_the_overrides(self):
+        """This file overrides the official lists; it must not restate them.
+
+        builder.py fetches the LFS and BLFS wget-lists from the
+        'repositories' URLs, then applies this file on top with a
+        last-line-wins rule keyed by source_key().  A pasted copy of an
+        official list therefore silently overrides every curated pin
+        above it for the same package.  The downloads/12.4 flavour that
+        used to sit here named ftpmirror.gnu.org for all 30 GNU tarballs
+        while the view/stable list builder.py fetches names ftp.gnu.org,
+        so build-base-cache run #5 lost m4, mpc, sed and readline to a
+        redirector answering 502/504 -- and neither the conglomeration
+        tier nor the Void tier carries LFS core packages at all.
+        """
+        hosts = {
+            urlparse(line.strip()).hostname
+            for line in self.SOURCES.read_text().splitlines()
+            if line.strip().startswith('http')
+        }
+        assert 'ftpmirror.gnu.org' not in hosts, \
+            ("ftpmirror.gnu.org is the redirector the official "
+             "downloads/<version> wget-list names; the view/stable list "
+             "builder.py fetches uses ftp.gnu.org, and SourceDownloader "
+             "re-points either at the GNU mirror tier on failure")
 
 
 class TestProfilePromiseGuardrails:
