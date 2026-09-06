@@ -400,3 +400,120 @@ class TestBasePrefixCache:
         assert "from builder import" not in step
         assert "cat /tmp/lfs-build/VERSION" in step
         assert '} > "/tmp/base-cache/${PREFIX}.json"' in step
+
+
+class TestNightly221PostBuildPrivileges:
+    """Every nightly step runs as the unprivileged runner user, but the
+    rootfs is installed from inside a chroot, so build-release/ and most
+    of what it holds are root-owned.
+
+    Nightly #221 completed the entire build for three profiles (both
+    minimal jobs and arm64/x86_64) and then lost all three in the first
+    post-build step on "cp: cannot create regular file
+    '/tmp/lfs-build/build-release/vmlinuz-...': Permission denied".  The
+    same defect was latent in the three steps that follow it, which no
+    profile had ever reached.
+    """
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, name):
+        workflow = self._read("nightly.yml")
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def test_kernel_copy_and_checksum_are_privileged(self):
+        step = self._step("Verify kernel and boot artifact")
+        assert 'sudo cp "$KERNEL_SRC"' in step
+        assert '| sudo tee "SHA256SUMS-${SUFFIX}"' in step
+        # A bare redirection creates the file as the runner user and dies
+        # on the root-owned directory exactly like the cp did.
+        assert '> "SHA256SUMS-${SUFFIX}"' not in step
+
+    def test_compat_pointer_write_is_privileged(self):
+        step = self._step("Create compat ISO pointer")
+        assert "| sudo tee lfs-installer.iso.pointer" in step
+        assert "} > lfs-installer.iso.pointer" not in step
+
+    def test_rootfs_checksum_append_is_privileged(self):
+        """SHA256SUMS is created root-owned by the kernel step, so the
+        rootfs parts have to be appended through the same privilege."""
+        step = self._step("Export split rootfs tarball")
+        assert '| sudo tee -a "SHA256SUMS-${SUFFIX}"' in step
+        assert '>> "SHA256SUMS-${SUFFIX}"' not in step
+
+    def test_artifact_renames_are_privileged(self):
+        """Renaming needs write permission on the containing directory,
+        which the runner user does not have."""
+        step = self._step("Rename shared-name artifacts per profile")
+        assert 'sudo mv build_info.json "build_info-${SUFFIX}.json"' in step
+        assert 'sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"' in step
+        assert 'sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"' in step
+        # No unprivileged top-level mv may survive the fix.
+        assert "\n          mv " not in step
+
+
+class TestBaseCacheRun7VerifyStep:
+    """build-base-cache #7 built two complete 21G prefixes, 2h each, and
+    published neither: the verification step's informational size report
+    walked the rootfs as the runner user, could not read the directories
+    the chroot created root-only (./var/cache/ldconfig is mode 700) and
+    exited non-zero, which failed the step even though every real check
+    above it had passed.
+    """
+
+    def _step(self):
+        workflow = Path(".github/workflows/build-base-cache.yml").read_text()
+        marker = "- name: Verify the base prefix is real\n"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def test_size_report_cannot_abort_the_step(self):
+        step = self._step()
+        assert "sudo du -sh . || true" in step
+        # An unprivileged du both under-reports and fails the step.
+        assert "\n          du -sh .\n" not in step
+
+    def test_real_checks_still_gate_the_publish(self):
+        """Tolerating the size report must not weaken the verification:
+        the prefix content checks are what stop a hollow cache from
+        poisoning every nightly that restores it."""
+        step = self._step()
+        for check in ("test -x usr/bin/gcc", "test -x bin/bash",
+                      "test -f etc/passwd", "test ! -d tools"):
+            assert check in step, check
+            assert step.index(check) < step.index("sudo du -sh ."), check
+
+
+class TestEmulatedArm64StageBudget:
+    """The two scheduled aarch64 workflows invoked builder.py with no
+    --stage-timeout, so lfs-system was killed at the 7200s default having
+    used every second of it (ARM64 XFCE #41, Cross-Compile #106).  Under
+    qemu-user emulation that stage needs far longer than a native one.
+    """
+
+    WORKFLOWS = ("arm64-xfce.yml", "cross-compile.yml")
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def test_stage_timeout_is_raised_but_still_fits_the_job_cap(self):
+        """10800 leaves room for the remaining stages inside GitHub's hard
+        6h job cap; a larger value would only trade a self-reported stage
+        timeout for a platform cancellation with no diagnostics at all."""
+        for name in self.WORKFLOWS:
+            workflow = self._read(name)
+            assert "--stage-timeout 10800" in workflow, name
+
+    def test_download_resilience_matches_nightly(self):
+        """The 30s/3-attempt defaults are what made a degraded GNU mirror
+        unrecoverable; nightly.yml already asks for 600s and 5 attempts."""
+        for name in self.WORKFLOWS:
+            workflow = self._read(name)
+            assert "--download-timeout 600" in workflow, name
+            assert "--download-retries 5" in workflow, name

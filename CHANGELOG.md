@@ -170,6 +170,94 @@
 
 ### Fixed
 
+- **`xtrans` was built two phases after the `libX11` needing it**
+  (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
+  - The xorg stage aborted with `Package requirements (xproto >= 7.0.25
+    xextproto xtrans xcb >= 1.11.1 kbproto inputproto) were not met:
+    Package 'xtrans' not found`, and eight nightly #221 profiles (xfce
+    x2, gnome, kde, lxqt, java-dev, full, audio-studio) died with it.
+    `libX11`'s `configure` requires the `xtrans` pkg-config module, but
+    `xtrans` sat in Phase 3 while `libX11` was built in Phase 2
+  - The old comment justified the late placement by the transport macros
+    (`xtrans.m4`) that `libFS`, `libICE`, `libSM`, `libXt` and
+    `libXfont2` include at build time.  That is true but incomplete:
+    all five consumers are Phase 3 packages, which is presumably why
+    `xtrans` was filed alongside them
+  - The book reaches the same order from the other direction.
+    `lib-7.md5` lists `xtrans-1.6.0.tar.xz` as its first line,
+    immediately before `libX11-1.8.12.tar.xz`, and the chapter's install
+    loop walks that file in order.  `xtrans` moves to Phase 2, directly
+    ahead of `libX11`, and keeps a single build site -- the new
+    `test_xtrans_precedes_libx11` asserts both, so a second late call
+    cannot satisfy the ordering check vacuously
+  - Not a regression.  Nightly #218 never reached xorg, it died in
+    `blfs-libs`; #221 was the first run to get far enough to expose the
+    next defect
+
+- **an informational `du` threw away two complete base prefixes**
+  (`.github/workflows/build-base-cache.yml`,
+  `tests/test_release_workflow.py`)
+  - `build-base-cache` run #7 failed *both* matrix jobs at `Verify the
+    base prefix is real`, after `test -x usr/bin/gcc`,
+    `test -x bin/bash`, `test -f etc/passwd` and `test ! -d tools` had
+    all passed and the prefix had printed its own `21G .` total.  The
+    step's last command was a bare `du -sh .`, and `du` exits non-zero
+    on `./var/cache/ldconfig` (mode 700, created root-only by the
+    chroot) even though it still reports the total
+  - Two 21 G prefixes costing roughly 2 h each were discarded, so no
+    base cache has ever been published: every nightly still restores
+    with `USE_BASE_CACHE: false` and rebuilds from scratch, which
+    defeats the entire purpose of the prefix cache
+  - It becomes `sudo du -sh . || true` -- `sudo` so the total is
+    complete rather than silently missing a subtree, `|| true` because a
+    size report must never abort a step whose real gate is the four
+    `test` lines above it.  `test_real_checks_still_gate_the_publish`
+    pins that ordering, so tolerating the report cannot weaken the gate
+
+- **nightly post-build steps wrote into a root-owned tree**
+  (`.github/workflows/nightly.yml`, `tests/test_release_workflow.py`)
+  - `cp: cannot create regular file
+    '/tmp/lfs-build/build-release/vmlinuz-minimal-x86_64-sysvinit':
+    Permission denied`.  Three nightly #221 profiles (minimal x2 and
+    arm64/x86_64) had completed the *entire* build and were then thrown
+    away by the artifact steps that follow it
+  - `builder.py` runs as `lfs`, but the stage scripts install from
+    inside a chroot, so `build-release/` and most of what it holds are
+    root-owned.  Creating or renaming a file needs write permission on
+    the *containing* directory, which the `runner` user that executes
+    workflow steps does not have
+  - `sudo cp` for the kernel and `sudo mv` for the `build_info.json`,
+    `sbom.spdx.json` and `lpm-repo/packages.list*` renames; the two
+    `SHA256SUMS` writes and the `lfs-installer.iso.pointer` block go
+    through `cmd | sudo tee FILE` instead, because `sudo cmd > FILE`
+    would still fail -- the redirection is performed by the
+    unprivileged shell
+  - A blanket `chown -R` was rejected: it would flatten the ownership
+    metadata that `sudo tar --numeric-owner --xattrs` deliberately
+    preserves inside the rootfs
+
+- **the 7200 s default stage timeout cannot survive emulation**
+  (`.github/workflows/arm64-xfce.yml`,
+  `.github/workflows/cross-compile.yml`,
+  `tests/test_release_workflow.py`)
+  - `ERROR - Stage timed out after 7200 seconds: lfs-system` in both
+    ARM64 XFCE #41 and Cross-Compile ARM64 #106.  Neither workflow
+    passed `--stage-timeout`, so `builder.py` fell back to its 7200 s
+    default, and an emulated aarch64 `lfs-system` consumed all of it:
+    the job started at 03:18:53, `lfs-system` began at 04:19:07 behind a
+    52-minute toolchain, and was killed at 06:19:07
+  - Both now pass `--stage-timeout 10800`, together with
+    `--download-timeout 600 --download-retries 5` to match nightly.yml.
+    3 h is the largest value that still fits GitHub's hard 6 h per-job
+    cap once the toolchain and earlier stages are accounted for; a
+    larger one would trade a self-reported timeout for a platform
+    cancellation that leaves no diagnostics at all
+  - `timeout-minutes: 480` is deliberately left alone here even though
+    nightly.yml dropped to 330.  nightly needed the lower budget to
+    reach its `if: failure() || cancelled()` log-upload step, which
+    these two workflows do not have, so lowering it would only take
+    30 minutes away from an emulated build that needs every minute
+
 - **a pasted copy of the official wget-list overrode every mirror pin**
   (`packages/custom-sources.list`, `tests/test_acceptance_shell.py`)
   - `packages/custom-sources.list` is applied *on top of* the official
