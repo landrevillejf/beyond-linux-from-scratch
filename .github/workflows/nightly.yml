@@ -380,9 +380,17 @@ jobs:
           fi
           # Give the kernel a per-profile name so release assets from
           # different matrix jobs never collide.
-          cp "$KERNEL_SRC" "/tmp/lfs-build/build-release/vmlinuz-${SUFFIX}"
+          #
+          # Every write from here to the artifact upload needs sudo.
+          # builder.py runs as lfs but the stage scripts install inside a
+          # chroot, so build-release/ and most of what it holds are
+          # root-owned and the runner user cannot create a file there.
+          # Nightly #221 threw away three profiles (minimal x2 and
+          # arm64/x86_64) that had completed the entire build, on
+          # "cp: cannot create regular file ... Permission denied".
+          sudo cp "$KERNEL_SRC" "/tmp/lfs-build/build-release/vmlinuz-${SUFFIX}"
           cd /tmp/lfs-build/build-release || exit 1
-          sha256sum "$ARTIFACT" "vmlinuz-${SUFFIX}" > "SHA256SUMS-${SUFFIX}"
+          sudo sha256sum "$ARTIFACT" "vmlinuz-${SUFFIX}" | sudo tee "SHA256SUMS-${SUFFIX}" >/dev/null
 
       - name: Sign ISO with GPG
         if: env.HAVE_GPG_KEY == 'true'
@@ -419,12 +427,12 @@ jobs:
           # Release assets cannot be symlinks and copying the ISO would
           # duplicate gigabytes, so publish a tiny pointer that resolves
           # the backward-compatible lfs-installer.iso name.
-          SHA=$(sha256sum "$ISO" | awk '{print $1}')
+          SHA=$(sudo sha256sum "$ISO" | awk '{print $1}')
           {
             echo "iso_name=$ISO"
             echo "sha256=$SHA"
             echo "download_url=https://github.com/${{ github.repository }}/releases/download/nightly-$(date +%Y%m%d)/$ISO"
-          } > lfs-installer.iso.pointer
+          } | sudo tee lfs-installer.iso.pointer >/dev/null
 
       - name: Export split rootfs tarball
         if: matrix.profile == 'xfce' || matrix.profile == 'arm64'
@@ -453,20 +461,24 @@ jobs:
           sudo mv /tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-* /tmp/lfs-build/build-release/
           cd /tmp/lfs-build/build-release || exit 1
           sudo chown lfs:lfs rootfs-${SUFFIX}.tar.zst.part-*
-          sha256sum rootfs-${SUFFIX}.tar.zst.part-* >> "SHA256SUMS-${SUFFIX}"
+          # Appending needs sudo: SHA256SUMS was created root-owned by the
+          # kernel verification step above.
+          sha256sum rootfs-${SUFFIX}.tar.zst.part-* | sudo tee -a "SHA256SUMS-${SUFFIX}" >/dev/null
           du -h rootfs-${SUFFIX}.tar.zst.part-*
 
       - name: Rename shared-name artifacts per profile
         run: |
           cd /tmp/lfs-build/build-release || exit 1
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
-          mv build_info.json "build_info-${SUFFIX}.json"
+          # Renaming needs write permission on the containing directory,
+          # which the runner user does not have (see the kernel step).
+          sudo mv build_info.json "build_info-${SUFFIX}.json"
           if [ -f sbom.spdx.json ]; then
-            mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"
+            sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"
           fi
           if ls lpm-repo/packages.list* >/dev/null 2>&1; then
             for f in lpm-repo/packages.list*; do
-              mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
+              sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
             done
           fi
           # Base binary package tarballs are deliberately not uploaded

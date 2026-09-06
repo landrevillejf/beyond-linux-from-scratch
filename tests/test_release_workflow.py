@@ -400,3 +400,58 @@ class TestBasePrefixCache:
         assert "from builder import" not in step
         assert "cat /tmp/lfs-build/VERSION" in step
         assert '} > "/tmp/base-cache/${PREFIX}.json"' in step
+
+
+class TestNightly221PostBuildPrivileges:
+    """Every nightly step runs as the unprivileged runner user, but the
+    rootfs is installed from inside a chroot, so build-release/ and most
+    of what it holds are root-owned.
+
+    Nightly #221 completed the entire build for three profiles (both
+    minimal jobs and arm64/x86_64) and then lost all three in the first
+    post-build step on "cp: cannot create regular file
+    '/tmp/lfs-build/build-release/vmlinuz-...': Permission denied".  The
+    same defect was latent in the three steps that follow it, which no
+    profile had ever reached.
+    """
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, name):
+        workflow = self._read("nightly.yml")
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def test_kernel_copy_and_checksum_are_privileged(self):
+        step = self._step("Verify kernel and boot artifact")
+        assert 'sudo cp "$KERNEL_SRC"' in step
+        assert '| sudo tee "SHA256SUMS-${SUFFIX}"' in step
+        # A bare redirection creates the file as the runner user and dies
+        # on the root-owned directory exactly like the cp did.
+        assert '> "SHA256SUMS-${SUFFIX}"' not in step
+
+    def test_compat_pointer_write_is_privileged(self):
+        step = self._step("Create compat ISO pointer")
+        assert "| sudo tee lfs-installer.iso.pointer" in step
+        assert "} > lfs-installer.iso.pointer" not in step
+
+    def test_rootfs_checksum_append_is_privileged(self):
+        """SHA256SUMS is created root-owned by the kernel step, so the
+        rootfs parts have to be appended through the same privilege."""
+        step = self._step("Export split rootfs tarball")
+        assert '| sudo tee -a "SHA256SUMS-${SUFFIX}"' in step
+        assert '>> "SHA256SUMS-${SUFFIX}"' not in step
+
+    def test_artifact_renames_are_privileged(self):
+        """Renaming needs write permission on the containing directory,
+        which the runner user does not have."""
+        step = self._step("Rename shared-name artifacts per profile")
+        assert 'sudo mv build_info.json "build_info-${SUFFIX}.json"' in step
+        assert 'sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"' in step
+        assert 'sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"' in step
+        # No unprivileged top-level mv may survive the fix.
+        assert "\n          mv " not in step
