@@ -24,7 +24,10 @@ https://mirrors.kernel.org/gnu/libsigsegv/libsigsegv-2.15.tar.gz
 https://mirrors.kernel.org/gnu/libtasn1/libtasn1-4.20.0.tar.gz
 https://mirrors.kernel.org/gnu/libtool/libtool-2.5.4.tar.xz
 https://mirrors.kernel.org/gnu/libunistring/libunistring-1.3.tar.xz
-https://mirrors.kernel.org/gnu/m4/m4-1.4.21.tar.xz
+# m4: the book and recipes/lfs/*/m4*.lpm both name 1.4.20.  1.4.21 is on
+# the GNU mirrors but shares the "pkg:m4-1" dedup key, so pinning it here
+# would silently build a version no LFS chapter describes.
+https://mirrors.kernel.org/gnu/m4/m4-1.4.20.tar.xz
 https://mirrors.kernel.org/gnu/make/make-4.4.1.tar.gz
 https://mirrors.kernel.org/gnu/mpc/mpc-1.3.1.tar.gz
 https://mirrors.kernel.org/gnu/mpfr/mpfr-4.2.2.tar.xz
@@ -121,11 +124,11 @@ https://sourceforge.net/projects/luabinaries/files/5.4.8/Docs%20and%20Sources/lu
 # a52dec – version 0.8.0
 https://ftp2.osuosl.org/pub/blfs/conglomeration/a52dec/a52dec-0.8.0.tar.gz
 
-https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz
-
-https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz
-
-https://www.mpfr.org/mpfr-4.2.1/mpfr-4.2.1.tar.xz
+# gmp / mpc / mpfr: the gmplib.org, ftp.gnu.org and mpfr.org pins that
+# used to sit here duplicated the kernel.org block at the top of this
+# file and, coming later, won the source_key() tie-break -- the mpfr one
+# named 4.2.1 while the book builds 4.2.2.  The top block is the single
+# authority for the GNU toolchain tarballs.
 
 # ============================================================================
 # BLFS Core Libraries (08a-build-blfs-libs.sh)
@@ -546,91 +549,19 @@ https://dri.freedesktop.org/libdrm/libdrm-2.4.134.tar.xz
 # rule silently built the non-book one.  The official BLFS wget-list is
 # authoritative.
 
-https://download.savannah.gnu.org/releases/acl/acl-2.3.2.tar.xz
-https://download.savannah.gnu.org/releases/attr/attr-2.5.2.tar.gz
-https://ftpmirror.gnu.org/autoconf/autoconf-2.72.tar.xz
-https://ftpmirror.gnu.org/automake/automake-1.18.1.tar.xz
-https://ftpmirror.gnu.org/bash/bash-5.3.tar.gz
-https://github.com/gavinhoward/bc/releases/download/7.0.3/bc-7.0.3.tar.xz
-https://sourceware.org/pub/binutils/releases/binutils-2.45.tar.xz
-https://ftpmirror.gnu.org/bison/bison-3.8.2.tar.xz
-https://www.sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
-https://ftpmirror.gnu.org/coreutils/coreutils-9.7.tar.xz
-https://dbus.freedesktop.org/releases/dbus/dbus-1.16.2.tar.xz
-https://ftpmirror.gnu.org/dejagnu/dejagnu-1.6.3.tar.gz
-https://ftpmirror.gnu.org/diffutils/diffutils-3.12.tar.xz
-https://downloads.sourceforge.net/project/e2fsprogs/e2fsprogs/v1.47.3/e2fsprogs-1.47.3.tar.gz
-https://sourceware.org/ftp/elfutils/0.193/elfutils-0.193.tar.bz2
-https://github.com/libexpat/libexpat/releases/download/R_2_7_1/expat-2.7.1.tar.xz
-https://prdownloads.sourceforge.net/expect/expect5.45.4.tar.gz
-https://astron.com/pub/file/file-5.46.tar.gz
-https://ftpmirror.gnu.org/findutils/findutils-4.10.0.tar.xz
-https://github.com/westes/flex/releases/download/v2.6.4/flex-2.6.4.tar.gz
-https://pypi.org/packages/source/f/flit-core/flit_core-3.12.0.tar.gz
-
-https://ftpmirror.gnu.org/gcc/gcc-15.2.0/gcc-15.2.0.tar.xz
-https://ftpmirror.gnu.org/gdbm/gdbm-1.26.tar.gz
-https://ftpmirror.gnu.org/gettext/gettext-0.26.tar.xz
-https://ftpmirror.gnu.org/glibc/glibc-2.42.tar.xz
-https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
-https://ftpmirror.gnu.org/gperf/gperf-3.3.tar.gz
-https://ftpmirror.gnu.org/grep/grep-3.12.tar.xz
-https://ftpmirror.gnu.org/groff/groff-1.23.0.tar.gz
-https://ftpmirror.gnu.org/grub/grub-2.12.tar.xz
-https://ftpmirror.gnu.org/gzip/gzip-1.14.tar.xz
-https://github.com/Mic92/iana-etc/releases/download/20250807/iana-etc-20250807.tar.gz
-https://ftpmirror.gnu.org/inetutils/inetutils-2.6.tar.xz
-https://launchpad.net/intltool/trunk/0.51.0/+download/intltool-0.51.0.tar.gz
-https://www.kernel.org/pub/linux/utils/net/iproute2/iproute2-6.16.0.tar.xz
-https://pypi.org/packages/source/J/Jinja2/jinja2-3.1.6.tar.gz
-https://www.kernel.org/pub/linux/utils/kbd/kbd-2.8.0.tar.xz
-https://www.kernel.org/pub/linux/utils/kernel/kmod/kmod-34.2.tar.xz
-https://www.greenwoodsoftware.com/less/less-679.tar.gz
-https://www.linuxfromscratch.org/lfs/downloads/12.4/lfs-bootscripts-20250827.tar.xz
-https://anduin.linuxfromscratch.org/BLFS/blfs-bootscripts/blfs-bootscripts-20250225.tar.xz
-https://www.kernel.org/pub/linux/libs/security/linux-privs/libcap2/libcap-2.76.tar.xz
-https://github.com/libffi/libffi/releases/download/v3.5.2/libffi-3.5.2.tar.gz
-https://download.savannah.gnu.org/releases/libpipeline/libpipeline-1.5.8.tar.gz
-https://ftpmirror.gnu.org/libtool/libtool-2.5.4.tar.xz
-https://github.com/besser82/libxcrypt/releases/download/v4.4.38/libxcrypt-4.4.38.tar.xz
-https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz
-https://github.com/lz4/lz4/releases/download/v1.10.0/lz4-1.10.0.tar.gz
-https://ftpmirror.gnu.org/m4/m4-1.4.20.tar.xz
-https://ftpmirror.gnu.org/make/make-4.4.1.tar.gz
-https://download.savannah.gnu.org/releases/man-db/man-db-2.13.1.tar.xz
-https://www.kernel.org/pub/linux/docs/man-pages/man-pages-6.15.tar.xz
-https://pypi.org/packages/source/M/MarkupSafe/markupsafe-3.0.2.tar.gz
-https://github.com/mesonbuild/meson/releases/download/1.8.3/meson-1.8.3.tar.gz
-https://ftpmirror.gnu.org/mpc/mpc-1.3.1.tar.gz
-https://ftpmirror.gnu.org/mpfr/mpfr-4.2.2.tar.xz
-https://github.com/ninja-build/ninja/archive/v1.13.1/ninja-1.13.1.tar.gz
-https://github.com/openssl/openssl/releases/download/openssl-3.5.2/openssl-3.5.2.tar.gz
-https://files.pythonhosted.org/packages/source/p/packaging/packaging-25.0.tar.gz
-https://ftpmirror.gnu.org/patch/patch-2.8.tar.xz
-https://www.cpan.org/src/5.0/perl-5.42.0.tar.xz
-https://distfiles.ariadne.space/pkgconf/pkgconf-2.5.1.tar.xz
-https://sourceforge.net/projects/procps-ng/files/Production/procps-ng-4.0.5.tar.xz
-https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.7.tar.xz
-https://www.python.org/ftp/python/3.13.7/Python-3.13.7.tar.xz
-https://www.python.org/ftp/python/doc/3.13.7/python-3.13.7-docs-html.tar.bz2
-https://ftpmirror.gnu.org/readline/readline-8.3.tar.gz
-https://ftpmirror.gnu.org/sed/sed-4.9.tar.xz
-https://pypi.org/packages/source/s/setuptools/setuptools-80.9.0.tar.gz
-https://github.com/shadow-maint/shadow/releases/download/4.18.0/shadow-4.18.0.tar.xz
-https://github.com/troglobit/sysklogd/releases/download/v2.7.2/sysklogd-2.7.2.tar.gz
-https://github.com/systemd/systemd/archive/v257.8/systemd-257.8.tar.gz
-https://anduin.linuxfromscratch.org/LFS/systemd-man-pages-257.8.tar.xz
-https://github.com/slicer69/sysvinit/releases/download/3.14/sysvinit-3.14.tar.xz
-https://ftpmirror.gnu.org/tar/tar-1.35.tar.xz
-https://downloads.sourceforge.net/tcl/tcl8.6.16-src.tar.gz
-https://downloads.sourceforge.net/tcl/tcl8.6.16-html.tar.gz
-https://ftpmirror.gnu.org/texinfo/texinfo-7.2.tar.xz
-https://www.iana.org/time-zones/repository/releases/tzdata2025b.tar.gz
-https://anduin.linuxfromscratch.org/LFS/udev-lfs-20230818.tar.xz
-https://www.kernel.org/pub/linux/utils/util-linux/v2.41/util-linux-2.41.1.tar.xz
-https://github.com/vim/vim/archive/v9.1.1629/vim-9.1.1629.tar.gz
-https://pypi.org/packages/source/w/wheel/wheel-0.46.1.tar.gz
-https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.47.tar.gz
+# The official LFS wget-list used to be pasted here verbatim.  It must not
+# come back: builder.py already fetches it at build time from the
+# 'repositories' URLs and applies this file on top of it with a
+# last-line-wins rule keyed by source_key(), so a copy of the official
+# list silently overrode every curated mirror pin above it for the same
+# package.  The pasted block was the downloads/12.4 flavour, which names
+# ftpmirror.gnu.org for all 30 GNU tarballs, while the view/stable list
+# builder.py fetches names ftp.gnu.org -- so the paste moved the whole
+# core toolchain onto a redirector that was answering 502/504 to every
+# request (build-base-cache run #5: m4, mpc, sed and readline all lost,
+# and neither the conglomeration tier nor the Void tier carries LFS core
+# packages).  Removing it changed no version: the two official lists name
+# byte-identical filenames and differ only by host.
 
 # Business-ISBN: CPAN keeps only the latest version of a distribution,
 # so the pinned 3.012 release 404s on www.cpan.org (nightly #185).
