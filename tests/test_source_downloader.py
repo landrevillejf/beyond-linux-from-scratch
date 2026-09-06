@@ -31,22 +31,23 @@ class TestSourceDownloader:
         assert result is True
         mock_logger.info.assert_called_with("Already exists: test.tar.gz")
 
-    @patch('urllib.request.urlretrieve')
-    def test_download_success(self, mock_urlretrieve, sources_dir, mock_logger):
+    def test_download_success(self, fake_urlretrieve, sources_dir, mock_logger):
         """Test successful download"""
         downloader = SourceDownloader(sources_dir, mock_logger)
-        result = downloader.download("https://example.com/newfile.tar.gz", "newfile.tar.gz")
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve()) as mock_urlretrieve:
+            result = downloader.download("https://example.com/newfile.tar.gz", "newfile.tar.gz")
 
         assert result is True
         mock_urlretrieve.assert_called_once()
 
-    @patch('urllib.request.urlretrieve')
-    def test_download_retry_on_failure(self, mock_urlretrieve, sources_dir, mock_logger):
+    def test_download_retry_on_failure(self, fake_urlretrieve, sources_dir, mock_logger):
         """Test retry on download failure"""
-        mock_urlretrieve.side_effect = [Exception("Network error"), Exception("Network error"), MagicMock()]
-
         downloader = SourceDownloader(sources_dir, mock_logger)
-        result = downloader.download("https://example.com/retry.tar.gz", "retry.tar.gz", retries=3)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(Exception("Network error"),
+                                                Exception("Network error"))) as mock_urlretrieve:
+            result = downloader.download("https://example.com/retry.tar.gz", "retry.tar.gz", retries=3)
 
         assert result is True
         assert mock_urlretrieve.call_count == 3
@@ -217,19 +218,15 @@ https://git.savannah.gnu.org/git/guix.git
         logger.warning.assert_any_call("  https://example.com/package.tar.gz")
 
     @patch('builder.time.sleep')
-    def test_download_http_503_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+    def test_download_http_503_retries_with_backoff(self, mock_sleep, fake_urlretrieve,
+                                                    sources_dir, mock_logger):
         """Test that 5xx HTTP errors are retried with exponential backoff."""
         downloader = SourceDownloader(sources_dir, mock_logger)
 
-        mock_urlretrieve = patch('urllib.request.urlretrieve')
-        with mock_urlretrieve as mock_retrieve:
-            mock_retrieve.side_effect = [
-                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=503,
-                                       msg='Service Unavailable', hdrs=None, fp=None),
-                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=503,
-                                       msg='Service Unavailable', hdrs=None, fp=None),
-                MagicMock(),  # success on third attempt
-            ]
+        unavailable = urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=503,
+                                             msg='Service Unavailable', hdrs=None, fp=None)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(unavailable, unavailable)) as mock_retrieve:
             result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=3)
 
         assert result is True
@@ -237,23 +234,23 @@ https://git.savannah.gnu.org/git/guix.git
         assert mock_sleep.call_count == 2  # slept between attempts
 
     @patch('builder.time.sleep')
-    def test_download_http_429_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+    def test_download_http_429_retries_with_backoff(self, mock_sleep, fake_urlretrieve,
+                                                    sources_dir, mock_logger):
         """Test that HTTP 429 (rate limit) is retried."""
         downloader = SourceDownloader(sources_dir, mock_logger)
 
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
-            mock_retrieve.side_effect = [
-                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=429,
-                                       msg='Too Many Requests', hdrs=None, fp=None),
-                MagicMock(),
-            ]
+        throttled = urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=429,
+                                           msg='Too Many Requests', hdrs=None, fp=None)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(throttled)) as mock_retrieve:
             result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=2)
 
         assert result is True
         assert mock_sleep.call_count == 1
 
     @patch('builder.time.sleep')
-    def test_download_http_418_retries_with_backoff(self, mock_sleep, sources_dir, mock_logger):
+    def test_download_http_418_retries_with_backoff(self, mock_sleep, fake_urlretrieve,
+                                                    sources_dir, mock_logger):
         """HTTP 418 (freedesktop.org anti-abuse) is transient and retried.
 
         Nightly #208: freedesktop.org's CDN answers parallel CI download
@@ -264,12 +261,10 @@ https://git.savannah.gnu.org/git/guix.git
         """
         downloader = SourceDownloader(sources_dir, mock_logger)
 
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
-            mock_retrieve.side_effect = [
-                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
-                                       msg="I'm a teapot", hdrs=None, fp=None),
-                MagicMock(),
-            ]
+        teapot = urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
+                                        msg="I'm a teapot", hdrs=None, fp=None)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(teapot)) as mock_retrieve:
             result = downloader.download('http://example.com/f.tar.gz', 'f.tar.gz', retries=2)
 
         assert result is True
@@ -435,16 +430,14 @@ class TestNightly212DownloadResilience:
 
     @patch('builder.time.sleep')
     @patch('builder.random.uniform', return_value=0.0)
-    def test_418_uses_the_rate_limit_backoff(self, mock_uniform, mock_sleep,
+    def test_418_uses_the_rate_limit_backoff(self, mock_uniform, mock_sleep, fake_urlretrieve,
                                              sources_dir, mock_logger):
         """freedesktop.org's 418 must wait out the throttle window."""
         downloader = SourceDownloader(sources_dir, mock_logger)
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
-            mock_retrieve.side_effect = [
-                urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
-                                       msg="I'm a teapot", hdrs=None, fp=None),
-                MagicMock(),
-            ]
+        teapot = urllib.error.HTTPError(url='http://example.com/f.tar.gz', code=418,
+                                        msg="I'm a teapot", hdrs=None, fp=None)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve(teapot)):
             assert downloader.download(
                 'http://example.com/f.tar.gz', 'f.tar.gz', retries=2) is True
 

@@ -219,24 +219,16 @@ class TestDockerEnvironment:
 class TestCombinedEdgeCases:
     """Test combinations of edge cases"""
 
-    def test_download_retry_logic_with_mixed_errors(self, tmp_path):
+    def test_download_retry_logic_with_mixed_errors(self, tmp_path, fake_urlretrieve):
         logger = logging.getLogger('test')
         downloader = SourceDownloader(tmp_path, logger)
 
-        errors = [
-            Exception("Connection refused"),
-            Exception("Timeout"),
-            None  # Success on third try
-        ]
+        # Two different failures, then success on the third try: the
+        # fixture's arguments are raised in call order before the first
+        # attempt that leaves a body behind.
+        retrieve = fake_urlretrieve(Exception("Connection refused"), Exception("Timeout"))
 
-        with patch('urllib.request.urlretrieve') as mock_retrieve:
-            def side_effect(*args, **kwargs):
-                error = errors.pop(0)
-                if error:
-                    raise error
-                return MagicMock()
-
-            mock_retrieve.side_effect = side_effect
+        with patch('urllib.request.urlretrieve', side_effect=retrieve):
             result = downloader.download("http://example.com/file.tar.gz", retries=3)
             assert result is True
 
