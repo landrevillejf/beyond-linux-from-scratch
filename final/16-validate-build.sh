@@ -379,10 +379,21 @@ fi
 # --------------------------------------------------------------------------
 # 12. Disk usage summary
 # --------------------------------------------------------------------------
+# Purely informational, so it must never be able to abort the stage.  du
+# exits non-zero whenever it cannot read one directory of the rootfs (the
+# build user is not root and /root, /var/lib/tor and friends are 0700), and
+# under "set -o pipefail" that status propagates through the awk pipeline.
+# Nightly #218 lost all three validate jobs exactly here: the total was
+# printed, then the script died before the Summary block and before the
+# "[ERROR] ... critical check(s) failed" line, so the stage exited 1 with no
+# explanation anywhere in the log.  "|| true" plus a default keeps du's
+# verdict out of the stage's exit status.
 echo ""
 echo "--- Disk usage ---"
-du -sh "$LFS" 2>/dev/null | awk '{print "  Total rootfs size: " $1}'
-du -sh "$LFS/boot" 2>/dev/null | awk '{print "  /boot size:        " $1}'
+rootfs_size="$(du -sh "$LFS" 2>/dev/null | awk '{print $1}' || true)"
+boot_size="$(du -sh "$LFS/boot" 2>/dev/null | awk '{print $1}' || true)"
+echo "  Total rootfs size: ${rootfs_size:-unknown}"
+echo "  /boot size:        ${boot_size:-unknown}"
 echo ""
 echo "  Installed packages: $(wc -l < "$LFS/var/lib/lpm/installed.list" 2>/dev/null || echo 'unknown')"
 
