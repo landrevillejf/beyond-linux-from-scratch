@@ -180,15 +180,36 @@ find_archive() {
     printf '%s\n' "${tier2[0]}"
     return 0
 }
+# A corrupt or truncated archive must abort naming the file.  Nightly #218
+# fetched a 200 response that was not gzip: tar printed nothing, the empty
+# directory name was rm -rf'd and cd'd into, and the stage died without ever
+# naming the package.  "|| true" keeps set -o pipefail from aborting here on
+# the SIGPIPE head(1) sends tar, so the empty-result test below decides.
 extract_archive() {
     local archive="$1" dir
-    dir="$(tar -tf "$archive" | head -n 1 | cut -d/ -f1)"
+    if [ -z "$archive" ] || [ ! -f "$archive" ]; then
+        log_error "extract_archive: no such source archive: '$archive'"
+        return 1
+    fi
+    dir="$(tar -tf "$archive" 2>/dev/null | head -n 1 | cut -d/ -f1 || true)"
+    if [ -z "$dir" ]; then
+        log_error "extract_archive: '$archive' is not a readable archive (corrupt or truncated download)"
+        return 1
+    fi
     rm -rf "$dir"
     tar -xf "$archive"
     printf '%s\n' "$dir"
 }
 have_pc() { pkg-config --exists "$1" 2>/dev/null; }
 have_cmd() { command -v "$1" >/dev/null 2>&1; }
+
+# True when the chroot can resolve a host name.  getent ships with glibc and
+# is therefore always present in the LFS base system; without it no answer is
+# assumed, which is the safe direction for an optional network build.
+chroot_can_resolve() {
+    command -v getent >/dev/null 2>&1 || return 1
+    getent hosts "$1" >/dev/null 2>&1
+}
 
 is_installed() {
     local pkg="$1"
@@ -1689,35 +1710,63 @@ run_build optional libopenmpt
 # libzip – ZIP file access; no BLFS book page
 run_build optional libzip
 
-# rust – Rust compiler (required to build modern Firefox).  Not built
-# from source here: the shipped rustc tarball is a prebuilt toolchain.
-if ! have_cmd rustc; then
-    archive=""
+# rust – Rust compiler (required to build modern Firefox).
+#
+# The BLFS book (general/rust.html) is explicit: "It will download a stage0
+# binary at the start of the build, so you cannot compile it without an
+# Internet connection."  The build chroot has no resolver, so Nightly #218
+# watched curl fail four times on static.rust-lang.org, bootstrap.py abort on
+# the SHA-256 of an empty file, and "make" take all seven blfs-libs jobs down
+# with it -- even though rust is the LAST package of the stage, everything
+# before it had succeeded, and only Firefox and Thunderbird consume it (both
+# already skip themselves through check_deps when rustc is missing).
+#
+# A prebuilt toolchain tarball ships install.sh and needs no network, so it
+# is always used.  A from-source build is attempted only when the chroot can
+# actually resolve the stage0 host, and any failure stays a warning: the
+# rc/&& pattern is the one build_pkg documents above, because run_build-style
+# "if" callers suspend set -e for the whole function body.
+build_rust() {
+    local archive="" base dir rc=0
     for base in $(archive_names rust); do
         archive="$(find_archive "$base")"
         [ -n "$archive" ] && break
     done
-    if [ -n "$archive" ]; then
-        log_info "Building rust from $archive"
-        dir="$(extract_archive "$archive")"
-        pushd "$dir" >/dev/null
-        if [ -x ./install.sh ]; then
-            ./install.sh --prefix=/usr --disable-docs
-        elif [ -x ./configure ] || [ -f configure ]; then
-            ./configure --prefix=/usr
-            make -j"$JOBS"
-            make install
+    if [ -z "$archive" ]; then
+        log_warning "[OPTIONAL] rust source archive missing; Firefox may not build"
+        return 1
+    fi
+    log_info "Building rust from $archive"
+    dir="$(extract_archive "$archive")" || return 1
+    pushd "$dir" >/dev/null || return 1
+    if [ -x ./install.sh ]; then
+        ./install.sh --prefix=/usr --disable-docs || rc=1
+    elif [ -f configure ] && chroot_can_resolve static.rust-lang.org; then
+        ./configure --prefix=/usr &&
+        make -j"$JOBS" &&
+        make install || rc=1
+    else
+        rc=1
+        if [ -f configure ]; then
+            log_warning "[OPTIONAL] rust: the chroot cannot resolve static.rust-lang.org and the book's from-source build downloads its stage0 compiler from there; skipping"
         else
             log_warning "[OPTIONAL] rust: no recognised build system"
         fi
-        popd >/dev/null
-        rm -rf "$dir"
-        touch "$(marker_for rust)"
-    else
-        log_warning "[OPTIONAL] rust source archive missing; Firefox may not build"
     fi
-else
+    popd >/dev/null
+    rm -rf "$dir"
+    if [ "$rc" -ne 0 ]; then
+        log_warning "[OPTIONAL] rust not installed; Firefox and Thunderbird will be skipped"
+        return 1
+    fi
+    touch "$(marker_for rust)"
+    log_success "rust installed"
+}
+
+if have_cmd rustc; then
     log_info "rust already installed; skipping"
+else
+    build_rust || log_warning "[OPTIONAL] rust build failed; continuing with the rest of the stage"
 fi
 
 log_success "BLFS core libraries build complete"

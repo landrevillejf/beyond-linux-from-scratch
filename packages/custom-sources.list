@@ -508,8 +508,11 @@ https://archive.mozilla.org/pub/nspr/releases/v4.36/src/nspr-4.36.tar.gz
 # nss (Firefox Network Security Services)
 https://archive.mozilla.org/pub/security/nss/releases/NSS_3_108_RTM/src/nss-3.108.tar.gz
 
-# rust (Firefox Rust compiler)
-https://static.rust-lang.org/dist/rustc-1.88.0-src.tar.gz
+# rust (Firefox Rust compiler) -- deliberately NO override: the 1.88.0 pin
+# was a downgrade of the book's rustc-1.89.0-src, so find_archive's "newest
+# wins" rule could never select it and it only cost every job a 585 MB
+# download.  Firefox and Thunderbird (blfs/10-build-applications.sh) require
+# rustc >= 1.76, which the official BLFS wget-list version satisfies.
 
 https://xorg.freedesktop.org/archive/individual/proto/xorgproto-2024.1.tar.xz
 
