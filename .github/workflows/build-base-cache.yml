@@ -155,7 +155,15 @@ jobs:
           # absence proves the last chapter of the prefix really ran.
           test ! -d tools
           ls -l usr/bin/gcc bin/bash etc/passwd
-          du -sh .
+          # du walks the whole rootfs and exits non-zero on the directories
+          # the chroot created root-only (./var/cache/ldconfig is mode 700),
+          # which failed this step even though every real check above had
+          # passed: build-base-cache #7 discarded two complete 21G prefixes
+          # that had cost 2h each to build, so no cache was ever published
+          # for the nightlies to restore.  Run it as root so the total is
+          # complete, and never let an informational size report abort the
+          # step - the test -x / test -f lines above are the real gate.
+          sudo du -sh . || true
 
       - name: Pack the base prefix into split parts
         run: |

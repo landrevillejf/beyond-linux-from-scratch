@@ -455,3 +455,36 @@ class TestNightly221PostBuildPrivileges:
         assert 'sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"' in step
         # No unprivileged top-level mv may survive the fix.
         assert "\n          mv " not in step
+
+
+class TestBaseCacheRun7VerifyStep:
+    """build-base-cache #7 built two complete 21G prefixes, 2h each, and
+    published neither: the verification step's informational size report
+    walked the rootfs as the runner user, could not read the directories
+    the chroot created root-only (./var/cache/ldconfig is mode 700) and
+    exited non-zero, which failed the step even though every real check
+    above it had passed.
+    """
+
+    def _step(self):
+        workflow = Path(".github/workflows/build-base-cache.yml").read_text()
+        marker = "- name: Verify the base prefix is real\n"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def test_size_report_cannot_abort_the_step(self):
+        step = self._step()
+        assert "sudo du -sh . || true" in step
+        # An unprivileged du both under-reports and fails the step.
+        assert "\n          du -sh .\n" not in step
+
+    def test_real_checks_still_gate_the_publish(self):
+        """Tolerating the size report must not weaken the verification:
+        the prefix content checks are what stop a hollow cache from
+        poisoning every nightly that restores it."""
+        step = self._step()
+        for check in ("test -x usr/bin/gcc", "test -x bin/bash",
+                      "test -f etc/passwd", "test ! -d tools"):
+            assert check in step, check
+            assert step.index(check) < step.index("sudo du -sh ."), check
