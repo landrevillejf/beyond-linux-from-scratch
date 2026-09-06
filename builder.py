@@ -686,6 +686,24 @@ class SourceDownloader:
     VOID_MIRRORS = (
         'https://sources.voidlinux.org',
     )
+
+    # ftpmirror.gnu.org, the redirector the LFS book's downloadable
+    # wget-list names for every GNU tarball, is a single proxy in front of
+    # a rotating set of backends: when it degrades it degrades for every
+    # runner at once.  build-base-cache run #5 collected 502/504 answers
+    # for m4, mpc, sed and readline while ftp.gnu.org, mirrors.kernel.org
+    # and team-cymru all served the same files, and neither of the two
+    # tiers above could help because the conglomeration tree carries only
+    # BLFS-book packages and Void has no LFS core stem at all -- both
+    # answered 404, leaving the core toolchain unrecoverable.  Every GNU
+    # mirror shares the ftp.gnu.org/gnu/<package>/<file> layout, so the
+    # path is re-pointed verbatim rather than guessed.
+    GNU_MIRRORS = (
+        'https://ftp.gnu.org/gnu',
+        'https://mirrors.kernel.org/gnu',
+        'https://mirror.team-cymru.com/gnu',
+        'https://mirrors.ocf.berkeley.edu/gnu',
+    )
     RETRY_BACKOFF_CAP = 30
     RATE_LIMIT_BACKOFF_CAP = 240
     MIRROR_RETRIES = 2
@@ -787,6 +805,29 @@ class SourceDownloader:
             return []
         return [f"{base}/{stem}/{filename}" for base in self.VOID_MIRRORS]
 
+    def _gnu_candidates(self, url: str) -> List[str]:
+        """Return equivalent GNU mirror URLs for one source archive.
+
+        Only URLs that are unambiguously GNU archives are rewritten: the
+        ftpmirror.gnu.org redirector, whose document root *is* the gnu
+        tree, and any path already carrying a /gnu/ segment.  Everything
+        else yields no candidate, because re-pointing a foreign URL at a
+        GNU mirror would only buy extra 404s.
+        """
+        parsed = urlparse(url)
+        host = parsed.hostname or ''
+        path = parsed.path.lstrip('/')
+        if host == 'ftpmirror.gnu.org':
+            relative = path
+        elif path.startswith('gnu/'):
+            relative = path[len('gnu/'):]
+        else:
+            return []
+        if not relative or relative.endswith('/'):
+            return []
+        return [f"{base}/{relative}" for base in self.GNU_MIRRORS
+                if urlparse(base).netloc != host]
+
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with backoff retries and a BLFS mirror fallback.
 
@@ -794,9 +835,11 @@ class SourceDownloader:
         418 anti-abuse response freedesktop.org's CDN returns under load)
         are retried with increasing delays.  Permanent client errors
         (other 4xx) fail immediately to avoid wasting time.  Once the
-        primary host has given up, the conglomeration mirrors and then
-        the Void Linux mirror are tried before the source is declared
-        missing.
+        primary host has given up, the GNU mirrors, then the
+        conglomeration mirrors and finally the Void Linux mirror are
+        tried before the source is declared missing.  The GNU tier comes
+        first because it re-points an existing path instead of deriving a
+        package directory from the filename.
         """
         if filename is None:
             filename = url.split('/')[-1]
@@ -814,7 +857,9 @@ class SourceDownloader:
         if self._download_attempt(url, dest, filename, retries):
             return True
 
-        for mirror_url in self._mirror_candidates(url) + self._void_candidates(url):
+        candidates = (self._gnu_candidates(url) + self._mirror_candidates(url)
+                      + self._void_candidates(url))
+        for mirror_url in candidates:
             self.logger.warning(f"Primary host failed for {filename}, trying mirror: {mirror_url}")
             if self._download_attempt(mirror_url, dest, filename, self.MIRROR_RETRIES):
                 return True
