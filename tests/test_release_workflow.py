@@ -488,3 +488,32 @@ class TestBaseCacheRun7VerifyStep:
                       "test -f etc/passwd", "test ! -d tools"):
             assert check in step, check
             assert step.index(check) < step.index("sudo du -sh ."), check
+
+
+class TestEmulatedArm64StageBudget:
+    """The two scheduled aarch64 workflows invoked builder.py with no
+    --stage-timeout, so lfs-system was killed at the 7200s default having
+    used every second of it (ARM64 XFCE #41, Cross-Compile #106).  Under
+    qemu-user emulation that stage needs far longer than a native one.
+    """
+
+    WORKFLOWS = ("arm64-xfce.yml", "cross-compile.yml")
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def test_stage_timeout_is_raised_but_still_fits_the_job_cap(self):
+        """10800 leaves room for the remaining stages inside GitHub's hard
+        6h job cap; a larger value would only trade a self-reported stage
+        timeout for a platform cancellation with no diagnostics at all."""
+        for name in self.WORKFLOWS:
+            workflow = self._read(name)
+            assert "--stage-timeout 10800" in workflow, name
+
+    def test_download_resilience_matches_nightly(self):
+        """The 30s/3-attempt defaults are what made a degraded GNU mirror
+        unrecoverable; nightly.yml already asks for 600s and 5 attempts."""
+        for name in self.WORKFLOWS:
+            workflow = self._read(name)
+            assert "--download-timeout 600" in workflow, name
+            assert "--download-retries 5" in workflow, name

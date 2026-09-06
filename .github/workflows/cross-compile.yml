@@ -49,7 +49,18 @@ jobs:
       - name: Build ARM64 (minimal)
         run: |
           cd /tmp/lfs-build
-          sudo -u lfs python3 builder.py --profile arm64 --no-live --output ./build-arm64
+          # The 7200s default stage timeout is too short for an emulated
+          # aarch64 build: lfs-system used the whole 2h and was killed
+          # (Cross-Compile #106).  3h is the largest value that still fits
+          # GitHub's hard 6h job cap once the ~3h the toolchain and earlier
+          # stages consume are accounted for, so a slow stage reports its
+          # own timeout instead of the job being cancelled with no
+          # diagnostics at all.  Download flags match nightly.yml.
+          sudo -u lfs python3 builder.py --profile arm64 --no-live \
+            --output ./build-arm64 \
+            --stage-timeout 10800 \
+            --download-timeout 600 \
+            --download-retries 5
 
       - name: Verify output image
         run: |
