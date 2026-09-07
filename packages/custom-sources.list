@@ -443,7 +443,7 @@ https://gitlab.freedesktop.org/wayland/weston/-/releases/14.0.2/downloads/weston
 # ============================================================================
 
 # polkit
-https://gitlab.freedesktop.org/polkit/polkit/-/archive/125/polkit-125.tar.xz
+https://github.com/polkit-org/polkit/archive/refs/tags/125.tar.gz
 
 # accountsservice -- 23.13.92 does not exist (404, a typo for 23.13.9)
 # and evicted the book's live tarball; the official wget-list is used.
