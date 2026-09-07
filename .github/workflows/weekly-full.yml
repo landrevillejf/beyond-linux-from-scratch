@@ -1,8 +1,8 @@
 name: Weekly Full Matrix
 
 on:
-  schedule:
-    - cron: '0 4 * * 0'      # Every Sunday at 04:00 UTC
+#  schedule:
+#    - cron: '0 4 * * 0'      # Every Sunday at 04:00 UTC
   workflow_dispatch:          # Manual trigger
 
 permissions:

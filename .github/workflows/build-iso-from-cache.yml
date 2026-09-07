@@ -12,8 +12,8 @@ on:
         required: true
         default: true
         type: boolean
-  schedule:
-    - cron: '0 6 * * 1'
+#  schedule:
+#    - cron: '0 6 * * 1'
 
 permissions:
   contents: write

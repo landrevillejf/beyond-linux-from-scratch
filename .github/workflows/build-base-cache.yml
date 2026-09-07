@@ -18,17 +18,17 @@ on:
     # 90 minutes ahead of the nightly cron so the cache is warm when the
     # matrix starts.
     - cron: '30 1 * * *'
-  push:
-    branches: [main]
-    paths:
-      - 'host/**'
-      - 'lfs/05a-build-lfs-basic.sh'
-      - 'lfs/05b-build-lfs-system.sh'
-      - 'config/**'
-      - 'packages/sources.list'
-      - 'packages/custom-sources.list'
-      - 'builder.py'
-      - 'VERSION'
+#  push:
+#    branches: [main]
+#    paths:
+#      - 'host/**'
+#      - 'lfs/05a-build-lfs-basic.sh'
+#      - 'lfs/05b-build-lfs-system.sh'
+#      - 'config/**'
+#      - 'packages/sources.list'
+#      - 'packages/custom-sources.list'
+#      - 'builder.py'
+#      - 'VERSION'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
