@@ -133,6 +133,27 @@
 
 ### Changed
 
+- **documentation synced with the current feature set**
+  (`docs/content.md`, `docs/index.md`, `docs/features.md`)
+  - `docs/content.md` still advertised version 0.4.3, 15 profiles and a
+    pre-LUKS/Calamares stage list.  It now carries version 0.55.1, all 17
+    profiles, the full 40-stage `BUILD_STAGES` order (adding `blfs-libs`,
+    `xorg`, `wayland`, `display-manager`, `java-dev`, `basic-networking`,
+    `multimedia`, `server`, `printing-scanning`, `audio-studio`,
+    `calamares`, `luks-encryption` and `validate`, dropping the never-built
+    `package-updater`/`lpm-advanced`), the complete command-line reference
+    (`--arch`, `--bootloader`, `--host-distro`, `--kernel-version`,
+    `--generate-sources-list`, `--sign-iso`, `--sbom`, `--milestone`,
+    `--nightly`, `--skip-man-pages`, `--download-*`, `--stage-timeout`)
+    and the corrected 150-line failure log tail
+  - `docs/index.md` bumped 0.53.0 to 0.55.1 and its stage list corrected to
+    match `BUILD_STAGES` (`service-abstraction` not `service-mgmt`,
+    `build-kernel` ahead of `desktop`, `audio-studio` present, no phantom
+    `lpm` stage, `package-manager` before `base-packages`)
+  - `docs/features.md` expanded to cover book compliance, LUKS, Calamares,
+    the audio-studio stack, supply-chain artifacts, mirror-fallback
+    downloads, the base prefix cache and the CI/CD pipeline model
+
 - **nightly job budget and concurrency**
   (`.github/workflows/nightly.yml`)
   - `timeout-minutes` drops from 480 to 330.  480 sits above GitHub's

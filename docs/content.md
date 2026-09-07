@@ -1,6 +1,6 @@
 # LFS/BLFS Builder – Documentation
 
-**Version 0.4.3** – *Works on Linux, macOS, and Windows (WSL2)*  
+**Version 0.55.1** – *Works on Linux, macOS, and Windows (WSL2)*  
 **Author:** Jean-Francois Landreville
 
 ---
@@ -9,22 +9,33 @@
 
 The **LFS/BLFS Builder** is a Python‑based orchestrator that automates the creation of a custom Linux system from scratch, following the Linux From Scratch (LFS) and Beyond Linux From Scratch (BLFS) books. It downloads source tarballs, runs a series of shell scripts to compile the toolchain, the base system, desktop environments, and additional packages, and finally produces a bootable ISO image.
 
-The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC, etc.), desktop environments (XFCE, GNOME, KDE, LXQt), cross‑compilation for ARM64, and a cache mechanism to speed up repeated builds.
+The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC, runit, s6), desktop environments (XFCE, GNOME, KDE, LXQt, Phosh), cross‑compilation for ARM64, a cache mechanism to speed up repeated builds, LUKS full‑disk encryption, the Calamares graphical installer, professional branding, and supply‑chain artifacts (GPG signing and SPDX SBOM).
 
 ---
 
 ## Features
 
-- **Profile‑based builds** – choose from 15 predefined profiles (minimal, full desktop, security‑hardened, etc.).
+- **Profile‑based builds** – choose from 17 profiles (minimal, full desktop, security‑hardened, audio production, ARM64, etc.).
 - **Flexible init systems** – sysvinit, systemd, OpenRC, runit, s6.
-- **Desktop environments** – XFCE, GNOME, KDE Plasma, LXQt, or no GUI.
-- **Cross‑compilation** – build for ARM64 (aarch64) on an x86_64 host using QEMU and cross‑toolchains.
-- **Cache support** – download a pre‑built root filesystem from a remote cache to skip compilation (useful for CI/CD).
-- **Live ISO generation** – produce a hybrid BIOS/UEFI ISO with a squashfs live system.
+- **Desktop environments** – XFCE, GNOME, KDE Plasma, LXQt, Phosh (mobile), or no GUI.
+- **Book compliance** – stages follow LFS 13.0 / BLFS 13.0: packages are built with the exact commands from the books, with the books' error policy enforced.
+- **Cross‑compilation** – build for ARM64 (aarch64) on an x86_64 host using QEMU and cross‑toolchains; target arch can be overridden with `--arch`.
+- **Cache support** – download a pre‑built root filesystem from a remote cache to skip compilation (`--use-cache`, `--cache-only`; useful for CI/CD).
+- **Live ISO generation** – produce a hybrid BIOS/UEFI ISO with a squashfs live system and persistence support.
+- **LUKS encryption** – full‑disk encryption support via the `luks-encryption` stage.
+- **Calamares installer** – graphical system installer integration.
+- **Complete software stacks** – basic networking, multimedia (PipeWire/PulseAudio, GStreamer, ffmpeg, mpv, VLC), server packages (Apache, MariaDB, PostgreSQL, Samba, OpenSSH, ...), printing and scanning (CUPS, SANE, Gutenprint).
+- **Audio production** – Ardour DAW, LV2 plugin packs (LSP, Dragonfly), NeuralRack and a PREEMPT_RT realtime kernel for the `audio-studio` profile.
+- **Security and privacy** – kernel hardening, nftables firewall, fail2ban, auditing (AIDE), and privacy tools.
+- **Java development stack** – JDK, Maven, Gradle, Tomcat and container tooling via the `java-dev` stage.
 - **USB writing** – write the ISO directly to a USB drive with partition unmounting.
-- **Parallel downloads** – fetch source tarballs concurrently.
-- **Resume capability** – restart from a failed stage without redoing previous work.
-- **Comprehensive logging** – detailed logs per stage, with last 50 lines displayed on failure.
+- **Parallel downloads** – fetch source tarballs concurrently, with configurable timeouts and retries.
+- **Resume capability** – restart from a failed stage without redoing previous work (`--resume-from`); stop early with `--stop-after`.
+- **Build validation** – final `validate` stage checks the produced image before publication.
+- **Supply-chain artifacts** – GPG-sign the ISO (`--sign-iso`) and generate an SPDX SBOM (`--sbom`).
+- **Milestone / nightly naming** – tag ISO filenames with a milestone label (`--milestone alpha1`) or today's date (`--nightly`).
+- **Professional branding** – custom themes, wallpapers, and GRUB backgrounds for the installer and live system.
+- **Comprehensive logging** – detailed logs per stage, with last 150 lines displayed on failure.
 
 ---
 
@@ -104,8 +115,11 @@ python3 builder.py --write-usb /dev/sdb
 | `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`. |
 | `--output` | Output directory (default: `./lfs-build`). |
 | `--config` | Configuration file path (default: `config/build.conf`). |
+| `--download-timeout` | Timeout in seconds for each download (default: from config or 300). |
+| `--download-retries` | Number of retries for failed downloads (default: from config or 3). |
+| `--stage-timeout` | Timeout in seconds for each build stage (default: 7200; raise for qemu-emulated cross builds). |
 | `--resume-from` | Resume from a specific stage. Sources are still validated and downloaded first, and an unknown stage name is a hard error rather than a silent restart. |
-| `--stop-after` | Stop after a specific stage completes (used for cache builds). |
+| `--stop-after` | Stop once this stage has completed (used to publish the base prefix cache). |
 | `--write-usb` | Write the generated ISO to a USB device (e.g., `/dev/sdb`). |
 | `--list-profiles` | List all available profiles. |
 | `--profile-info` | Show detailed information about a specific profile. |
@@ -118,6 +132,16 @@ python3 builder.py --write-usb /dev/sdb
 | `--cache-only` | Only use the cache; fail if not found. |
 | `--cache-url` | Custom URL for cache metadata (default: a predefined JSON). |
 | `--kernel-type` | Kernel type: `linux`, `linux-libre`, `gnu-hurd`, `freebsd`. |
+| `--kernel-version` | Kernel version override (e.g. `6.16.1`, `6.12.20`). |
+| `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`). |
+| `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`). |
+| `--arch` | Target architecture (`x86_64`, `aarch64`). |
+| `--generate-sources-list` | Generate `packages/sources.list` and exit. |
+| `--sign-iso [GPG_KEY]` | Sign the generated ISO with GPG (optional key ID or email). |
+| `--sbom` | Generate an SPDX software bill of materials after the build. |
+| `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`). |
+| `--nightly` | Nightly build mode: append today's date to the ISO filename. |
+| `--skip-man-pages` | Export `SKIP_MAN_PAGES=true` so stage scripts skip man page generation. |
 
 ---
 
@@ -154,7 +178,7 @@ The builder comes with a set of predefined profiles that configure the target sy
 | `arm64` | ARM64 server (Raspberry Pi, Orange Pi) |
 | `audio-cli` | CLI‑only audio production system |
 | `pinebook` | Pinebook / Pinebook Pro ARM64 laptop |
-| `audio-studio` | Full audio production studio with XFCE |
+| `audio-studio` | Pro audio studio: XFCE, Ardour DAW, LV2/NeuralRack, LSP/Dragonfly plugins, PREEMPT_RT |
 | `kde` | KDE Plasma full‑featured desktop |
 | `lxqt` | LXQt extremely lightweight Qt desktop |
 | `server` | Production‑optimised server configuration |
@@ -186,39 +210,50 @@ You can override any setting by editing the file. The builder will create a defa
 
 ## Build Stages
 
-The build process is divided into several stages, executed in order:
+The build process is divided into ordered stages. Profiles include or skip stages as needed (GUI stages are skipped for headless profiles, and `qemu-setup`/`uboot` only run for cross-compiled architectures). The master ordered list (`BUILD_STAGES` in `builder.py`) is:
 
 1. **host-check** – verify host system prerequisites.
 2. **host-prepare** – prepare the host environment (create user, directories).
-3. **disk-image** – create a disk image file.
-4. **toolchain** – build the cross‑toolchain (binutils, gcc).
-5. **qemu-setup** – set up QEMU user emulation for cross‑compilation.
-6. **uboot** – build U‑Boot for ARM boards.
+3. **qemu-setup** – set up QEMU user emulation for cross-compilation.
+4. **disk-image** – create a disk image file.
+5. **toolchain** – build the cross-toolchain (binutils, gcc).
+6. **uboot** – build U-Boot for ARM boards.
 7. **lfs-basic** – build the basic LFS system (bash, coreutils, etc.).
 8. **lfs-system** – build the full LFS system (glibc, binutils, gcc).
 9. **init-system** – install the chosen init system.
 10. **service-abstraction** – set up service management.
 11. **configure-lfs** – configure the LFS system.
 12. **blfs-base** – build BLFS base packages (curl, openssl, etc.).
-13. **build-kernel** – compile the Linux kernel.
-14. **desktop** – build the desktop environment (if enabled).
-15. **applications** – install desktop applications.
-16. **configure-desktop** – configure the desktop.
-17. **package-manager** – install the LPM package manager.
-18. **base-packages** – install base packages via LPM.
-19. **security** – apply security hardening.
-20. **privacy** – install privacy tools.
-21. **branding** – apply custom branding (themes, wallpapers).
-22. **first-boot** – set up first‑boot services.
-23. **system-updater** – install the system updater.
-24. **package-updater** – install the package updater.
-25. **lpm-advanced** – advanced LPM features.
-26. **initramfs** – create the initramfs.
-27. **bootloader** – install the bootloader (GRUB).
-28. **installer** – create the bootable ISO.
-29. **live-system** – generate the live squashfs and final ISO.
+13. **blfs-libs** – build core BLFS libraries (glib, mesa, GTK, ...).
+14. **xorg** – build the X Window System stack.
+15. **wayland** – build the Wayland stack.
+16. **display-manager** – build the display manager (LightDM, etc.).
+17. **build-kernel** – compile the Linux kernel.
+18. **desktop** – build the desktop environment (if enabled).
+19. **applications** – install desktop applications.
+20. **configure-desktop** – configure the desktop.
+21. **java-dev** – install the Java development stack (if enabled).
+22. **basic-networking** – configure networking (profiles declaring `network`).
+23. **multimedia** – install the multimedia stack (audio/multimedia profiles).
+24. **server** – install server packages (profiles declaring `ssh`/`server-tools`).
+25. **printing-scanning** – install CUPS/SANE (profiles declaring `printing` or `all`).
+26. **audio-studio** – install pro audio tooling (audio profiles only).
+27. **package-manager** – install the LPM package manager.
+28. **base-packages** – install base packages via LPM.
+29. **security** – apply security hardening.
+30. **privacy** – install privacy tools.
+31. **branding** – apply custom branding (themes, wallpapers).
+32. **calamares** – install the Calamares graphical installer.
+33. **first-boot** – set up first-boot services.
+34. **system-updater** – install the system updater.
+35. **luks-encryption** – set up LUKS full-disk encryption support.
+36. **initramfs** – create the initramfs.
+37. **bootloader** – install the bootloader (GRUB).
+38. **installer** – create the bootable ISO.
+39. **live-system** – generate the live squashfs and final ISO (when enabled).
+40. **validate** – validate the produced build before publication.
 
-If a stage fails, you can resume from that stage using `--resume-from`.
+If a stage fails, you can resume from that stage using `--resume-from`, or stop early with `--stop-after`.
 
 ---
 
@@ -267,7 +302,7 @@ You can add custom source URLs (e.g., for private mirrors or additional packages
 
 ## Troubleshooting
 
-- **Build fails at a stage** – check the log file at `./lfs-build/logs/<stage>.log`. The builder prints the last 50 lines on failure.
+- **Build fails at a stage** – check the log file at `./lfs-build/logs/<stage>.log`. The builder prints the last 150 lines on failure.
 - **Missing host tools** – install required packages (see System Requirements).
 - **Disk space** – a full desktop build may require 20–30 GB. Use `--clean` to free space.
 - **Download errors** – some source URLs may be outdated. Update `packages/sources.list` manually or via `_update_sources_list()`.

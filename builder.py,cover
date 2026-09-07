@@ -5,27 +5,31 @@
 > Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026
 > """
   
-> import os
-> import re
-> import sys
-> import json
 > import argparse
-> import subprocess
-> import platform
-> import shutil
+> import copy
 > import hashlib
-> import socket
-> from pathlib import Path
-> from datetime import datetime
-> from typing import Any, Dict, List, Optional, Tuple
+> import json
 > import logging
+> import os
+> import platform
+> import pwd
+> import random
+> import re
+> import shutil
+> import socket
+> import subprocess
+> import sys
 > import tarfile
 > import tempfile
-> import pwd
-> import urllib.request
+> import time
 > import urllib.error
-> from urllib.parse import urlparse
+> import urllib.request
 > from concurrent.futures import ThreadPoolExecutor, as_completed
+> from datetime import datetime, timezone
+> from pathlib import Path
+> from typing import Any, Dict, List, Optional, Tuple
+> from urllib.parse import urlparse
+  
   
   # ============================================================================
   # VERSION INFO - Read from VERSION file
@@ -52,34 +56,51 @@
 >     'common': 'common'
 > }
   
-  # Build stages with correct paths
+  # Build stages with correct paths.  This master list mirrors the order of
+  # LFSBuilder.get_build_stages(); conditional stages are all listed here and
+  # filtered per profile at runtime.  Keep both in sync (guardrail:
+  # tests/test_builder.py::test_build_stages_constant_matches_scheduler).
 > BUILD_STAGES = [
 >     ('host-check', 'host/01-check-host.sh'),
 >     ('host-prepare', 'host/02-prepare-host.sh'),
+>     ('qemu-setup', 'host/00-setup-qemu.sh'),
 >     ('disk-image', 'host/03-create-disk-image.sh'),
 >     ('toolchain', 'host/04-build-toolchain.sh'),
->     ('qemu-setup', 'host/00-setup-qemu.sh'),
 >     ('uboot', 'host/05-build-uboot.sh'),
->     ('lfs-system', 'lfs/05-build-lfs-system.sh'),
+>     ('lfs-basic', 'lfs/05a-build-lfs-basic.sh'),
+>     ('lfs-system', 'lfs/05b-build-lfs-system.sh'),
 >     ('init-system', 'lfs/06a-init-system.sh'),
->     ('service-mgmt', 'lfs/06b-service-management.sh'),
+>     ('service-abstraction', 'lfs/06b-service-management.sh'),
 >     ('configure-lfs', 'lfs/07-configure-lfs.sh'),
->     ('blfs-base', 'lfs/08-build-blfs-base.sh'),
+>     ('blfs-base', 'blfs/08-build-blfs-base.sh'),
+>     ('blfs-libs', 'blfs/08a-build-blfs-libs.sh'),
+>     ('xorg', 'blfs/08b-build-xorg.sh'),
+>     ('wayland', 'blfs/08c-build-wayland.sh'),
+>     ('display-manager', 'blfs/08d-build-display-manager.sh'),
+>     ('build-kernel', 'lfs/08-build-kernel.sh'),
 >     ('desktop', 'blfs/09-build-desktop.sh'),
 >     ('applications', 'blfs/10-build-applications.sh'),
 >     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
 >     ('java-dev', 'blfs/12-install-java-dev.sh'),
+>     ('basic-networking', 'blfs/23-basic-networking.sh'),
+>     ('multimedia', 'blfs/24-multimedia.sh'),
+>     ('server', 'blfs/25-server.sh'),
+>     ('printing-scanning', 'blfs/26-printing-scanning.sh'),
+>     ('audio-studio', 'blfs/27-audio-studio.sh'),
+>     ('package-manager', 'blfs/19-lpm.sh'),
 >     ('base-packages', 'blfs/14-create-base-packages.sh'),
 >     ('security', 'blfs/15-security-hardening.sh'),
 >     ('privacy', 'blfs/16-privacy-tools.sh'),
 >     ('branding', 'blfs/20-branding.sh'),
+>     ('calamares', 'blfs/22-calamares-installer.sh'),
 >     ('first-boot', 'blfs/17-first-boot-service.sh'),
 >     ('system-updater', 'blfs/18-system-updater.sh'),
->     ('lpm', 'blfs/19-lpm.sh'),
+>     ('luks-encryption', 'blfs/21-luks-encryption.sh'),
 >     ('initramfs', 'final/12-create-initramfs.sh'),
 >     ('bootloader', 'final/13-create-bootloader.sh'),
 >     ('installer', 'final/14-create-installer.sh'),
 >     ('live-system', 'final/15-create-live-system.sh'),
+>     ('validate', 'final/16-validate-build.sh'),
 > ]
   
   # ============================================================================
@@ -125,7 +146,7 @@
   
 >     def get_default_config(self) -> Dict:
 >         """Return default configuration for LFS 13.0"""
->         return {
+-         return {
 >             "lfs_version": "13.0",
 >             "blfs_version": "13.0",
 >             "architecture": "x86_64",
@@ -173,7 +194,7 @@
   
 >             "java_dev": {
 >                 "enabled": False,
->                 "version": "21.0.10",
+>                 "version": "21.0.9",
 >                 "distribution": "temurin",
 >                 "tools": ["maven", "gradle", "tomcat", "jenkins", "docker", "kubectl"],
 >                 "optimizations": True,
@@ -205,12 +226,9 @@
 >                 "kernel_hardening": True,
 >                 "firewall": {"enabled": True, "backend": "nftables", "allow_ssh": True, "allow_http": False},
 >                 "privacy": {"disable_telemetry": True, "clear_tmp_on_boot": True, "disable_core_dumps": True},
->                 "fail2ban": {"enabled": True, "ban_time": 3600, "max_retry": 5},
 >                 "audit": {"enabled": True, "monitor_files": ["/etc/passwd", "/etc/shadow", "/etc/sudoers"]},
 >                 "user_hardening": {"password_min_length": 12, "disable_root_login": True, "max_login_attempts": 5},
->                 "encryption": {"encrypted_swap": True, "swap_size_mb": 2048},
->                 "hids": {"enabled": True, "daily_check": True, "tool": "aide"},
->                 "daily_scans": {"enabled": True, "rootkit_check": True, "port_scan": True}
+>                 "encryption": {"encrypted_swap": True, "swap_size_mb": 2048}
 >             },
   
 >             "bootloader": {
@@ -314,7 +332,7 @@
 >     """Manage build profiles with flexible desktop, init system, and audio options"""
   
       # Available choices for configuration
->     AVAILABLE_DESKTOPS = ['none', 'xfce', 'gnome', 'kde', 'lxqt']
+>     AVAILABLE_DESKTOPS = ['none', 'xfce', 'gnome', 'kde', 'lxqt', 'phosh']
 >     AVAILABLE_INIT_SYSTEMS = ['sysvinit', 'systemd', 'openrc', 'runit', 's6']
 >     AVAILABLE_AUDIO = ['none', 'cli', 'studio']
   
@@ -332,7 +350,10 @@
 >             'security_hardening': False,
 >             'privacy_tools': False,
 >             'live_system': False,
->             'system_updater': False,
+              # Every shipped system needs a way to update itself, and lfs-update
+              # only delegates to the lpm this profile already installs, so the
+              # updater is no longer optional on the lean profile either.
+>             'system_updater': True,
 >             'desktop_options': ['none'],
 >             'init_options': ['sysvinit', 'systemd', 'openrc'],
 >             'audio_options': ['none']
@@ -357,7 +378,7 @@
 >             'description': 'Full GNU System with all GNU packages',
 >             'size_gb': 10,
 >             'build_time_hours': 8,
->             'packages': ['gnu-all', 'gnu-emacs', 'gnu-octave', 'icecat'],
+>             'packages': ['gnu-all', 'gnu-emacs'],
 >             'desktop': 'xfce',
 >             'init_system': 'sysvinit',
 >             'java_dev': False,
@@ -373,7 +394,7 @@
 >             'description': 'XFCE desktop environment',
 >             'size_gb': 4,
 >             'build_time_hours': 4,
->             'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps'],
+>             'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'multimedia'],
 >             'desktop': 'xfce',
 >             'init_system': 'systemd',
 >             'java_dev': False,
@@ -387,7 +408,7 @@
 >             'description': 'GNOME desktop environment',
 >             'size_gb': 8,
 >             'build_time_hours': 8,
->             'packages': ['base', 'network', 'ssh', 'xorg', 'gnome', 'apps'],
+>             'packages': ['base', 'network', 'ssh', 'xorg', 'gnome', 'apps', 'multimedia'],
 >             'desktop': 'gnome',
 >             'init_system': 'systemd',
 >             'java_dev': False,
@@ -401,7 +422,7 @@
 >             'description': 'Java development environment with XFCE',
 >             'size_gb': 10,
 >             'build_time_hours': 6,
->             'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'java', 'maven', 'gradle', 'tomcat', 'jenkins', 'docker'],
+>             'packages': ['base', 'network', 'ssh', 'xorg', 'xfce', 'apps', 'multimedia', 'java', 'maven', 'gradle', 'tomcat', 'jenkins', 'docker'],
 >             'desktop': 'xfce',
 >             'init_system': 'systemd',
 >             'java_dev': True,
@@ -460,7 +481,7 @@
 >             'description': 'CLI-only audio production system',
 >             'size_gb': 2,
 >             'build_time_hours': 3,
->             'packages': ['base', 'network', 'audio-core', 'audio-midi'],
+>             'packages': ['base', 'network', 'audio-core'],
 >             'desktop': None,
 >             'init_system': 'sysvinit',
 >             'java_dev': False,
@@ -488,10 +509,10 @@
 >             'bootloader': 'uboot'
 >         },
 >         'audio-studio': {
->             'description': 'Full audio production studio with XFCE',
->             'size_gb': 8,
->             'build_time_hours': 6,
->             'packages': ['base', 'network', 'xorg', 'xfce', 'audio-core', 'audio-daw', 'audio-plugins', 'audio-midi'],
+>             'description': 'Pro audio studio: XFCE, Ardour + LV2/NeuralRack, LSP/Dragonfly plugins, PREEMPT_RT',
+>             'size_gb': 9,
+>             'build_time_hours': 8,
+>             'packages': ['base', 'network', 'xorg', 'xfce', 'audio-core', 'audio-plugins'],
 >             'desktop': 'xfce',
 >             'init_system': 'systemd',
 >             'java_dev': False,
@@ -519,7 +540,7 @@
 >             'description': 'LXQt extremely lightweight Qt desktop environment',
 >             'size_gb': 2,
 >             'build_time_hours': 3,
->             'packages': ['base', 'network', 'ssh', 'xorg', 'lxqt', 'apps'],
+>             'packages': ['base', 'network', 'ssh', 'xorg', 'lxqt', 'apps', 'multimedia'],
 >             'desktop': 'lxqt',
 >             'init_system': 'systemd',
 >             'java_dev': False,
@@ -578,10 +599,10 @@
   
 >     @classmethod
 >     def get_profile(cls, name: str) -> Dict:
->         """Get profile configuration"""
+>         """Get profile configuration (returns a deep copy to prevent mutation)"""
 >         if name not in cls.PROFILES:
 >             raise ValueError(f"Unknown profile: {name}. Available: {list(cls.PROFILES.keys())}")
->         return cls.PROFILES[name]
+>         return copy.deepcopy(cls.PROFILES[name])
   
 >     @classmethod
 >     def list_profiles(cls) -> List[str]:
@@ -627,8 +648,94 @@
   # SOURCE DOWNLOADER
   # ============================================================================
   
+  # Reference kept so the IPv4-only wrapper below can delegate to the
+  # real resolver.
+> _ORIGINAL_GETADDRINFO = socket.getaddrinfo
+  
+  
+> def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+>     """Restrict DNS resolution to IPv4 addresses.
+  
+>     The IPv6 route from CI runners to some mirrors (ftp.gnu.org)
+>     intermittently dies with ENETUNREACH while IPv4 keeps working
+>     (Nightly #194), so download attempts alternate between stacks.
+>     """
+>     return _ORIGINAL_GETADDRINFO(host, port, socket.AF_INET, type, proto, flags)
+  
+  
+> def _archive_filename(url: str) -> str:
+>     """Return the on-disk filename a source URL is stored under.
+  
+>     GitHub's auto-generated /archive/refs/{tags,heads}/ tarballs are named
+>     after the ref alone, so the OpenRC pin used to land in /sources as
+>     "0.63.3.tar.gz".  Every stage script resolves its sources through
+>     find_archive, which globs on the package-name prefix, so no script
+>     could ever match that file and all 15 openrc cells of the weekly
+>     matrix died on "Source archive missing for openrc".  OpenRC publishes
+>     no release assets, so deriving the name here is the only fix that does
+>     not depend on a third-party mirror.
+  
+>     A basename that already starts with the repository name is returned
+>     unchanged (audacity/Audacity-3.7.8.tar.gz,
+>     vamp-plugin-sdk/vamp-plugin-sdk-v2.10.tar.gz): prefixing those again
+>     would demote them from find_archive's name-<version> tier to its
+>     weaker fallback tier without making them any easier to match.
+>     """
+>     basename = url.split('/')[-1]
+>     match = re.search(r'/([^/]+)/archive/refs/(?:tags|heads)/[^/]+$',
+>                       urlparse(url).path)
+>     if not match:
+>         return basename
+>     repo = match.group(1)
+>     if basename.lower().startswith(repo.lower()):
+>         return basename
+>     return f"{repo}-{basename}"
+  
+  
 > class SourceDownloader:
 >     """Download and verify LFS/BLFS sources"""
+  
+      # BLFS keeps its own copy of every book tarball in a "conglomeration"
+      # tree laid out as <mirror>/<package>/<filename>.  It is the only
+      # fallback that keeps a build alive when an upstream host drops an
+      # archive or throttles CI runners (Nightly #212: freedesktop.org
+      # answered 418 to every libevdev request and killed all twelve
+      # x86_64 jobs; several wget-list URLs now 404 outright).
+>     CONGLOMERATION_MIRRORS = (
+>         'https://ftp2.osuosl.org/pub/blfs/conglomeration',
+>     )
+  
+      # Void Linux keeps every upstream tarball it packages in a flat tree
+      # keyed by the archive stem (<mirror>/<stem>/<file>), byte-identical
+      # to the original.  It is the second fallback for the hosts the
+      # conglomeration tree does not carry: Nightly #213 lost the gnome and
+      # audio-studio jobs because freedesktop.org answered 418 to every
+      # libevdev request for the whole run and conglomeration has no
+      # libevdev directory at all.
+>     VOID_MIRRORS = (
+>         'https://sources.voidlinux.org',
+>     )
+  
+      # ftpmirror.gnu.org, the redirector the LFS book's downloadable
+      # wget-list names for every GNU tarball, is a single proxy in front of
+      # a rotating set of backends: when it degrades it degrades for every
+      # runner at once.  build-base-cache run #5 collected 502/504 answers
+      # for m4, mpc, sed and readline while ftp.gnu.org, mirrors.kernel.org
+      # and team-cymru all served the same files, and neither of the two
+      # tiers above could help because the conglomeration tree carries only
+      # BLFS-book packages and Void has no LFS core stem at all -- both
+      # answered 404, leaving the core toolchain unrecoverable.  Every GNU
+      # mirror shares the ftp.gnu.org/gnu/<package>/<file> layout, so the
+      # path is re-pointed verbatim rather than guessed.
+>     GNU_MIRRORS = (
+>         'https://ftp.gnu.org/gnu',
+>         'https://mirrors.kernel.org/gnu',
+>         'https://mirror.team-cymru.com/gnu',
+>         'https://mirrors.ocf.berkeley.edu/gnu',
+>     )
+>     RETRY_BACKOFF_CAP = 30
+>     RATE_LIMIT_BACKOFF_CAP = 240
+>     MIRROR_RETRIES = 2
   
 >     def __init__(self, sources_dir: Path, logger: logging.Logger, timeout: int = 30, retries: int = 2):
 >         self.sources_dir = sources_dir
@@ -649,20 +756,155 @@
 >         urllib.request.install_opener(opener)
 >         return opener
   
+>     def _is_valid_archive(self, path: Path) -> bool:
+>         """Check the magic bytes of an archive by extension.
+  
+>         Cache-restored files may be HTML error pages or truncated
+>         downloads (Nightly #162/#163 died on a corrupt zlib tarball);
+>         trusting them blindly poisons every later run.
+>         """
+>         magic_map = {
+>             '.gz': (b'\x1f\x8b',),
+>             '.tgz': (b'\x1f\x8b',),
+>             '.xz': (b'\xfd7zXZ\x00',),
+>             '.bz2': (b'BZh',),
+>             '.zip': (b'PK',),
+>         }
+          # .tar.* archives: match on the final compression suffix
+>         suffixes = path.suffixes
+>         if len(suffixes) >= 2 and suffixes[-2] == '.tar':
+>             key = suffixes[-1]
+>         else:
+>             key = path.suffix
+>         expected = magic_map.get(key)
+>         if expected is None:
+>             return True  # Unknown type: do not block the build
+>         try:
+>             with open(path, 'rb') as f:
+>                 header = f.read(6)
+>         except OSError:
+>             return False
+>         return any(header.startswith(m) for m in expected)
+  
+>     def _backoff_delay(self, attempt: int, rate_limited: bool = False) -> float:
+>         """Exponential backoff, far more patient on rate-limit answers.
+  
+>         A 418/429 means the host is deliberately throttling us, so coming
+>         back a second later only re-enters the same block window (Nightly
+          #212: every libevdev attempt hit freedesktop.org's 418 window and
+>         took the whole blfs-libs stage down with it).
+>         """
+>         cap = self.RATE_LIMIT_BACKOFF_CAP if rate_limited else self.RETRY_BACKOFF_CAP
+>         base = 2 ** attempt * (8 if rate_limited else 1)
+>         return min(base + random.uniform(0, 1), cap)
+  
+>     def _mirror_candidates(self, url: str) -> List[str]:
+>         """Return BLFS conglomeration mirror URLs for one source archive.
+  
+>         The tree is keyed by package directory, so strip the archive
+>         suffix and the trailing version to recover its name.  Filenames
+>         without a recognisable version yield no candidate: guessing a
+>         directory would only buy extra 404s.
+>         """
+>         filename = Path(urlparse(url).path).name
+>         match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
+>         if not match:
+>             return []
+>         stem = match.group(1)
+>         package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
+>         if not package or package == stem:
+>             return []
+>         return [f"{base}/{package}/{filename}" for base in self.CONGLOMERATION_MIRRORS]
+  
+>     def _void_candidates(self, url: str) -> List[str]:
+>         """Return Void Linux mirror URLs for one source archive.
+  
+>         The tree is keyed by the whole archive stem, so no package name
+>         has to be guessed.  Stems without a trailing version are skipped
+>         for the same reason as in _mirror_candidates: the layout is
+>         <name>-<version> and anything else would only buy extra 404s.
+>         """
+>         filename = Path(urlparse(url).path).name
+>         match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
+>         if not match:
+>             return []
+>         stem = match.group(1)
+>         package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
+>         if not package or package == stem:
+>             return []
+>         return [f"{base}/{stem}/{filename}" for base in self.VOID_MIRRORS]
+  
+>     def _gnu_candidates(self, url: str) -> List[str]:
+>         """Return equivalent GNU mirror URLs for one source archive.
+  
+>         Only URLs that are unambiguously GNU archives are rewritten: the
+>         ftpmirror.gnu.org redirector, whose document root *is* the gnu
+>         tree, and any path already carrying a /gnu/ segment.  Everything
+>         else yields no candidate, because re-pointing a foreign URL at a
+>         GNU mirror would only buy extra 404s.
+>         """
+>         parsed = urlparse(url)
+>         host = parsed.hostname or ''
+>         path = parsed.path.lstrip('/')
+>         if host == 'ftpmirror.gnu.org':
+>             relative = path
+>         elif path.startswith('gnu/'):
+>             relative = path[len('gnu/'):]
+>         else:
+>             return []
+>         if not relative or relative.endswith('/'):
+>             return []
+>         return [f"{base}/{relative}" for base in self.GNU_MIRRORS
+>                 if urlparse(base).netloc != host]
+  
 >     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
->         """Download a file with retry"""
+>         """Download a file with backoff retries and a BLFS mirror fallback.
+  
+>         Transient errors (timeouts, connection resets, 5xx, 429 and the
+>         418 anti-abuse response freedesktop.org's CDN returns under load)
+>         are retried with increasing delays.  Permanent client errors
+>         (other 4xx) fail immediately to avoid wasting time.  Once the
+>         primary host has given up, the GNU mirrors, then the
+>         conglomeration mirrors and finally the Void Linux mirror are
+>         tried before the source is declared missing.  The GNU tier comes
+>         first because it re-points an existing path instead of deriving a
+>         package directory from the filename.
+>         """
 >         if filename is None:
->             filename = url.split('/')[-1]
+>             filename = _archive_filename(url)
   
 >         dest = self.sources_dir / filename
 >         retries = self.retries if retries is None else max(1, int(retries))
   
 >         if dest.exists():
->             self.logger.info(f"Already exists: {filename}")
+>             if self._is_valid_archive(dest):
+>                 self.logger.info(f"Already exists: {filename}")
+>                 return True
+>             self.logger.warning(f"Existing file is not a valid archive, re-downloading: {filename}")
+>             dest.unlink()
+  
+>         if self._download_attempt(url, dest, filename, retries):
 >             return True
   
+>         candidates = (self._gnu_candidates(url) + self._mirror_candidates(url)
+>                       + self._void_candidates(url))
+>         for mirror_url in candidates:
+>             self.logger.warning(f"Primary host failed for {filename}, trying mirror: {mirror_url}")
+>             if self._download_attempt(mirror_url, dest, filename, self.MIRROR_RETRIES):
+>                 return True
+>         return False
+  
+>     def _download_attempt(self, url: str, dest: Path, filename: str, retries: int) -> bool:
+>         """Fetch one URL, alternating resolvers and backing off between tries."""
 >         for attempt in range(retries):
 >             self.logger.info(f"Downloading: {filename} (attempt {attempt + 1}/{retries})")
+              # Alternate dual-stack and IPv4-only resolution: the IPv6
+              # route to some mirrors dies intermittently on CI runners
+              # (ENETUNREACH) while IPv4 keeps working.
+>             previous_getaddrinfo = socket.getaddrinfo
+>             if attempt % 2 == 1:
+>                 socket.getaddrinfo = _ipv4_only_getaddrinfo
+>             corrupt_body = False
 >             try:
 >                 previous_timeout = socket.getdefaulttimeout()
 >                 socket.setdefaulttimeout(self.timeout)
@@ -670,61 +912,131 @@
 >                     urllib.request.urlretrieve(url, dest)
 >                 finally:
 >                     socket.setdefaulttimeout(previous_timeout)
->                 return True
+>                 if self._is_valid_archive(dest):
+>                     return True
+                  # A 200 whose body is not the advertised archive (an HTML
+                  # error page, a placeholder left behind by a rotated
+                  # snapshot) must be treated as a failed attempt: Nightly
+                  # #218's gnome job stored such a body as ncurses and
+                  # lfs-system then died on "gzip: stdin: not in gzip
+                  # format" with no package name anywhere in the log.
+>                 dest.unlink(missing_ok=True)
+>                 corrupt_body = True
+>                 self.logger.error(f"Response body from {url} is not a valid archive; discarding")
 >             except urllib.error.HTTPError as e:
->                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
 >                 if dest.exists():
 >                     dest.unlink()
+                  # Permanent client errors – do not retry.  429 (rate
+                  # limit) and 418 (freedesktop.org's anti-abuse "I'm a
+                  # teapot") are transient: a single rate-limit window must
+                  # not fail the whole stage, so both fall through to the
+                  # backoff retry below (Nightly #208: libevdev 418 aborted
+                  # blfs-libs for the xfce jobs).
+>                 rate_limited = e.code in (418, 429)
+>                 if 400 <= e.code < 500 and not rate_limited:
+>                     self.logger.error(f"Permanent error downloading {url}: {e}")
+>                     return False
+                  # Retryable server errors and rate limits
+>                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
+>                 if attempt < retries - 1:
+>                     delay = self._backoff_delay(attempt, rate_limited)
+>                     self.logger.info(f"Retrying in {delay:.1f}s...")
+>                     time.sleep(delay)
+>                     continue
 >                 self.logger.error(f"Failed to download {url}: {e}")
 >                 return False
 >             except Exception as e:
->                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
 >                 if dest.exists():
 >                     dest.unlink()
+>                 self.logger.warning(f"Attempt {attempt + 1} failed: {e}")
 >                 if attempt < retries - 1:
+>                     delay = self._backoff_delay(attempt)
+>                     self.logger.info(f"Retrying in {delay:.1f}s...")
+>                     time.sleep(delay)
 >                     continue
 >                 self.logger.error(f"Failed to download {url}: {e}")
->                 return False  # at top
+>                 return False
+>             finally:
+>                 socket.getaddrinfo = previous_getaddrinfo
+>             if corrupt_body:
+>                 if attempt < retries - 1:
+>                     delay = self._backoff_delay(attempt)
+>                     self.logger.info(f"Retrying in {delay:.1f}s...")
+>                     time.sleep(delay)
+>                     continue
+>                 self.logger.error(f"Failed to download a valid archive from {url}")
+>                 return False
+>         return False
   
->     def download_from_list(self, list_file: Path, parallel: int = 4) -> bool:
->         """Download multiple sources in parallel"""
->         if not list_file.exists():
->             self.logger.error(f"Sources list not found: {list_file}")
->             return False
+-     def download_from_list(self, list_file: Path, parallel: int = 4,
+-                            retry_passes: int = 2) -> bool:
+-         """Download multiple sources in parallel with retry passes.
   
->         urls = []
->         with open(list_file, 'r') as f:
->             for line in f:
->                 line = line.strip()
->                 if line and not line.startswith('#'):
->                     if line.startswith('git://') or line.endswith('.git'):
->                         self.logger.info(f"Skipping Git repository (use git clone): {line}")
->                         continue
->                     urls.append(line)
+-         After the initial parallel download, any failures are retried in
+-         sequential passes to handle transient network issues common in CI.
+-         """
+-         if not list_file.exists():
+-             self.logger.error(f"Sources list not found: {list_file}")
+-             return False
   
->         self.logger.info(f"Downloading {len(urls)} sources with {parallel} threads")
+-         urls = []
+-         with open(list_file, 'r') as f:
+-             for line in f:
+-                 line = line.strip()
+-                 if line and not line.startswith('#'):
+-                     if line.startswith('git://') or line.endswith('.git'):
+-                         self.logger.info(f"Skipping Git repository (use git clone): {line}")
+-                         continue
+-                     urls.append(line)
   
->         failed_urls = []
->         with ThreadPoolExecutor(max_workers=parallel) as executor:
->             future_to_url = {executor.submit(self.download, url): url for url in urls}
->             for future in as_completed(future_to_url):
->                 url = future_to_url[future]
->                 try:
->                     success = future.result()
->                     if not success:
->                         failed_urls.append(url)
->                 except Exception as e:
->                     self.logger.error(f"Unexpected error downloading {url}: {e}")
->                     failed_urls.append(url)
+-         self.logger.info(f"Downloading {len(urls)} sources with {parallel} threads")
   
->         if failed_urls:
->             self.logger.warning(f"Failed to download {len(failed_urls)} sources:")
->             for url in failed_urls:
->                 self.logger.warning(f"  {url}")
->             return False
+          # --- First pass: parallel download ---
+-         failed_urls = []
+-         with ThreadPoolExecutor(max_workers=parallel) as executor:
+-             future_to_url = {executor.submit(self.download, url): url for url in urls}
+-             for future in as_completed(future_to_url):
+-                 url = future_to_url[future]
+-                 try:
+-                     success = future.result()
+-                     if not success:
+-                         failed_urls.append(url)
+-                 except Exception as e:
+-                     self.logger.error(f"Unexpected error downloading {url}: {e}")
+-                     failed_urls.append(url)
+  
+          # --- Retry passes: sequential, with increasing per-file retries ---
+-         for pass_num in range(1, retry_passes + 1):
+-             if not failed_urls:
+-                 break
+-             self.logger.warning(
+-                 f"Retry pass {pass_num}/{retry_passes}: "
+-                 f"{len(failed_urls)} sources still missing"
+-             )
+-             still_failed = []
+-             for url in failed_urls:
+-                 filename = _archive_filename(url)
+-                 dest = self.sources_dir / filename
+-                 if dest.exists():
+-                     continue  # downloaded by a concurrent thread
+-                 extra_retries = 2 + pass_num  # progressively more patient
+-                 try:
+-                     if self.download(url, retries=extra_retries):
+-                         self.logger.info(f"  Recovered on retry pass {pass_num}: {filename}")
+-                         continue
+-                 except Exception as e:
+-                     self.logger.warning(f"Retry pass {pass_num} error for {url}: {e}")
+-                 still_failed.append(url)
+-             failed_urls = still_failed
+  
+-         if failed_urls:
+-             self.logger.warning(f"Failed to download {len(failed_urls)} sources:")
+-             for url in failed_urls:
+-                 self.logger.warning(f"  {url}")
+-             return False
 >         else:
->             self.logger.info("All sources downloaded successfully")
->             return True
+-             self.logger.info(f"All sources downloaded successfully to: {self.sources_dir}")
+-             return True
   
 >     def verify_checksums(self, checksum_file: Path) -> bool:
 >         """Verify downloaded files against checksums"""
@@ -743,7 +1055,7 @@
 >                 if len(parts) != 2:
 >                     continue
   
->                 expected_md5, filename = parts
+>                 expected_sha256, filename = parts
 >                 filepath = self.sources_dir / filename
   
 >                 if not filepath.exists():
@@ -751,8 +1063,8 @@
 >                     all_valid = False
 >                     continue
   
->                 actual_md5 = hashlib.md5(filepath.read_bytes()).hexdigest()
->                 if actual_md5 != expected_md5:
+>                 actual_sha256 = hashlib.sha256(filepath.read_bytes()).hexdigest()
+>                 if actual_sha256 != expected_sha256:
 >                     self.logger.error(f"Checksum mismatch: {filename}")
 >                     all_valid = False
   
@@ -766,10 +1078,14 @@
 > class ScriptExecutor:
 >     """Execute build scripts with proper error handling"""
   
->     def __init__(self, env: Dict, output_dir: Path, logger: logging.Logger):
+>     def __init__(self, env: Dict, output_dir: Path, logger: logging.Logger,
+>                  stage_timeout: int = 7200):
 >         self.env = env
 >         self.output_dir = output_dir
 >         self.logger = logger
+          # Cross-compile jobs run the chroot under qemu-user emulation and
+          # need far more than 2 hours per stage (Nightly #163 arm64).
+>         self.stage_timeout = stage_timeout
 >         self.completed_stages = []
   
 >     def find_script(self, script_path: str) -> Optional[Path]:
@@ -789,8 +1105,10 @@
   
 >         return None
   
->     def run_script(self, script_path: str, stage_name: str, timeout: int = 7200) -> bool:
+>     def run_script(self, script_path: str, stage_name: str, timeout: Optional[int] = None) -> bool:
 >         """Run a single build script"""
+>         if timeout is None:
+>             timeout = self.stage_timeout
 >         self.logger.info(f"Running stage: {stage_name}")
   
 >         script = self.find_script(script_path)
@@ -849,11 +1167,21 @@
   
 >     def resume_from(self, resume_stage: str, stages: List[Tuple[str, str]]) -> bool:
 >         """Resume build from a specific stage"""
->         start_index = 0
->         for i, (stage_name, _) in enumerate(stages):
->             if stage_name == resume_stage:
->                 start_index = i
->                 break
+          # An unmatched name used to leave start_index at 0 and rebuild
+          # everything from the top, so a typo in --resume-from silently cost
+          # a full multi-hour build instead of reporting an error.
+>         start_index = next(
+>             (i for i, (stage_name, _) in enumerate(stages)
+>              if stage_name == resume_stage),
+>             None
+>         )
+>         if start_index is None:
+>             self.logger.error(f"Unknown resume stage: {resume_stage}")
+>             self.logger.error(
+>                 "Available stages for this profile: "
+>                 + ", ".join(name for name, _ in stages)
+>             )
+>             return False
   
 >         self.logger.info(f"Resuming build from stage: {resume_stage}")
   
@@ -923,7 +1251,7 @@
 >                     subprocess.run(['sudo', 'umount'] + partitions, capture_output=True, text=True)
 >             except IOError:
                   # Fallback if /proc/mounts is unreadable
->                 pass
+-                 pass
 >             cmd = ['sudo', 'dd', f'if={iso_path}', f'of={device}', 'bs=4M', 'status=progress', 'conv=fsync']
 >         elif system == "Darwin":
 >             raw_device = device.replace('disk', 'rdisk')
@@ -1042,12 +1370,51 @@
 > class LFSBuilder:
 >     """Main orchestrator for LFS/BLFS build process"""
   
+      # Backward-compatible symlink name (always points to the actual ISO)
+>     ISO_COMPAT_NAME = 'lfs-installer.iso'
+  
+      # Sources the official wget-lists carry but no stage ever builds, and that
+      # only burn CI time.  ftp.math.utah.edu resets every connection from the
+      # runners, so each multi-gigabyte texlive tarball consumes the full
+      # download timeout on every retry and pass; docbook.org's XML 5.0 zip has
+      # been gone for good.  Nightly #214: retrying them ate roughly an hour of
+      # GitHub's hard six-hour job cap and the server and arm64 jobs were
+      # cancelled mid-build as a result.
+>     UNUSED_SOURCE_PATTERNS = (
+>         r'/texlive-[^/]*\.tar\.xz$',
+>         r'/install-tl-unx\.tar\.gz$',
+>         r'^https://docbook\.org/xml/[^/]*/docbook-[^/]*\.zip$',
+>     )
+  
+      # Rolling upstream snapshots the official wget-lists still carry even
+      # though the directory has rotated away from them.  invisible-mirror.net
+      # serves ncurses from a "current/" directory whose content changes with
+      # every snapshot, so the URL the book was written against stops naming
+      # the book version and eventually stops resolving at all.  Nightly #218:
+      # the gnome job fetched a 200 response whose body was not gzip, unpacked
+      # it as ncurses and killed lfs-system, while the xfce and kde jobs got a
+      # 404 from all three hosts and silently built the stable GNU tarball
+      # pinned in packages/custom-sources.list instead.  Dropping the snapshot
+      # here makes that pin the only ncurses archive, so find_archive's
+      # "newest wins" rule can no longer pick the bogus one.  Every pattern
+      # MUST have a stable replacement pinned in packages/custom-sources.list.
+>     SUPERSEDED_SOURCE_PATTERNS = (
+>         r'^https://invisible-mirror\.net/archives/ncurses/current/ncurses-[^/]*\.tgz$',
+>     )
+  
 >     def __init__(self, profile: str, output_dir: Path, config_file: Path,
 >                  cache_url: Optional[str] = None,
 >                  download_timeout: Optional[int] = None,
->                  download_retries: Optional[int] = None):
+>                  download_retries: Optional[int] = None,
+>                  milestone: Optional[str] = None,
+>                  stage_timeout: Optional[int] = None,
+>                  nightly: bool = False,
+>                  skip_man_pages: bool = False):
 >         self.profile = profile
 >         self.output_dir = Path(output_dir).resolve()
+>         self.milestone = milestone
+>         self.nightly = nightly
+>         self.skip_man_pages = skip_man_pages
 >         if isinstance(config_file, str):
 >             config_file = Path(config_file)
 >         self.config = LFSConfig(config_file)   # <- UN SEUL ARGUMENT
@@ -1060,6 +1427,10 @@
   
 >         timeout = download_timeout if download_timeout is not None else self.config.get('build_options.download_timeout', 300)
 >         retries = download_retries if download_retries is not None else self.config.get('build_options.retry_downloads', 3)
+>         if stage_timeout is not None:
+>             self.stage_timeout = stage_timeout
+>         else:
+>             self.stage_timeout = self.config.get('build_options.stage_timeout', 7200)
   
 >         self.downloader = SourceDownloader(
 >             self.output_dir / 'sources',
@@ -1071,7 +1442,8 @@
   
 >     def refresh_executor(self):
 >         """Rebuild script executor with up-to-date environment variables."""
->         self.executor = ScriptExecutor(self._get_env(), self.output_dir, self.logger)
+>         self.executor = ScriptExecutor(self._get_env(), self.output_dir, self.logger,
+>                                        stage_timeout=self.stage_timeout)
   
 >     def _apply_profile_settings(self):
 >         """Apply profile-specific settings to configuration"""
@@ -1122,17 +1494,19 @@
 >         """Get QEMU user emulator for target architecture"""
 >         arch = self.get_target_architecture()
 >         qemu_map = {
->             'aarch64': 'qemu-aarch64-static',
->             'arm': 'qemu-arm-static',
->             'armv7l': 'qemu-arm-static',
->             'riscv64': 'qemu-riscv64-static',
->             'mips64': 'qemu-mips64-static'
+>             'aarch64': 'qemu-aarch64-static'
 >         }
 >         return self.config.get('qemu_user', qemu_map.get(arch, ''))
   
 >     def get_sysroot(self) -> str:
 >         """Get sysroot path for cross-compilation"""
 >         return self.config.get('sysroot', f"{self.output_dir}/sysroot/{self.get_target_architecture()}")
+  
+>     def _get_kernel_arch(self) -> str:
+>         arch = self.get_target_architecture()
+>         if arch == "aarch64":
+>             return "arm64"
+>         return arch
   
 >     def get_init_system(self) -> str:
 >         """Get init system choice from config"""
@@ -1148,6 +1522,36 @@
 >             init = 'sysvinit'
   
 >         return init
+  
+>     def get_iso_name(self, dated: Optional[bool] = None) -> str:
+>         """Generate the versioned ISO filename.
+  
+>         Format: lfs-{version}-{profile}-{arch}-{init}[-{milestone}][-{date}].iso
+  
+>         Args:
+>             dated: If True, append today's date (for nightly builds).
+>                    If None, defaults to the builder's nightly flag so that
+>                    every consumer (env vars, build, sign, SBOM) agrees.
+  
+>         Returns:
+>             ISO filename string (e.g. 'lfs-0.52.40-xfce-x86_64-sysvinit.iso')
+>         """
+>         if dated is None:
+>             dated = self.nightly
+  
+>         version = __version__
+>         arch = self.get_target_architecture()
+>         init = self.get_init_system()
+  
+>         parts = [f"lfs-{version}", self.profile, arch, init]
+  
+>         if self.milestone:
+>             parts.append(self.milestone)
+  
+>         if dated:
+>             parts.append(datetime.now().strftime("%Y%m%d"))
+  
+>         return "-".join(parts) + ".iso"
   
 >     def _flatten_config(self, obj: Any, prefix: str = '') -> Dict[str, str]:
 >         """Recursively flatten nested config dictionaries to env variables"""
@@ -1187,7 +1591,9 @@
 >             'KERNEL_TYPE': str(self.config.get('kernel.type', 'linux')).lower(),
 >             'KERNEL_VERSION': str(self.config.get('kernel.version', '6.16.1')),
 >             'SYSTEM_UPDATER': str(self.profile_config.get('system_updater', True)).lower(),
+>             'SKIP_MAN_PAGES': str(self.skip_man_pages).lower(),
 >             'LFS_VERSION': __version__,
+>             'ISO_NAME': self.get_iso_name(),
 >             'LC_ALL': 'POSIX'
 >         }
   
@@ -1363,17 +1769,29 @@
 >         if free_space < required_space:
 >             self.logger.warning(f"Low disk space: {free_space}GB (recommended: {required_space}GB)")
   
->         self.logger.info("Prerequisites check passed")
+-         self.logger.info("Prerequisites check passed")
 >         return True
   
 >     def prepare_environment(self) -> bool:
 >         """Prepare build environment directories"""
 >         self.logger.info("Preparing build environment")
   
+          # $LFS/tools is deliberately absent: it is the temporary LFS
+          # chapter 5/6 toolchain prefix, so it must exist only while the
+          # toolchain is being built and must be gone from the finished
+          # system (final/16-validate-build.sh fails the build on a
+          # leftover /tools, per LFS book 8.84).  Every stage that needs it
+          # creates it itself -- host/02-prepare-host.sh, host/04 and
+          # lfs/05a -- and lfs/05b removes it once the system is
+          # self-hosting.  Creating it here resurrected an empty /tools on
+          # every invocation, including a --resume-from run that skips
+          # lfs-system and therefore never reaches its rm -rf: nightly
+          # #223 lost minimal/systemd, server and arm64/x86_64 on
+          # "/tools still present - system is not standalone" the first
+          # time the base prefix cache was actually restored.
 >         directories = [
 >             self.output_dir,
 >             self.output_dir / 'sources',
->             self.output_dir / 'tools',
 >             self.output_dir / 'logs',
 >             self.output_dir / 'image',
 >             self.output_dir / 'cache',
@@ -1419,10 +1837,43 @@
 >         return True
   
 >     def download_sources(self) -> bool:
->         """Download all required sources"""
 >         self.logger.info("Downloading sources")
   
-          # Update sources.list from official repositories
+          # ---- Téléchargement conditionnel du noyau pour cross-compilation ----
+>         if self.is_cross_compile():
+>             kernel_version = self.config.get('kernel.version', '6.16.1')
+>             kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
+  
+              # On ne supprime et ne re-télécharge que si l'archive est invalide ou absente
+>             if not self._validate_kernel_archive(kernel_archive, kernel_version):
+                  # Supprime l'archive existante (si elle existe) pour forcer un téléchargement frais
+>                 if kernel_archive.exists():
+>                     kernel_archive.unlink()
+>                     self.logger.info(f"🗑️ Suppression de l'ancienne archive noyau (invalide ou corrompue)")
+  
+                  # Construire l'URL selon le type de noyau
+>                 kernel_url = None
+>                 kernel_type = self.config.get('kernel.type', 'linux')
+>                 if kernel_type == 'linux':
+>                     kernel_url = f"https://www.kernel.org/pub/linux/kernel/v6.x/linux-{kernel_version}.tar.xz"
+>                 elif kernel_type == 'linux-libre':
+>                     kernel_url = f"https://www.linux-libre.fsfla.org/pub/linux-libre/releases/{kernel_version}-gnu/linux-libre-{kernel_version}-gnu.tar.xz"
+>                 elif kernel_type == 'gnu-hurd':
+>                     kernel_url = f"https://ftpmirror.gnu.org/hurd/hurd-{kernel_version}.tar.gz"
+>                 elif kernel_type == 'freebsd':
+>                     kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
+  
+>                 if kernel_url:
+>                     self.logger.info(f"Downloading new kernel for {self.get_target_architecture()}")
+>                     self.downloader.download(kernel_url)
+>                     if not self._validate_kernel_archive(kernel_archive, kernel_version):
+>                         self.logger.error(f"Kernel tarball still invalid after download: {kernel_archive}")
+                          # Optionnel : tenter un miroir secondaire ici
+                          # self._download_kernel_from_mirror(...)
+>                         return False
+>             else:
+>                 self.logger.info(f"Valid kernel archive already present: {kernel_archive}")
+  
 >         self._update_sources_list()
   
 >         sources_candidates = []
@@ -1474,6 +1925,29 @@
   
 >         return True
   
+>     def _validate_kernel_archive(self, kernel_archive: Path, kernel_version: str) -> bool:
+>         if not kernel_archive.exists():
+>             return False
+>         try:
+>             import tarfile
+>             with tarfile.open(kernel_archive, 'r:xz') as tar:
+>                 arch_dir = f"linux-{kernel_version}/arch/{self._get_kernel_arch()}"
+>                 member = tar.getmember(f"{arch_dir}/Makefile")
+>                 return member.isfile()
+>         except (KeyError, tarfile.ReadError, Exception):
+>             return False
+  
+>     def _profile_has_pkg(self, name: str) -> bool:
+>         """Return True when the active profile's package list requests *name*.
+  
+>         The 'all' token (full profile) matches every package group.  This
+>         turns the declarative profile package lists into real stage gating
+>         (audit G1/G2: networking/server/printing stages existed but were
+>         never scheduled, so their packages reached no built system).
+>         """
+>         packages = self.profile_config.get('packages', [])
+>         return 'all' in packages or name in packages
+  
 >     def get_build_stages(self) -> List[Tuple[str, str]]:
 >         """Get ordered list of build stages with correct script paths"""
 >         stages = []
@@ -1494,8 +1968,9 @@
 >         if bootloader_type == 'uboot':
 >             stages.append(('uboot', 'host/05-build-uboot.sh'))
   
-          # LFS core
->         stages.append(('lfs-system', 'lfs/05-build-lfs-system.sh'))
+          # LFS core – split into basic (chroot setup) and system (compilation)
+>         stages.append(('lfs-basic', 'lfs/05a-build-lfs-basic.sh'))
+>         stages.append(('lfs-system', 'lfs/05b-build-lfs-system.sh'))
   
           # Init system (sysvinit or systemd)
 >         stages.append(('init-system', 'lfs/06a-init-system.sh'))
@@ -1507,14 +1982,19 @@
           # BLFS base
 >         stages.append(('blfs-base', 'blfs/08-build-blfs-base.sh'))
   
-          # Build kernel
->         stages.append(('build-kernel', 'lfs/09-build-kernel.sh'))
+          # BLFS core libraries and display stack (only when a desktop is requested)
+>         _desktop = self.profile_config.get('desktop')
+>         if _desktop and _desktop != 'none':
+>             stages.append(('blfs-libs', 'blfs/08a-build-blfs-libs.sh'))
+>             stages.append(('xorg', 'blfs/08b-build-xorg.sh'))
+>             stages.append(('wayland', 'blfs/08c-build-wayland.sh'))
+>             stages.append(('display-manager', 'blfs/08d-build-display-manager.sh'))
   
-          # ⚠️ SUPPRIMEZ la ligne suivante (initramfs ne doit pas être ici)
-          # stages.append(('initramfs', 'final/12-create-initramfs.sh'))  <--- À RETIRER
+          # Build kernel
+>         stages.append(('build-kernel', 'lfs/08-build-kernel.sh'))
   
           # Desktop (if enabled)
->         if self.profile_config.get('desktop'):
+>         if _desktop and _desktop != 'none':
 >             stages.append(('desktop', 'blfs/09-build-desktop.sh'))
 >             stages.append(('applications', 'blfs/10-build-applications.sh'))
 >             stages.append(('configure-desktop', 'blfs/11-configure-desktop.sh'))
@@ -1522,6 +2002,35 @@
           # Java development
 >         if self.profile_config.get('java_dev', False):
 >             stages.append(('java-dev', 'blfs/12-install-java-dev.sh'))
+  
+          # BLFS layer stages declared by the profile package list.  Audit
+          # G1/G2: these scripts were implemented but never scheduled, so
+          # NetworkManager/dhcpcd, OpenSSH and CUPS reached no built system.
+>         if self._profile_has_pkg('network'):
+>             stages.append(('basic-networking', 'blfs/23-basic-networking.sh'))
+  
+          # Audio/multimedia stack: the BLFS multimedia chapter (ALSA,
+          # PipeWire, codecs, ffmpeg, mpv, VLC) plus the LV2 host stack
+          # and the NeuralRack neural amp modeller for the audio
+          # profiles.  Desktop profiles declare the 'multimedia' token so
+          # their promised apps (VLC needs pc:libavcodec) actually get
+          # their runtime libraries; without it the applications stage
+          # silently skipped VLC.  The two stages are interleaved with
+          # server/printing exactly as in the BUILD_STAGES master list
+          # (multimedia before server, audio-studio after
+          # printing-scanning); audio profiles skip server/printing so
+          # the effective order is unchanged for them.
+>         _audio_profile = self.profile in ('audio-cli', 'audio-studio')
+>         if _audio_profile or self._profile_has_pkg('multimedia'):
+>             stages.append(('multimedia', 'blfs/24-multimedia.sh'))
+  
+>         if self._profile_has_pkg('ssh') or self._profile_has_pkg('server-tools'):
+>             stages.append(('server', 'blfs/25-server.sh'))
+>         if self._profile_has_pkg('printing'):
+>             stages.append(('printing-scanning', 'blfs/26-printing-scanning.sh'))
+  
+>         if _audio_profile:
+>             stages.append(('audio-studio', 'blfs/27-audio-studio.sh'))
   
           # Package manager
 >         if self.profile_config.get('package_manager', True):
@@ -1539,15 +2048,26 @@
           # Branding
 >         stages.append(('branding', 'blfs/20-branding.sh'))
   
+          # Calamares installer (for desktop profiles with live system)
+>         calamares_live = self.profile_config.get('live_system', True)
+>         calamares_desktop = _desktop and _desktop != 'none'
+>         if calamares_desktop and calamares_live:
+>             stages.append(('calamares', 'blfs/22-calamares-installer.sh'))
+  
           # First boot service
 >         stages.append(('first-boot', 'blfs/17-first-boot-service.sh'))
   
-          # System updater
+          # System updater (lpm itself is already installed by the
+          # package-manager stage before base-packages)
 >         if self.profile_config.get('system_updater', True):
 >             stages.append(('system-updater', 'blfs/18-system-updater.sh'))
->             stages.append(('lpm', 'blfs/19-lpm.sh'))
   
           # FINAL STAGES (un seul initramfs ici)
+          # LUKS encryption support must run BEFORE initramfs (initramfs needs dm-crypt modules)
+>         encryption_enabled = self.config.get('security.encryption.enabled', False)
+>         if self.profile_config.get('security_hardening', False) or encryption_enabled:
+>             stages.append(('luks-encryption', 'blfs/21-luks-encryption.sh'))
+  
 >         stages.append(('initramfs', 'final/12-create-initramfs.sh'))
 >         stages.append(('bootloader', 'final/13-create-bootloader.sh'))
 >         stages.append(('installer', 'final/14-create-installer.sh'))
@@ -1558,7 +2078,18 @@
 >         if live_from_profile and live_from_config:
 >             stages.append(('live-system', 'final/15-create-live-system.sh'))
   
+          # Post-build validation (always runs last)
+>         stages.append(('validate', 'final/16-validate-build.sh'))
+  
 >         return stages
+  
+>     def _is_unused_source(self, url: str) -> bool:
+>         """Return True for sources no stage builds, which only cost CI time."""
+>         return any(re.search(pattern, url) for pattern in self.UNUSED_SOURCE_PATTERNS)
+  
+>     def _is_superseded_source(self, url: str) -> bool:
+>         """Return True for rolling snapshots a custom pin replaces."""
+>         return any(re.search(pattern, url) for pattern in self.SUPERSEDED_SOURCE_PATTERNS)
   
 >     def _update_sources_list(self) -> bool:
 >         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""
@@ -1571,7 +2102,7 @@
 >         else:
 >             repo_parent = repo_sources_file.parent if repo_sources_file.parent.exists() else Path('.')
 >             if not os.access(repo_parent, os.W_OK):
-!                 sources_file = output_sources_file
+>                 sources_file = output_sources_file
   
 >         custom_candidates = [
 >             Path('packages/custom-sources.list'),
@@ -1590,8 +2121,20 @@
 >         def source_key(url: str) -> str:
 >             filename = Path(urlparse(url).path).name
 >             if filename:
->                 base = re.sub(r'[-_][v]?\d[\d.+]*.*$', '', filename)
->                 if not base:
+                  # Strip the minor/revision digits of the FIRST version token
+                  # but keep its separator, major digit and extension in the
+                  # key.  Stripping the whole token made a tarball and its
+                  # companion patch hash to the same key, so the custom gcc15
+                  # patch silently evicted the libtirpc tarball from the
+                  # generated list (Nightly #194) and collapsed distinct
+                  # patches of the same package (coreutils i18n vs
+                  # upstream_fix).  Stripping the major digit too made two
+                  # co-installable series collide: the custom gtk-4.18.6
+                  # tarball evicted the official gtk-3.24.50 one, so the xorg
+                  # stage lost the archive its required gtk3 build looks for
+                  # (Nightly #212).
+>                 base = re.sub(r'([-_][v]?)(\d+)(?:[.+]\d+)*', r'\1\2', filename, count=1)
+>                 if not base or base.startswith('.'):
 >                     self.logger.warning(
 >                         f"source_key: regex stripped entire filename '{filename}'; "
 >                         "using full filename as key"
@@ -1614,8 +2157,8 @@
 >             except Exception as e:
 >                 self.logger.warning(f"Failed to fetch {repo_url}: {e}")
   
-          # 2. Substitution du noyau (seulement si on a des URLs officielles)
->         if urls_by_key:
+          # 2. Substitution du noyau (UNIQUEMENT en cross-compilation)
+>         if self.is_cross_compile():
 >             kernel_type = self.config.get('kernel.type', 'linux')
 >             kernel_version = self.config.get('kernel.version', '6.16.1')
   
@@ -1630,12 +2173,44 @@
 >                 kernel_url = f"https://download.freebsd.org/ftp/releases/amd64/{kernel_version}/src.txz"
   
 >             if kernel_url:
->                 keys_to_remove = [k for k in urls_by_key if 'linux-' in k or k.startswith('pkg:linux')]
+                  # Supprimer TOUTES les entrées existantes qui ressemblent à un noyau
+                  # Valider d'abord le domaine pour éviter les attaques par substring
+>                 allowed_kernel_domains = {
+>                     'kernel.org',
+>                     'www.kernel.org',
+>                     'linux-libre.fsfla.org',
+>                     'ftpmirror.gnu.org',
+>                     'download.freebsd.org'
+>                 }
+>                 keys_to_remove = []
+>                 for k, v in urls_by_key.items():
+>                     try:
+>                         parsed = urlparse(v)
+                          # Sécurité: valider que le hostname est autorisé avant de vérifier le path
+>                         if parsed.hostname and parsed.hostname in allowed_kernel_domains:
+                              # Ensuite vérifier les patterns dans le chemin pour identifier les kernels
+>                             path = parsed.path.lower()
+>                             if ('linux-' in path or 'linux-libre' in path or
+>                                 'hurd-' in path or 'freebsd' in path):
+>                                 keys_to_remove.append(k)
+>                     except Exception:
+                          # Si l'URL ne peut pas être parsée, on la garde
+-                         pass
 >                 for k in keys_to_remove:
 >                     del urls_by_key[k]
->                 new_key = f"pkg:{kernel_type}-{kernel_version}"
->                 urls_by_key[new_key] = kernel_url
->                 self.logger.info(f"Using {kernel_type} kernel {kernel_version}: {kernel_url}")
+  
+                  # Vérifier si l'archive existe déjà et est valide
+>                 kernel_archive = self.output_dir / 'sources' / f"linux-{kernel_version}.tar.xz"
+>                 if self._validate_kernel_archive(kernel_archive, kernel_version):
+>                     self.logger.info(f"Kernel tarball {kernel_archive} already exists and is valid. Skipping download.")
+                      # Ne pas ajouter de nouvelle URL
+>                 else:
+                      # Archive absente ou invalide → on ajoute l'URL
+>                     new_key = f"pkg:{kernel_type}-{kernel_version}"
+>                     urls_by_key[new_key] = kernel_url
+>                     self.logger.info(f"Using {kernel_type} kernel {kernel_version}: {kernel_url}")
+>         else:
+>             self.logger.info("Cross-compilation disabled – keeping original kernel entries from official lists.")
   
           # 3. Ajouter les sources personnalisées (prioritaires)
 >         if custom_file.exists():
@@ -1650,12 +2225,28 @@
 >                             override_count += 1
 >                         urls_by_key[key] = line
   
-          # 4. Si aucune URL, on retourne False
+          # 4. Drop the sources no stage builds (see UNUSED_SOURCE_PATTERNS).
+          #    Done after the custom overrides so a deliberate custom pin for one
+          #    of these packages could never be silently discarded by the filter.
+>         unused_keys = [k for k, u in urls_by_key.items() if self._is_unused_source(u)]
+>         for key in unused_keys:
+>             self.logger.info(f"Skipping unused source (never built by any stage): {urls_by_key.pop(key)}")
+  
+          # 4b. Drop rolling snapshots a custom pin supersedes.  Same ordering
+          #     rationale as above, and the two filename variants of one package
+          #     hash to different source_key() values, so without this step both
+          #     land in /sources and find_archive() picks between them by
+          #     version sort (see SUPERSEDED_SOURCE_PATTERNS).
+>         superseded_keys = [k for k, u in urls_by_key.items() if self._is_superseded_source(u)]
+>         for key in superseded_keys:
+>             self.logger.info(f"Skipping superseded rolling snapshot (stable release pinned): {urls_by_key.pop(key)}")
+  
+          # 5. Si aucune URL, on retourne False
 >         if not urls_by_key:
 >             self.logger.error("No URLs found from official or custom sources")
 >             return False
   
-          # 5. Créer le répertoire parent et écrire le fichier
+          # 6. Créer le répertoire parent et écrire le fichier
 >         sources_file.parent.mkdir(parents=True, exist_ok=True)
 >         with open(sources_file, 'w') as f:
 >             f.write("# LFS Sources - Automatically generated from official wget-lists\n")
@@ -1670,7 +2261,8 @@
 >         self.logger.info(f"Updated sources.list with {len(urls_by_key)} URLs (official + custom) -> {sources_file}")
 >         return True
   
->     def build(self, resume_from: Optional[str] = None, use_cache: bool = False, cache_only: bool = False) -> bool:
+>     def build(self, resume_from: Optional[str] = None, use_cache: bool = False,
+>               cache_only: bool = False, stop_after: Optional[str] = None) -> bool:
 >         self.logger.info("=" * 70)
 >         self.logger.info(f"LFS Builder v{__version__}")
 >         self.logger.info(f"Profile: {self.profile}")
@@ -1719,38 +2311,211 @@
           # --- Resume or full build ---
 >         stages = self.get_build_stages()
   
->         if resume_from:
->             return self.executor.resume_from(resume_from, stages)
-  
->         total_stages = len(stages)
->         for idx, (stage_name, script_path) in enumerate(stages, 1):
->             self.logger.info(f"[{idx}/{total_stages}] Processing stage: {stage_name}")
->             if not self.executor.run_script(script_path, stage_name):
->                 self.logger.error(f"Build failed at stage: {stage_name}")
->                 self.logger.info(f"You can resume with: --resume-from {stage_name}")
+          # Truncate before the resume branch so --stop-after and
+          # --resume-from compose: the base-cache publisher stops once
+          # lfs-system is done, while a resumed nightly job stops nowhere.
+>         if stop_after:
+>             stop_index = next(
+>                 (i for i, (stage_name, _) in enumerate(stages)
+>                  if stage_name == stop_after),
+>                 None
+>             )
+>             if stop_index is None:
+>                 self.logger.error(f"--stop-after: unknown stage '{stop_after}' for this profile")
+>                 self.logger.error(
+>                     "Available stages for this profile: "
+>                     + ", ".join(name for name, _ in stages)
+>                 )
 >                 return False
+>             stages = stages[:stop_index + 1]
+>             self.logger.info(
+>                 f"Stage list truncated after '{stop_after}' ({len(stages)} stages)"
+>             )
+  
+>         if resume_from:
+>             build_succeeded = self.executor.resume_from(resume_from, stages)
+>         else:
+>             total_stages = len(stages)
+>             build_succeeded = True
+>             for idx, (stage_name, script_path) in enumerate(stages, 1):
+>                 self.logger.info(f"[{idx}/{total_stages}] Processing stage: {stage_name}")
+>                 if not self.executor.run_script(script_path, stage_name):
+>                     self.logger.error(f"Build failed at stage: {stage_name}")
+>                     self.logger.info(f"You can resume with: --resume-from {stage_name}")
+>                     build_succeeded = False
+>                     break
+  
+>         if not build_succeeded:
+>             return False
   
 >         self.logger.info("=" * 70)
->         self.logger.info("BUILD COMPLETED SUCCESSFULLY!")
+>         if stop_after:
+              # A truncated run produces no ISO; report what stopped instead
+              # of implying a finished, bootable system.
+>             self.logger.info(f"BUILD STOPPED AFTER STAGE: {stop_after}")
+>         else:
+>             self.logger.info("BUILD COMPLETED SUCCESSFULLY!")
 >         self.logger.info("=" * 70)
   
->         iso_path = self.output_dir / 'lfs-installer.iso'
+>         iso_name = self.get_iso_name()
+>         iso_path = self.output_dir / iso_name
+>         compat_path = self.output_dir / self.ISO_COMPAT_NAME
+  
 >         if iso_path.exists():
 >             size_mb = iso_path.stat().st_size / (1024 * 1024)
 >             size_gb = size_mb / 1024
 >             self.logger.info(f"Installer ISO: {iso_path} ({size_gb:.1f} GB / {size_mb:.0f} MB)")
 >             sha256 = hashlib.sha256(iso_path.read_bytes()).hexdigest()
->             self.logger.info(f"SHA256: {sha256[:32]}...")
+>             self.logger.info(f"SHA256: {sha256}")
   
+              # Write SHA256SUMS file
+>             sums_file = self.output_dir / 'SHA256SUMS'
+>             with open(sums_file, 'w') as f:
+>                 f.write(f"{sha256}  {iso_name}\n")
+>             self.logger.info(f"SHA256SUMS written to {sums_file}")
+  
+              # Create backward-compatible symlink
+>             if compat_path != iso_path and not compat_path.exists():
+>                 try:
+>                     compat_path.symlink_to(iso_name)
+>                     self.logger.info(f"Compat symlink: {self.ISO_COMPAT_NAME} -> {iso_name}")
+>                 except OSError:
+-                     pass  # Non-fatal: symlink may fail on some filesystems
+  
+>         return True
+  
+>     def sign_iso(self, gpg_key: Optional[str] = None) -> bool:
+>         """Sign the ISO with GPG to produce a detached signature.
+  
+>         Args:
+>             gpg_key: GPG key ID or email to sign with. If None, uses the default key.
+  
+>         Returns:
+>             True if signing succeeded or GPG is unavailable (non-fatal).
+>         """
+>         iso_name = self.get_iso_name()
+>         iso_path = self.output_dir / iso_name
+>         if not iso_path.exists():
+>             self.logger.error(f"ISO not found ({iso_name}) – cannot sign")
+>             return False
+  
+>         if not shutil.which('gpg'):
+>             self.logger.warning("GPG not found – skipping ISO signing")
+>             return True
+  
+>         sig_file = iso_path.with_suffix('.iso.sig')
+>         self.logger.info(f"Signing ISO with GPG: {iso_name}")
+  
+>         cmd = ['gpg', '--batch', '--yes', '--armor', '--detach-sign',
+>                '--output', str(sig_file)]
+>         if gpg_key:
+>             cmd.extend(['--local-user', gpg_key])
+>         cmd.append(str(iso_path))
+  
+>         try:
+>             subprocess.run(cmd, check=True, capture_output=True, text=True)
+>             self.logger.info(f"ISO signature written to {sig_file}")
+>             self.logger.info(f"Verify with: gpg --verify {iso_name}.sig {iso_name}")
+>             return True
+>         except subprocess.CalledProcessError as e:
+>             self.logger.error(f"GPG signing failed: {e.stderr}")
+>             return False
+  
+>     def generate_sbom(self) -> bool:
+>         """Generate an SPDX 2.3 Software Bill of Materials for the build."""
+>         iso_name = self.get_iso_name()
+>         iso_path = self.output_dir / iso_name
+>         sbom_file = self.output_dir / 'sbom.spdx.json'
+>         build_info_file = self.output_dir / 'build_info.json'
+  
+>         self.logger.info("Generating SBOM (SPDX 2.3)...")
+  
+          # Load build info
+>         build_info = {}
+>         if build_info_file.exists():
+>             with open(build_info_file) as f:
+>                 build_info = json.load(f)
+  
+          # Scan installed packages from LPM database
+>         installed_list = self.output_dir / 'image' / 'var' / 'lib' / 'lpm' / 'installed.list'
+>         packages = []
+>         if installed_list.exists():
+>             with open(installed_list) as f:
+>                 for line in f:
+>                     parts = line.strip().split()
+>                     if len(parts) >= 2:
+>                         packages.append({'name': parts[0], 'version': parts[1]})
+  
+          # Build SPDX document
+>         now = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+>         doc_uuid = f"SPDXRef-DOCUMENT-{hashlib.sha256(str(now).encode()).hexdigest()[:20]}"
+  
+>         sbom = {
+>             "spdxVersion": "SPDX-2.3",
+>             "dataLicense": "CC0-1.0",
+>             "SPDXID": "SPDXRef-DOCUMENT",
+>             "name": f"Way-Beyond-LFS-{self.profile}",
+>             "documentNamespace": f"https://github.com/landrevillejf/beyond-linux-from-scratch/spdx/{self.profile}/{now}",
+>             "creationInfo": {
+>                 "created": now,
+>                 "creators": [
+>                     f"Tool: LFS-Builder-{__version__}",
+>                     "Organization: Beyond Linux From Scratch"
+>                 ],
+>                 "licenseListVersion": "3.19"
+>             },
+>             "packages": [
+>                 {
+>                     "SPDXID": "SPDXRef-Package-" + re.sub(r'[^a-zA-Z0-9.-]', '-', pkg['name']),
+>                     "name": pkg['name'],
+>                     "versionInfo": pkg['version'],
+>                     "downloadLocation": "NOASSERTION",
+>                     "filesAnalyzed": False,
+>                     "licenseConcluded": "NOASSERTION",
+>                     "licenseDeclared": "NOASSERTION",
+>                     "copyrightText": "NOASSERTION"
+>                 }
+>                 for pkg in packages
+>             ],
+>             "relationships": [
+>                 {
+>                     "spdxElementId": "SPDXRef-DOCUMENT",
+>                     "relatedSpdxElement": "SPDXRef-Package-" + re.sub(r'[^a-zA-Z0-9.-]', '-', pkg['name']),
+>                     "relationshipType": "DESCRIBES"
+>                 }
+>                 for pkg in packages
+>             ]
+>         }
+  
+          # Add build metadata as an external document reference
+>         if build_info:
+>             sbom["externalDocumentRefs"] = [{
+>                 "externalDocumentId": "DocumentRef-build-info",
+>                 "spdxDocument": f"https://github.com/landrevillejf/beyond-linux-from-scratch/build/{build_info.get('build_date', now)}",
+>                 "checksum": {"algorithm": "SHA256", "checksumValue": hashlib.sha256(
+>                     json.dumps(build_info, sort_keys=True).encode()).hexdigest()}
+>             }]
+  
+>         with open(sbom_file, 'w') as f:
+>             json.dump(sbom, f, indent=2)
+  
+>         self.logger.info(f"SBOM written to {sbom_file} ({len(packages)} packages)")
 >         return True
   
 >     def create_writable_media(self, device: Optional[str] = None) -> bool:
 >         """Create bootable USB media from installer ISO"""
->         installer = self.output_dir / 'lfs-installer.iso'
+>         iso_name = self.get_iso_name()
+>         installer = self.output_dir / iso_name
   
 >         if not installer.exists():
->             self.logger.error("Installer ISO not found. Run build first.")
->             return False
+              # Fall back to compat symlink for users who built before versioned naming
+>             compat = self.output_dir / self.ISO_COMPAT_NAME
+>             if compat.exists():
+>                 installer = compat
+>                 iso_name = self.ISO_COMPAT_NAME
+>             else:
+>                 self.logger.error("Installer ISO not found. Run build first.")
+>                 return False
   
 >         if device:
 >             return USBWriter.write_iso(installer, device, self.logger)
@@ -1764,7 +2529,7 @@
 >             self.logger.info("\nTo write to USB, run:")
 >             self.logger.info(f"  python3 builder.py --write-usb /dev/sdX")
 >             self.logger.info("\nOr use:")
->             self.logger.info("  sudo dd if=lfs-installer.iso of=/dev/sdX bs=4M status=progress")
+>             self.logger.info(f"  sudo dd if={iso_name} of=/dev/sdX bs=4M status=progress")
 >             return True
   
   
@@ -1831,6 +2596,9 @@
 >     parser.add_argument('--resume-from',
 >                         help='Resume build from specific stage')
   
+>     parser.add_argument('--stop-after',
+>                         help='Stop the build once this stage has completed')
+  
 >     parser.add_argument('--write-usb', metavar='DEVICE',
 >                         help='Write ISO to USB device (e.g., /dev/sdb)')
   
@@ -1867,7 +2635,7 @@
 >     parser.add_argument('--kernel-type',
 >                         choices=['linux', 'linux-libre', 'gnu-hurd', 'freebsd'],
 >                         default='linux',
->                         help='Type de noyau à utiliser (linux, linux-libre, gnu-hurd, freebsd)')
+>                         help='Kernel type to use (linux, linux-libre, gnu-hurd, freebsd)')
   
 >     parser.add_argument('--host-distro', choices=['debian', 'fedora', 'arch', 'auto'], default='auto',
 >                         help='Override host distribution detection')
@@ -1881,13 +2649,35 @@
 >                         help='Generate packages/sources.list from configured repositories and exit')
   
 >     parser.add_argument('--kernel-version',
->                         help='Version du noyau (ex: 6.16.1, 6.12.20, etc.)')
+>                         help='Kernel version (e.g. 6.16.1, 6.12.20, etc.)')
   
 >     parser.add_argument('--download-timeout', type=int,
 >                         help='Timeout in seconds for each download (default: from config or 300)')
   
 >     parser.add_argument('--download-retries', type=int,
 >                         help='Number of retries for failed downloads (default: from config or 3)')
+  
+>     parser.add_argument('--stage-timeout', type=int,
+>                         help='Timeout in seconds for each build stage (default: 7200)')
+  
+>     parser.add_argument('--arch', choices=['x86_64', 'aarch64'],
+>                     help='Target architecture (overrides profile default)')
+  
+>     parser.add_argument('--sign-iso', metavar='GPG_KEY', nargs='?',
+>                         const='', default=None,
+>                         help='Sign the ISO with GPG (optional key ID or email)')
+  
+>     parser.add_argument('--sbom', action='store_true',
+>                         help='Generate SPDX SBOM after build')
+  
+>     parser.add_argument('--milestone',
+>                         help='Milestone tag for ISO naming (e.g. alpha1, beta1, rc1)')
+  
+>     parser.add_argument('--nightly', action='store_true',
+>                         help='Nightly build mode: append today\'s date to the ISO filename')
+  
+>     parser.add_argument('--skip-man-pages', action='store_true',
+>                         help='Skip man page generation (for environments without rst2man/docutils)')
   
 >     return parser
   
@@ -1957,8 +2747,33 @@
 >         config_file=args.config,
 >         cache_url=args.cache_url,
 >         download_timeout=args.download_timeout,
->         download_retries=args.download_retries
+>         download_retries=args.download_retries,
+>         milestone=args.milestone,
+>         stage_timeout=args.stage_timeout,
+>         nightly=args.nightly,
+>         skip_man_pages=args.skip_man_pages
 >     )
+  
+      # --- Override architecture via --arch ---
+>     if args.arch:
+>         is_cross = args.arch != 'x86_64'
+>         builder.config.set('cross_compile', is_cross)
+>         builder.config.set('architecture', args.arch)
+  
+>         triplet_map = {
+>             'x86_64': 'x86_64-lfs-linux-gnu',
+>             'aarch64': 'aarch64-lfs-linux-gnu'
+>         }
+>         builder.config.set('target_triplet', triplet_map.get(args.arch, 'x86_64-lfs-linux-gnu'))
+  
+          # Ajuster le bootloader pour les architectures ARM si cross-compilation
+>         if is_cross and args.arch in ('aarch64', 'armv7l'):
+>             builder.config.set('bootloader.type', 'uboot')
+>         else:
+>             builder.config.set('bootloader.type', 'grub')
+  
+          # Mettre à jour l'environnement et l'executor
+>         builder.refresh_executor()
   
 >     if args.host_distro:
 >         builder.config.set('host.distro_override', args.host_distro)
@@ -2037,12 +2852,26 @@
 >     if not builder.prepare_environment():
 >         sys.exit(1)
   
->     if not args.resume_from:
->         if not builder.download_sources():
->             sys.exit(1)
-  
->     if not builder.build(resume_from=args.resume_from, use_cache=args.use_cache, cache_only=args.cache_only):
+      # Sources are downloaded on resume as well.  A resumed job still needs
+      # everything the skipped stages never fetched - notably the kernel
+      # tarball, which the nightly workflow deletes on purpose to force a
+      # fresh one - and download() returns early for any archive that already
+      # exists and validates, so the extra pass costs a checksum sweep.
+>     if not builder.download_sources():
 >         sys.exit(1)
+  
+>     if not builder.build(resume_from=args.resume_from, use_cache=args.use_cache,
+>                          cache_only=args.cache_only, stop_after=args.stop_after):
+>         sys.exit(1)
+  
+      # Post-build: generate SBOM if requested
+>     if args.sbom:
+>         builder.generate_sbom()
+  
+      # Post-build: sign ISO if requested
+>     if args.sign_iso is not None:
+>         gpg_key = args.sign_iso if args.sign_iso else None
+>         builder.sign_iso(gpg_key)
   
 >     if args.write_usb:
 >         builder.create_writable_media(args.write_usb)
@@ -2050,19 +2879,20 @@
 >     print("\n" + "=" * 70)
 >     print("BUILD COMPLETED SUCCESSFULLY!")
 >     print("=" * 70)
->     print(f"ISO location: {builder.output_dir}/lfs-installer.iso")
+>     print(f"ISO location: {builder.output_dir}/{builder.get_iso_name()}")
 >     print("\nNext steps:")
 >     print("  1. Write ISO to USB:")
 >     print(f"     python3 builder.py --write-usb /dev/sdX")
 >     print("  2. Boot from USB")
 >     print("  3. Select 'Try LFS Linux' to test live mode")
 >     print("  4. Or select 'Install LFS Linux' for permanent installation")
+-     print("     (You will be required to set root password and create a user account)")
   
 >     if builder.is_cross_compile():
 >         print(f"\nFor ARM64 target ({builder.get_target_architecture()}):")
->         print(f"   - Flash to SD card: dd if={builder.output_dir}/lfs-installer.img of=/dev/sdb bs=4M")
+>         print(f"   - Flash to SD card: dd if={builder.output_dir}/{builder.get_iso_name()} of=/dev/sdb bs=4M")
 >         print(f"   - Boot on your ARM device (Raspberry Pi, Orange Pi, etc.)")
->         print(f"   - Default login: lfsuser / lfsuser123")
+-         print(f"   - You will be required to set root password and create a user")
   
 >     print("\nAfter installation:")
 >     print("  - Check for updates:   lfs-update check")
@@ -2082,5 +2912,5 @@
 >     print()
   
   
-> if __name__ == '__main__':
+- if __name__ == '__main__':
 -     main() # pragma: no cover

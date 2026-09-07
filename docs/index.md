@@ -2,7 +2,7 @@
 
 Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`). Works on Linux, macOS, and Windows (WSL2).
 
-**Version:** 0.53.0  
+**Version:** 0.55.1  
 **Author:** Jean-Francois Landreville
 
 This repository is designed for reproducible, profile‑driven builds and CI/CD publication workflows that separate:
@@ -157,42 +157,44 @@ cross-compiled architectures). The master ordered list is:
 
 1. `host-check`
 2. `host-prepare`
-3. `disk-image`
-4. `toolchain`
-5. `qemu-setup` (cross-compile architectures)
+3. `qemu-setup` (cross-compile architectures)
+4. `disk-image`
+5. `toolchain`
 6. `uboot` (ARM bootloaders)
 7. `lfs-basic`
 8. `lfs-system`
 9. `init-system`
-10. `service-mgmt`
+10. `service-abstraction`
 11. `configure-lfs`
 12. `blfs-base`
 13. `blfs-libs`
 14. `xorg`
 15. `wayland`
 16. `display-manager`
-17. `desktop`
-18. `applications`
-19. `configure-desktop`
-20. `java-dev`
-21. `basic-networking`
-22. `multimedia`
-23. `server`
-24. `printing-scanning`
-25. `base-packages`
-26. `security`
-27. `privacy`
-28. `branding`
-29. `calamares`
-30. `first-boot`
-31. `system-updater`
-32. `lpm`
-33. `luks-encryption`
-34. `initramfs`
-35. `bootloader`
-36. `installer`
-37. `live-system` (when enabled)
-38. `validate`
+17. `build-kernel`
+18. `desktop`
+19. `applications`
+20. `configure-desktop`
+21. `java-dev`
+22. `basic-networking` (profiles declaring the `network` package)
+23. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
+24. `server` (profiles declaring `ssh` or `server-tools`)
+25. `printing-scanning` (profiles declaring `printing`, or `all`)
+26. `audio-studio` (audio profiles only)
+27. `package-manager`
+28. `base-packages`
+29. `security`
+30. `privacy`
+31. `branding`
+32. `calamares`
+33. `first-boot`
+34. `system-updater`
+35. `luks-encryption`
+36. `initramfs`
+37. `bootloader`
+38. `installer`
+39. `live-system` (when enabled)
+40. `validate`
 
 ---
 
