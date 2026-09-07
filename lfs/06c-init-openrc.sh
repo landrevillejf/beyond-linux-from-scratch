@@ -27,7 +27,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -48,9 +51,13 @@ EOF
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot not working – run lfs-basic first"; exit 1
+    log_error "chroot not working – run lfs-basic first"
+    exit 1
 fi
 
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
@@ -232,18 +239,36 @@ run_build() {
 }
 
 log_info "Building OpenRC..."
-# openrc is not in packages/stable/12.4/sources.list (and not a package of
-# the LFS/BLFS books), so it stays optional until its tarball is added.
-run_build optional openrc
+# openrc is not a package of the LFS/BLFS books, so the official wget-lists
+# do not carry it; packages/custom-sources.list pins the GitHub refs/tags
+# archive instead (OpenRC publishes no release assets), and builder.py
+# stores that under openrc-<tag>.tar.gz so find_archive can match it.  It is
+# required rather than optional because an OpenRC system with no openrc has
+# no init at all: writing the service files below would still produce a
+# rootfs that passes validate's /sbin/init check and then fails to boot.
+run_build required openrc
 
 # ---- Post-install configuration ----
 log_info "Configuring OpenRC..."
 
+# Create the directories openrc's own "make install" normally provides.
+# Without them the first service heredoc below dies on a redirection error
+# naming the victim (/etc/init.d/hostname) instead of the missing parent,
+# which is what made the skipped-build case so hard to read.
+mkdir -p /etc/init.d /etc/conf.d
+
 # Create runlevels directory structure
 mkdir -p /etc/runlevels/{sysinit,boot,default,shutdown,single,recovery}
 
-# Link /sbin/init to openrc-init
-ln -sf /sbin/openrc-init /sbin/init
+# Link /sbin/init to openrc-init only once the binary really is there.  An
+# unconditional symlink satisfies validate's /sbin/init check on a system
+# whose init cannot run, which is a worse failure than stopping here.
+if [ -x /sbin/openrc-init ]; then
+    ln -sf /sbin/openrc-init /sbin/init
+else
+    log_error "/sbin/openrc-init missing - refusing to link /sbin/init"
+    exit 1
+fi
 
 # Create /etc/rc.conf
 cat > /etc/rc.conf <<'RCCONF'

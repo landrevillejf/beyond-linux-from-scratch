@@ -952,8 +952,22 @@ EOF
         ;;
     libffi)
         extract "$(find_archive libffi)"
+        # --disable-multi-os-directory keeps libffi.so in /usr/lib on every
+        # architecture.  By default libffi appends `gcc -print-multi-os-
+        # directory` to the libdir: on x86_64 the chapter-8 gcc build seds
+        # m64=lib64 into m64=lib (see the gcc case above), so it prints "."
+        # and the library lands in /usr/lib, but aarch64 has no such sed and
+        # prints "../lib64".  /usr/lib64 is not on the aarch64 loader's
+        # default search path and /etc/ld.so.conf is deliberately empty, so
+        # python's build-time "import _ctypes" test failed with
+        # "libffi.so.8: cannot open shared object file"; CPython then
+        # deletes the module it could not import while leaving it in the
+        # install list, and make install died on
+        # "cannot stat 'Modules/_ctypes.cpython-313-aarch64-linux-gnu.so'"
+        # (nightly #223, arm64/sysvinit/aarch64).
         ./configure --prefix=/usr \
             --disable-static \
+            --disable-multi-os-directory \
             --with-gcc-arch=native
         make -j"$(nproc)"
         make install

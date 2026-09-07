@@ -663,6 +663,35 @@ def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
     return _ORIGINAL_GETADDRINFO(host, port, socket.AF_INET, type, proto, flags)
 
 
+def _archive_filename(url: str) -> str:
+    """Return the on-disk filename a source URL is stored under.
+
+    GitHub's auto-generated /archive/refs/{tags,heads}/ tarballs are named
+    after the ref alone, so the OpenRC pin used to land in /sources as
+    "0.63.3.tar.gz".  Every stage script resolves its sources through
+    find_archive, which globs on the package-name prefix, so no script
+    could ever match that file and all 15 openrc cells of the weekly
+    matrix died on "Source archive missing for openrc".  OpenRC publishes
+    no release assets, so deriving the name here is the only fix that does
+    not depend on a third-party mirror.
+
+    A basename that already starts with the repository name is returned
+    unchanged (audacity/Audacity-3.7.8.tar.gz,
+    vamp-plugin-sdk/vamp-plugin-sdk-v2.10.tar.gz): prefixing those again
+    would demote them from find_archive's name-<version> tier to its
+    weaker fallback tier without making them any easier to match.
+    """
+    basename = url.split('/')[-1]
+    match = re.search(r'/([^/]+)/archive/refs/(?:tags|heads)/[^/]+$',
+                      urlparse(url).path)
+    if not match:
+        return basename
+    repo = match.group(1)
+    if basename.lower().startswith(repo.lower()):
+        return basename
+    return f"{repo}-{basename}"
+
+
 class SourceDownloader:
     """Download and verify LFS/BLFS sources"""
 
@@ -842,7 +871,7 @@ class SourceDownloader:
         package directory from the filename.
         """
         if filename is None:
-            filename = url.split('/')[-1]
+            filename = _archive_filename(url)
 
         dest = self.sources_dir / filename
         retries = self.retries if retries is None else max(1, int(retries))
@@ -986,7 +1015,7 @@ class SourceDownloader:
             )
             still_failed = []
             for url in failed_urls:
-                filename = url.split('/')[-1]
+                filename = _archive_filename(url)
                 dest = self.sources_dir / filename
                 if dest.exists():
                     continue  # downloaded by a concurrent thread
@@ -1747,10 +1776,22 @@ class LFSBuilder:
         """Prepare build environment directories"""
         self.logger.info("Preparing build environment")
 
+        # $LFS/tools is deliberately absent: it is the temporary LFS
+        # chapter 5/6 toolchain prefix, so it must exist only while the
+        # toolchain is being built and must be gone from the finished
+        # system (final/16-validate-build.sh fails the build on a
+        # leftover /tools, per LFS book 8.84).  Every stage that needs it
+        # creates it itself -- host/02-prepare-host.sh, host/04 and
+        # lfs/05a -- and lfs/05b removes it once the system is
+        # self-hosting.  Creating it here resurrected an empty /tools on
+        # every invocation, including a --resume-from run that skips
+        # lfs-system and therefore never reaches its rm -rf: nightly
+        # #223 lost minimal/systemd, server and arm64/x86_64 on
+        # "/tools still present - system is not standalone" the first
+        # time the base prefix cache was actually restored.
         directories = [
             self.output_dir,
             self.output_dir / 'sources',
-            self.output_dir / 'tools',
             self.output_dir / 'logs',
             self.output_dir / 'image',
             self.output_dir / 'cache',

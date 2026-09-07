@@ -135,6 +135,33 @@ class TestLFSBuilder:
         assert (builder.output_dir / 'image').exists()
         assert (builder.output_dir / 'build_info.json').exists()
 
+    def test_prepare_environment_does_not_create_tools(self, builder, temp_dir):
+        """$LFS/tools must not be resurrected on every invocation.
+
+        /tools is the temporary LFS chapter 5/6 toolchain prefix: host/02,
+        host/04 and lfs/05a create it when they need it and lfs/05b removes
+        it once the system is self-hosting.  prepare_environment() used to
+        mkdir it unconditionally, and main() calls it before build(), so a
+        --resume-from run that skips lfs-system (the base prefix cache path)
+        reached final/16-validate-build.sh with an empty /tools still there
+        and failed "system is not standalone".  Nightly #223 lost
+        minimal/systemd, server and arm64/x86_64 exactly that way, the
+        first night the base cache was actually restored.
+        """
+        builder.output_dir = temp_dir / "test-build"
+        assert builder.prepare_environment() is True
+        assert not (builder.output_dir / 'tools').exists()
+
+    def test_prepare_environment_leaves_an_existing_tools_alone(self, builder, temp_dir):
+        """Not creating /tools must not mean deleting it either: a toolchain
+        stage already in progress owns that directory."""
+        builder.output_dir = temp_dir / "test-build"
+        (builder.output_dir / 'tools').mkdir(parents=True)
+        sentinel = builder.output_dir / 'tools' / 'bin'
+        sentinel.mkdir()
+        assert builder.prepare_environment() is True
+        assert sentinel.exists()
+
     def test_prepare_environment_creates_build_info(self, builder):
         """Test build info JSON creation"""
         builder.prepare_environment()

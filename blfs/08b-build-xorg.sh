@@ -249,6 +249,7 @@ is_installed() {
         xcb-util-wm)        have_pc xcb-ewmh ;;
         xcb-util-cursor)   have_pc xcb-cursor ;;
         xkeyboard-config)   [ -d /usr/share/X11/xkb/rules/evdev ] || [ -f /usr/share/X11/xkb/rules/evdev.lst ] ;;
+        libtirpc)           have_pc libtirpc ;;
         xorg-server)        [ -x /usr/bin/Xorg ] || [ -x /usr/lib/Xorg ] ;;
         xwayland)           [ -x /usr/bin/Xwayland ] ;;
         xf86-input-libinput) [ -f /usr/lib/xorg/modules/input/libinput_drv.so ] ;;
@@ -542,6 +543,28 @@ build_commands_xkeyboard_config() {
     mkdir build && cd build &&
     meson setup --prefix=/usr --buildtype=release .. &&
     ninja && ninja install
+}
+
+# BLFS basicnet/libtirpc – xorg-server's meson defaults secure-rpc to
+# true and aborts with "secure-rpc requested, but neither libtirpc or
+# libc RPC support were found" once glibc stopped shipping rpc/rpc.h.
+# The book lists libtirpc as a Recommended xorg-server dependency and
+# builds it in chapter IV (Networking), long before chapter VI
+# (Graphical Components); here the basic-networking stage runs after
+# this one, so the library is built early instead.  Stage 23 guards on
+# have_pc libtirpc and skips its own copy.
+build_libtirpc() { book_install libtirpc build_commands_libtirpc; }
+build_commands_libtirpc() {
+    local p
+    for p in ../libtirpc-*-gcc15_fixes-*.patch; do
+        [ -f "$p" ] || continue
+        patch -Np1 -i "$p" || return 1
+    done
+    ./configure --prefix=/usr     \
+                --sysconfdir=/etc \
+                --disable-static  \
+                --disable-gssapi &&
+    make -j"$JOBS" && make install
 }
 
 # BLFS x/xorg-server – tearfree patch applied only when shipped;
@@ -865,6 +888,9 @@ run_build required xcb-util-cursor
 log_info "Phase 6: Xorg server and drivers"
 
 run_build required xkeyboard-config
+
+# secure-rpc is on by default in xorg-server's meson and needs libtirpc.
+run_build required libtirpc
 
 # Xorg server with the book meson flags
 run_build required xorg-server

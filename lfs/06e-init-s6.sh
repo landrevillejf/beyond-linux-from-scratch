@@ -27,7 +27,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -48,9 +51,13 @@ EOF
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot not working – run lfs-basic first"; exit 1
+    log_error "chroot not working – run lfs-basic first"
+    exit 1
 fi
 
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
@@ -245,24 +252,26 @@ run_build() {
 }
 
 log_info "Building s6 ecosystem (skarnet toolchain)..."
-# None of the skarnet packages are in packages/stable/12.4/sources.list
-# (they are not packages of the LFS/BLFS books), so they stay optional
-# until their tarballs are added.
+# None of the skarnet packages are in the LFS/BLFS books, so the official
+# wget-lists do not carry them; packages/custom-sources.list pins all five
+# at the current skarnet.org releases.  Every one is required: s6-init below
+# is a shell script that execs s6-svscan, so a partial install produces an
+# /sbin/init that satisfies validate's check and then panics at boot.
 
 # skalibs must be built first (all other packages depend on it)
-run_build optional skalibs --enable-time-acc
+run_build required skalibs --enable-time-acc
 
 # execline depends on skalibs
-run_build optional execline --enable-foreach --enable-import --enable-multiparse
+run_build required execline --enable-foreach --enable-import --enable-multiparse
 
 # nsss depends on skalibs
-run_build optional nsss --enable-libc-nss
+run_build required nsss --enable-libc-nss
 
 # s6 depends on skalibs and execline
-run_build optional s6 --enable-shared
+run_build required s6 --enable-shared
 
 # s6-rc depends on skalibs, execline, and s6
-run_build optional s6-rc --enable-shared
+run_build required s6-rc --enable-shared
 
 # ---- Post-install configuration ----
 log_info "Configuring s6..."
@@ -302,8 +311,17 @@ exec s6-svscan /etc/s6/sv
 S6INIT
 chmod +x /sbin/s6-init
 
-# Link /sbin/init to s6-init
-ln -sf /sbin/s6-init /sbin/init
+# Link /sbin/init to s6-init, but only once s6 is really installed.  The
+# script above is created unconditionally, so an unconditional symlink made
+# /sbin/init exist with zero s6 binaries behind it: validate's critical
+# /sbin/init check then passed and the weekly matrix reported BUILD_OK for
+# an s6 system that could not boot.  Fail here instead.
+if have_cmd s6-svscan; then
+    ln -sf /sbin/s6-init /sbin/init
+else
+    log_error "s6-svscan not installed - refusing to link /sbin/init"
+    exit 1
+fi
 
 # Create essential supervised services
 

@@ -6,12 +6,28 @@ on:
   workflow_dispatch:          # Manual trigger
 
 permissions:
-  contents: write
+  contents: read
+
+# 83 jobs is four times the 20-job concurrency limit, so a second
+# dispatch overlapping the Sunday run would queue for hours.  The queued
+# run must wait rather than cancel a build that has already burned its
+# whole 330-minute budget.
+concurrency:
+  group: weekly-full-matrix
+  cancel-in-progress: false
 
 jobs:
   build-profiles:
-    runs-on: ubuntu-latest
-    timeout-minutes: 600      # 10 hours for the biggest profiles
+    # The runner follows the target arch instead of becoming a fourth
+    # matrix dimension: every include entry below pins profile/arch/init
+    # and none of them a runner, so adding one would leave those entries
+    # partial.  aarch64 has to be native - emulated it cannot finish at
+    # any timeout (see the same note in nightly.yml).
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    # 600 sat above GitHub's hard 6h per-job cap, so the platform killed
+    # the job rather than us and nothing reached the log-upload step.
+    # 330 produces a clean cancelled() that B13's upload can still catch.
+    timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
@@ -42,24 +58,45 @@ jobs:
           - s6
         arch:
           - x86_64
-        # For profiles that are cross-compile enabled, also test aarch64
+        # For profiles that are cross-compile enabled, also test aarch64.
+        #
+        # Every entry pins init as well as profile and arch.  `aarch64` is
+        # absent from the arch list above, so these cannot merge into an
+        # existing combination: GitHub creates a new one, and any
+        # dimension an entry omits stays empty.  Run 34011217058 produced
+        # three such cells - the artifact `release-logs-arm64--aarch64`,
+        # where the double hyphen is the empty ${init} - whose builder.py
+        # call read `--init --arch aarch64`, so argparse aborted before a
+        # single log line was written.
         include:
-          # ARM64 profiles (cross-compile only for these)
+          # ARM64 profiles on native ARM runners
           - profile: arm64
             arch: aarch64
+            init: sysvinit
           - profile: pinebook
             arch: aarch64
+            init: sysvinit
           - profile: brax3
             arch: aarch64
-          # Optionally test x86_64 for arm64 profile (already included in default)
-          - profile: arm64
-            arch: x86_64
-          # Also test aarch64 for minimal and server? Could be added but not necessary.
+            init: sysvinit
         # Exclude combinations that are not relevant (e.g., openrc on arm64 might not work)
         # We can add exclusions if needed, but keep them all for now.
 
     permissions:
       contents: write
+
+    env:
+      # Unlike nightly, weekly keeps no uncached canary: its job is
+      # breadth across 83 cells, and minimal/sysvinit/x86_64 already
+      # re-proves the whole prefix from scratch every night.  Cells the
+      # publisher does not cover (openrc, runit, s6, aarch64) simply miss
+      # and build from scratch.
+      USE_BASE_CACHE: 'true'
+      # Where the published base prefix ends, expressed as the stage this
+      # job picks up at.  Moving the boundary means editing these two
+      # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
+      BASE_CACHE_RESUME_STAGE: init-system
+      BASE_CACHE_IMAGE_STAGE: disk-image
 
     steps:
       - uses: actions/checkout@v4
@@ -76,13 +113,13 @@ jobs:
             --repo ${{ github.repository }} \
             --pattern "lfs-packages-part-*.tar.gz" \
             --pattern "SHA256SUMS" \
-            2>/dev/null || echo "⚠️ No cache release found"
+            2>/dev/null || echo "No cache release found"
           mkdir -p /tmp/lfs-sources
           if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
             cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
-            echo "✅ Cache restored successfully"
+            echo "Cache restored successfully"
           else
-            echo "⚠️ No cached packages found, will download during build"
+            echo "No cached packages found, will download during build"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,10 +130,10 @@ jobs:
         run: |
           if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
             echo "hit=true" >> $GITHUB_OUTPUT
-            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+            echo "Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
           else
             echo "hit=false" >> $GITHUB_OUTPUT
-            echo "❌ Cache MISS: Will download packages during build"
+            echo "Cache MISS: Will download packages during build"
           fi
 
       - name: Free disk space
@@ -125,6 +162,22 @@ jobs:
             xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
             libssl-dev libelf-dev squashfs-tools ca-certificates \
             libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+
+      - name: Install ARM64 cross tools
+        if: matrix.arch == 'aarch64'
+        run: |
+          # builder.py sets cross_compile for any --arch other than x86_64,
+          # so host/05-build-uboot.sh still hard-requires ${CROSS_COMPILE}gcc
+          # even on the native ARM runner these cells now use - where these
+          # two packages are the native compiler and binutils under their
+          # triplet names, and host/04 derives LFS_TGT from `uname -m`.
+          #
+          # qemu-user-static and binfmt-support are deliberately absent:
+          # host/00-setup-qemu.sh exits early when `uname -m` matches the
+          # target, so an installed emulator would only offer a way to
+          # regress into a build ~27x slower.
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
 
       - name: Install Python dependencies
         run: |
@@ -159,83 +212,309 @@ jobs:
             sudo mkdir -p /tmp/lfs-build/build-release/sources
             sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
             sudo chown -R lfs:lfs /tmp/lfs-build/build-release
-            echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+            echo "Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+            # The copy above duplicates several GB of tarballs; the base
+            # prefix restore that follows needs the room.
+            sudo rm -rf /tmp/lfs-sources
+            df -h /tmp
           fi
 
       - name: Ensure fresh kernel for aarch64
         run: |
           if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
             sudo rm -f /tmp/lfs-build/build-release/sources/linux-*.tar.xz
-            echo "🗑️ Removed cached kernel to force fresh download"
+            echo "Removed cached kernel to force fresh download"
           fi
 
       # ------- DEBUG (optional) -------
       - name: Debug sources directory before build
         run: |
-          echo "📂 Sources directory:"
+          echo "Sources directory:"
           ls -la /tmp/lfs-build/build-release/sources/ | head -30
           echo "files in sources : $(ls /tmp/lfs-build/build-release/sources/ | wc -l)"
 
       - name: Ensure build directory is fully owned by lfs user
         run: sudo chown -R lfs:lfs /tmp/lfs-build
 
+      # ------- BASE PREFIX CACHE -------
+      - name: Restore base prefix cache
+        id: base_cache
+        if: env.USE_BASE_CACHE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A cache miss must degrade to a from-scratch build, never break
+          # the job: every failure path below leaves hit=false and the step
+          # still succeeds.
+          INIT="${{ matrix.init }}"
+          ARCH="${{ matrix.arch }}"
+          # Same key the publisher computes: git ls-tree -r emits blob SHAs,
+          # so a weekly cell can never restore a base built from different
+          # inputs.
+          BASE_KEY=$(git ls-tree -r HEAD -- host \
+            lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            config packages/sources.list packages/custom-sources.list \
+            builder.py VERSION | sha256sum | cut -c1-12)
+          PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
+          HIT=false
+          mkdir -p /tmp/base-cache
+          cd /tmp/base-cache
+          echo "Looking for ${PREFIX} in base-cache-latest"
+          if gh release download base-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "${PREFIX}.tar.zst.part-*" \
+            --pattern "${PREFIX}.sha256"; then
+            # Verify before extracting.  The package-cache step above
+            # downloads SHA256SUMS and never checks it; do not repeat that.
+            if sha256sum -c "${PREFIX}.sha256"; then
+              df -h /tmp
+              sudo mkdir -p /tmp/lfs-build/build-release
+              if cat $(ls -v "${PREFIX}".tar.zst.part-*) \
+                | sudo tar --zstd --numeric-owner --xattrs \
+                  -xf - -C /tmp/lfs-build/build-release; then
+                # The lfs uid is not guaranteed identical across runners,
+                # and the resumed build must be able to write anywhere in
+                # the restored rootfs, not just in the top-level scaffolding.
+                sudo chown lfs:lfs /tmp/lfs-build
+                sudo chown -R "$(id -u lfs):$(id -g lfs)" \
+                  /tmp/lfs-build/build-release
+                HIT=true
+              else
+                echo "Base cache extraction failed - building from scratch"
+              fi
+            else
+              echo "Base cache checksum mismatch - building from scratch"
+            fi
+          else
+            echo "No base cache published for ${PREFIX} - building from scratch"
+          fi
+          # The parts are several GB and the runner disk is tight; they are
+          # useless once extracted.
+          rm -f "${PREFIX}".tar.zst.part-* "${PREFIX}.sha256"
+          df -h /tmp
+          du -sh /tmp/lfs-build/build-release 2>/dev/null || true
+          echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
+          echo "Base prefix cache hit: ${HIT}"
+
+      - name: Recreate disk image after cache restore
+        if: steps.base_cache.outputs.hit == 'true'
+        run: |
+          cd /tmp/lfs-build
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+          # host/03 umounts the loop partition when the stage exits, so
+          # re-running it hides nothing: it recreates build-release.img,
+          # which the headless-profile artifact check and the QEMU smoke
+          # test both look for, and leaves the restored rootfs untouched.
+          # Resuming and stopping on the same stage runs host/03 alone -
+          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
+          # the system is self-hosting.
+          sudo -u lfs python3 builder.py \
+            --profile "$PROFILE" \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --resume-from "$BASE_CACHE_IMAGE_STAGE" \
+            --stop-after "$BASE_CACHE_IMAGE_STAGE" \
+            --download-timeout 600 \
+            --download-retries 5 \
+            --stage-timeout 18000
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
       # ------- BUILD -------
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
           cd /tmp/lfs-build
           CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
-          echo "📦 Package cache status: $CACHE_STATUS"
+          echo "Package cache status: $CACHE_STATUS"
+
+          # builder.py has no aarch64 profile; the three ARM cells map to
+          # arm64, which carries the aarch64 kernel and the u-boot stage.
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+
+          # Only a verified cache hit may skip the prefix; anything else
+          # runs the full build exactly as before.
+          RESUME_ARGS=""
+          if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
+            RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
+            echo "Base cache hit: resuming from $BASE_CACHE_RESUME_STAGE"
+          fi
 
           sudo -u lfs python3 builder.py \
-            --profile ${{ matrix.profile }} \
+            --profile "$PROFILE" \
             --init ${{ matrix.init }} \
             --arch ${{ matrix.arch }} \
             --output ./build-release \
             --verbose \
+            --nightly \
+            --sbom \
+            $RESUME_ARGS \
+            --stage-timeout 18000 \
             --download-timeout 600 \
             --download-retries 5
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
-      - name: Verify kernel and ISO
+      - name: Resolve ISO name
+        id: iso_name
         run: |
-          ls /tmp/lfs-build/build-release/image/boot/vmlinuz*
-          test -s /tmp/lfs-build/build-release/lfs-installer.iso
-          sha256sum /tmp/lfs-build/build-release/lfs-installer.iso > /tmp/lfs-build/build-release/SHA256SUMS
-          sha256sum /tmp/lfs-build/build-release/image/boot/vmlinuz* >> /tmp/lfs-build/build-release/SHA256SUMS
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+            ARCH="aarch64"
+          else
+            PROFILE="${{ matrix.profile }}"
+            ARCH="${{ matrix.arch }}"
+          fi
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          DATE=$(date +%Y%m%d)
+          # Mirrors builder.py's get_iso_name(): --nightly above is what
+          # makes the builder append the date, so the two must agree or
+          # every post-build step looks for a file that does not exist.
+          ISO_NAME="lfs-${BUILDER_VERSION}-${PROFILE}-${ARCH}-${{ matrix.init }}-${DATE}.iso"
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+          echo "ISO name: $ISO_NAME"
+
+      - name: Verify kernel and boot artifact
+        run: |
+          SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
+          ISO="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          # builder.py sets LFS to the resolved output directory, so the
+          # rootfs *is* build-release/ and every stage script installs the
+          # kernel into $LFS/boot.  build-release/image/ is created empty
+          # by prepare_environment() and populated by nothing, which is why
+          # the `ls image/boot/vmlinuz*` this step replaced could never
+          # succeed - and the `test -s lfs-installer.iso` beside it threw
+          # away seven builds that had printed BUILD COMPLETED
+          # SUCCESSFULLY, among them arm64/sysvinit/x86_64 after 4h57m.
+          KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
+          test -n "$KERNEL_SRC"
+          # Headless profiles ship a disk image instead of a live ISO;
+          # accept either as the boot artifact.
+          if [ -f "$ISO" ]; then
+            test -s "$ISO"
+            ARTIFACT="$ISO"
+          else
+            ARTIFACT="/tmp/lfs-build/build-release.img"
+            test -s "$ARTIFACT"
+          fi
+          # Give the kernel a per-profile name so release assets from
+          # different matrix jobs never collide.
+          #
+          # Every write from here to the artifact upload needs sudo.
+          # builder.py runs as lfs but the stage scripts install inside a
+          # chroot, so build-release/ and most of what it holds are
+          # root-owned and the runner user cannot create a file there.
+          sudo cp "$KERNEL_SRC" "/tmp/lfs-build/build-release/vmlinuz-${SUFFIX}"
+          cd /tmp/lfs-build/build-release || exit 1
+          sudo sha256sum "$ARTIFACT" "vmlinuz-${SUFFIX}" | sudo tee "SHA256SUMS-${SUFFIX}" >/dev/null
+
+      - name: Create compat ISO pointer
+        run: |
+          cd /tmp/lfs-build/build-release || exit 1
+          ISO="${{ steps.iso_name.outputs.iso_name }}"
+          # Headless profiles ship no ISO, hence no pointer either.
+          if [ ! -f "$ISO" ]; then
+            echo "No ISO for this profile, skipping pointer"
+            exit 0
+          fi
+          # Release assets cannot be symlinks and copying the ISO would
+          # duplicate gigabytes, so publish a tiny pointer that resolves
+          # the backward-compatible lfs-installer.iso name.  The tag is
+          # the ref this workflow runs on, which is what create-release
+          # below tags its release with.
+          SHA=$(sudo sha256sum "$ISO" | awk '{print $1}')
+          {
+            echo "iso_name=$ISO"
+            echo "sha256=$SHA"
+            echo "download_url=https://github.com/${{ github.repository }}/releases/download/${GITHUB_REF_NAME}/$ISO"
+          } | sudo tee lfs-installer.iso.pointer >/dev/null
+
+      - name: Rename shared-name artifacts per profile
+        run: |
+          cd /tmp/lfs-build/build-release || exit 1
+          SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
+          # Renaming needs write permission on the containing directory,
+          # which the runner user does not have (see the kernel step).
+          # Without the suffix, 83 jobs upload a file all named
+          # build_info.json and the flattened release keeps one of them.
+          sudo mv build_info.json "build_info-${SUFFIX}.json"
+          if [ -f sbom.spdx.json ]; then
+            sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"
+          fi
+          if ls lpm-repo/packages.list* >/dev/null 2>&1; then
+            for f in lpm-repo/packages.list*; do
+              sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
+            done
+          fi
+          # Base binary package tarballs are deliberately not uploaded on
+          # the weekly matrix: 83 jobs would collide on the same asset
+          # names once the release is flattened.
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
           path: |
-            /tmp/lfs-build/build-release/lfs-installer.iso
-            /tmp/lfs-build/build-release/image/boot/vmlinuz*
-            /tmp/lfs-build/build-release/SHA256SUMS
-            /tmp/lfs-build/build-release/build_info.json
-          if-no-files-found: error
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
+            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
+          # The ISO and its pointer are absent for every profile with
+          # live_system: False; kernel, sums and build_info always ship.
+          # `error` made those cells fail after a successful build.
+          if-no-files-found: ignore
 
-      - name: Boot ISO in QEMU (smoke test)
+      - name: Boot artifact in QEMU (smoke test)
         if: success() && matrix.arch == 'x86_64'
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
-          ISO_PATH="/tmp/lfs-build/build-release/lfs-installer.iso"
-          echo "Booting $ISO_PATH in QEMU..."
-          timeout 90s qemu-system-x86_64 \
-            -cdrom "$ISO_PATH" \
-            -nographic -no-reboot -m 2G -smp 2 \
-            -append "console=ttyS0" | tee qemu.log || true
-          if grep -qi "LFS\|init:\|login:" qemu.log; then
-            echo "ISO booted successfully!"
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          # The inline `qemu-system-x86_64 ... | tee` this replaces ran
+          # under `|| true` and then grepped, so a QEMU that never started
+          # was indistinguishable from one that booted; it also passed
+          # -append without -kernel.  tools/qemu-boot-smoke.sh owns that
+          # logic now.
+          # QEMU attaches a raw disk image with -drive file=...,format=raw,
+          # which it opens read-write, but host/03 creates build-release.img
+          # under sudo and this step runs as the runner user while the build
+          # ran as lfs (nightly #223: "Could not open build-release.img:
+          # Permission denied").  Loosen the mode instead of elevating the
+          # script, which would also flip its /dev/kvm probe.
+          if [ -f /tmp/lfs-build/build-release.img ]; then
+            sudo chmod a+rw /tmp/lfs-build/build-release.img
+          fi
+          if [ -f "$ISO_PATH" ]; then
+            bash tools/qemu-boot-smoke.sh "$ISO_PATH"
+          elif [ -f /tmp/lfs-build/build-release.img ]; then
+            # The image is formatted but empty - host/03 umounts the loop
+            # partition when the stage exits - so the kernel and initramfs
+            # come from the rootfs tree, which is build-release/ itself.
+            bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \
+              /tmp/lfs-build/build-release
           else
-            echo "ISO boot failed – no expected output found"
-            cat qemu.log
+            echo "No bootable artifact (ISO or disk image) found" >&2
             exit 1
           fi
 
       - name: Upload logs on failure
-        if: failure()
+        # Cancelled jobs must leave logs behind as well, otherwise a budget
+        # overrun is undiagnosable.  Run 34011217058 cancelled 15 jobs and
+        # this step's bare `if: failure()` uploaded nothing for any of
+        # them, which is why their durations are still unexplained.
+        if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
           name: release-logs-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
