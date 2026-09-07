@@ -27,7 +27,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -48,9 +51,13 @@ EOF
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
-    log_error "chroot not working – run lfs-basic first"; exit 1
+    log_error "chroot not working – run lfs-basic first"
+    exit 1
 fi
 
 run_privileged ln -sfn /bin/bash "$LFS/bin/sh"
@@ -203,8 +210,36 @@ build_pkg() {
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
-    # runit uses a custom Makefile-based build system
-    if [ -f Makefile ]; then
+    # smarden.org ships runit inside a djb-style package tree: the tarball's
+    # first path component is "admin" and the project sits one level down,
+    # so the directory extract_archive returns holds no build files at all
+    # and this stage reported "runit has no recognised build system" for
+    # every runit cell of the weekly matrix.  Descend to the level that
+    # actually carries package/compile.
+    if [ ! -x package/compile ]; then
+        for tree in */*/ */; do
+            if [ -x "${tree}package/compile" ]; then
+                cd "$tree" || { popd >/dev/null; return 1; }
+                break
+            fi
+        done
+    fi
+    # runit has no top-level Makefile and no "make install".  Upstream's
+    # documented install is package/compile followed by copying the binaries
+    # out of command/: the two that PID 1 needs go to /sbin so /sbin/init can
+    # point at /sbin/runit-init, and the supervision tools the service
+    # scripts below invoke go to /usr/bin.
+    if [ -x package/compile ]; then
+        package/compile
+        install -m 0755 command/runit command/runit-init /sbin/
+        for prog in command/*; do
+            [ -f "$prog" ] || continue
+            case "$prog" in
+                command/runit | command/runit-init) continue ;;
+            esac
+            install -m 0755 "$prog" /usr/bin/
+        done
+    elif [ -f Makefile ]; then
         make -j"$JOBS" CC=gcc
         make install
     else
@@ -232,15 +267,13 @@ run_build() {
 }
 
 log_info "Building runit..."
-# runit is not in packages/stable/12.4/sources.list (and not a package of
-# the LFS/BLFS books), so it stays optional until its tarball is added.
-run_build optional runit
-
-# runit's build system installs to /package/admin/runit, fix the path
-if [ -d /package/admin/runit ]; then
-    cp -a /package/admin/runit/command/* /usr/bin/ || log_warning "Could not copy runit commands to /usr/bin"
-    cp -a /package/admin/runit/command/* /sbin/ || log_warning "Could not copy runit commands to /sbin"
-fi
+# runit is not a package of the LFS/BLFS books, so the official wget-lists
+# do not carry it; packages/custom-sources.list pins smarden.org's current
+# release instead.  It is required rather than optional because a runit
+# system with no runit has no init at all, and writing the supervision tree
+# below would still leave a rootfs that passes validate and then fails to
+# boot.
+run_build required runit
 
 # ---- Post-install configuration ----
 log_info "Configuring runit..."
@@ -441,13 +474,17 @@ ln -sf /etc/sv/getty-tty2 /etc/service/getty-tty2
 ln -sf /etc/sv/sshd /etc/service/sshd
 ln -sf /etc/sv/networking /etc/service/networking
 
-# Link /sbin/init to runit
+# Link /sbin/init to runit.  Both branches need a real binary: an
+# unconditional symlink would satisfy validate's /sbin/init check on a
+# system whose init cannot run, which is a worse failure than stopping
+# here.
 if [ -x /sbin/runit-init ]; then
     ln -sf /sbin/runit-init /sbin/init
 elif [ -x /sbin/runit ]; then
     ln -sf /sbin/runit /sbin/init
 else
-    log_warning "runit binary not found; /sbin/init not relinked"
+    log_error "no runit binary in /sbin - refusing to link /sbin/init"
+    exit 1
 fi
 
 log_success "runit configuration complete."

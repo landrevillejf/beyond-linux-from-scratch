@@ -170,6 +170,112 @@
 
 ### Fixed
 
+- **`xorg-server` was built before the `libtirpc` it requires**
+  (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
+  - Eight nightly #223 jobs (xfce sysvinit, xfce systemd, gnome, kde,
+    lxqt, java-dev, full, audio-studio) died in the xorg stage with
+    `secure-rpc requested, but neither libtirpc or libc RPC support
+    were found`.  xorg-server's meson defaults `secure-rpc` to true and
+    glibc no longer ships `rpc/rpc.h`, so that option now needs libtirpc
+    to be installed
+  - The BLFS book lists libtirpc as a Recommended xorg-server
+    dependency and builds it in chapter IV (Networking), long before
+    chapter VI (Graphical Components).  This builder schedules the two
+    the other way round -- `basic-networking` is stage 23 while `xorg`
+    is stage 08b -- so the only libtirpc build site ran after its
+    consumer
+  - The stage order is left alone (it is shared by every profile and
+    baked into the cache keys) and libtirpc is instead built in 08b
+    immediately ahead of xorg-server, with the book's own commands
+    (`--sysconfdir=/etc --disable-static --disable-gssapi` plus the
+    gcc15 patch).  `blfs/23-basic-networking.sh` already guards on
+    `have_pc libtirpc`, so its later copy becomes a no-op instead of a
+    second build
+  - Not a regression: nightly #221 never got past `libX11`, and #223
+    was the first run to reach xorg-server
+
+- **`prepare_environment()` resurrected `/tools` on every invocation**
+  (`builder.py`, `tests/test_builder.py`,
+  `tests/test_acceptance_shell.py`)
+  - Three nightly #223 jobs (minimal/systemd, server/sysvinit,
+    arm64/sysvinit/x86_64) cleared every build stage and then failed
+    `validate` on `/tools still present - system is not standalone`
+  - `$LFS/tools` is the temporary LFS chapter 5/6 toolchain prefix.
+    `lfs/05b-build-lfs-system.sh` removes it once the system is
+    self-hosting, but the `directories` list in `builder.py` recreated
+    it at the start of *every* run, so a `--resume-from` that skips
+    `lfs-system` -- precisely what a restored base prefix does -- never
+    reached that `rm -rf` and left an empty `/tools` in the artifact
+  - #223 was the first nightly to actually restore a base prefix, hence
+    the first that could hit this.  The uncached path always runs
+    `lfs-system` last, so the directory was always cleaned up again
+  - Every stage that needs it creates it itself
+    (`host/02-prepare-host.sh`, `host/04-build-toolchain.sh`,
+    `lfs/05a-build-lfs-basic.sh`), so removing it from the list is
+    sufficient.  The `[ ! -d "$LFS/tools" ]` re-rooting heuristics in
+    `lfs/05b` and `lfs/08-build-kernel.sh` are untouched: they test
+    `<output>/image/tools`, which nothing ever populates
+
+- **a root-owned disk image broke the QEMU boot smoke test**
+  (`host/03-create-disk-image.sh`, `.github/workflows/nightly.yml`,
+  `.github/workflows/weekly-full.yml`,
+  `tests/test_acceptance_shell.py`)
+  - The `minimal / sysvinit / x86_64` canary -- the one job that builds
+    everything from scratch -- finished successfully and then failed
+    its post-build smoke test with `Could not open
+    'build-release.img': Permission denied`
+  - `host/03` needs privileges only for the loop-device calls, but it
+    ran the preceding `dd` under `$USE_SUDO` as well, leaving the
+    artifact `root:root 0644`.  `tools/qemu-boot-smoke.sh` attaches a
+    raw image with `-drive file=...,format=raw`, which QEMU opens
+    read-write, and the workflow step runs as the runner user while the
+    build ran as `lfs`
+  - The image is now chowned back to the invoking user between the `dd`
+    and the `losetup`, and both workflows loosen its mode before
+    booting it as belt and braces for artifacts left over from an
+    earlier revision
+  - Running the smoke test itself as root was rejected: that would also
+    satisfy the script's `[ -r /dev/kvm ]` probe and silently move every
+    nightly from TCG onto an accelerator path nothing else exercises
+
+- **libffi installed into `/usr/lib64` on aarch64**
+  (`lfs/05b-build-lfs-system.sh`, `tests/test_acceptance_shell.py`)
+  - The `arm64 / sysvinit / aarch64` job died in `lfs-system` with
+    `install: cannot stat
+    'Modules/_ctypes.cpython-313-aarch64-linux-gnu.so'`
+  - libffi appends `gcc -print-multi-os-directory` to its libdir unless
+    told otherwise.  On x86_64 the chapter-8 gcc build seds `m64=lib64`
+    into `m64=lib`, so that prints `.` and the library lands in
+    `/usr/lib`; aarch64 carries no such sed and prints `../lib64`.
+    `/usr/lib64` is not on the aarch64 loader's default search path and
+    `/etc/ld.so.conf` is deliberately empty
+  - python's build-time `import _ctypes` probe therefore failed with
+    `libffi.so.8: cannot open shared object file`.  CPython deletes an
+    extension module it could not import but leaves it in the install
+    list, which is why the stage reported a `cannot stat` thousands of
+    lines after the real error
+  - `--disable-multi-os-directory` is added to libffi's configure --
+    the documented way to keep the library in `/usr/lib` on every
+    architecture.  x86_64 behaviour is unchanged, since `.` already
+    resolved to the same directory there
+
+- **`custom-sources.list` downgraded `xorg-server` off the book**
+  (`packages/custom-sources.list`, `tests/test_acceptance_shell.py`)
+  - The file pinned `xorg-server-21.1.16.tar.xz` from
+    `xorg.freedesktop.org` while the BLFS 12.4 book and the official
+    wget-list both build `21.1.18` from `www.x.org`.  `source_key()`
+    strips the version before hashing, so the pin replaced the book
+    version rather than adding to it, and the xorg stage had been
+    silently building off-book
+  - Re-pinned to the book's URL, following the lockstep rule the file
+    already documents for libtirpc, and the optional
+    `xorg-server-21.1.18-tearfree_backport-1.patch` is listed next to
+    it.  The book marks that patch optional ("apply this patch if you
+    are going to use Xorg in an environment without a compositor"), so
+    the official wget-list does not carry it and it would otherwise
+    never be downloaded; `08b-build-xorg.sh` applies it only when it is
+    present in `/sources` and it changes no default
+
 - **`xtrans` was built two phases after the `libX11` needing it**
   (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
   - The xorg stage aborted with `Package requirements (xproto >= 7.0.25

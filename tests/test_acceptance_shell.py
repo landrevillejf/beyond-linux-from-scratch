@@ -2779,20 +2779,43 @@ class TestInitSystemErrorPolicyGuardrails:
                 f"{script} must run the inner script with env -i"
 
     def test_init_required_packages_have_sources(self):
-        """Every required init package must resolve to a tarball listed
-        in packages/stable/12.4/sources.list."""
-        import re
+        """Every required init package must resolve to a downloadable tarball.
 
-        sources = Path('packages/stable/12.4/sources.list').read_text()
+        packages/stable/12.4/sources.list is only the snapshot of the
+        official wget-lists; builder.py applies packages/custom-sources.list
+        on top of it, and that override file is the sole home of the init
+        systems the books do not carry (openrc, runit and the whole s6
+        stack).  Checking the snapshot alone made every one of them look
+        unsourced the moment lfs/06c-06e classified them as required.
+
+        Names are compared after builder._archive_filename(), because a
+        GitHub refs/tags URL is stored as <repo>-<tag>.tar.gz: matching the
+        raw URL would let the OpenRC pin through as a bare "0.63.3.tar.gz",
+        which no find_archive glob can ever resolve.
+        """
+        import re
+        from builder import _archive_filename
+
+        names = []
+        for list_file in ('packages/stable/12.4/sources.list',
+                          'packages/custom-sources.list'):
+            for line in Path(list_file).read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    names.append(_archive_filename(line))
+        # Newline-anchored, the same way the old check anchored on the "/"
+        # of the URL path: "s6" must not be satisfied by "s6-rc-...".
+        blob = '\n' + '\n'.join(names)
         call_re = re.compile(r'run_build\s+required\s+(\S+)')
 
         for script in self.BUILD_SCRIPTS:
             content = Path(script).read_text()
             for pkg in set(call_re.findall(content)):
-                found = (f"/{pkg}-" in sources or f"/{pkg}." in sources)
+                found = (f"\n{pkg}-" in blob or f"\n{pkg}." in blob)
                 assert found, \
-                    f"{script}: required package {pkg} has no source " \
-                    f"in packages/stable/12.4/sources.list"
+                    f"{script}: required package {pkg} has no source in " \
+                    f"packages/stable/12.4/sources.list or " \
+                    f"packages/custom-sources.list"
 
     def test_shellcheck_on_init_scripts(self):
         """shellcheck must be clean on the outer scripts and on the
@@ -2837,3 +2860,177 @@ class TestInitSystemErrorPolicyGuardrails:
                     f"{script}:\n{result.stdout}"
             finally:
                 os.unlink(tmp_path)
+
+
+class TestNightly223StageGuardrails:
+    """Guardrails for the Nightly #223 all-profile failure classes.
+
+    Run #223 lost all thirteen jobs to four independent defects.  It was
+    also the first nightly to actually restore the base prefix cache --
+    build-base-cache only published its first prefix some 17 h earlier --
+    so two of the four had been latent in the resume path since the day
+    it was written:
+
+    * xorg-server's meson defaults secure-rpc to true and aborts with
+      "secure-rpc requested, but neither libtirpc or libc RPC support
+      were found".  libtirpc was built only by basic-networking, which
+      builder.py schedules *after* xorg -- the inverse of the book, where
+      chapter IV (Networking) precedes chapter VI (Graphical Components).
+      Eight desktop profiles died there.
+    * builder.py's prepare_environment() recreated <output>/tools on
+      every invocation, so a --resume-from init-system run that skips
+      lfs-system (the only "rm -rf /tools") reached validate with an
+      empty /tools and failed "system is not standalone".  Three jobs.
+    * host/03 created build-release.img under sudo and the QEMU smoke
+      test, running as the runner user, could not open it read-write.
+      One job, thrown away after a complete successful build.
+    * libffi installed into /usr/lib/../lib64 on aarch64, which is not on
+      the loader's default search path, so CPython's build-time _ctypes
+      import failed and "make install" died on the module CPython had
+      just deleted.  One job.
+    """
+
+    XORG = Path('blfs/08b-build-xorg.sh')
+    BASICNET = Path('blfs/23-basic-networking.sh')
+    LFS_SYSTEM = Path('lfs/05b-build-lfs-system.sh')
+    DISK_IMAGE = Path('host/03-create-disk-image.sh')
+    VALIDATE = Path('final/16-validate-build.sh')
+    SOURCES = Path('packages/custom-sources.list')
+    BOOK_SOURCES = Path('packages/stable/12.4/sources.list')
+    NIGHTLY = Path('.github/workflows/nightly.yml')
+    WEEKLY = Path('.github/workflows/weekly-full.yml')
+
+    @staticmethod
+    def _build_pos(content, mode, pkg):
+        match = re.search(rf'^run_build {mode} {re.escape(pkg)}\b',
+                          content, re.MULTILINE)
+        return match.start() if match else -1
+
+    def test_libtirpc_precedes_xorg_server(self):
+        """The book lists libtirpc as a Recommended xorg-server
+        dependency and builds it two chapters earlier; this repository
+        schedules basic-networking after xorg, so the xorg stage has to
+        build the library itself."""
+        content = self.XORG.read_text()
+        tirpc = self._build_pos(content, 'required', 'libtirpc')
+        server = self._build_pos(content, 'required', 'xorg-server')
+        assert tirpc != -1, "libtirpc build missing from the xorg stage"
+        assert server != -1, "xorg-server build missing from the stage"
+        assert tirpc < server, \
+            "libtirpc must be built before xorg-server (Nightly #223)"
+        # Exactly one build site: a second, later call would satisfy the
+        # ordering assertion while the first one still ran too late.
+        assert content.count('run_build required libtirpc') == 1
+
+    def test_xorg_stage_ships_the_book_libtirpc_commands(self):
+        """The early build must be the book build, and is_installed must
+        guard it so a system that already has the library skips it."""
+        content = self.XORG.read_text()
+        assert 'build_libtirpc()' in content
+        body = content[content.index('build_commands_libtirpc()'):]
+        body = body[:body.index('\n}\n')]
+        for flag in ('--prefix=/usr', '--sysconfdir=/etc',
+                     '--disable-static', '--disable-gssapi'):
+            assert flag in body, f"libtirpc configure lost {flag}"
+        assert re.search(r'^\s+libtirpc\).*have_pc libtirpc',
+                         content, re.MULTILINE), \
+            "is_installed must guard libtirpc on its pkg-config module"
+
+    def test_basic_networking_still_skips_an_installed_libtirpc(self):
+        """The duplicate build is only a no-op because stage 23 guards on
+        the same pkg-config module; dropping that guard would rebuild the
+        library on every desktop profile as well."""
+        content = self.BASICNET.read_text()
+        assert re.search(r'^\s+libtirpc\)\s*have_pc libtirpc',
+                         content, re.MULTILINE)
+        assert self._build_pos(content, 'required', 'libtirpc') != -1, \
+            "nfs-utils still needs libtirpc built by basic-networking"
+
+    def test_custom_sources_do_not_downgrade_xorg_server(self):
+        """A custom pin overrides the book version, so a stale one moves
+        the xorg stage off-book.  21.1.16 did exactly that while the
+        BLFS 12.4 book and its wget-list both build 21.1.18."""
+        pattern = r'xorg-server-(\d+\.\d+\.\d+)\.tar\.xz'
+        book = re.findall(pattern, self.BOOK_SOURCES.read_text())
+        custom = re.findall(pattern, self.SOURCES.read_text())
+        assert book, 'the book list must carry xorg-server'
+        effective = custom[-1] if custom else book[0]
+        assert effective == book[0], \
+            f'effective xorg-server {effective} is not the book {book[0]}'
+
+    def test_xorg_server_tearfree_patch_matches_the_pinned_version(self):
+        """The patch is optional in the book and therefore absent from the
+        official wget-list; 08b applies it whenever it shipped, so the pin
+        and the tarball must stay in lockstep."""
+        sources = self.SOURCES.read_text()
+        patch = re.search(
+            r'xorg-server-(\d+\.\d+\.\d+)-tearfree_backport-\d+\.patch',
+            sources)
+        tarball = re.search(r'xorg-server-(\d+\.\d+\.\d+)\.tar\.xz',
+                            sources)
+        assert patch, 'the tearfree_backport patch is not pinned'
+        assert tarball and tarball.group(1) == patch.group(1), \
+            'the tearfree patch must match the pinned xorg-server version'
+        assert 'xorg-server-*-tearfree_backport-*.patch' \
+            in self.XORG.read_text()
+
+    def test_every_tools_consumer_creates_the_directory_itself(self):
+        """builder.py no longer mkdirs <output>/tools, so each stage that
+        writes into the temporary toolchain prefix must create it.  This
+        is the premise that makes the resume-path fix safe."""
+        assert 'mkdir -pv "$LFS/tools"' in \
+            Path('host/02-prepare-host.sh').read_text()
+        assert 'mkdir -pv "$LFS"/tools' in \
+            Path('host/04-build-toolchain.sh').read_text()
+        assert 'mkdir -p "$LFS/tools/lib"' in \
+            Path('lfs/05a-build-lfs-basic.sh').read_text()
+
+    def test_lfs_system_removes_tools_and_validate_gates_on_it(self):
+        """The only rm -rf /tools lives in lfs-system, and validate is
+        what turns a leftover into a hard failure (LFS book 8.84)."""
+        assert 'rm -rf /tools' in self.LFS_SYSTEM.read_text()
+        content = self.VALIDATE.read_text()
+        assert 'if [ -d "$LFS/tools" ]; then' in content
+        assert 'system is not standalone' in content
+
+    def test_disk_image_is_handed_back_to_the_invoking_user(self):
+        """The dd runs under sudo but writes a plain file; only the loop
+        device operations need privileges.  Leaving the artifact
+        root-owned 0644 is what made QEMU's read-write -drive fail."""
+        content = self.DISK_IMAGE.read_text()
+        dd = content.index('dd if=/dev/zero of="$IMAGE_FILE"')
+        chown = content.find('chown "$(id -u):$(id -g)" "$IMAGE_FILE"')
+        loop = content.index('losetup --find --show')
+        assert chown != -1, \
+            'host/03 must chown the image back to the invoking user'
+        assert dd < chown < loop, \
+            'the chown belongs between the dd and the loop setup'
+
+    def test_smoke_test_step_can_open_the_disk_image(self):
+        """Both scheduled workflows boot build-release.img as the runner
+        user while the build ran as lfs, so the mode has to be loosened
+        first.  Elevating the whole script instead would also flip its
+        /dev/kvm probe onto an accel path nothing has exercised."""
+        for workflow in (self.NIGHTLY, self.WEEKLY):
+            content = workflow.read_text()
+            chmod = content.find(
+                'sudo chmod a+rw /tmp/lfs-build/build-release.img')
+            smoke = content.find('bash tools/qemu-boot-smoke.sh '
+                                 '/tmp/lfs-build/build-release.img')
+            assert chmod != -1, f'{workflow} never unlocks the disk image'
+            assert smoke != -1, f'{workflow} no longer boots the image'
+            assert chmod < smoke, \
+                f'{workflow} must chmod the image before booting it'
+
+    def test_libffi_disables_the_multi_os_directory(self):
+        """On aarch64 gcc prints "../lib64", so libffi's default put
+        libffi.so.8 in /usr/lib64 -- not on the loader's search path,
+        with /etc/ld.so.conf deliberately empty.  x86_64 only escaped it
+        because the chapter-8 gcc build seds m64=lib64 into m64=lib."""
+        content = self.LFS_SYSTEM.read_text()
+        start = content.index('    libffi)\n')
+        block = content[start:content.index('    python)\n', start)]
+        assert '--disable-multi-os-directory' in block, \
+            'libffi must install into /usr/lib on every architecture'
+        assert '--disable-static' in block
+        assert '--with-gcc-arch=native' in block

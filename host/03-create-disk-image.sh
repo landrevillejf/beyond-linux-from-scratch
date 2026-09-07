@@ -153,6 +153,18 @@ create_image_native() {
         return $?
     }
 
+    # Only the loop-device operations below need privileges; the dd above
+    # writes a plain file, but running it under sudo leaves the artifact
+    # root-owned 0644.  Nothing downstream can then open it for writing:
+    # the QEMU boot smoke test attaches it with -drive file=...,format=raw,
+    # which QEMU opens read-write, and nightly #223 lost minimal/sysvinit
+    # on "Could not open build-release.img: Permission denied" after the
+    # whole build had succeeded.  Hand the file back to the invoking user.
+    if [ -n "$USE_SUDO" ]; then
+        $USE_SUDO chown "$(id -u):$(id -g)" "$IMAGE_FILE" 2>/dev/null ||
+            log_warning "Could not chown $IMAGE_FILE back to $(id -un)"
+    fi
+
     # Setup loop device
     log_info "Setting up loop device..."
     LOOP_DEV=$($USE_SUDO losetup --find --show --partscan "$IMAGE_FILE" 2>/dev/null || {

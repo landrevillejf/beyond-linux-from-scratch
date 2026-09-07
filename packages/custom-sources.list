@@ -392,8 +392,12 @@ https://xorg.freedesktop.org/archive/individual/driver/xf86-video-vesa-2.6.0.tar
 # xf86-video-vmware
 https://xorg.freedesktop.org/archive/individual/driver/xf86-video-vmware-13.4.0.tar.xz
 
-# xorg-server
-https://xorg.freedesktop.org/archive/individual/xserver/xorg-server-21.1.16.tar.xz
+# xorg-server -- pinned to the BLFS 12.4 book version so the tarball and
+# the tearfree_backport patch below stay in lockstep when the stable book
+# moves on (same rationale as libtirpc).  The previous 21.1.16 pin was a
+# downgrade of the official wget-list's 21.1.18: it hashed to the same
+# source_key(), so it silently moved the xorg stage off-book.
+https://www.x.org/pub/individual/xserver/xorg-server-21.1.18.tar.xz
 
 # twm
 https://xorg.freedesktop.org/archive/individual/app/twm-1.0.12.tar.xz
@@ -467,11 +471,29 @@ https://gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.11.1.tar.bz2
 # kmod: pinned once below (34.2); the duplicate 34 entry hashed to the
 # same dedup key and only wasted a download.
 
-# OpenRC
-https://github.com/OpenRC/openrc/archive/refs/tags/0.55.1.tar.gz
+# OpenRC (06c-init-openrc.sh).  Only the 0.63.3 pin survives, in the
+# loose block below: the stale 0.55.1 entry that used to sit here hashed
+# to a different source_key() than 0.63.3 (a bare "0.55.1.tar.gz" carries
+# no [-_]<digit> token for the regex to strip), so both were downloaded
+# into /sources and find_archive picked between them by glob order.
+# OpenRC publishes no release assets at all, so the GitHub refs/tags
+# archive is the only source -- builder.py names it openrc-<tag>.tar.gz.
 
-# runit
-http://smarden.org/runit/runit-2.2.0.tar.gz
+# runit (06d-init-runit.sh).  2.3.1 is upstream's current release; the
+# 2.2.0 pin dated from 2022.
+http://smarden.org/runit/runit-2.3.1.tar.gz
+
+# s6 ecosystem (06e-init-s6.sh), listed in build order.  None of these
+# are LFS/BLFS book packages, so this file is their only home, and the
+# stage builds all five as required.  Versions are the current
+# skarnet.org releases and satisfy every minimum those pages state:
+# execline, s6 and s6-rc all need skalibs >= 2.15.1.0, and s6-rc needs
+# execline >= 2.9.9.2 plus s6 >= 2.15.1.0.
+https://skarnet.org/software/skalibs/skalibs-2.15.1.0.tar.gz
+https://skarnet.org/software/execline/execline-2.9.9.2.tar.gz
+https://skarnet.org/software/nsss/nsss-0.2.1.3.tar.gz
+https://skarnet.org/software/s6/s6-2.15.1.0.tar.gz
+https://skarnet.org/software/s6-rc/s6-rc-0.7.0.0.tar.gz
 
 # ============================================================================
 # Application-specific dependencies (Phase 4)
@@ -529,7 +551,14 @@ https://xorg.freedesktop.org/archive/individual/app/xeyes-1.2.0.tar.gz
 
 https://download.gnome.org/sources/json-glib/1.10/json-glib-1.10.8.tar.xz
 
-https://github.com/ubuntu/lightdm/archive/refs/tags/1.33.1.tar.gz
+# lightdm -- deliberately NO archive pin: the 1.33.1 refs/tags entry that
+# used to sit here is a non-book version (the BLFS book and the official
+# wget-list both build 1.32.0, pinned above), and its bare "1.33.1.tar.gz"
+# on-disk name never matched find_archive's "lightdm" prefix, so
+# 08d-build-display-manager.sh has always built the book's 1.32.0.  Now
+# that builder.py names refs/tags archives after their repository the pin
+# would finally take effect and silently move the display-manager stage off
+# the book version, which is a regression rather than a fix.
 
 https://github.com/OpenRC/openrc/archive/refs/tags/0.63.3.tar.gz
 
@@ -688,3 +717,9 @@ https://www.linuxfromscratch.org/patches/lfs/12.4/glibc-2.42-fhs-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/kbd-2.8.0-backspace-1.patch
 https://www.linuxfromscratch.org/patches/lfs/12.4/sysvinit-3.14-consolidated-1.patch
 https://www.linuxfromscratch.org/patches/blfs/12.4/libtirpc-1.3.6-gcc15_fixes-1.patch
+
+# xorg-server TearFree backport -- optional in the book, so the official
+# wget-list does not carry it.  08b-build-xorg.sh applies it only when it
+# is present in /sources; it adds the TearFree option to the modesetting
+# driver without changing any default.
+https://www.linuxfromscratch.org/patches/blfs/12.4/xorg-server-21.1.18-tearfree_backport-1.patch

@@ -532,6 +532,17 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          # QEMU attaches a raw disk image with -drive file=...,format=raw,
+          # which it opens read-write, but host/03 creates build-release.img
+          # under sudo and this step runs as the runner user while the build
+          # ran as lfs.  Nightly #223 lost minimal/sysvinit here on "Could
+          # not open build-release.img: Permission denied" after the whole
+          # build had succeeded.  Loosen the mode instead of elevating the
+          # script: running it as root would also flip its /dev/kvm probe
+          # and silently move the smoke test onto an untested accel path.
+          if [ -f /tmp/lfs-build/build-release.img ]; then
+            sudo chmod a+rw /tmp/lfs-build/build-release.img
+          fi
           if [ -f "$ISO_PATH" ]; then
             bash tools/qemu-boot-smoke.sh "$ISO_PATH"
           elif [ -f /tmp/lfs-build/build-release.img ]; then

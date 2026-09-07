@@ -33,7 +33,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
@@ -52,7 +55,10 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     log_error "chroot not working"
     exit 1
@@ -201,6 +207,7 @@ is_installed() {
         opus) have_pc opus ;;
         speex) have_pc speex ;;
         lame) have_cmd lame ;;
+        libsndfile) have_pc sndfile ;;
         ffmpeg) have_cmd ffmpeg ;;
         mplayer) have_cmd mplayer ;;
         mpv) have_cmd mpv ;;
@@ -356,6 +363,23 @@ build_commands_lame() {
     # shellcheck disable=SC2016
     sed -i -e 's/^\(\s*hardcode_libdir_flag_spec\s*=\).*/\1/' configure &&
     ./configure --prefix=/usr --enable-mp3rtp --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# BLFS multimedia/libsndfile -- the book files it under multimedia, so
+# building it here is book-correct rather than a workaround.  It must run
+# before pulseaudio, whose meson hard-requires sndfile; until now the only
+# build lived in blfs/27-audio-studio.sh (multimedia is BUILD_STAGES index
+# 86, audio-studio index 89), so every audio-cli cell died on
+# 'Dependency "sndfile" not found'.  27 detects the install through
+# have_pc sndfile and skips it, so there is no double build.
+build_libsndfile() { book_install libsndfile build_commands_libsndfile; }
+build_commands_libsndfile() {
+    # The book's GCC-15 fix; LFS 12.4 ships GCC 15, so it is not optional.
+    sed '/typedef enum/,/bool ;/d' -i \
+        src/ALAC/alac_{en,de}coder.c &&
+    ./configure --prefix=/usr    \
+                --docdir="/usr/share/doc/$dir" &&
     make -j"$JOBS" && make install
 }
 
@@ -586,6 +610,10 @@ run_build required speex
 
 # lame – LAME MP3 encoder
 run_build required lame
+
+# libsndfile – audio sample format library; pulseaudio below and every
+# consumer in 27-audio-studio.sh link against it.
+run_build required libsndfile
 
 log_info "Phase 2: ALSA (Advanced Linux Sound Architecture)"
 

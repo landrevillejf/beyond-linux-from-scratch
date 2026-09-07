@@ -624,3 +624,78 @@ class TestBaseCacheRun5GnuMirrorFallback:
             'Primary host failed for m4-1.4.20.tar.xz, trying mirror: '
             'https://ftp.gnu.org/gnu/m4/m4-1.4.20.tar.xz'
         )
+
+
+class TestArchiveFilename:
+    """GitHub refs/tags archives must land under a find_archive-matchable name.
+
+    OpenRC publishes no release assets, so packages/custom-sources.list pins
+    its auto-generated refs/tags archive, whose basename is the bare tag
+    ("0.63.3.tar.gz").  Every stage script resolves its sources through
+    find_archive, which globs on the package-name prefix, so storing the file
+    under that basename made openrc unbuildable and all 15 openrc cells of
+    the weekly matrix died on "Source archive missing for openrc".
+    """
+
+    OPENRC_URL = ('https://github.com/OpenRC/openrc/archive/refs/tags/'
+                  '0.63.3.tar.gz')
+
+    def test_refs_tags_archive_is_named_after_its_repository(self):
+        from builder import _archive_filename
+        assert _archive_filename(self.OPENRC_URL) == 'openrc-0.63.3.tar.gz'
+
+    def test_refs_heads_archive_is_named_after_its_repository(self):
+        from builder import _archive_filename
+        url = 'https://github.com/skarnet/skalibs/archive/refs/heads/master.tar.gz'
+        assert _archive_filename(url) == 'skalibs-master.tar.gz'
+
+    def test_basename_already_prefixed_is_left_alone(self):
+        """Re-prefixing would demote these from find_archive's
+        name-<version> tier to its weaker fallback tier."""
+        from builder import _archive_filename
+        assert _archive_filename(
+            'https://github.com/audacity/audacity/archive/refs/tags/'
+            'Audacity-3.7.8.tar.gz') == 'Audacity-3.7.8.tar.gz'
+        assert _archive_filename(
+            'https://github.com/vamp-plugins/vamp-plugin-sdk/archive/'
+            'refs/tags/vamp-plugin-sdk-v2.10.tar.gz'
+        ) == 'vamp-plugin-sdk-v2.10.tar.gz'
+
+    def test_plain_url_keeps_its_basename(self):
+        from builder import _archive_filename
+        assert _archive_filename(
+            'http://smarden.org/runit/runit-2.3.1.tar.gz'
+        ) == 'runit-2.3.1.tar.gz'
+
+    def test_repository_name_is_the_last_path_segment_before_archive(self):
+        """A nested GitHub org must not leak into the derived name."""
+        from builder import _archive_filename
+        assert _archive_filename(
+            'https://github.com/lsp-plugins/lsp-plugins/archive/refs/tags/'
+            '1.2.35.tar.gz') == 'lsp-plugins-1.2.35.tar.gz'
+
+    def test_download_stores_the_archive_under_the_derived_name(
+            self, fake_urlretrieve, sources_dir, mock_logger):
+        """The name the downloader writes must be the derived one, or the
+        fix stays cosmetic."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve',
+                   side_effect=fake_urlretrieve()):
+            result = downloader.download(self.OPENRC_URL)
+
+        assert result is True
+        assert (sources_dir / 'openrc-0.63.3.tar.gz').exists()
+        assert not (sources_dir / '0.63.3.tar.gz').exists()
+
+    def test_pinned_openrc_source_resolves_to_a_matchable_archive(self):
+        """Guard the real pin, not just a synthetic URL: lfs/06c builds
+        openrc as required, so an unmatchable name is a dead init system."""
+        from builder import _archive_filename
+        custom = Path('packages/custom-sources.list').read_text()
+        urls = [line.strip() for line in custom.splitlines()
+                if line.strip().startswith('http') and 'openrc' in line.lower()]
+        assert urls, 'no openrc pin left in packages/custom-sources.list'
+        for url in urls:
+            name = _archive_filename(url).lower()
+            assert name.startswith('openrc-'), \
+                f'{url} is stored as {name}, which find_archive cannot match'
