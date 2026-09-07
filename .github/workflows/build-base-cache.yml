@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Vérifier les commits des dernières 24 heures
+      - name: Check commits from the last 24 hours
         id: check
         run: |
           if [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
