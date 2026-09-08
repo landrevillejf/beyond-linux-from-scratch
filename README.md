@@ -501,7 +501,6 @@ graph TD
     E["Governance and docs"] --> E1["pr-labeler.yml"]
     E --> E2["squash-pr.yml"]
     E --> E3["docs.yml"]
-    E --> E4["deploy-docs.yml"]
 ```
 
 ### Build and release workflow behavior
