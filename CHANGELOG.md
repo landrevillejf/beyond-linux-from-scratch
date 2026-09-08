@@ -191,6 +191,41 @@
 
 ### Fixed
 
+- **`curl` configure aborted `blfs-base` on aarch64**
+  (`blfs/08-build-blfs-base.sh`, `tests/test_acceptance_shell.py`)
+  - Nightly #223 (arm64/aarch64/sysvinit) built for 1h45m and then died
+    in `blfs-base` at curl's configure: `checking run-time libs
+    availability... failed / one or more libs available at link-time are
+    not available run-time. Libs used at link-time: -lidn2 -lpsl -lssl
+    -lcrypto -lzstd -lz`.  curl links a probe against the resolved
+    libraries and then runs it; every one of those libraries installs
+    under `/usr/lib`, but the chroot's `/etc/ld.so.cache` is the stale
+    one left by the LFS chapter-8 build, so the aarch64 loader never
+    resolves the openssl/IDN/psl stack installed moments earlier.  The
+    x86_64 profiles hide this behind the loader's trusted-directory
+    fallback
+  - `blfs-base` now runs a guarded `/sbin/ldconfig` (same pattern as
+    `blfs/17-first-boot-service.sh`) after the openssl/libunistring/
+    libidn2/libpsl installs and before curl is configured, and pins
+    libunistring and libidn2 with `--libdir=/usr/lib` and libpsl's meson
+    build with `--libdir=lib` so the gcc multi-os directory cannot divert
+    any of them into `/usr/lib64` -- the same aarch64 trap that hit
+    libffi in #223.  A new guardrail test asserts the ldconfig call
+    precedes the curl build and that the three libdir pins are present
+
+- **`jtreg` custom pin pointed at a mirror that does not host it**
+  (`packages/custom-sources.list`)
+  - The bare pin `https://mirror-hk.koddos.net/blfs/12.4/j/jtreg-7.5.1+1.tar.gz`
+    is wrong: jtreg is not in the BLFS `/blfs/12.4/j/` conglomeration
+    layout, so koddos answered 200 with an HTML error body (caught by the
+    archive validator as "not a valid archive") while both fallbacks 404'd
+    (conglomeration and Void carry no jtreg).  As the last-applied entry it
+    also evicted the good official URL.  Repointed to the authoritative LFS
+    OpenJDK location `https://anduin.linuxfromscratch.org/BLFS/OpenJDK/OpenJDK-24.0.2/jtreg-7.5.1+1.tar.gz`,
+    matching `packages/stable/12.4/sources.list`.  The failure was a
+    non-fatal download warning on arm64 (which builds no Java), but it
+    broke the java-dev and full profiles
+
 - **`xorg-server` was built before the `libtirpc` it requires**
   (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
   - Eight nightly #223 jobs (xfce sysvinit, xfce systemd, gnome, kde,

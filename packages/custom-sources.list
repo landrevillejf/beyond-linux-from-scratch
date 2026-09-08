@@ -700,7 +700,13 @@ https://downloads.sourceforge.net/libtirpc/libtirpc-1.3.6.tar.bz2
 https://releases.pagure.org/libaio/libaio-0.3.113.tar.gz
 https://releases.pagure.org/xmlto/xmlto-0.0.29.tar.gz
 
-https://mirror-hk.koddos.net/blfs/12.4/j/jtreg-7.5.1+1.tar.gz
+# jtreg -- the OpenJDK regression test harness.  It is NOT in the BLFS
+# /blfs/12.4/j/ conglomeration layout, so the previous koddos mirror pin
+# answered 200 with an HTML error body ("not a valid archive") while both
+# fallbacks 404'd (conglomeration and Void carry no jtreg).  LFS hosts it
+# under the OpenJDK directory on anduin; that is the authoritative URL and
+# matches packages/stable/12.4/sources.list.
+https://anduin.linuxfromscratch.org/BLFS/OpenJDK/OpenJDK-24.0.2/jtreg-7.5.1+1.tar.gz
 
 # Ardour dependency stack (audio-studio profile) -- no BLFS book page;
 # sha256 pins live in blfs/27-audio-studio.sh.  Ardour itself is a

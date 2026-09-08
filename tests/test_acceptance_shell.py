@@ -508,6 +508,37 @@ class TestLFSComplianceGuardrails:
                 assert 'mount' in stripped, \
                     f"Error masking outside mount cleanup: {stripped}"
 
+    def test_blfs_base_refreshes_ld_cache_before_curl(self):
+        """blfs-base must refresh the loader cache before curl configures.
+
+        Nightly #223 (arm64/aarch64/sysvinit) ran 1h45m and then died in
+        blfs-base at curl's configure: "checking run-time libs
+        availability... failed / one or more libs available at link-time
+        are not available run-time (-lidn2 -lpsl -lssl -lcrypto -lzstd
+        -lz)".  Every one of those libraries installs under /usr/lib, but
+        the chroot's /etc/ld.so.cache is the stale one left by the LFS
+        chapter-8 build, so the aarch64 loader never resolves the
+        openssl/IDN/psl stack installed moments earlier.  The stage must
+        run ldconfig before curl, and pin the three BLFS libs to /usr/lib
+        so none can split into /usr/lib64 (the libffi multi-os trap).
+        """
+        content = Path('blfs/08-build-blfs-base.sh').read_text()
+
+        ldconfig_pos = content.find('/sbin/ldconfig')
+        curl_pos = content.find('find_archive curl)')
+        assert ldconfig_pos != -1, \
+            "blfs-base must run ldconfig (nightly #223 curl run-time probe)"
+        assert curl_pos != -1, "curl build missing from blfs-base"
+        assert ldconfig_pos < curl_pos, \
+            "ldconfig must run before curl is configured (nightly #223)"
+
+        # The three BLFS libs curl links against must be pinned to /usr/lib
+        # so the gcc multi-os directory cannot divert them to /usr/lib64.
+        assert content.count('--libdir=/usr/lib') >= 2, \
+            "libunistring and libidn2 must pin --libdir=/usr/lib (#223)"
+        assert '--libdir=lib' in content, \
+            "libpsl meson build must pin --libdir=lib (nightly #223)"
+
     def test_blfs_bootscripts_no_bulk_install(self):
         """blfs-bootscripts must never run a bulk make install.
 

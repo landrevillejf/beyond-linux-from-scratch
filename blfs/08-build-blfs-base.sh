@@ -233,6 +233,7 @@ cd /sources
 # this one, so the whole chain must land here before cURL.
 extract "$(find_archive libunistring)"
 ./configure --prefix=/usr \
+    --libdir=/usr/lib \
     --disable-static
 make -j"$(nproc)"
 make install
@@ -240,6 +241,7 @@ cd /sources
 
 extract "$(find_archive libidn2)"
 ./configure --prefix=/usr \
+    --libdir=/usr/lib \
     --disable-static
 make -j"$(nproc)"
 make install
@@ -251,11 +253,35 @@ extract "$(find_archive libpsl)"
 mkdir -p build
 cd build
 meson setup --prefix=/usr \
+    --libdir=lib \
     --buildtype=release \
     ..
 ninja
 ninja install
 cd /sources
+
+# aarch64: curl's configure links a probe against -lidn2 -lpsl -lssl
+# -lcrypto -lzstd -lz and then RUNS it.  On the native arm64 runners that
+# run-time check died with "one or more libs available at link-time are
+# not available run-time" (Nightly #223) even though every one of those
+# libraries installs under /usr/lib: the chroot's /etc/ld.so.cache is the
+# stale one left by the LFS chapter-8 build, so the loader never sees the
+# openssl/IDN/psl stack installed just above.  Refresh the cache before
+# curl is configured; the three BLFS libs are pinned to /usr/lib above so
+# none can split into /usr/lib64 via the gcc multi-os directory (the same
+# aarch64 trap that hit libffi).  Guarded like blfs/17-first-boot-service.sh.
+if [ -x /sbin/ldconfig ]; then
+    /sbin/ldconfig
+fi
+
+# Nightly #223 aarch64 diagnostic: show where curl's six link-time
+# libraries actually landed, so the next arm64 log settles lib64-split
+# vs stale-cache.  Wrapped in `if !` so a partial glob miss (e.g. no
+# /usr/lib64) cannot abort the chroot script under `set -e`.
+if ! ls -l /usr/lib/lib{ssl,crypto,idn2,psl,zstd,z}.so* \
+        /usr/lib64/lib{ssl,crypto,idn2,psl,zstd,z}.so* 2>/dev/null; then
+    echo "curl-dep diagnostic: some libs absent from /usr/lib or /usr/lib64"
+fi
 
 # ---- cURL (BLFS basicnet – needs OpenSSL and libpsl first) ----
 curl_dir=$(tar -tf "$(find_archive curl)" | head -1 | cut -d/ -f1)
