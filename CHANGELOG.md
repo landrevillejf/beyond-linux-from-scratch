@@ -191,6 +191,23 @@
 
 ### Fixed
 
+- **Legacy docs deploy workflow retired; Pages now builds via Actions**
+  (`.github/workflows/deploy-docs.yml`, GitHub Pages settings)
+  - `deploy-docs.yml` ("Deploy MkDocs to Pages") built the site, copied
+    the generated HTML into `docs/` and pushed straight to `main`.  The
+    branch protection now on `main` (require a PR, required status
+    checks, enforce admins) rejects that direct push with `GH006`, so
+    the workflow failed on every push to `main` touching `docs/**` or
+    `mkdocs.yml` (first seen on the PR #96 merge)
+  - It was redundant: `docs.yml` ("Build and Deploy Docs") already
+    builds the same site with `mkdocs build --strict` and publishes it
+    through `actions/deploy-pages`, and never pushes to `main`.  GitHub
+    Pages was switched from the legacy "deploy from a branch
+    (`main` `/docs`)" source to the "GitHub Actions" source, so the
+    green `docs.yml` pipeline serves the site and the legacy workflow
+    was removed.  The HTML previously committed under `docs/` is now
+    vestigial
+
 - **gtk4 aborted the xorg stage trying to fetch its media backend online**
   (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
   - The four desktop nightly #226 jobs (full, gnome, kde, java-dev) all
