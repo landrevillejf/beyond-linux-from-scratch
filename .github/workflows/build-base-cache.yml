@@ -15,9 +15,13 @@ name: Build Base Prefix Cache
 on:
   workflow_dispatch:
   schedule:
-    # 90 minutes ahead of the nightly cron so the cache is warm when the
-    # matrix starts.
-    - cron: '30 1 * * *'
+    # ~4 hours ahead of the nightly cron (0 3 * * *), not 90 minutes: the
+    # prefix build takes 2h45m-3h, so the old '30 1 * * *' head start let the
+    # scheduled nightly begin before the fresh cache was published and rebuild
+    # the whole prefix from scratch (#224: build-base-cache 01:47->04:33,
+    # nightly started 03:07 and missed).  Starting at 23:00 UTC finishes ~02:00,
+    # an hour clear of the matrix.
+    - cron: '0 23 * * *'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
