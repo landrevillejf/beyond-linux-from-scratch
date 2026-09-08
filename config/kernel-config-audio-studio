@@ -62,9 +62,39 @@ CONFIG_ATH9K=y
 CONFIG_IWLWIFI=y
 
 # Storage drivers
+#
+# Boot-critical block stack -- see the identical block in config/kernel-config.
+# lfs/08-build-kernel.sh seeds .config from this fragment then runs
+# `make olddefconfig`, which defaults every unnamed symbol to n; SCSI,
+# BLK_DEV_SD, BLK_DEV_INITRD and DEVTMPFS all default to n, and CONFIG_ATA
+# depends on SCSI, so without them olddefconfig dropped ATA/SATA_AHCI and the
+# kernel could not enumerate the disk, create /dev nodes or use the initramfs
+# ("VFS: Cannot open root device ... unknown-block(0,0): error -6", Nightly
+# #224).  The audio-studio profile reaches the same QEMU boot gate as the base
+# desktop profiles, so it needs the same stack.
+CONFIG_SCSI=y
+CONFIG_SCSI_LOWLEVEL=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_NVME=y
 CONFIG_ATA=y
 CONFIG_SATA_AHCI=y
+CONFIG_ATA_PIIX=y
+CONFIG_VIRTIO_BLK=y
+
+# Initramfs + device nodes (final/12-create-initramfs.sh): busybox initramfs
+# mounts devtmpfs, resolves root, switch_root's into it.  BLK_DEV_INITRD makes
+# the kernel honour -initrd; DEVTMPFS provides the /dev/sd* nodes; RD_ZSTD/
+# RD_GZIP unpack the compressed cpio.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_RD_ZSTD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+
+# Partition tables: host/03-create-disk-image.sh labels the disk GPT.
+CONFIG_EFI_PARTITION=y
+CONFIG_MSDOS_PARTITION=y
 
 # Input drivers
 CONFIG_KEYBOARD_ATKBD=y

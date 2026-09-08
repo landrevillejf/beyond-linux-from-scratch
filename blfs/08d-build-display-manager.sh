@@ -272,11 +272,15 @@ build_commands_polkit() {
     else
         unitdir=/tmp
     fi
+    # polkit renders its man pages with the same offline DocBook XSL
+    # toolchain as gtk3; -D man=true would abort the display-manager stage
+    # exactly where gtk3 aborted xorg (Nightly #224).  Disabled for the
+    # same reason - man pages are documentation only.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D man=true \
+          -D man=false \
           -D session_tracking="$tracking" \
           -D systemdsystemunitdir="$unitdir" &&
     ninja && ninja install

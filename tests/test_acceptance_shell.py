@@ -1090,6 +1090,80 @@ class TestLFSComplianceGuardrails:
         assert 'console=ttyS0' in content
         assert '-kernel "$WORKDIR/vmlinuz"' in content
 
+    def test_kernel_configs_enumerate_boot_block_devices(self):
+        """Every bootable kernel-config fragment must carry the block,
+        initramfs and devtmpfs stack, or the built kernel cannot mount
+        root.
+
+        lfs/08-build-kernel.sh seeds .config from the fragment and runs
+        `make olddefconfig`, which defaults every unnamed symbol to n.
+        SCSI, BLK_DEV_SD, BLK_DEV_INITRD and DEVTMPFS all default to n,
+        and CONFIG_ATA depends on SCSI -- so the pre-#224 fragments, which
+        set only CONFIG_ATA/SATA_AHCI, had ATA silently dropped and could
+        neither enumerate the QEMU q35 AHCI disk nor honour -initrd.  The
+        boot smoke test then panicked with "VFS: Cannot open root device
+        ... unknown-block(0,0): error -6" and an empty partition list for
+        every headless profile (Nightly #224).
+        """
+        boot_stack = (
+            'CONFIG_SCSI=y',
+            'CONFIG_BLK_DEV_SD=y',
+            'CONFIG_BLK_DEV_INITRD=y',
+            'CONFIG_RD_ZSTD=y',
+            'CONFIG_DEVTMPFS=y',
+            'CONFIG_EFI_PARTITION=y',
+        )
+        for name in ('kernel-config', 'kernel-config-audio-studio',
+                     'kernel-config-arm64'):
+            content = Path(f'config/{name}').read_text()
+            for option in boot_stack:
+                assert option in content, f"{name} lacks {option}"
+            # CONFIG_ATA depends on SCSI: never enable ATA without SCSI,
+            # or olddefconfig drops both and the SATA disk disappears.
+            if 'CONFIG_ATA=y' in content:
+                assert 'CONFIG_SCSI=y' in content, \
+                    f"{name} enables ATA without its SCSI dependency"
+
+    def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
+        """The disk-image boot must target the real root partition and
+        tolerate the empty-disk switch_root panic.
+
+        host/03-create-disk-image.sh lays the image out as p1=ESP(/boot),
+        p2=swap, p3=root, so the old root=/dev/sda2 pointed at swap.  And
+        because host/03 umounts the image before anything is installed,
+        the root partition is empty: the initramfs reaches userspace
+        ("Mounting root:") but then panics switching into an empty /mnt.
+        For a .img that trailing panic is expected; for a live ISO (real
+        squashfs root) a panic stays fatal.
+        """
+        content = Path('tools/qemu-boot-smoke.sh').read_text()
+        assert 'ROOT_DEV="${ROOT_DEV:-/dev/sda3}"' in content
+        assert ':-/dev/sda2' not in content, \
+            "disk image root must not be the swap partition (sda2)"
+        assert 'p3 is the root filesystem' in content
+        assert 'ARTIFACT_TYPE=img' in content
+        assert 'ARTIFACT_TYPE=iso' in content
+        assert 'disk image root is empty by design' in content
+        assert 'Kernel panic during boot' in content
+
+    def test_no_offline_man_pages_in_blfs_meson(self):
+        """No BLFS meson build may request man pages with -D man=true.
+
+        gtk3 and polkit rendered man pages with xsltproc against a
+        network DocBook XSL URL; no stage installs docbook-xsl and the
+        chroot is offline (xsltproc runs --nonet), so -D man=true aborted
+        the xorg stage for every desktop profile with "Attempt to load
+        network entity" (Nightly #224).  Only comments may mention it.
+        """
+        for script in sorted(Path('blfs').glob('*.sh')):
+            for lineno, line in enumerate(
+                    script.read_text().splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith('#'):
+                    continue
+                assert '-D man=true' not in stripped, \
+                    f"{script}:{lineno} builds man pages offline"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

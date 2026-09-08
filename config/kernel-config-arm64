@@ -54,6 +54,43 @@ CONFIG_GPIO_BCM2835=y
 CONFIG_GPIO_SUNXI=y
 
 # ============================================================================
+# STORAGE / BOOT BLOCK STACK
+# ============================================================================
+# Same boot-critical gap as config/kernel-config (Nightly #224): the kernel
+# build seeds .config from this fragment and runs `make olddefconfig`, which
+# defaults every unnamed symbol to n.  SCSI, BLK_DEV_SD, BLK_DEV_INITRD and
+# DEVTMPFS all default to n, so without them the kernel ignored the initramfs,
+# created no /dev nodes and could not enumerate a disk.  CONFIG_ATA depends on
+# SCSI, so ATA/SATA_AHCI must be paired with it.  The arm64 profile is also
+# built for x86_64 in the nightly matrix (where the QEMU q35 disk is AHCI/SATA)
+# and boots via SD/MMC (root=/dev/mmcblk0p2 in CONFIG_CMDLINE) or virtio on real
+# boards, so all three block backends are enabled here.
+CONFIG_SCSI=y
+CONFIG_SCSI_LOWLEVEL=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_BLK_DEV_SR=y
+CONFIG_BLK_DEV_NVME=y
+CONFIG_ATA=y
+CONFIG_SATA_AHCI=y
+CONFIG_VIRTIO_BLK=y
+CONFIG_MMC=y
+CONFIG_MMC_BLOCK=y
+CONFIG_MMC_BCM2835=y
+CONFIG_MMC_SDHCI=y
+
+# Initramfs + device nodes (final/12-create-initramfs.sh): busybox initramfs
+# mounts devtmpfs, resolves root, switch_root's into it.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_RD_ZSTD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+
+# Partition tables: host/03-create-disk-image.sh labels the disk GPT.
+CONFIG_EFI_PARTITION=y
+CONFIG_MSDOS_PARTITION=y
+
+# ============================================================================
 # BOOT OPTIONS (ARM64)
 # ============================================================================
 CONFIG_CMDLINE="console=ttyAMA0,115200 console=tty1 root=/dev/mmcblk0p2 rw"

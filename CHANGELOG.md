@@ -191,6 +191,57 @@
 
 ### Fixed
 
+- **the built kernel could not see its own root disk or initramfs**
+  (`config/kernel-config`, `config/kernel-config-audio-studio`,
+  `config/kernel-config-arm64`, `tools/qemu-boot-smoke.sh`,
+  `tests/test_acceptance_shell.py`)
+  - The four headless nightly #224 jobs (minimal sysvinit, minimal
+    systemd, server, arm64/x86_64) built completely and then failed the
+    QEMU boot smoke test with `VFS: Cannot open root device "/dev/sda2"
+    or unknown-block(0,0): error -6` and an empty partition list.  The
+    panic came from `kernel_init -> prepare_namespace -> mount_root_generic`
+    in PID 1, i.e. the kernel mounted `root=` itself because no initramfs
+    had taken over, and it enumerated no block device at all
+  - `lfs/08-build-kernel.sh` seeds `.config` from the fragment and runs
+    `make olddefconfig`, which defaults every unnamed symbol to `n`.
+    `SCSI`, `BLK_DEV_SD`, `BLK_DEV_INITRD` and `DEVTMPFS` all default to
+    `n`, and `CONFIG_ATA` depends on `SCSI` -- so the fragments, which
+    set only `CONFIG_ATA`/`SATA_AHCI`, had ATA silently dropped: no AHCI
+    driver (no `/dev/sda`), no initramfs support (`-initrd` ignored) and
+    no `/dev` nodes.  This gated every profile's boot, not just the
+    headless ones; the desktop jobs simply died earlier at gtk3 in #224
+  - All three bootable fragments now carry the block stack (`SCSI`,
+    `BLK_DEV_SD`, `BLK_DEV_SR`, `ATA_PIIX`, `VIRTIO_BLK`, `NVME`), the
+    initramfs stack (`BLK_DEV_INITRD`, `RD_GZIP`, `RD_ZSTD`), `DEVTMPFS`
+    (+`_MOUNT`) and GPT/MBR partition support; arm64 also gains the
+    `MMC`/`MMC_BLOCK` its `root=/dev/mmcblk0p2` cmdline already assumes
+  - `tools/qemu-boot-smoke.sh` booted `root=/dev/sda2`, but
+    `host/03-create-disk-image.sh` lays the image out as p1=ESP(/boot),
+    p2=swap, p3=root, so it targeted the swap partition; the default is
+    now `/dev/sda3`.  Because host/03 umounts the image before anything
+    is installed, its root partition is empty, so the initramfs reaches
+    userspace ("Mounting root:") and then panics switching into an empty
+    `/mnt`; for a `.img` that trailing panic is now accepted as the pass
+    signal, while a live ISO (real squashfs root) still fails on any
+    panic.  A guardrail pins the root partition and the artifact split
+
+- **gtk3 and polkit built man pages against an offline DocBook URL**
+  (`blfs/08b-build-xorg.sh`, `blfs/08d-build-display-manager.sh`,
+  `tests/test_acceptance_shell.py`)
+  - Seven nightly #224 desktop jobs (xfce sysvinit, xfce systemd, gnome,
+    lxqt, java-dev, audio-studio, full) died in the xorg stage at gtk3:
+    meson was configured `-D man=true`, which renders the man pages with
+    `xsltproc --nonet` against the DocBook XSL stylesheets at a network
+    URL.  No stage installs docbook-xsl and the chroot is offline, so
+    xsltproc failed with "Attempt to load network entity ... docbook.xsl"
+    and `run_build required gtk3` aborted the stage.  polkit, built the
+    same way in the display-manager stage, was the next domino
+  - Both switch to `-D man=false`, matching the gnome stage's existing
+    `-D man=false -D docbook=false` and the gdk-pixbuf `SKIP_MAN_PAGES`
+    guard in `blfs/08a-build-blfs-libs.sh`.  Man pages are documentation
+    only; a new guardrail asserts no non-comment `-D man=true` survives
+    anywhere under `blfs/`
+
 - **`curl` configure aborted `blfs-base` on aarch64**
   (`blfs/08-build-blfs-base.sh`, `tests/test_acceptance_shell.py`)
   - Nightly #223 (arm64/aarch64/sysvinit) built for 1h45m and then died

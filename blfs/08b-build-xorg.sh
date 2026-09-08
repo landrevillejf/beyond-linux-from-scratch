@@ -686,11 +686,18 @@ build_gtk3() { book_install gtk3 build_commands_gtk3; }
 build_commands_gtk3() {
     wayland=false
     pkg-config --exists wayland-client 2>/dev/null && wayland=true
+    # gtk3 renders its man pages with xsltproc against the DocBook XSL
+    # stylesheets at a network URL.  No stage installs docbook-xsl and the
+    # chroot is offline (xsltproc runs --nonet), so -D man=true died with
+    # "Attempt to load network entity ... docbook.xsl" and aborted the xorg
+    # stage for every desktop profile (Nightly #224).  Man pages are
+    # documentation only; disable them, mirroring the gnome stage's
+    # -D man=false -D docbook=false and the gdk-pixbuf guard in 08a.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
-          -D man=true \
+          -D man=false \
           -D broadway_backend=true \
           -D wayland_backend="$wayland" &&
     ninja && ninja install

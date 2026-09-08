@@ -40,9 +40,40 @@ CONFIG_ATH9K=y
 CONFIG_IWLWIFI=y
 
 # Storage drivers
+#
+# Boot-critical block stack.  lfs/08-build-kernel.sh seeds .config from this
+# fragment then runs `make olddefconfig`, which leaves every symbol not named
+# here at its default -- and SCSI, BLK_DEV_SD, BLK_DEV_INITRD and DEVTMPFS all
+# default to n.  CONFIG_ATA depends on SCSI, so with SCSI unset olddefconfig
+# silently dropped ATA and SATA_AHCI as well: the kernel could not see the QEMU
+# q35 AHCI disk (nor a real SATA/NVMe/optical disk), created no /dev nodes and
+# ignored the initramfs.  The QEMU boot smoke test then panicked with
+# "VFS: Cannot open root device ... unknown-block(0,0): error -6" and an empty
+# partition list (Nightly #224).  These are required on real hardware too.
+CONFIG_SCSI=y
+CONFIG_SCSI_LOWLEVEL=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_BLK_DEV_SR=y
 CONFIG_BLK_DEV_NVME=y
 CONFIG_ATA=y
 CONFIG_SATA_AHCI=y
+CONFIG_ATA_PIIX=y
+CONFIG_VIRTIO_BLK=y
+
+# Initramfs + device nodes: the boot flow (final/12-create-initramfs.sh) is a
+# busybox initramfs that mounts devtmpfs, resolves the root device and then
+# switch_root's into it.  Without BLK_DEV_INITRD the kernel ignores -initrd and
+# mounts root= directly; without DEVTMPFS the initramfs sees no /dev/sd* nodes;
+# RD_ZSTD/RD_GZIP unpack the compressed cpio the initramfs stage produces.
+CONFIG_BLK_DEV_INITRD=y
+CONFIG_RD_GZIP=y
+CONFIG_RD_ZSTD=y
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+
+# Partition tables: host/03-create-disk-image.sh labels the disk GPT.
+CONFIG_EFI_PARTITION=y
+CONFIG_MSDOS_PARTITION=y
 
 # Input drivers
 CONFIG_KEYBOARD_ATKBD=y
