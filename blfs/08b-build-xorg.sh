@@ -716,13 +716,27 @@ build_commands_gtk4() {
     pkg-config --exists vulkan 2>/dev/null && vulkan=enabled
     intro=disabled
     pkg-config --exists gobject-introspection-1.0 2>/dev/null && intro=enabled
+    # gtk4's gstreamer media backend is the meson *feature* media-gstreamer
+    # (default auto).  When gstreamer-player-1.0 is absent meson reaches for
+    # the gstreamer-full.wrap fallback subproject and tries to clone it with
+    # git, which the offline chroot has neither git nor network for: "ERROR:
+    # Git program not found, cannot download gstreamer-full.wrap via git"
+    # aborted the xorg stage for all four desktop profiles (Nightly #226).
+    # gstreamer is only a *Recommended* gtk4 dep in the book and no stage
+    # builds it before xorg, so probe for it and disable the backend when it
+    # is missing; --wrap-mode=nofallback (as in pango above, 08a and 09b) is
+    # the belt-and-braces guard that stops meson fetching any wrap at all.
+    media_gst=disabled
+    pkg-config --exists gstreamer-player-1.0 2>/dev/null && media_gst=enabled
     mkdir build && cd build &&
     meson setup --prefix=/usr \
                 --buildtype=release \
+                --wrap-mode=nofallback \
                 -D broadway-backend=true \
                 -D wayland-backend="$wayland" \
                 -D introspection="$intro" \
                 -D vulkan="$vulkan" \
+                -D media-gstreamer="$media_gst" \
                 .. &&
     ninja && ninja install
 }
