@@ -1164,6 +1164,29 @@ class TestLFSComplianceGuardrails:
                 assert '-D man=true' not in stripped, \
                     f"{script}:{lineno} builds man pages offline"
 
+    def test_gtk4_disables_offline_gstreamer_media_backend(self):
+        """gtk4 must not try to fetch its gstreamer media backend online.
+
+        gtk4's media-gstreamer feature defaults to auto, so with no
+        gstreamer-player-1.0 in the offline chroot meson fell back to the
+        gstreamer-full.wrap subproject and died with "Git program not
+        found, cannot download gstreamer-full.wrap via git", aborting the
+        xorg stage for full/gnome/kde/java-dev (Nightly #226).  The build
+        must probe for gstreamer and disable the backend when absent, and
+        keep the --wrap-mode=nofallback offline guard pango/08a/09b use.
+        """
+        content = Path('blfs/08b-build-xorg.sh').read_text()
+        fn = content.split('build_commands_gtk4() {', 1)[1]
+        fn = fn.split('\n}\n', 1)[0]
+        assert 'media_gst=disabled' in fn, \
+            "gtk4 must default the gstreamer media backend to disabled"
+        assert 'gstreamer-player-1.0' in fn, \
+            "gtk4 must probe gstreamer before enabling the media backend"
+        assert '-D media-gstreamer="$media_gst"' in fn, \
+            "gtk4 must pass the probed media-gstreamer feature to meson"
+        assert '--wrap-mode=nofallback' in fn, \
+            "gtk4 must keep the offline wrap guard (no git subproject fetch)"
+
     def test_find_archive_survives_variant_tarballs(self, tmp_path):
         """find_archive must skip docs variants and survive case and
         underscore tarball names.

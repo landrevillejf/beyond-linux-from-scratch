@@ -191,6 +191,22 @@
 
 ### Fixed
 
+- **gtk4 aborted the xorg stage trying to fetch its media backend online**
+  (`blfs/08b-build-xorg.sh`, `tests/test_acceptance_shell.py`)
+  - The four desktop nightly #226 jobs (full, gnome, kde, java-dev) all
+    died in the `xorg` stage with `Required package gtk4 failed`.  gtk4's
+    `media-gstreamer` meson feature defaults to `auto`, so when
+    `gstreamer-player-1.0` was absent meson fell back to the
+    `gstreamer-full.wrap` subproject and tried to clone it: `ERROR: Git
+    program not found, cannot download gstreamer-full.wrap via git`.  The
+    offline chroot has neither git nor network, and no stage builds
+    gstreamer before xorg (it is only a *Recommended* gtk4 dep in the book)
+  - `build_commands_gtk4` now probes `gstreamer-player-1.0` and passes
+    `-D media-gstreamer=disabled` when it is missing, plus
+    `--wrap-mode=nofallback` -- the same offline guard pango, blfs-libs
+    (08a) and gnome (09b) already use -- so meson never reaches for a wrap.
+    A guardrail test asserts both survive in the gtk4 build
+
 - **the built kernel could not see its own root disk or initramfs**
   (`config/kernel-config`, `config/kernel-config-audio-studio`,
   `config/kernel-config-arm64`, `tools/qemu-boot-smoke.sh`,
