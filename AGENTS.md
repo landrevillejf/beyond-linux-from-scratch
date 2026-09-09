@@ -200,7 +200,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 15. Documentation - Document any derivations from the standard LFS/BLFS instructions.
 16. If the project structure, stage order, or core configuration schema changes, update this AGENTS.md file to reflect the new reality.
 17. When the LFS/BLFS books are updated upstream, do not automatically bump the version. Check the changelog for patches that affect our build scripts, and create a feature branch to test the new version against our profiles before updating the VERSION file
-
+18. Agent should sign their p/r eg: done by Qwen3.8-Max, SWE, Co-Pilot, etc., create feature branch, and wait for approval before merging.
 ---
 
 ### Debugging and Troubleshooting
@@ -425,3 +425,15 @@ Requires: Linux x86_64 host, 8+ GB RAM, 50+ GB free disk, Python 3.10+.
 | `LFS_PROFILE_*` | Flattened keys from the active profile |
 
 These variables are also preserved inside the built system at `/etc/lfs-builder-params.env`.
+
+## Completion Report
+
+Report:
+
+- User-visible behavior
+- Modified files
+- Commands and results
+- Acceptance criteria status
+- Assumptions
+- Known limitations
+- Remaining risks
