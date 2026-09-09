@@ -626,6 +626,114 @@ class TestBaseCacheRun5GnuMirrorFallback:
         )
 
 
+class TestGluedNameAndUnifontFallbacks:
+    """Regression tests for five sources a transient blip made unrecoverable.
+
+    A download run reported zlib, xterm, lynx, unifont and jtreg missing
+    even though every primary URL was live.  Three of them (lynx, unifont)
+    had no *working* fallback tier because of how their names/hosts are
+    shaped, which these tests pin down; the mirrors named below were all
+    verified to carry the exact byte-for-byte archive in September 2026.
+    """
+
+    LYNX_URL = ('https://invisible-mirror.net/archives/lynx/tarballs/'
+                'lynx2.9.2.tar.bz2')
+    UNIFONT_URL = ('https://unifoundry.com/pub/unifont/unifont-16.0.04/'
+                   'font-builds/unifont-16.0.04.pcf.gz')
+
+    def test_split_stem_dashed_form(self):
+        assert SourceDownloader._split_stem('xterm-401') == ('xterm', '401', True)
+        assert SourceDownloader._split_stem('ImageMagick-7.1.2-1') == (
+            'ImageMagick', '7.1.2-1', True)
+
+    def test_split_stem_glued_form(self):
+        """The version runs straight into the name with no separator."""
+        assert SourceDownloader._split_stem('lynx2.9.2') == ('lynx', '2.9.2', False)
+
+    def test_split_stem_without_a_trailing_version(self):
+        for stem in ('noversion', 'python-3.13.7-docs-html', 'tcl8.6.16-src',
+                     '3500400'):
+            assert SourceDownloader._split_stem(stem) is None, stem
+
+    def test_mirror_candidates_splits_a_glued_name(self, sources_dir, mock_logger):
+        """lynx2.9.2 must reach the conglomeration lynx/ directory."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._mirror_candidates(self.LYNX_URL) == [
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/lynx/lynx2.9.2.tar.bz2'
+        ]
+
+    def test_void_candidates_normalises_a_glued_name(self, sources_dir, mock_logger):
+        """Void keys lynx2.9.2 under the dashed lynx-2.9.2 directory."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._void_candidates(self.LYNX_URL) == [
+            'https://sources.voidlinux.org/lynx-2.9.2/lynx2.9.2.tar.bz2'
+        ]
+
+    def test_gnu_candidates_repoints_unifoundry_to_gnu(self, sources_dir, mock_logger):
+        """GNU Unifont is an official GNU package on every GNU mirror."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._gnu_candidates(self.UNIFONT_URL) == [
+            'https://ftp.gnu.org/gnu/unifont/unifont-16.0.04/unifont-16.0.04.pcf.gz',
+            'https://mirrors.kernel.org/gnu/unifont/unifont-16.0.04/unifont-16.0.04.pcf.gz',
+            'https://mirror.team-cymru.com/gnu/unifont/unifont-16.0.04/unifont-16.0.04.pcf.gz',
+            'https://mirrors.ocf.berkeley.edu/gnu/unifont/unifont-16.0.04/unifont-16.0.04.pcf.gz',
+        ]
+
+    def test_unifont_gets_no_guessed_conglomeration_or_void_tier(
+            self, sources_dir, mock_logger):
+        """.pcf.gz is not a tarball, so only the exact GNU rewrite applies."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._mirror_candidates(self.UNIFONT_URL) == []
+        assert downloader._void_candidates(self.UNIFONT_URL) == []
+
+    def test_download_recovers_lynx_from_conglomeration(self, sources_dir, mock_logger):
+        """A dead invisible-mirror answer must fall back to the BLFS mirror."""
+        dest = sources_dir / 'lynx2.9.2.tar.bz2'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            if 'invisible-mirror.net' in url:
+                raise urllib.error.HTTPError(url=url, code=404,
+                                             msg='Not Found', hdrs=None, fp=None)
+            Path(path).write_bytes(b'BZh9payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(self.LYNX_URL, retries=1)
+
+        assert result is True
+        assert seen[-1] == (
+            'https://ftp2.osuosl.org/pub/blfs/conglomeration/lynx/lynx2.9.2.tar.bz2'
+        )
+        assert dest.exists()
+
+    @patch('builder.time.sleep')
+    def test_download_recovers_unifont_from_a_gnu_mirror(
+            self, mock_sleep, sources_dir, mock_logger):
+        """A dead unifoundry answer must fall back to ftp.gnu.org."""
+        dest = sources_dir / 'unifont-16.0.04.pcf.gz'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            if 'unifoundry.com' in url:
+                raise urllib.error.HTTPError(url=url, code=503,
+                                             msg='Service Unavailable',
+                                             hdrs=None, fp=None)
+            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(self.UNIFONT_URL, retries=1)
+
+        assert result is True
+        assert seen[-1] == (
+            'https://ftp.gnu.org/gnu/unifont/unifont-16.0.04/unifont-16.0.04.pcf.gz'
+        )
+        assert dest.exists()
+
+
 class TestArchiveFilename:
     """GitHub refs/tags archives must land under a find_archive-matchable name.
 

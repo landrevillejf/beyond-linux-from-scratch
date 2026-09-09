@@ -813,50 +813,81 @@ class SourceDownloader:
         base = 2 ** attempt * (8 if rate_limited else 1)
         return min(base + random.uniform(0, 1), cap)
 
+    @staticmethod
+    def _split_stem(stem: str) -> Optional[Tuple[str, str, bool]]:
+        """Split an archive stem into (package, version, dashed).
+
+        Returns None when the stem carries no trailing version, because
+        guessing a mirror directory would only buy extra 404s.  Two forms
+        are recognised: the common dashed one (``xterm-401`` -> ``xterm``
+        / ``401``) and the glued one some upstreams use where the version
+        runs straight into the name (``lynx2.9.2`` -> ``lynx`` / ``2.9.2``).
+        The BLFS conglomeration tree keys both by ``<package>`` and the
+        Void tree by ``<package>-<version>``, so the glued form has to be
+        split before either tier can address it: the previous single regex
+        only stripped a ``[-_]``-delimited version, which left lynx -- whose
+        archive is literally named ``lynx2.9.2.tar.bz2`` -- with no fallback
+        at all even though both mirrors demonstrably carry it.  ``dashed``
+        reports which form matched so the Void tier can reuse the stem
+        verbatim instead of re-joining it with a separator it never had.
+        """
+        match = re.match(r'^(.+?)[-_][v]?(\d[\d.+_\-]*)$', stem)
+        if match:
+            return match.group(1), match.group(2), True
+        match = re.match(r'^(.*?[A-Za-z])(\d[\d.]*)$', stem)
+        if match:
+            return match.group(1), match.group(2), False
+        return None
+
     def _mirror_candidates(self, url: str) -> List[str]:
         """Return BLFS conglomeration mirror URLs for one source archive.
 
         The tree is keyed by package directory, so strip the archive
-        suffix and the trailing version to recover its name.  Filenames
-        without a recognisable version yield no candidate: guessing a
-        directory would only buy extra 404s.
+        suffix and the trailing version to recover its name (see
+        _split_stem, which handles both the dashed and the glued form).
+        Stems without a recognisable trailing version yield no candidate:
+        guessing a directory would only buy extra 404s.
         """
         filename = Path(urlparse(url).path).name
         match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
         if not match:
             return []
-        stem = match.group(1)
-        package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
-        if not package or package == stem:
+        split = self._split_stem(match.group(1))
+        if split is None:
             return []
+        package = split[0]
         return [f"{base}/{package}/{filename}" for base in self.CONGLOMERATION_MIRRORS]
 
     def _void_candidates(self, url: str) -> List[str]:
         """Return Void Linux mirror URLs for one source archive.
 
-        The tree is keyed by the whole archive stem, so no package name
-        has to be guessed.  Stems without a trailing version are skipped
-        for the same reason as in _mirror_candidates: the layout is
-        <name>-<version> and anything else would only buy extra 404s.
+        The tree is keyed by ``<name>-<version>``, so a dashed stem is
+        reused verbatim while a glued one (``lynx2.9.2``) is normalised
+        to the dashed directory Void actually uses (``lynx-2.9.2``).  A
+        stem with no trailing version is skipped for the same reason as
+        in _mirror_candidates: anything else would only buy extra 404s.
         """
         filename = Path(urlparse(url).path).name
         match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
         if not match:
             return []
         stem = match.group(1)
-        package = re.sub(r'[-_][v]?\d[\d.+_\-]*$', '', stem)
-        if not package or package == stem:
+        split = self._split_stem(stem)
+        if split is None:
             return []
-        return [f"{base}/{stem}/{filename}" for base in self.VOID_MIRRORS]
+        package, version, dashed = split
+        directory = stem if dashed else f"{package}-{version}"
+        return [f"{base}/{directory}/{filename}" for base in self.VOID_MIRRORS]
 
     def _gnu_candidates(self, url: str) -> List[str]:
         """Return equivalent GNU mirror URLs for one source archive.
 
         Only URLs that are unambiguously GNU archives are rewritten: the
         ftpmirror.gnu.org redirector, whose document root *is* the gnu
-        tree, and any path already carrying a /gnu/ segment.  Everything
-        else yields no candidate, because re-pointing a foreign URL at a
-        GNU mirror would only buy extra 404s.
+        tree, any path already carrying a /gnu/ segment, and the GNU
+        Unifont tarballs served from unifoundry.com.  Everything else
+        yields no candidate, because re-pointing a foreign URL at a GNU
+        mirror would only buy extra 404s.
         """
         parsed = urlparse(url)
         host = parsed.hostname or ''
@@ -865,6 +896,16 @@ class SourceDownloader:
             relative = path
         elif path.startswith('gnu/'):
             relative = path[len('gnu/'):]
+        elif host == 'unifoundry.com' and path.startswith('pub/unifont/'):
+            # GNU Unifont is an official GNU package, so every GNU mirror
+            # carries it under /gnu/unifont/<version>/.  The unifoundry
+            # layout inserts an extra font-builds/ directory that the GNU
+            # tree omits, so drop it (and the leading pub/) and re-point.
+            # unifoundry.com is a single small host with no redundancy of
+            # its own; ftp.gnu.org/gnu/unifont/unifont-16.0.04/ serves the
+            # byte-identical unifont-16.0.04.pcf.gz the BLFS book names.
+            segments = [s for s in path.split('/') if s != 'font-builds']
+            relative = '/'.join(segments[1:])
         else:
             return []
         if not relative or relative.endswith('/'):
