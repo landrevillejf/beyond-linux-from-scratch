@@ -175,6 +175,42 @@ All workflows live in `.github/workflows/`. Key pipelines:
 7. **Document new profiles** — add new profiles to the profile table in `README.md` and `builder.py`'s `ProfileManager`.
 8. **No Emoji** -- No emoji in code.
 9. **Follow the books** -- Follow the LFS and BLFS books as closely as possible. they are in `/docs/books`
+10. **Bump the version** -- Bump the version number in `VERSION` after each release/fix. Use semantic versioning (major, minor, patch).
+11. **Validate YAML files** -- Check indentation and formatting (e.g., .github/workflows/*.yml).
+12. Environment Preparation
+- **Host System Requirements**: Ensure your host system strictly meets all the requirements listed in the current LFS book (e.g., software versions, kernel configuration).
+- **Partitioning & Mounting**: The automation agent **should not** handle disk partitioning or mounting. It must assume that the target partition (e.g., `/mnt/build_dir`) is already prepared, formatted, and mounted by the user or a separate provisioning step.
+
+13. The Build Process
+- **Strict Adherence to the Book**: Your scripts must execute the official LFS/BLFS instructions **exactly** as written. Any deviation (even seemingly minor ones, like changing a flag without justification) can lead to unpredictable failures and make debugging extremely difficult.
+- **Handling Interactivity**: Many BLFS packages require user interaction during configuration (e.g., accepting an EULA). Your agent must be able to handle these non-interactively using tools like `yes`, `echo`, or input redirection (`< /dev/null`).
+- **Dependency Management**: BLFS dependencies are complex and categorized as "required," "recommended," and "optional." The agent must be capable of parsing these dependencies and building them in the correct topological order to avoid circular dependency deadlocks.
+- **Build as a Non-Root User**: Follow the BLFS recommendations strictly. **The compilation process must be executed as an unprivileged (non-root) user**. The agent should only switch to the `root` user for the installation phase (e.g., `make install`).
+- **Users and Groups**: Ensure that all required system users and groups (e.g., `nobody`, `nogroup`, `polkitd`, etc.) are created before the relevant packages are built.
+- **Comprehensive Logging**: Log every command, its output, and its exit status. This is not only crucial for debugging failures but also serves as definitive proof that the build succeeded.
+
+14. Error Handling and Recovery
+- **Intelligent Recovery**: The agent should be able to recover from a build failure without restarting from scratch. This often means preserving the source directories and continuing from the exact step that failed after the issue is resolved.
+- **Clear and Actionable Error Reports**: When a build fails, the agent must output a precise report including:
+  - The exact version of the LFS/BLFS book being used (LFS 12.4 and BLFS 13.0).
+  - The specific package or chapter that failed.
+  - The full error message and relevant log excerpts.
+  - A clear list of any custom modifications or deviations made to the book's standard instructions.
+
+15. Documentation - Document any derivations from the standard LFS/BLFS instructions.
+16. If the project structure, stage order, or core configuration schema changes, update this AGENTS.md file to reflect the new reality.
+17. When the LFS/BLFS books are updated upstream, do not automatically bump the version. Check the changelog for patches that affect our build scripts, and create a feature branch to test the new version against our profiles before updating the VERSION file
+
+---
+
+### Debugging and Troubleshooting
+
+When your automated build fails (and it will), follow this disciplined approach:
+
+- **Reproduce Manually**: Try to execute the failing step manually inside the chroot environment. If the manual command succeeds but the script fails, the issue is in your automation logic (e.g., environment variables, working directories). If it fails manually, the issue is in the build configuration or the source code itself. 
+- **Inspect Logs Thoroughly**: Scroll up from the very bottom of the log. Often the root cause (e.g., a missing dependency or a compiler flag error) is located several hundred lines *before* the final "fatal error" message.
+- **Refer to the books** for exact instructions and examples.
+
 ---
 
 ## 1. Commit Convention
