@@ -1435,11 +1435,15 @@ class LFSBuilder:
     # download timeout on every retry and pass; docbook.org's XML 5.0 zip has
     # been gone for good.  Nightly #214: retrying them ate roughly an hour of
     # GitHub's hard six-hour job cap and the server and arm64 jobs were
-    # cancelled mid-build as a result.
+    # cancelled mid-build as a result.  The BLFS wget-list also carries
+    # enscript, but no stage compiles or installs it, so it is dropped here
+    # too; if a stage ever builds it, remove the pattern and pin a working
+    # mirror in packages/custom-sources.list.
     UNUSED_SOURCE_PATTERNS = (
         r'/texlive-[^/]*\.tar\.xz$',
         r'/install-tl-unx\.tar\.gz$',
         r'^https://docbook\.org/xml/[^/]*/docbook-[^/]*\.zip$',
+        r'/enscript-[^/]*\.tar\.gz$',
     )
 
     # Rolling upstream snapshots the official wget-lists still carry even

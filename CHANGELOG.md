@@ -133,6 +133,16 @@
 
 ### Changed
 
+- **enscript dropped from the generated sources list**
+  (`builder.py`, `packages/custom-sources.list`)
+  - The BLFS wget-list carries `enscript-1.6.6.tar.gz`, but no `blfs/*`
+    stage compiles or installs it, so every download pass fetched an
+    archive nothing consumed.  It is now filtered out by
+    `UNUSED_SOURCE_PATTERNS` alongside texlive, install-tl and the
+    docbook XML 5.0 zip, and the `custom-sources.list` note records
+    that it is deliberately left unpinned.  If a stage ever builds
+    enscript, remove that pattern and pin a working mirror.
+
 - **documentation synced with the current feature set**
   (`docs/content.md`, `docs/index.md`, `docs/features.md`)
   - `docs/content.md` still advertised version 0.4.3, 15 profiles and a
