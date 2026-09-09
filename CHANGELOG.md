@@ -191,6 +191,35 @@
 
 ### Fixed
 
+- **five live sources had no working mirror fallback**
+  (`builder.py`, `tests/test_source_downloader.py`)
+  - A download run reported `zlib-1.3.1`, `xterm-401`, `lynx2.9.2`,
+    `unifont-16.0.04` and `jtreg-7.5.1+1` missing even though every
+    primary URL was verified live at the time.  The failures were
+    transient host blips, but the fallback tiers could not recover two
+    of them because of how their names and hosts are shaped
+  - `lynx2.9.2.tar.bz2` has no separator before its version, so the
+    single trailing-version regex in `_mirror_candidates`/`_void_candidates`
+    bailed out and generated no candidate at all -- even though the BLFS
+    conglomeration (`conglomeration/lynx/lynx2.9.2.tar.bz2`) and Void
+    (`lynx-2.9.2/lynx2.9.2.tar.bz2`) both carry it.  A new `_split_stem`
+    helper now also splits the glued `<name><version>` form, and the Void
+    tier normalises it to the dashed `<name>-<version>` directory Void
+    actually keys by
+  - `unifont-16.0.04.pcf.gz` is served only from the single small
+    `unifoundry.com` host, and `.pcf.gz` is not a tarball so the guessed
+    tiers never applied.  GNU Unifont is an official GNU package, so
+    `_gnu_candidates` now re-points `unifoundry.com/pub/unifont/<ver>/
+    font-builds/<file>` at `/gnu/unifont/<ver>/<file>` across all four
+    GNU mirrors (verified byte-identical on `ftp.gnu.org`)
+  - `zlib`, `xterm` and `jtreg` are deliberately left on their canonical
+    hosts: `zlib.net/fossils` and `invisible-mirror.net/archives/xterm`
+    are permanent archives (they keep every historical version), the
+    conglomeration and Void tiers were verified *not* to carry these
+    pinned versions, and no byte-identical second source exists -- so a
+    transient blip is correctly left to the existing retry passes rather
+    than an unverified third-party copy of a core toolchain tarball
+
 - **`build-base-cache` #17 died in 57 s on a third-party apt CDN**
   (`.github/workflows/build-base-cache.yml`,
   `.github/workflows/nightly.yml`, `tests/test_release_workflow.py`)
