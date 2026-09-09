@@ -3242,3 +3242,156 @@ class TestNightly223StageGuardrails:
             'libffi must install into /usr/lib on every architecture'
         assert '--disable-static' in block
         assert '--with-gcc-arch=native' in block
+
+
+class TestNightly227StageGuardrails:
+    """Nightly #227 failed every one of its thirteen jobs.
+
+    Four independent defects, each unmasked by the previous nightly's fix
+    letting the builds get further:
+
+    * polkit aborted seven desktop/systemd jobs on an invalid meson
+      session_tracking value,
+    * the chapter-8 gcc rebuild left aarch64 installing into /usr/lib64,
+      so gnutls could not see the nettle built moments earlier,
+    * the nightly matrix crossed the arm64 profile with x86_64, booting
+      an aarch64 kernel under qemu-system-x86_64,
+    * the initramfs probed the root device exactly once, losing a race
+      against asynchronous block-device enumeration under TCG.
+    """
+
+    DISPLAY_MANAGER = Path('blfs/08d-build-display-manager.sh')
+    LFS_SYSTEM = Path('lfs/05b-build-lfs-system.sh')
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+    NIGHTLY = Path('.github/workflows/nightly.yml')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    def test_polkit_never_requests_session_tracking_none(self):
+        """polkit's session_tracking only accepts logind, elogind or
+        ConsoleKit.
+
+        The stage defaulted to "none" - a value NetworkManager accepts
+        but polkit does not - so meson aborted with 'Value "none" ... is
+        not one of the choices'.  polkit is a required package, so the
+        whole display-manager stage died with it, taking gnome, kde,
+        lxqt, xfce/systemd, java-dev, audio-studio and full along
+        (Nightly #227).  The flag must be omitted when no session
+        manager is present so meson falls back to polkit's own default.
+        """
+        code = self._code(self.DISPLAY_MANAGER.read_text())
+        assert 'session_tracking=none' not in code, \
+            'polkit rejects session_tracking=none'
+        assert 'tracking=none' not in code, \
+            'the invalid polkit default must stay removed'
+        fn = code.split('build_commands_polkit() {', 1)[1]
+        fn = fn.split('\n}\n', 1)[0]
+        # libsystemd means logind; the old code mapped it to elogind.
+        assert 'session_tracking=logind' in fn, \
+            'libsystemd must select logind, not elogind'
+        assert 'session_tracking=elogind' in fn
+        assert fn.index('libsystemd') < fn.index('session_tracking=logind')
+        # Empty-array expansion has to survive the inner script's set -u.
+        assert '${tracking_args[@]+"${tracking_args[@]}"}' in fn, \
+            'an unset tracking_args would trip set -u in the chroot'
+
+    def test_chapter8_gcc_normalizes_lib64_on_aarch64(self):
+        """The in-chroot gcc rebuild must normalize lib64 for aarch64.
+
+        host/04-build-toolchain.sh already seds t-aarch64-linux, but the
+        chapter-8 rebuild in 05b - the compiler every later BLFS package
+        uses - only carried the x86_64 branch.  On the native arm64
+        runner that left -print-multi-os-directory reporting ../lib64,
+        so nettle installed into /usr/lib64 while pkgconf (built with
+        --prefix=/usr alone) only searches /usr/lib/pkgconfig.  gnutls
+        then aborted the server stage with "Libnettle 3.6 was not found"
+        seconds after nettle reported success (Nightly #227).
+        """
+        content = self.LFS_SYSTEM.read_text()
+        start = content.index('    gcc)\n')
+        block = content[start:content.index('    ncurses)\n', start)]
+        assert "sed -e '/m64=/s/lib64/lib/'" in block, \
+            'x86_64 lib64 -> lib normalization must stay'
+        assert "sed -e '/mabi.lp64=/s/lib64/lib/'" in block, \
+            'aarch64 lib64 -> lib normalization missing from chapter 8'
+        assert 'gcc/config/aarch64/t-aarch64-linux' in block
+        assert 'aarch64)' in block
+
+    def test_nightly_matrix_does_not_cross_arm64_with_x86_64(self):
+        """The arm64 profile may only appear on the aarch64 cell.
+
+        ProfileManager pins arm64 to architecture=aarch64 and
+        cross_compile=True whatever --arch says, so listing arm64 in the
+        base profile array produced a spurious arm64/sysvinit/x86_64 job
+        that skipped "Install ARM64 cross tools" (gated on arch ==
+        'aarch64') yet still ran the boot smoke test (gated on arch ==
+        'x86_64'), panicking an aarch64 kernel under qemu-system-x86_64
+        (Nightly #227).  Only the include entry may supply arm64.
+        """
+        content = self.NIGHTLY.read_text()
+        matrix = content.split('matrix:', 1)[1].split('include:', 1)[0]
+        profiles = re.search(r'^\s*profile:\s*\[(.*?)\]', matrix,
+                             re.MULTILINE)
+        assert profiles, 'the nightly base matrix must list profiles'
+        names = [p.strip() for p in profiles.group(1).split(',')]
+        assert names, 'the base profile list came out empty'
+        assert 'arm64' not in names, \
+            'arm64 in the base matrix creates an arm64 x x86_64 job'
+        # The real arm64 coverage still exists, on the native arm runner.
+        include = content.split('include:', 1)[1]
+        assert re.search(r'-\s*profile:\s*arm64\s*\n\s*arch:\s*aarch64',
+                         include), \
+            'the arm64/aarch64 include entry must stay'
+        assert "matrix.arch == 'aarch64' && 'ubuntu-24.04-arm'" in content
+
+    def test_initramfs_waits_for_the_root_device(self):
+        """The init script must poll for the root node, not probe once.
+
+        devtmpfs is mounted at the top of /init, but PCI/AHCI/virtio-blk
+        probing is asynchronous and /dev/sdX can appear seconds later -
+        far later under TCG, which is what the smoke test falls back to
+        when the runner exposes no /dev/kvm.  The single [ -b ] test
+        raced ahead of the probe and dropped to a shell with "Root
+        device not found", failing the gate even though the kernel
+        config fixed in #224 was enumerating the disk correctly
+        (Nightly #227).
+        """
+        content = self.INITRAMFS.read_text()
+        init = content.split("<<'EOF'", 1)[1].split('\nEOF\n', 1)[0]
+        assert 'wait_for_dev()' in init, \
+            'the init script needs a polling helper'
+        helper = init.split('wait_for_dev() {', 1)[1].split('\n}\n', 1)[0]
+        assert 'sleep 1' in helper, \
+            'busybox fractional sleep needs CONFIG_FEATURE_FANCY_SLEEP'
+        classic = init.split('# Classic single-root mode', 1)[1]
+        assert 'wait_for_dev "$ROOT_DEV"' in classic
+        assert classic.index('wait_for_dev') < \
+            classic.index('Root device not found'), \
+            'the wait must happen before giving up on the root device'
+        assert 'Mounting root:' in classic, \
+            'qemu-boot-smoke.sh greps for this userspace marker'
+
+    def test_initramfs_fallback_probes_root_before_swap(self):
+        """The fallback list must try partition 3 before partition 2.
+
+        host/03-create-disk-image.sh lays the image out as p1=ESP,
+        p2=swap, p3=root, so leading with /dev/sda2 tried to mount the
+        swap partition - the same mistake already corrected in
+        tools/qemu-boot-smoke.sh, whose ROOT_DEV default is /dev/sda3.
+        """
+        content = self.INITRAMFS.read_text()
+        loop = re.search(r'for candidate in ([^;]*?); do', content,
+                         re.DOTALL)
+        assert loop, 'the initramfs fallback device loop is missing'
+        candidates = re.findall(r'/dev/\w+', loop.group(1))
+        assert candidates, 'the fallback loop lists no candidates'
+        assert candidates[0] in ('/dev/sda3', '/dev/vda3',
+                                 '/dev/nvme0n1p3'), \
+            f'fallback must lead with a root partition, got {candidates[0]}'
+        assert candidates.index('/dev/sda3') < candidates.index('/dev/sda2'), \
+            'p3 is the root filesystem; p2 is swap'
+

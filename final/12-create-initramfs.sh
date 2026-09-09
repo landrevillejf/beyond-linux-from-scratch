@@ -113,6 +113,25 @@ root_is_valid() {
     [ -x /mnt/sbin/init ] || [ -x /mnt/usr/lib/systemd/systemd ] || [ -x /mnt/usr/sbin/init ]
 }
 
+# wait_for_dev <device> [seconds] - poll until the block node shows up.
+# Block-device probing (PCI, AHCI, virtio-blk, SCSI scan) is asynchronous:
+# devtmpfs is mounted above, but /dev/sdX nodes can appear seconds later,
+# especially under TCG-emulated QEMU with no KVM.  Testing the node exactly
+# once raced ahead of the probe and dropped to a shell with "Root device not
+# found" for a disk and a driver that were both fine (Nightly #227).
+# Integer sleeps only: busybox fractional sleep needs
+# CONFIG_FEATURE_FANCY_SLEEP, which the downloaded static binary lacks.
+wait_for_dev() {
+    local dev="$1" timeout="${2:-10}" i=0
+    [ -n "$dev" ] || return 1
+    while [ "$i" -lt "$timeout" ]; do
+        [ -b "$dev" ] && return 0
+        /bin/busybox sleep 1
+        i=$((i + 1))
+    done
+    [ -b "$dev" ]
+}
+
 # ---------------------------------------------------------------------------
 # A/B root partition logic
 # ---------------------------------------------------------------------------
@@ -152,10 +171,21 @@ if [ -n "$ROOT_A_DEV" ] && [ -n "$ROOT_B_DEV" ]; then
 # Classic single-root mode
 # ---------------------------------------------------------------------------
 else
-    # Fallback: try common root device names
+    # Give the kernel time to finish enumerating the disk before declaring
+    # the root device missing (see wait_for_dev above).
+    if [ -n "$ROOT_DEV" ]; then
+        wait_for_dev "$ROOT_DEV" 10
+    fi
+
+    # Fallback: try common root device names.  Partition 3 leads because
+    # host/03-create-disk-image.sh lays the image out as p1=ESP(/boot),
+    # p2=swap, p3=root - probing p2 first tried to mount the swap partition
+    # (the same mistake already fixed in tools/qemu-boot-smoke.sh).
     if [ -z "$ROOT_DEV" ] || [ ! -b "$ROOT_DEV" ]; then
-        for candidate in /dev/sda2 /dev/vda2 /dev/nvme0n1p2 /dev/xvda2 /dev/sda1 /dev/vda1; do
-            if [ -b "$candidate" ]; then
+        for candidate in /dev/sda3 /dev/vda3 /dev/nvme0n1p3 \
+                         /dev/sda2 /dev/vda2 /dev/nvme0n1p2 \
+                         /dev/xvda2 /dev/sda1 /dev/vda1; do
+            if wait_for_dev "$candidate" 2; then
                 ROOT_DEV="$candidate"
                 break
             fi
@@ -211,7 +241,7 @@ chmod 755 "$INITRAMFS_DIR/init"
 cd "$INITRAMFS_DIR"
 if command -v zstd >/dev/null 2>&1; then
     echo "[INFO] Compressing initramfs with zstd..."
-    find . | cpio -o -H newc 2>/dev/null | zstd -19 -q > "$INITRAMFS_OUTPUT"
+    find . | cpio -o -H newc 2>/dev/null | zstd -19 -q >"$INITRAMFS_OUTPUT"
 else
     echo "[INFO] Compressing initramfs with gzip..."
     find . | cpio -o -H newc 2>/dev/null | gzip -9 >"$INITRAMFS_OUTPUT"
