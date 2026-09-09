@@ -693,7 +693,7 @@ class TestGluedNameAndUnifontFallbacks:
 
         def fake_retrieve(url, path, *args):
             seen.append(url)
-            if 'invisible-mirror.net' in url:
+            if urlparse(url).hostname == 'invisible-mirror.net':
                 raise urllib.error.HTTPError(url=url, code=404,
                                              msg='Not Found', hdrs=None, fp=None)
             Path(path).write_bytes(b'BZh9payload')
