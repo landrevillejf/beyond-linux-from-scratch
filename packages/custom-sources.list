@@ -82,8 +82,10 @@ http://rsync.belnet.be/mirror/ftp.frugalware.org/ftp/pub/frugalware/frugalware-s
 # Zsh - version 5.9
 http://mirror.dotsrc.org/kali/pool/main/z/zsh/zsh_5.9.orig.tar.xz
 
-# Enscript -- deliberately NO override: the hust.edu.cn mirror drops the
-# connection mid-download; the official ftp.gnu.org URL is live.
+# Enscript -- deliberately NOT pinned: no blfs stage builds enscript, so
+# builder.py drops it from the generated sources list via
+# UNUSED_SOURCE_PATTERNS (fetching it only burns CI time).  If a stage ever
+# builds it, remove that pattern and pin a working mirror here.
 
 # Paxmirabilis
 https://ftp2.osuosl.org/pub/blfs/conglomeration/pax/paxmirabilis-20240817.tgz

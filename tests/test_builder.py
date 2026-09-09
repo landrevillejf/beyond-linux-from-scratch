@@ -885,6 +885,8 @@ class TestLFSBuilder:
             'texlive-20250308-extra.tar.xz',
             'https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz',
             'https://docbook.org/xml/5.0/docbook-5.0.zip',
+            # enscript is fetched by the BLFS wget-list but no stage builds it
+            'https://ftp.gnu.org/gnu/enscript/enscript-1.6.6.tar.gz',
         ]
         for url in unused:
             assert builder._is_unused_source(url) is True, url
@@ -987,6 +989,7 @@ class TestLFSBuilder:
             "texlive-20250308-texmf.tar.xz\n"
             "https://mirror.ctan.org/systems/texlive/tlnet/install-tl-unx.tar.gz\n"
             "https://docbook.org/xml/5.0/docbook-5.0.zip\n"
+            "https://ftp.gnu.org/gnu/enscript/enscript-1.6.6.tar.gz\n"
             "https://download.gnome.org/sources/gobject-introspection/1.84/"
             "gobject-introspection-1.84.0.tar.xz\n"
             "https://invisible-mirror.net/archives/ncurses/current/"
@@ -1005,6 +1008,8 @@ class TestLFSBuilder:
         assert 'texlive' not in content
         assert 'install-tl-unx' not in content
         assert 'docbook.org/xml' not in content
+        # enscript is never built by any stage, so it must be filtered out
+        assert 'enscript' not in content
         # the book's gobject-introspection 1.84.0 survives the filter
         assert 'gobject-introspection-1.84.0.tar.xz' in content
         # the rolling ncurses snapshot does not (Nightly #218)
