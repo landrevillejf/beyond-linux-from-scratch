@@ -191,6 +191,68 @@
 
 ### Fixed
 
+- **all thirteen nightly #227 jobs failed, on four unrelated defects**
+  (`blfs/08d-build-display-manager.sh`, `lfs/05b-build-lfs-system.sh`,
+  `final/12-create-initramfs.sh`, `.github/workflows/nightly.yml`,
+  `tests/test_acceptance_shell.py`)
+  - Each defect was unmasked by an earlier fix letting the builds get
+    further: #224's kernel config and #226's gtk4 guard moved the
+    failure point onwards rather than resolving it
+  - **polkit rejected `session_tracking=none`** -- 7 jobs (gnome, kde,
+    lxqt, xfce/systemd, java-dev, audio-studio, full).  meson aborted
+    with `Value "none" ... is not one of the choices.  Possible choices
+    are "logind", "elogind", "ConsoleKit"`, and polkit being a
+    `run_build required` package took the whole display-manager stage
+    down with it.  `none` *is* a legal NetworkManager value, which is
+    why `blfs/23-basic-networking.sh` keeps it, but polkit has no such
+    choice and the book only ever passes `elogind`.  The stage also
+    mapped a detected `libsystemd` to `elogind` rather than `logind`.
+    `build_commands_polkit` now selects `logind` for libsystemd,
+    `elogind` for elogind and omits the flag entirely otherwise, so
+    meson falls back to polkit's own default
+  - **the chapter-8 gcc rebuild left aarch64 installing into
+    `/usr/lib64`** -- arm64/aarch64/sysvinit.  `host/04-build-toolchain.sh`
+    seds `t-aarch64-linux` in all three of its gcc steps, but the 05b
+    rebuild -- the compiler every later BLFS package uses -- carried
+    only the `x86_64` branch.  On the native arm runner
+    `-print-multi-os-directory` therefore still printed `../lib64`, so
+    nettle installed into `/usr/lib64` while pkgconf (configured with
+    `--prefix=/usr` alone, and with no `PKG_CONFIG_PATH` set anywhere in
+    the repo) searches only `/usr/lib/pkgconfig`.  gnutls then aborted
+    the server stage with `Libnettle 3.6 was not found` seconds after
+    nettle logged success.  Same trap as the libffi
+    `--disable-multi-os-directory` workaround from #223, but fixed once
+    for every package instead of per package
+  - **the matrix crossed `arm64` with `x86_64`** -- arm64/sysvinit/x86_64.
+    `arm64` appeared both in the base `profile:` array and in an
+    `include:` entry with `arch: aarch64`, so GitHub generated an extra
+    arm64-on-x86_64 cell.  `ProfileManager` pins that profile to
+    `architecture=aarch64` and `cross_compile=True` whatever `--arch`
+    says; "Install ARM64 cross tools" is gated on
+    `matrix.arch == 'aarch64'` (so it was skipped) while the boot smoke
+    step is gated on `matrix.arch == 'x86_64'` (so it ran), panicking an
+    aarch64 kernel under `qemu-system-x86_64`.  `arm64` is dropped from
+    the base list: 13 jobs become 12 with no coverage lost
+  - **the initramfs probed the root device exactly once** -- server and
+    minimal sysvinit, minimal systemd.  Now that #224's config lets the
+    kernel enumerate the disk, the boot reached `/init`, which mounted
+    devtmpfs and immediately tested `[ -b "$ROOT_DEV" ]`.  Block-device
+    probing is asynchronous and these runners fall back to `accel=tcg`
+    when no `/dev/kvm` is exposed, so the node had not appeared yet: the
+    guest printed `Root device not found. Dropping to shell.` and the
+    gate reported `the initramfs never reached userspace`.  A new
+    `wait_for_dev` helper polls for up to 10 s before giving up
+    (integer sleeps -- busybox fractional sleep needs
+    `CONFIG_FEATURE_FANCY_SLEEP`).  The fallback list also led with
+    `/dev/sda2`, which `host/03` formats as swap; p3 now comes first,
+    matching the `ROOT_DEV=/dev/sda3` default corrected in #224
+  - `xfce/sysvinit/x86_64` was *cancelled*, not failed: it exhausted the
+    330-minute budget retrying x.org downloads (`Errno 110` to
+    www.x.org, 404 from both fallback mirrors).  Transient network
+    flakiness, so no code change
+  - Five guardrail tests were added and confirmed to fail against the
+    pre-fix tree
+
 - **Legacy docs deploy workflow retired; Pages now builds via Actions**
   (`.github/workflows/deploy-docs.yml`, GitHub Pages settings)
   - `deploy-docs.yml` ("Deploy MkDocs to Pages") built the site, copied

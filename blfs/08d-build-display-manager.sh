@@ -26,7 +26,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
@@ -44,9 +47,15 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ "$DESKTOP_TYPE" = "none" ] && { log_info "No desktop requested; skipping display manager"; exit 0; }
+[ "$DESKTOP_TYPE" = "none" ] && {
+    log_info "No desktop requested; skipping display manager"
+    exit 0
+}
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     log_error "chroot not working – run lfs-basic first"
     exit 1
@@ -264,9 +273,18 @@ build_pkg() {
 # manager; the sysvinit book variant redirects the unit dir to /tmp.
 build_polkit() { book_install polkit build_commands_polkit; }
 build_commands_polkit() {
-    tracking=none
-    pkg-config --exists elogind 2>/dev/null && tracking=elogind
-    pkg-config --exists libsystemd 2>/dev/null && tracking=elogind
+    # polkit's session_tracking option only accepts logind, elogind or
+    # ConsoleKit; the previous default of "none" is rejected outright by
+    # meson, which aborted every desktop profile at this stage once
+    # neither elogind nor libsystemd had been built yet (Nightly #227).
+    # Detect the real provider and omit the flag entirely when there is
+    # none so meson falls back to polkit's own default.
+    local tracking_args=()
+    if pkg-config --exists libsystemd 2>/dev/null; then
+        tracking_args+=(-D session_tracking=logind)
+    elif pkg-config --exists elogind 2>/dev/null; then
+        tracking_args+=(-D session_tracking=elogind)
+    fi
     if [ "$HAVE_SYSTEMD" = true ]; then
         unitdir=/usr/lib/systemd/system
     else
@@ -281,7 +299,7 @@ build_commands_polkit() {
           --prefix=/usr \
           --buildtype=release \
           -D man=false \
-          -D session_tracking="$tracking" \
+          ${tracking_args[@]+"${tracking_args[@]}"} \
           -D systemdsystemunitdir="$unitdir" &&
     ninja && ninja install
 }

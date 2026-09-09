@@ -56,7 +56,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        profile: [ minimal, xfce, arm64, server, java-dev, audio-studio, full ]
+        # arm64 is deliberately absent from this list: ProfileManager pins
+        # that profile to architecture=aarch64 and cross_compile=True no
+        # matter what --arch says, so an arm64 x x86_64 cell built an
+        # aarch64 kernel while skipping the "Install ARM64 cross tools"
+        # step (gated on matrix.arch == 'aarch64') and then ran the boot
+        # smoke test (gated on matrix.arch == 'x86_64'), which panicked
+        # instantly under qemu-system-x86_64 (Nightly #227).  The include
+        # entry below is the only arm64 job we want.
+        profile: [ minimal, xfce, server, java-dev, audio-studio, full ]
         init: [ sysvinit ]
         arch: [ x86_64 ]
         include:

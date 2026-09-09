@@ -744,8 +744,18 @@ EOF
         ;;
     gcc)
         extract "$(find_archive gcc)"
+        # lib64 -> lib normalization, keyed on the target.  Without it the
+        # compiler built here - the one every later BLFS package uses -
+        # keeps reporting ../lib64 from -print-multi-os-directory and drops
+        # libraries into /usr/lib64, which pkgconf never searches because
+        # recipes/lfs/system/pkgconf.lpm configures it with --prefix=/usr
+        # alone.  Nightly #227 arm64: nettle installed into /usr/lib64 and
+        # gnutls then aborted on "Libnettle 3.6 was not found".  Mirrors the
+        # sed already applied to the temporary toolchain in
+        # host/04-build-toolchain.sh.
         case $(uname -m) in
             x86_64) sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64 ;;
+            aarch64) sed -e '/mabi.lp64=/s/lib64/lib/' -i.orig gcc/config/aarch64/t-aarch64-linux ;;
         esac
         mkdir -v build
         cd build
