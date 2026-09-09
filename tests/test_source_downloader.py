@@ -717,7 +717,8 @@ class TestGluedNameAndUnifontFallbacks:
 
         def fake_retrieve(url, path, *args):
             seen.append(url)
-            if 'unifoundry.com' in url:
+            host = urlparse(url).hostname or ''
+            if host == 'unifoundry.com' or host.endswith('.unifoundry.com'):
                 raise urllib.error.HTTPError(url=url, code=503,
                                              msg='Service Unavailable',
                                              hdrs=None, fp=None)
