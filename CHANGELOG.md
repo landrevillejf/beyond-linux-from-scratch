@@ -191,6 +191,36 @@
 
 ### Fixed
 
+- **`build-base-cache` #17 died in 57 s on a third-party apt CDN**
+  (`.github/workflows/build-base-cache.yml`,
+  `.github/workflows/nightly.yml`, `tests/test_release_workflow.py`)
+  - Both matrix jobs failed at step 6 ("Install dependencies"), before
+    step 11 ever computed the base cache key, when `sudo apt-get update`
+    aborted with exit 100 on a `Hash Sum mismatch` from
+    `dl.google.com/linux/chrome-stable`.  Google's Release file had been
+    created 7h21m after the Packages.gz it described (17:16:59Z against
+    09:41:12Z), so apt read two halves of one repository from different
+    points in an asynchronous republish
+  - Nothing in this project installs from that source, or from
+    Microsoft's: every package these workflows request comes from
+    Ubuntu's own main/universe, and the "Free disk space" step deletes
+    `/usr/share/dotnet` outright.  The third-party sources the
+    `ubuntu-latest` image ships were therefore pure exposure, and both
+    are now removed before the update runs
+  - `apt-get update` is also retried three times with a 15 s/30 s
+    backoff, because the step gates hours of build work and a transient
+    hiccup on Ubuntu's own mirrors must not be fatal either.  The third
+    attempt still exits 1 -- tolerating a transient CDN error must not
+    mean tolerating a permanently unreachable archive, which would let
+    the build proceed without its toolchain and die hours later on an
+    unrelated error
+  - `nightly.yml`'s post-build "Boot artifact in QEMU (smoke test)" step
+    gets the same retry.  It runs after a multi-hour build, where the
+    identical failure would have discarded the whole job's work instead
+    of 57 seconds of it
+  - Four guardrail tests were added and confirmed to fail against the
+    pre-fix workflows
+
 - **all thirteen nightly #227 jobs failed, on four unrelated defects**
   (`blfs/08d-build-display-manager.sh`, `lfs/05b-build-lfs-system.sh`,
   `final/12-create-initramfs.sh`, `.github/workflows/nightly.yml`,

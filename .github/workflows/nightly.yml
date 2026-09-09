@@ -166,7 +166,23 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
+          # Drop the third-party apt sources ubuntu-latest ships (Chrome,
+          # Microsoft) and retry the update: nothing below comes from them,
+          # and build-base-cache #17 lost both matrix jobs in 57s to a
+          # "Hash Sum mismatch" on dl.google.com mid-republish.  Full
+          # post-mortem in build-base-cache.yml's copy of this step.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed, attempt $attempt of 3"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
@@ -537,7 +553,21 @@ jobs:
       - name: Boot artifact in QEMU (smoke test)
         if: success() && matrix.arch == 'x86_64'
         run: |
-          sudo apt-get update
+          # Same third-party CDN hazard as the Install dependencies step,
+          # but far more expensive here: this runs after a multi-hour build,
+          # so one bad Packages.gz from dl.google.com would discard the
+          # whole job's work.  The sources were already removed earlier in
+          # the job, so only the retry is needed.
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed, attempt $attempt of 3"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
           sudo apt-get install -y qemu-system-x86
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           # QEMU attaches a raw disk image with -drive file=...,format=raw,

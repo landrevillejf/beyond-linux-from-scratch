@@ -90,7 +90,29 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
+          # ubuntu-latest ships third-party apt sources this build never
+          # installs from - every package below comes from Ubuntu's own
+          # main/universe.  Their CDNs republish asynchronously, and when apt
+          # reads the Release file and Packages.gz from different points in
+          # that republish it aborts with exit 100: build-base-cache #17 died
+          # 57s in, both matrix jobs at once, on a "Hash Sum mismatch" from
+          # dl.google.com whose Release file was 7h newer than the Packages
+          # file it described.  Drop them so a third-party CDN can never cost
+          # a 2h prefix build.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
+          # Retry what is left: this step gates the entire build, so a
+          # transient hiccup on Ubuntu's own mirrors must not be fatal.
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed, attempt $attempt of 3"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
