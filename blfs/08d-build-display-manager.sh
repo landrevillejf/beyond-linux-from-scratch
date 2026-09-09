@@ -264,9 +264,18 @@ build_pkg() {
 # manager; the sysvinit book variant redirects the unit dir to /tmp.
 build_polkit() { book_install polkit build_commands_polkit; }
 build_commands_polkit() {
-    tracking=none
-    pkg-config --exists elogind 2>/dev/null && tracking=elogind
-    pkg-config --exists libsystemd 2>/dev/null && tracking=elogind
+    # polkit's session_tracking option only accepts logind, elogind or
+    # ConsoleKit; the previous default of "none" is rejected outright by
+    # meson, which aborted every desktop profile at this stage once
+    # neither elogind nor libsystemd had been built yet (Nightly #227).
+    # Detect the real provider and omit the flag entirely when there is
+    # none so meson falls back to polkit's own default.
+    local tracking_args=()
+    if pkg-config --exists libsystemd 2>/dev/null; then
+        tracking_args+=(-D session_tracking=logind)
+    elif pkg-config --exists elogind 2>/dev/null; then
+        tracking_args+=(-D session_tracking=elogind)
+    fi
     if [ "$HAVE_SYSTEMD" = true ]; then
         unitdir=/usr/lib/systemd/system
     else
@@ -281,7 +290,7 @@ build_commands_polkit() {
           --prefix=/usr \
           --buildtype=release \
           -D man=false \
-          -D session_tracking="$tracking" \
+          ${tracking_args[@]+"${tracking_args[@]}"} \
           -D systemdsystemunitdir="$unitdir" &&
     ninja && ninja install
 }
