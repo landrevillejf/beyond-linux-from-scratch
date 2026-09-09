@@ -635,3 +635,102 @@ class TestSameArchQemuSkip:
         """TARGET_ARCH defaults to aarch64, so the guard still fires on an
         ARM runner if builder.py ever stops exporting ARCH."""
         assert 'TARGET_ARCH="${ARCH:-aarch64}"' in self._script()
+
+
+class TestThirdPartyAptCdnResilience:
+    """build-base-cache #17 lost both matrix jobs 57 seconds in, before the
+    base cache key had even been computed.
+
+    `sudo apt-get update` aborted with exit 100 on a "Hash Sum mismatch"
+    from dl.google.com: Google's Release file had been created 7h after the
+    Packages.gz it described, so apt read two halves of one repository from
+    different points in an asynchronous republish.  Nothing here installs
+    Chrome or anything from Microsoft's repo - every package these
+    workflows ask for comes from Ubuntu's own main/universe, and the "Free
+    disk space" step deletes /usr/share/dotnet outright - so the
+    third-party sources the ubuntu-latest image ships are pure exposure.
+    The retry covers what is left, because this step gates hours of work.
+    """
+
+    SOURCES = ("google-chrome*.list", "*microsoft*.list")
+
+    INSTALL_STEPS = (("build-base-cache.yml", "Install dependencies"),
+                     ("nightly.yml", "Install dependencies"))
+
+    LOOP = "for attempt in 1 2 3; do"
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, workflow, name):
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        """Live lines only.  Both workflows name the removed sources in the
+        comments explaining their removal, so a whole-file substring test
+        would pass on the prose describing the fix instead of on the fix.
+        """
+        return [line.strip() for line in text.splitlines()
+                if line.strip() and not line.strip().startswith("#")]
+
+    @staticmethod
+    def _first(lines, needle):
+        return min(i for i, line in enumerate(lines) if needle in line)
+
+    def test_the_third_party_sources_are_dropped_before_the_update(self):
+        """Ordering is the whole point: removing a source after apt has
+        already read it prevents nothing."""
+        for name, step_name in self.INSTALL_STEPS:
+            lines = self._commands(self._step(self._read(name), step_name))
+            update = self._first(lines, "apt-get update")
+            for source in self.SOURCES:
+                removals = [i for i, line in enumerate(lines)
+                            if line.startswith("sudo rm -f") and source in line]
+                assert removals, f"{name}: {source} is never removed"
+                assert min(removals) < update, \
+                    f"{name}: {source} is removed after the update"
+
+    def test_the_update_is_retried_instead_of_run_once(self):
+        """A single bare `sudo apt-get update` is exactly what killed #17."""
+        for name, step_name in self.INSTALL_STEPS:
+            lines = self._commands(self._step(self._read(name), step_name))
+            assert "sudo apt-get update" not in lines, \
+                f"{name}: a bare, unretried apt-get update survived"
+            assert self.LOOP in lines, name
+            assert "if sudo apt-get update; then" in lines, name
+            assert lines.index(self.LOOP) \
+                < lines.index("if sudo apt-get update; then"), name
+            # The retry has to precede the install it feeds.
+            assert self._first(lines, "apt-get update") \
+                < self._first(lines, "apt-get install"), name
+
+    def test_the_post_build_qemu_step_survives_a_transient_mirror_error(self):
+        """This step runs after a multi-hour build, so one bad Packages.gz
+        here discards the whole job's work rather than 57 seconds of it."""
+        step = self._step(self._read("nightly.yml"),
+                          "Boot artifact in QEMU (smoke test)")
+        lines = self._commands(step)
+        assert "sudo apt-get update" not in lines
+        assert self.LOOP in lines
+        assert lines.index(self.LOOP) \
+            < lines.index("sudo apt-get install -y qemu-system-x86")
+
+    def test_resilience_does_not_become_masking(self):
+        """Surviving a transient CDN error must not mean surviving a
+        permanently broken mirror: after the third attempt the step still
+        fails loudly, otherwise the build proceeds without its toolchain and
+        dies hours later on an unrelated error."""
+        for name, step_name in self.INSTALL_STEPS:
+            lines = self._commands(self._step(self._read(name), step_name))
+            assert any('[ "$attempt" -eq 3 ]' in line for line in lines), name
+            assert "exit 1" in lines, f"{name}: the loop never gives up loudly"
+            # `|| true` on the update would swallow every failure, including
+            # a genuinely unreachable archive.
+            offenders = [line for line in lines
+                         if "apt-get update" in line and "|| true" in line]
+            assert offenders == [], f"{name}: {offenders}"
