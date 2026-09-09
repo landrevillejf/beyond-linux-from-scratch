@@ -241,7 +241,7 @@ chmod 755 "$INITRAMFS_DIR/init"
 cd "$INITRAMFS_DIR"
 if command -v zstd >/dev/null 2>&1; then
     echo "[INFO] Compressing initramfs with zstd..."
-    find . | cpio -o -H newc 2>/dev/null | zstd -19 -q > "$INITRAMFS_OUTPUT"
+    find . | cpio -o -H newc 2>/dev/null | zstd -19 -q >"$INITRAMFS_OUTPUT"
 else
     echo "[INFO] Compressing initramfs with gzip..."
     find . | cpio -o -H newc 2>/dev/null | gzip -9 >"$INITRAMFS_OUTPUT"
