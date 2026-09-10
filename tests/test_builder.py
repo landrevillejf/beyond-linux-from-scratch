@@ -321,6 +321,33 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'privacy' in stage_names
 
+    def test_get_build_stages_installer_iso_x86_64_only(self, builder):
+        """The x86-only installer ISO stage must be skipped on aarch64.
+
+        final/14 builds a hybrid isolinux/BIOS + `grub-install
+        --target=x86_64-efi` + BOOTX64.EFI ISO, so on the arm64
+        profile it aborted the installer stage with "grub-install:
+        error: /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist"
+        (Nightly #228).  aarch64 boards boot the disk/SD image via
+        U-Boot (host/05) or arm64 UEFI, and nightly ships arm64 as a
+        rootfs tarball + disk image while tolerating a missing ISO,
+        so the stage must not be scheduled for a non-x86_64 target --
+        but every other final stage still runs.
+        """
+        from builder import ProfileManager
+        # The default x86_64 target keeps the installer ISO.
+        builder.profile_config['architecture'] = 'x86_64'
+        assert 'installer' in [s[0] for s in builder.get_build_stages()]
+
+        # An aarch64 target drops it while keeping the rest of final/.
+        builder.profile = 'arm64'
+        builder.profile_config = ProfileManager.get_profile('arm64')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'installer' not in stage_names
+        assert 'initramfs' in stage_names
+        assert 'bootloader' in stage_names
+        assert 'validate' in stage_names
+
     def test_get_build_stages_audio_studio_builds_audio_stack(self, builder):
         """audio-studio must build the multimedia stack then NeuralRack.
 
