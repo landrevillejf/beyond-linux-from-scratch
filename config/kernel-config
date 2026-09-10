@@ -26,6 +26,23 @@ CONFIG_PREEMPT_VOLUNTARY=y
 # ============================================================================
 # DEVICE DRIVERS
 # ============================================================================
+# PCI bus.  This MUST be named explicitly.  lfs/08-build-kernel.sh copies the
+# fragment to .config and runs `make olddefconfig`, which resolves every symbol
+# absent from the fragment to its default -- and PCI resolves to n.  SATA_AHCI
+# and ATA_PIIX depend on `ATA && PCI`, BLK_DEV_NVME depends on PCI, VIRTIO_PCI
+# depends on PCI, and the E1000/E1000E/R8169/IWLWIFI NICs plus SND_HDA_INTEL/
+# SND_PCI are all PCI devices -- so a missing CONFIG_PCI silently dropped every
+# one of them even though each is set to =y below.  With no AHCI host driver the
+# kernel never bound the QEMU q35 ICH9 SATA controller, created no /dev/sda, and
+# the busybox initramfs dropped to a shell with "Root device not found", failing
+# the boot smoke test for every x86_64 profile that reached it (Nightly
+# #228/#229).  The wait_for_dev poll added for #227 could not mask this:
+# built-in drivers probe synchronously before /init runs, so there was never a
+# late-appearing device node to wait for.
+CONFIG_PCI=y
+CONFIG_PCI_MSI=y
+CONFIG_PCIEPORTBUS=y
+
 # Audio drivers
 CONFIG_SND=y
 CONFIG_SND_HDA_INTEL=y

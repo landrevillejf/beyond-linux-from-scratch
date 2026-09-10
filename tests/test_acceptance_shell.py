@@ -1104,8 +1104,19 @@ class TestLFSComplianceGuardrails:
         boot smoke test then panicked with "VFS: Cannot open root device
         ... unknown-block(0,0): error -6" and an empty partition list for
         every headless profile (Nightly #224).
+
+        PCI is the same trap one level down (Nightly #228/#229): the
+        fragments named CONFIG_SATA_AHCI/ATA_PIIX/VIRTIO_PCI=y but never
+        CONFIG_PCI, and SATA_AHCI depends on `ATA && PCI`, so olddefconfig
+        resolved PCI to n and silently dropped the AHCI host driver.  The
+        kernel then never bound the q35 ICH9 SATA controller, made no
+        /dev/sda, and the initramfs dropped to a shell with "Root device
+        not found" -- the boot smoke test failed for every x86_64 profile
+        that reached it, and the #227 wait_for_dev poll could not help
+        because built-in drivers probe before /init ever runs.
         """
         boot_stack = (
+            'CONFIG_PCI=y',
             'CONFIG_SCSI=y',
             'CONFIG_BLK_DEV_SD=y',
             'CONFIG_BLK_DEV_INITRD=y',
@@ -1123,6 +1134,15 @@ class TestLFSComplianceGuardrails:
             if 'CONFIG_ATA=y' in content:
                 assert 'CONFIG_SCSI=y' in content, \
                     f"{name} enables ATA without its SCSI dependency"
+            # CONFIG_SATA_AHCI depends on `ATA && PCI`: naming AHCI without
+            # PCI lets olddefconfig drop the AHCI host driver, so the q35
+            # ICH9 SATA disk is never bound and /dev/sda does not exist
+            # (Nightly #228/#229).
+            if 'CONFIG_SATA_AHCI=y' in content:
+                assert 'CONFIG_PCI=y' in content, \
+                    f"{name} enables SATA_AHCI without its PCI dependency"
+                assert 'CONFIG_ATA=y' in content, \
+                    f"{name} enables SATA_AHCI without its ATA dependency"
 
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
