@@ -46,6 +46,16 @@ CONFIG_HPET=y
 # ============================================================================
 # DEVICE DRIVERS
 # ============================================================================
+# PCI bus -- see the identical block in config/kernel-config.  Without an
+# explicit CONFIG_PCI, `make olddefconfig` (lfs/08) resolves it to n and
+# silently drops every PCI-dependent driver named below (SATA_AHCI/ATA_PIIX,
+# BLK_DEV_NVME, VIRTIO_PCI, the PCI NICs and SND_HDA_INTEL/SND_PCI), so the
+# kernel had no AHCI host driver and the initramfs could not find the q35 SATA
+# disk ("Root device not found", Nightly #228/#229).
+CONFIG_PCI=y
+CONFIG_PCI_MSI=y
+CONFIG_PCIEPORTBUS=y
+
 # Audio drivers
 CONFIG_SND=y
 CONFIG_SND_HDA_INTEL=y

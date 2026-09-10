@@ -715,6 +715,38 @@ class TestLFSComplianceGuardrails:
         assert 'build_commands_libpcap' in content
         assert 'libpcap) have_pc libpcap ;;' in content
 
+    def test_display_manager_builds_duktape_before_polkit(self):
+        """Stage 08d must build duktape before polkit.
+
+        polkit-126 defaults to the duktape JavaScript engine and the
+        BLFS postlfs/polkit page lists "duktape-2.7.0 and GLib" as
+        Required.  duktape ships in sources.list but no stage ever
+        built it, so polkit's meson setup aborted the display-manager
+        stage at "../meson.build:148:16: ERROR: C header 'duktape.h'
+        not found" for all eight desktop profiles (Nightly #228).
+        #227's session_tracking fix only let polkit get far enough to
+        reach this header check.  The stage must build duktape with
+        the general/duktape book commands and install it before
+        polkit runs.
+        """
+        content = Path('blfs/08d-build-display-manager.sh').read_text()
+        duktape_pos = content.find('run_build required duktape')
+        polkit_pos = content.find('run_build required polkit')
+        assert duktape_pos != -1, "duktape build missing from stage 08d"
+        assert polkit_pos != -1, "polkit build missing from stage 08d"
+        assert duktape_pos < polkit_pos, \
+            "duktape must be built before polkit (nightly #228)"
+        assert 'build_commands_duktape' in content
+        assert 'duktape)' in content, \
+            "is_installed must have a duktape case"
+        assert '[ -f /usr/include/duktape.h ]' in content, \
+            "is_installed must detect duktape by its installed header"
+        # general/duktape builds the shared library, not the static
+        # Makefile, and installs it under /usr so polkit finds
+        # duktape.h and libduktape.so.
+        assert 'make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr' \
+            in content
+
     def test_inkscape_overridden_via_conglomeration_mirror(self):
         """The dead inkscape.org gallery URL must be overridden.
 
@@ -1104,8 +1136,19 @@ class TestLFSComplianceGuardrails:
         boot smoke test then panicked with "VFS: Cannot open root device
         ... unknown-block(0,0): error -6" and an empty partition list for
         every headless profile (Nightly #224).
+
+        PCI is the same trap one level down (Nightly #228/#229): the
+        fragments named CONFIG_SATA_AHCI/ATA_PIIX/VIRTIO_PCI=y but never
+        CONFIG_PCI, and SATA_AHCI depends on `ATA && PCI`, so olddefconfig
+        resolved PCI to n and silently dropped the AHCI host driver.  The
+        kernel then never bound the q35 ICH9 SATA controller, made no
+        /dev/sda, and the initramfs dropped to a shell with "Root device
+        not found" -- the boot smoke test failed for every x86_64 profile
+        that reached it, and the #227 wait_for_dev poll could not help
+        because built-in drivers probe before /init ever runs.
         """
         boot_stack = (
+            'CONFIG_PCI=y',
             'CONFIG_SCSI=y',
             'CONFIG_BLK_DEV_SD=y',
             'CONFIG_BLK_DEV_INITRD=y',
@@ -1123,6 +1166,15 @@ class TestLFSComplianceGuardrails:
             if 'CONFIG_ATA=y' in content:
                 assert 'CONFIG_SCSI=y' in content, \
                     f"{name} enables ATA without its SCSI dependency"
+            # CONFIG_SATA_AHCI depends on `ATA && PCI`: naming AHCI without
+            # PCI lets olddefconfig drop the AHCI host driver, so the q35
+            # ICH9 SATA disk is never bound and /dev/sda does not exist
+            # (Nightly #228/#229).
+            if 'CONFIG_SATA_AHCI=y' in content:
+                assert 'CONFIG_PCI=y' in content, \
+                    f"{name} enables SATA_AHCI without its PCI dependency"
+                assert 'CONFIG_ATA=y' in content, \
+                    f"{name} enables SATA_AHCI without its ATA dependency"
 
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and

@@ -201,6 +201,59 @@
 
 ### Fixed
 
+- **all twelve nightly #228 jobs failed, on three unrelated defects**
+  (`config/kernel-config`, `config/kernel-config-audio-studio`,
+  `config/kernel-config-arm64`, `blfs/08d-build-display-manager.sh`,
+  `builder.py`, `tests/test_acceptance_shell.py`, `tests/test_builder.py`)
+  - As with #227, every defect sat behind an earlier fix: #227's
+    `wait_for_dev` poll and `session_tracking` repair moved each build to
+    a new failure point rather than resolving the underlying gap
+  - **the kernel fragments never named `CONFIG_PCI`** -- the 3 headless
+    x86_64 jobs (server, minimal/sysvinit, minimal/systemd) built
+    completely and then failed the QEMU boot smoke test.
+    `lfs/08-build-kernel.sh` seeds `.config` from the fragment and runs
+    `make olddefconfig`, which resolves every unnamed symbol to its
+    default -- and `PCI` defaults to `n`.  `SATA_AHCI`/`ATA_PIIX` depend
+    on `ATA && PCI`, `BLK_DEV_NVME` and `VIRTIO_PCI` depend on `PCI`, and
+    the E1000/E1000E/R8169 NICs plus `SND_HDA_INTEL`/`SND_PCI` are all
+    PCI devices, so a missing `CONFIG_PCI` silently dropped every one of
+    them even though each was set `=y` in the fragment.  With no AHCI
+    host driver the kernel never bound the q35 ICH9 SATA controller,
+    created no `/dev/sda`, and the busybox initramfs dropped to a shell
+    with `Root device not found. Dropping to shell.`; the gate reported
+    `the initramfs never reached userspace`.  #227's `wait_for_dev` poll
+    could not mask this -- built-in drivers probe synchronously before
+    `/init` runs, so there was never a late-appearing node to wait for.
+    All three bootable fragments now name `CONFIG_PCI=y` (plus `PCI_MSI`
+    and `PCIEPORTBUS`) explicitly, and the boot-stack guardrail asserts
+    `SATA_AHCI` never appears without its `PCI` and `ATA` dependencies
+  - **polkit's required duktape JS engine was downloaded but never
+    built** -- the 8 desktop jobs (xfce/sysvinit, xfce/systemd, gnome,
+    kde, lxqt, java-dev, audio-studio, full).  `polkit-126` defaults to
+    the duktape backend and its `meson.build` aborted the
+    display-manager stage with `../meson.build:148:16: ERROR: C header
+    'duktape.h' not found`.  The BLFS `postlfs/polkit` page lists
+    "duktape-2.7.0 and GLib" as *Required* and `duktape-2.7.0.tar.xz`
+    ships in `sources.list`, but no stage ever built it; #227's
+    `session_tracking` fix only let polkit get far enough to reach the
+    header check.  `blfs/08d` now builds duktape with the
+    `general/duktape` book commands (`make -f Makefile.sharedlibrary
+    INSTALL_PREFIX=/usr`, then the same with `install`) and installs it
+    before polkit; a guardrail pins the ordering and the header probe
+  - **the installer stage built an x86-only ISO for the arm64 profile**
+    -- arm64/aarch64/sysvinit.  `final/14-create-installer.sh` is a
+    hybrid isolinux/BIOS + `grub-install --target=x86_64-efi` +
+    `BOOTX64.EFI` + isohybrid-MBR image, so on the aarch64 runner it died
+    at `grub-install: error: /usr/lib/grub/x86_64-efi/modinfo.sh doesn't
+    exist`, and it could never produce a bootable arm64 medium anyway --
+    those boards boot the disk/SD image through U-Boot (`host/05`, which
+    `final/13` already defers to) or arm64 UEFI.  `get_build_stages` now
+    schedules `installer` only for an `x86_64` target; `nightly.yml`
+    already ships arm64 as a rootfs tarball plus disk image and tolerates
+    a missing ISO, so nothing downstream breaks
+  - Two guardrail tests and one stage-list test were added and confirmed
+    to fail against the pre-fix tree
+
 - **five live sources had no working mirror fallback**
   (`builder.py`, `tests/test_source_downloader.py`)
   - A download run reported `zlib-1.3.1`, `xterm-401`, `lynx2.9.2`,

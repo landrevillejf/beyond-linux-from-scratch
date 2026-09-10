@@ -54,6 +54,18 @@ CONFIG_GPIO_BCM2835=y
 CONFIG_GPIO_SUNXI=y
 
 # ============================================================================
+# PCI BUS
+# ============================================================================
+# SATA_AHCI and BLK_DEV_NVME in the storage stack below both depend on PCI, and
+# aarch64 QEMU virt plus real ARM boards expose their SATA/NVMe/NICs over PCIe.
+# `make olddefconfig` (lfs/08) resolves an unnamed CONFIG_PCI to n and silently
+# drops every PCI-dependent driver, so it is named explicitly here too
+# (Nightly #228/#229).
+CONFIG_PCI=y
+CONFIG_PCI_MSI=y
+CONFIG_PCIEPORTBUS=y
+
+# ============================================================================
 # STORAGE / BOOT BLOCK STACK
 # ============================================================================
 # Same boot-critical gap as config/kernel-config (Nightly #224): the kernel

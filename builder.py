@@ -2135,7 +2135,18 @@ class LFSBuilder:
 
         stages.append(('initramfs', 'final/12-create-initramfs.sh'))
         stages.append(('bootloader', 'final/13-create-bootloader.sh'))
-        stages.append(('installer', 'final/14-create-installer.sh'))
+        # The installer ISO (final/14) is an x86-only hybrid: isolinux BIOS
+        # boot + `grub-install --target=x86_64-efi` + BOOTX64.EFI + an
+        # isohybrid MBR.  On the aarch64 profiles (arm64/pinebook/brax3) it
+        # aborted the installer stage with "grub-install: error:
+        # /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist" (Nightly #228),
+        # and it could never produce a bootable arm64 medium anyway -- those
+        # boards boot the disk/SD image through U-Boot (host/05) or arm64
+        # UEFI.  nightly.yml already treats arm64 as a rootfs-tarball plus
+        # disk-image target and tolerates a missing ISO, so skip the stage
+        # for any non-x86_64 architecture.
+        if self.profile_config.get('architecture', 'x86_64') == 'x86_64':
+            stages.append(('installer', 'final/14-create-installer.sh'))
 
         # Live system
         live_from_profile = self.profile_config.get('live_system', True)
