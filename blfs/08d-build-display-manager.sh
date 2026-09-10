@@ -188,6 +188,7 @@ is_installed() {
     local pkg="$1"
     [ -f "$(marker_for "$pkg")" ] && return 0
     case "$pkg" in
+        duktape)            [ -f /usr/include/duktape.h ] ;;
         polkit)             have_pc polkit-gobject-1 ;;
         accountsservice)    have_pc accountsservice-glib ;;
         lightdm)            [ -x /usr/sbin/lightdm ] || [ -x /usr/bin/lightdm ] ;;
@@ -268,6 +269,22 @@ build_pkg() {
 # ======================================================================
 # Per-package BLFS book commands (wave 3).
 # ======================================================================
+
+# BLFS general/duktape -- polkit's required JavaScript engine.  polkit-126
+# defaults to the duktape backend and its meson.build aborts at
+# "../meson.build:148:16: ERROR: C header 'duktape.h' not found" when
+# duktape is absent, which killed the display-manager stage for all eight
+# desktop profiles (Nightly #228).  The tarball ships in sources.list but
+# no stage ever built it; #227's session_tracking fix only let polkit get
+# far enough to reach this header check.  Build the shared library exactly
+# as general/duktape prescribes so /usr/include/duktape.h and
+# /usr/lib/libduktape.so exist before polkit runs.
+build_duktape() { book_install duktape build_commands_duktape; }
+build_commands_duktape() {
+    sed -i 's/-Os/-O2/' Makefile.sharedlibrary
+    make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr
+    make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr install
+}
 
 # BLFS postlfs/polkit – session tracking follows the available session
 # manager; the sysvinit book variant redirects the unit dir to /tmp.
@@ -408,8 +425,14 @@ if [ -d /usr/lib/systemd/system ]; then
     HAVE_SYSTEMD=true
 fi
 
+log_info "Building duktape (polkit JavaScript engine)"
+# duktape: polkit's required JS engine (BLFS postlfs/polkit lists
+# "duktape-2.7.0 and GLib" as Required).  It must be installed before
+# polkit or meson aborts on the missing duktape.h header (Nightly #228).
+run_build required duktape
+
 log_info "Building polkit (PolicyKit)"
-# polkit: depends on glib2, dbus; meson flags follow the book page
+# polkit: depends on glib2, dbus, duktape; meson flags follow the book page
 run_build required polkit
 
 log_info "Building accountsservice"
