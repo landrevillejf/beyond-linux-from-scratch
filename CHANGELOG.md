@@ -201,6 +201,39 @@
 
 ### Fixed
 
+- **nightly #230 published no release at all, though four profiles built
+  successfully** (`.github/workflows/nightly.yml`,
+  `.github/workflows/weekly-full.yml`, `tests/test_release_workflow.py`)
+  - `create-release` was gated on
+    `needs.build-profiles.result == 'success'`, and for a matrix job that
+    result is the aggregate over all twelve legs: a single failure makes
+    it `failure`.  #230 completed arm64, minimal/sysvinit,
+    minimal/systemd and server, uploaded a `release-artifacts-*` archive
+    for each of them, and the release job was skipped -- the tag
+    `nightly-20260910` does not exist
+  - The four green legs are also exactly the four headless profiles.
+    `minimal`, `server` and `arm64` all carry `live_system: False`, so no
+    stage ever produced a `.iso`: their artifacts hold the kernel,
+    `SHA256SUMS`, `build_info` and `sbom`, plus split rootfs parts for
+    arm64.  Every profile that does build a live ISO died at
+    display-manager, which is the polkit defect fixed below, so nothing
+    was in fact lost that night -- but the all-or-nothing gate would have
+    discarded those ISOs the first time one desktop profile passes while
+    another fails
+  - The gate is now `!= 'cancelled'`, so whatever completed is published.
+    Both consequences are handled explicitly: the download is scoped to
+    `pattern: release-artifacts-*`, because failed legs upload
+    `release-logs-*` archives (~4 MB each) that belong on the run page
+    rather than among the release assets, and a new guard step reports
+    `found=false` when nothing was downloaded -- `download-artifact`
+    succeeds on a pattern matching zero artifacts, so without that guard
+    a night where every leg failed would publish an empty release
+  - `weekly-full.yml` carried the same gate and the same unfiltered
+    download over an identically shaped matrix, so it would have discarded
+    a partial week the same way; it gets the identical change
+  - Three guardrail tests, each asserting both workflows, were added and
+    confirmed to fail against the pre-fix tree
+
 - **nightly #230 lost audio-studio and six more desktop profiles, and
   every systemd profile had already lost its init system**
   (`lfs/06a-init-system.sh`, `blfs/08d-build-display-manager.sh`,

@@ -57,8 +57,16 @@ def test_release_workflow_ensures_lfs_owns_build_dir_before_builder_runs():
 class TestReleasePipelineHardening:
     """Guardrails for signing, compat pointers and 2 GB asset splitting."""
 
+    # Both matrices publish through a create-release job that used to
+    # require every leg to succeed.
+    RELEASE_WORKFLOWS = ("nightly.yml", "weekly-full.yml")
+
     def _read(self, name):
         return Path(f".github/workflows/{name}").read_text()
+
+    def _create_release(self, name):
+        """Slice out the create-release job of a matrix workflow."""
+        return self._read(name).split("create-release:")[1]
 
     def test_nightly_signing_step_is_secret_guarded(self):
         workflow = self._read("nightly.yml")
@@ -88,6 +96,42 @@ class TestReleasePipelineHardening:
         create_release = workflow.split("create-release:")[1]
         assert "30 days ago" in create_release
         assert "gh release delete" in create_release
+
+    def test_release_jobs_survive_a_partially_failed_matrix(self):
+        """`needs.build-profiles.result` is the aggregate over the matrix,
+        so it is `failure` as soon as one leg fails.  Nightly #230 built
+        arm64, minimal/sysvinit, minimal/systemd and server successfully,
+        uploaded their artifacts, and published nothing because the
+        release job required every leg to pass."""
+        for name in self.RELEASE_WORKFLOWS:
+            assert "if: always() && needs.build-profiles.result " \
+                "!= 'cancelled'" in self._create_release(name), name
+            # Re-introducing the all-or-nothing gate anywhere in either
+            # workflow reproduces the same silent loss.
+            assert "needs.build-profiles.result == 'success'" \
+                not in self._read(name), name
+
+    def test_release_jobs_keep_failure_logs_off_the_release(self):
+        """Failed legs upload release-logs-* archives; with the gate
+        relaxed they now coexist with successful legs, so the download has
+        to be scoped or ~4 MB of failure logs per profile become release
+        assets."""
+        for name in self.RELEASE_WORKFLOWS:
+            assert "pattern: release-artifacts-*" \
+                in self._create_release(name), name
+
+    def test_release_jobs_are_skipped_when_nothing_was_built(self):
+        """download-artifact succeeds on a pattern that matches nothing, so
+        a run where every leg failed would otherwise publish an empty
+        release; the guard has to sit between the download and the
+        softprops step."""
+        for name in self.RELEASE_WORKFLOWS:
+            section = self._create_release(name)
+            assert "id: artifacts" in section, name
+            assert "find artifacts -type f -print -quit" in section, name
+            release_step = section.split("- name: Create Release")[1]
+            assert "if: steps.artifacts.outputs.found == 'true'" \
+                in release_step, name
 
     def test_rootfs_cache_release_uses_split_parts(self):
         workflow = self._read("build-rootfs-cache.yml")

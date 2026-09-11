@@ -611,7 +611,14 @@ jobs:
   create-release:
     needs: build-profiles
     runs-on: ubuntu-latest
-    if: always() && needs.build-profiles.result == 'success'
+    # A matrix job's aggregate result is `failure` as soon as one leg
+    # fails, so requiring `== 'success'` threw away everything the green
+    # legs had built: nightly #230 completed arm64, minimal/sysvinit,
+    # minimal/systemd and server, uploaded their artifacts, and published
+    # no release at all.  Publish whatever completed instead.  Only a
+    # cancelled run is worthless, and the all-legs-failed case is caught
+    # by the guard below so it never creates an empty release.
+    if: always() && needs.build-profiles.result != 'cancelled'
     permissions:
       contents: write
     steps:
@@ -619,16 +626,31 @@ jobs:
         id: date
         run: echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
 
-      - name: Download all artifacts
+      - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
+          # Failed legs upload release-logs-* archives.  Those belong to
+          # the run page, not to the release assets, so the download is
+          # scoped to the per-profile payloads.  A pattern that matches
+          # nothing is not an error for this action -- it reports "Total
+          # of 0 artifact(s) downloaded" and succeeds -- which is what
+          # lets the next step decide whether a release is warranted.
+          pattern: release-artifacts-*
           path: artifacts
 
-      - name: List downloaded artifacts
+      - name: Check that a profile produced artifacts
+        id: artifacts
         run: |
-          find artifacts -type f
+          if [ -n "$(find artifacts -type f -print -quit 2>/dev/null)" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            find artifacts -type f
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No profile produced release artifacts; skipping the release."
+          fi
 
       - name: Create Release
+        if: steps.artifacts.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
           # Unique dated tag so each nightly gets its own release instead
