@@ -3475,6 +3475,12 @@ class TestNightly230StageGuardrails:
     INIT_SYSTEM = Path('lfs/06a-init-system.sh')
     DISPLAY_MANAGER = Path('blfs/08d-build-display-manager.sh')
     BASICNET = Path('blfs/23-basic-networking.sh')
+    # docs/books/ is gitignored, so the book is only vendored on a
+    # developer checkout.  Every cross-check below is conditional: CI
+    # falls back to the literal assertions instead of failing on a
+    # missing corpus.
+    PAM_BOOK = Path('docs/books/postlfs/linux-pam.html')
+    POLKIT_BOOK = Path('docs/books/postlfs/polkit.html')
 
     @staticmethod
     def _code(content):
@@ -3599,8 +3605,6 @@ class TestNightly230StageGuardrails:
         for flag in ('--prefix=/usr', '--buildtype=release',
                      '-D docs=disabled', 'ninja install'):
             assert flag in body, f'Linux-PAM meson lost {flag}'
-        assert 'chmod 4755 /usr/sbin/unix_checkpwd' in body, \
-            'pam_unix cannot verify a password without the setuid helper'
         post = self._fn(content, 'linux_pam_post_install')
         assert 'install -dm755 /etc/pam.d' in post
         for pam_file in ('system-account', 'system-auth', 'system-session',
@@ -3612,6 +3616,42 @@ class TestNightly230StageGuardrails:
         # clobber that.
         assert post.count('if [ ! -f /etc/pam.d/') == 5, \
             'every pam.d stack must be created idempotently'
+
+    def test_pam_setuid_helper_keeps_the_name_pam_builds(self):
+        """The helper pam_unix installs is unix_chkpwd, not unix_checkpwd.
+
+        Nightly #232 chmod'ed the invented name; chmod failed, and because
+        run_build calls build_commands_linux_pam from an "if" condition -
+        where set -e is suspended - the failed chmod became the function's
+        own status.  A fully installed PAM was therefore reported as a
+        failed required package and aborted the display-manager stage for
+        all eight desktop profiles, which is also why no ISO was published.
+
+        The guardrail written for #230 asserted the very same misspelling
+        as the script, so the suite stayed green while the build died: a
+        literal copied from the code under test cannot catch a typo in it.
+        This version is checked against the book page whenever the book is
+        vendored, and bans the misspelling repo-wide.
+        """
+        body = self._fn(self.DISPLAY_MANAGER.read_text(),
+                        'build_commands_linux_pam')
+        assert 'chmod -v 4755 /usr/sbin/unix_chkpwd' in body, \
+            'pam_unix cannot verify a password without the setuid helper'
+        if self.PAM_BOOK.exists():
+            book = self.PAM_BOOK.read_text(errors='replace')
+            assert re.search(r'chmod[^<]*unix_chkpwd', book), \
+                'the book changed its PAM setuid helper command'
+            assert 'checkpwd' not in book, \
+                'unix_checkpwd is not a name the book ever uses'
+        stages = sorted(script for d in ('blfs', 'lfs', 'final', 'host')
+                        for script in Path(d).glob('*.sh'))
+        assert stages, 'no stage script found; wrong working directory'
+        for script in stages:
+            # Comments are stripped so 08d can keep explaining why the
+            # odd-looking name is the correct one; a command cannot hide.
+            code = self._code(script.read_text(errors='replace'))
+            assert 'checkpwd' not in code, \
+                f'{script} reintroduced the unix_checkpwd typo'
 
     def test_pam_does_not_fake_a_systemd_installation(self):
         """pam_namespace.service lands in the default systemd unit
@@ -3685,3 +3725,42 @@ class TestNightly230StageGuardrails:
         # and its D-Bus policy references the user by name.
         assert 'groupadd -fg 27 polkitd' in fn
         assert 'useradd -c "PolicyKit Daemon Owner"' in fn
+
+    def test_polkit_removes_the_leftovers_the_sysv_book_removes(self):
+        """postlfs/polkit, "Remove some files that aren't useful on a SysV
+        system".
+
+        The sysvinit variant redirects systemdsystemunitdir to /tmp and
+        then deletes the generated units plus the sysusers.d/tmpfiles.d
+        drop-ins, which only systemd ever reads.  The script implemented
+        the redirect but never the cleanup, so a sysvinit image shipped
+        polkit units stranded in /tmp and two dead directories.  Under
+        systemd both must survive: lfs/06a builds it with -Dtmpfiles=true.
+        """
+        fn = self._fn(self.DISPLAY_MANAGER.read_text(),
+                      'build_commands_polkit')
+        assert 'unitdir=/tmp' in fn, \
+            'the SysV variant must still redirect the unit directory'
+        assert 'rm -f /tmp/*.service' in fn
+        assert 'rm -rf /usr/lib/sysusers.d /usr/lib/tmpfiles.d' in fn
+        if self.POLKIT_BOOK.exists():
+            book = self.POLKIT_BOOK.read_text(errors='replace')
+            assert 'rm -v /tmp/*.service' in book, \
+                'the book dropped the SysV polkit cleanup'
+            assert '{sysusers,tmpfiles}.d' in book, \
+                'the book no longer removes those two directories'
+        # The cleanup is the function's last command and run_build calls it
+        # from an "if" condition, where set -e is suspended: without its own
+        # status tracking a successful rm would mask a failed ninja, the
+        # exact masking that hid the #230 systemd build failure.
+        assert 'rc=0' in fn and '|| rc=1' in fn, \
+            'polkit must track the build status itself'
+        assert fn.rstrip().endswith('return "$rc"'), \
+            'polkit must report the build status, not the cleanup status'
+        guard = 'if [ "$rc" -eq 0 ]'
+        assert guard in fn, 'the cleanup must run only after a good build'
+        tail = fn.split(guard)[1]
+        assert 'rm -f /tmp/*.service' in tail, \
+            'a failed build must not run the cleanup'
+        assert '!= systemd' in tail, \
+            'a systemd profile keeps its own sysusers.d and tmpfiles.d'

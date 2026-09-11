@@ -201,6 +201,39 @@
 
 ### Fixed
 
+- **nightly #232 published no ISO: PAM's setuid helper was chmod'ed under
+  a name that does not exist** (`blfs/08d-build-display-manager.sh`,
+  `tests/test_acceptance_shell.py`)
+  - `build_commands_linux_pam` ended with
+    `chmod 4755 /usr/sbin/unix_checkpwd`.  pam_unix builds and installs
+    `unix_chkpwd` -- the #232 log reads "Installing
+    modules/pam_unix/unix_chkpwd to /usr/sbin" and then
+    `chmod: cannot access '/usr/sbin/unix_checkpwd': No such file or
+    directory`.  postlfs/linux-pam says
+    `chmod -v 4755 /usr/sbin/unix_chkpwd`, and never mentions the other
+    spelling
+  - `run_build` calls the command function from an `if` condition, so
+    `set -e` is suspended and the failed chmod became the function's own
+    status: a fully installed PAM was reported as `Required package
+    linux-pam failed - aborting stage`.  That killed the display-manager
+    stage on all eight desktop profiles, which is why the release held
+    only the four headless legs and no `.iso`
+  - The #230 guardrail asserted the misspelled literal, so the suite was
+    green while the build died -- a check copied from the code under test
+    cannot catch a typo in it.  It now asserts the book's command,
+    cross-checks `docs/books/postlfs/linux-pam.html` when the book is
+    vendored (it is gitignored, so CI skips that branch), and bans
+    `checkpwd` from the non-comment lines of every stage script
+  - Also implemented the polkit cleanup the SysV book page mandates and
+    the script never did: `rm -v /tmp/*.service` plus
+    `rm -rf /usr/lib/{sysusers,tmpfiles}.d`.  polkit's units were already
+    redirected to `unitdir=/tmp` and left there, and those two drop-in
+    directories are only ever read by systemd.  The cleanup is gated on a
+    successful build tracked through `rc` -- it is the function's last
+    command, so a bare trailing `rm` would return 0 and mask a failed
+    ninja -- and is skipped under systemd, which `lfs/06a` builds with
+    `-Dtmpfiles=true` and which owns both directories
+
 - **nightly #230 published no release at all, though four profiles built
   successfully** (`.github/workflows/nightly.yml`,
   `.github/workflows/weekly-full.yml`, `tests/test_release_workflow.py`)

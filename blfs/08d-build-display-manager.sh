@@ -309,6 +309,14 @@ build_commands_linux_pam() {
     # -D docs=disabled instead of the book's auto default: the man pages and
     # the documentation need the same offline DocBook XSL toolchain that
     # aborted gtk3 (Nightly #224), polkit (#227) and elogind below.
+    #
+    # unix_chkpwd is not a misspelling of unix_checkpwd: it is the setuid
+    # helper pam_unix builds ("Installing modules/pam_unix/unix_chkpwd to
+    # /usr/sbin").  Nightly #232 chmod'ed the invented name, chmod failed,
+    # and because run_build calls this function from an "if" condition -
+    # where set -e is suspended - that status became the function's own, so
+    # a fully installed PAM was reported as a failed required package and
+    # aborted the stage for all eight desktop profiles.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
@@ -316,7 +324,7 @@ build_commands_linux_pam() {
           -D docs=disabled \
           -D docdir="/usr/share/doc/$dir" &&
     ninja && ninja install &&
-    chmod 4755 /usr/sbin/unix_checkpwd
+    chmod -v 4755 /usr/sbin/unix_chkpwd
 }
 
 # BLFS postlfs/linux-pam "Configuring Linux PAM".  The restrictive
@@ -468,7 +476,7 @@ build_commands_polkit() {
     # the provider from the init system instead of probing for libsystemd,
     # which elogind aliases to libelogind.pc on sysvinit systems, and fall
     # back to ConsoleKit - the only choice that needs no session manager.
-    local tracking_args=()
+    local rc=0 tracking_args=()
     if [ "${INIT_SYSTEM:-sysvinit}" = "systemd" ]; then
         tracking_args+=(-D session_tracking=logind)
     elif pkg-config --exists libelogind 2>/dev/null; then
@@ -503,7 +511,20 @@ build_commands_polkit() {
           -D pam_prefix=/etc/pam.d \
           ${tracking_args[@]+"${tracking_args[@]}"} \
           -D systemdsystemunitdir="$unitdir" &&
-    ninja && ninja install
+    ninja && ninja install || rc=1
+    # BLFS postlfs/polkit, "Remove some files that aren't useful on a SysV
+    # system": with unitdir=/tmp the generated units are simply left behind
+    # there, and the sysusers.d/tmpfiles.d drop-ins polkit installs are only
+    # ever read by systemd - which lfs/06a builds with -Dtmpfiles=true on a
+    # systemd profile, so both directories have to survive there.  Tracked
+    # through rc because this cleanup is the function's last command and
+    # run_build calls it from an "if" condition where set -e is suspended:
+    # a bare trailing rm would return 0 and mask a failed ninja.
+    if [ "$rc" -eq 0 ] && [ "${INIT_SYSTEM:-sysvinit}" != systemd ]; then
+        rm -f /tmp/*.service
+        rm -rf /usr/lib/sysusers.d /usr/lib/tmpfiles.d
+    fi
+    return "$rc"
 }
 
 # BLFS general/accountsservice – test-only seds skipped
