@@ -189,6 +189,8 @@ is_installed() {
     [ -f "$(marker_for "$pkg")" ] && return 0
     case "$pkg" in
         duktape)            [ -f /usr/include/duktape.h ] ;;
+        linux-pam)          have_pc pam || [ -f /usr/include/security/pam_appl.h ] ;;
+        elogind)            have_pc libelogind || [ -x /usr/lib/elogind/elogind ] ;;
         polkit)             have_pc polkit-gobject-1 ;;
         accountsservice)    have_pc accountsservice-glib ;;
         lightdm)            [ -x /usr/sbin/lightdm ] || [ -x /usr/bin/lightdm ] ;;
@@ -235,32 +237,40 @@ book_install() {
 
 # Generic fallback for packages that have no BLFS book page.
 build_pkg() {
-    local pkg="$1" dir extra_opts=""
+    local pkg="$1" dir extra_opts="" rc=0
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
     dir="$(prep_src "$pkg")" || return 1
     pushd "$dir" >/dev/null || return 1
+    # run_build invokes this function from an "if" condition, which
+    # suspends set -e for the whole call.  Without the && chains below a
+    # failed meson/ninja fell through to log_success and reported the
+    # package as installed (the same masking 08a fixed after Nightly #213).
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
-        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc $extra_opts
-        ninja -C builddir
-        ninja -C builddir install
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc $extra_opts &&
+            ninja -C builddir &&
+            ninja -C builddir install || rc=1
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
-        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+            make -j"$JOBS" &&
+            make install || rc=1
     elif [ -x ./autogen.sh ]; then
         # shellcheck disable=SC2086
-        ./autogen.sh --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./autogen.sh --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+            make -j"$JOBS" &&
+            make install || rc=1
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg failed to build or install"
+        return 1
+    fi
     rm -rf "$dir"
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
@@ -286,21 +296,186 @@ build_commands_duktape() {
     make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr install
 }
 
+# BLFS postlfs/linux-pam -- the authentication framework the rest of this
+# stage links against.  x/lightdm lists Linux-PAM-1.7.1 as Required and its
+# configure aborts with "PAM not found" when security/pam_appl.h is
+# missing, general/elogind lists it as Recommended (required for Xorg) and
+# only builds pam_elogind when libpam is present, and polkit-126 defaults
+# to authfw=pam, whose meson.build asserts on cc.find_library('pam').  The
+# tarball ships in sources.list but no stage ever built it, so the desktop
+# profiles died at polkit before they ever reached lightdm (Nightly #230).
+build_linux_pam() { book_install linux-pam build_commands_linux_pam || return 1; linux_pam_post_install; }
+build_commands_linux_pam() {
+    # -D docs=disabled instead of the book's auto default: the man pages and
+    # the documentation need the same offline DocBook XSL toolchain that
+    # aborted gtk3 (Nightly #224), polkit (#227) and elogind below.
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D docs=disabled \
+          -D docdir="/usr/share/doc/$dir" &&
+    ninja && ninja install &&
+    chmod 4755 /usr/sbin/unix_checkpwd
+}
+
+# BLFS postlfs/linux-pam "Configuring Linux PAM".  The restrictive
+# /etc/pam.d/other makes every PAM-aware program fail closed unless it has
+# its own stack, so the generic system-* files have to exist before
+# elogind, polkit or lightdm are configured against the new library.  They
+# are created only when missing: 15-security-hardening rewrites
+# system-password with pam_pwquality and a display-manager re-run must not
+# clobber that.
+linux_pam_post_install() {
+    # pam_namespace.service lands in the default systemd unit directory even
+    # on a System V system, which would flip every downstream
+    # "[ -d /usr/lib/systemd/system ]" probe (HAVE_SYSTEMD here and in
+    # 09a-09d) to true.  The book removes the stray tree; under systemd that
+    # directory belongs to systemd itself and is kept.
+    if [ "$INIT_SYSTEM" != systemd ] && [ -f /usr/lib/systemd/system/pam_namespace.service ]; then
+        rm -f /usr/lib/systemd/system/pam_namespace.service
+        rmdir -p /usr/lib/systemd/system 2>/dev/null || true
+        log_info "Removed stray pam_namespace.service left by Linux-PAM"
+    fi
+
+    install -dm755 /etc/pam.d
+
+    if [ ! -f /etc/pam.d/system-account ]; then
+        cat > /etc/pam.d/system-account <<'PAMACCT'
+# Begin /etc/pam.d/system-account
+account   required    pam_unix.so
+# End /etc/pam.d/system-account
+PAMACCT
+    fi
+    if [ ! -f /etc/pam.d/system-auth ]; then
+        cat > /etc/pam.d/system-auth <<'PAMAUTH'
+# Begin /etc/pam.d/system-auth
+auth      required    pam_unix.so
+# End /etc/pam.d/system-auth
+PAMAUTH
+    fi
+    if [ ! -f /etc/pam.d/system-session ]; then
+        cat > /etc/pam.d/system-session <<'PAMSESS'
+# Begin /etc/pam.d/system-session
+session   required    pam_unix.so
+# End /etc/pam.d/system-session
+PAMSESS
+    fi
+    if [ ! -f /etc/pam.d/system-password ]; then
+        cat > /etc/pam.d/system-password <<'PAMPASS'
+# Begin /etc/pam.d/system-password
+password  required    pam_unix.so       yescrypt shadow try_first_pass
+# End /etc/pam.d/system-password
+PAMPASS
+    fi
+    if [ ! -f /etc/pam.d/other ]; then
+        cat > /etc/pam.d/other <<'PAMOTHER'
+# Begin /etc/pam.d/other
+auth        required        pam_warn.so
+auth        required        pam_deny.so
+account     required        pam_warn.so
+account     required        pam_deny.so
+password    required        pam_warn.so
+password    required        pam_deny.so
+session     required        pam_warn.so
+session     required        pam_deny.so
+# End /etc/pam.d/other
+PAMOTHER
+    fi
+}
+
+# BLFS general/elogind -- the session manager the System V book builds for
+# polkit.  postlfs/polkit lists elogind-255.17 as a recommended dependency
+# and configures polkit with -D session_tracking=elogind; polkit 126 has no
+# "none" choice left and its meson default (logind) makes libsystemd a hard
+# requirement, so a sysvinit system without elogind cannot build polkit at
+# all (Nightly #230).  The tarball ships in sources.list but no stage ever
+# built it.  Only mandatory dependencies are libcap and libmount, both from
+# LFS chapter 8; Linux-PAM above is what lets elogind build pam_elogind.
+build_elogind() { book_install elogind build_commands_elogind || return 1; elogind_post_install; }
+build_commands_elogind() {
+    # -D man=false instead of the book's -D man=auto: elogind renders its
+    # man pages with the same offline DocBook XSL toolchain that aborted
+    # gtk3 (Nightly #224) and polkit (Nightly #227).
+    mkdir build && cd build &&
+    meson setup .. \
+          --prefix=/usr \
+          --buildtype=release \
+          -D man=false \
+          -D docdir="/usr/share/doc/$dir" \
+          -D cgroup-controller=elogind \
+          -D dev-kvm-mode=0660 \
+          -D dbuspolicydir=/etc/dbus-1/system.d &&
+    ninja && ninja install &&
+    ln -sfv libelogind.pc /usr/lib/pkgconfig/libsystemd.pc &&
+    ln -sfvn elogind /usr/include/systemd
+}
+
+# BLFS general/elogind "Configuring elogind": every user has to register a
+# session through PAM at login or elogind cannot track it, and polkit then
+# refuses to authorise that session.  pam_loginuid is a no-op when the
+# kernel is built without CONFIG_AUDIT (audit-userspace is not in
+# sources.list either), which the book documents as harmless.
+elogind_post_install() {
+    if [ ! -d /etc/pam.d ]; then
+        log_warning "No /etc/pam.d; skipping elogind PAM configuration"
+        return 0
+    fi
+    # Guarded so that a re-run of the stage does not append twice.
+    if ! grep -q pam_elogind /etc/pam.d/system-session 2>/dev/null; then
+        cat >> /etc/pam.d/system-session <<'PAMELOGIND'
+# Begin elogind addition
+session  required    pam_loginuid.so
+session  optional    pam_elogind.so
+# End elogind addition
+PAMELOGIND
+    fi
+    cat > /etc/pam.d/elogind-user <<'PAMELOGINDUSER'
+# Begin /etc/pam.d/elogind-user
+account  required    pam_access.so
+account  include     system-account
+session  required    pam_env.so
+session  required    pam_limits.so
+session  required    pam_unix.so
+session  required    pam_loginuid.so
+session  optional    pam_keyinit.so force revoke
+session  optional    pam_elogind.so
+auth     required    pam_deny.so
+password required    pam_deny.so
+# End /etc/pam.d/elogind-user
+PAMELOGINDUSER
+}
+
 # BLFS postlfs/polkit – session tracking follows the available session
 # manager; the sysvinit book variant redirects the unit dir to /tmp.
 build_polkit() { book_install polkit build_commands_polkit; }
 build_commands_polkit() {
-    # polkit's session_tracking option only accepts logind, elogind or
-    # ConsoleKit; the previous default of "none" is rejected outright by
-    # meson, which aborted every desktop profile at this stage once
-    # neither elogind nor libsystemd had been built yet (Nightly #227).
-    # Detect the real provider and omit the flag entirely when there is
-    # none so meson falls back to polkit's own default.
+    # BLFS postlfs/polkit root commands: polkitd drops privileges to this
+    # dedicated account, and no stage ever created it - the daemon cannot
+    # start without the user its D-Bus policy and defaults reference.
+    if ! getent group polkitd >/dev/null 2>&1; then
+        groupadd -fg 27 polkitd 2>/dev/null || log_warning "Could not create polkitd group"
+    fi
+    if ! getent passwd polkitd >/dev/null 2>&1; then
+        useradd -c "PolicyKit Daemon Owner" -d /etc/polkit-1 -u 27 \
+            -g polkitd -s /bin/false polkitd 2>/dev/null \
+            || log_warning "Could not create polkitd user"
+    fi
+    # polkit 126 accepts logind, elogind or ConsoleKit, and meson's default
+    # is logind: dependency('libsystemd') is required, so omitting the flag
+    # - the Nightly #227 workaround - aborts configure with "logind support
+    # requested but libsystemd library not found" (Nightly #230).  Choose
+    # the provider from the init system instead of probing for libsystemd,
+    # which elogind aliases to libelogind.pc on sysvinit systems, and fall
+    # back to ConsoleKit - the only choice that needs no session manager.
     local tracking_args=()
-    if pkg-config --exists libsystemd 2>/dev/null; then
+    if [ "${INIT_SYSTEM:-sysvinit}" = "systemd" ]; then
         tracking_args+=(-D session_tracking=logind)
-    elif pkg-config --exists elogind 2>/dev/null; then
+    elif pkg-config --exists libelogind 2>/dev/null; then
         tracking_args+=(-D session_tracking=elogind)
+    else
+        log_warning "No elogind and no libsystemd; polkit uses ConsoleKit"
+        tracking_args+=(-D session_tracking=ConsoleKit)
     fi
     if [ "$HAVE_SYSTEMD" = true ]; then
         unitdir=/usr/lib/systemd/system
@@ -311,11 +486,21 @@ build_commands_polkit() {
     # toolchain as gtk3; -D man=true would abort the display-manager stage
     # exactly where gtk3 aborted xorg (Nightly #224).  Disabled for the
     # same reason - man pages are documentation only.
+    #
+    # -D os_type=lfs: the book's flag for a system without /etc/lfs-release.
+    # No stage creates that file, so polkit's autodetection comes up empty
+    # and the page warns the result is a polkit that cannot be used.
+    # -D pam_prefix=/etc/pam.d: polkit's meson default is <prefix>/lib/pam.d,
+    # where libpam never looks.  Left alone, the generated polkit-1 stack
+    # would be unreachable and every authorisation would fall through to the
+    # deny-all /etc/pam.d/other installed with Linux-PAM above.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
           -D man=false \
+          -D os_type=lfs \
+          -D pam_prefix=/etc/pam.d \
           ${tracking_args[@]+"${tracking_args[@]}"} \
           -D systemdsystemunitdir="$unitdir" &&
     ninja && ninja install
@@ -324,8 +509,11 @@ build_commands_polkit() {
 # BLFS general/accountsservice – test-only seds skipped
 build_accountsservice() { book_install accountsservice build_commands_accountsservice; }
 build_commands_accountsservice() {
+    # elogind installs libelogind.pc only - probing the bare "elogind"
+    # module never matched, so the System V book's -D elogind=true was
+    # silently downgraded to false.
     elogind=false
-    pkg-config --exists elogind 2>/dev/null && elogind=true
+    pkg-config --exists libelogind 2>/dev/null && elogind=true
     if [ "$HAVE_SYSTEMD" = true ]; then
         unitdir=/usr/lib/systemd/system
     else
@@ -430,6 +618,21 @@ log_info "Building duktape (polkit JavaScript engine)"
 # "duktape-2.7.0 and GLib" as Required).  It must be installed before
 # polkit or meson aborts on the missing duktape.h header (Nightly #228).
 run_build required duktape
+
+log_info "Building Linux-PAM (authentication framework)"
+# Linux-PAM: required by lightdm (configure aborts with "PAM not found"),
+# recommended by elogind for Xorg and asserted on by polkit's default
+# authfw=pam.  It has to precede all three so that their configure steps
+# see security/pam_appl.h and libpam.
+run_build required linux-pam
+
+if [ "${INIT_SYSTEM:-sysvinit}" != "systemd" ]; then
+    log_info "Building elogind (polkit session tracking provider)"
+    # elogind: BLFS general/elogind, the session manager postlfs/polkit
+    # configures on a System V system.  It has to precede polkit because
+    # session_tracking=elogind resolves libelogind through pkg-config.
+    run_build required elogind
+fi
 
 log_info "Building polkit (PolicyKit)"
 # polkit: depends on glib2, dbus, duktape; meson flags follow the book page
