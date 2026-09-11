@@ -173,7 +173,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 5. **Validate JSON configuration** — all changes to `config/build.conf` must be valid JSON. Use `python3 -m json.tool config/build.conf` to verify.
 6. **Respect the flattened env var contract** — stage scripts read `LFS_CONFIG_*` and `LFS_PROFILE_*`. Any new configuration key added to `build.conf` must be exported in `builder.py`'s environment propagation logic.
 7. **Document new profiles** — add new profiles to the profile table in `README.md` and `builder.py`'s `ProfileManager`.
-8. **No Emoji** -- No emoji in code.
+8. **No Emoji** -- No emoji in code or any files at all.
 9. **Follow the books** -- Follow the LFS and BLFS books as closely as possible. they are in `/docs/books`
 10. **Bump the version** -- Bump the version number in `VERSION` after each release/fix. Use semantic versioning (major, minor, patch).
 11. **Validate YAML files** -- Check indentation and formatting (e.g., .github/workflows/*.yml).
@@ -200,7 +200,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 15. Documentation - Document any derivations from the standard LFS/BLFS instructions.
 16. If the project structure, stage order, or core configuration schema changes, update this AGENTS.md file to reflect the new reality.
 17. When the LFS/BLFS books are updated upstream, do not automatically bump the version. Check the changelog for patches that affect our build scripts, and create a feature branch to test the new version against our profiles before updating the VERSION file
-18. Agent should sign their p/r eg: done by Qwen3.8-Max, SWE, Co-Pilot, etc., create feature branch, and wait for approval before merging.
+18. When attributing the commits and p/r, use a standard git ‘Signed-off-by:’ trailer with the repo committer identity instead of agent attribution, create feature branch, and wait for approval before merging.
 ---
 
 ### Debugging and Troubleshooting
