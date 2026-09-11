@@ -550,7 +550,11 @@ build_commands_libndp() {
 build_networkmanager() { book_install networkmanager build_commands_networkmanager; }
 build_commands_networkmanager() {
     local session_tracking=none
-    if have_pc elogind; then session_tracking=elogind; fi
+    # elogind installs libelogind.pc, not elogind.pc; probing the bare
+    # module name always missed and left NetworkManager without session
+    # tracking even on systems where the display-manager stage had built
+    # elogind.
+    if have_pc libelogind; then session_tracking=elogind; fi
     grep -rl '^#!.*python$' . 2>/dev/null | xargs -r sed -i '1s/python/&3/' || true
     mkdir -p build && cd build &&
     meson setup ..                    \

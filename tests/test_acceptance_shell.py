@@ -1442,6 +1442,7 @@ class TestBLFSErrorPolicyGuardrails:
         'icu': ['icu4c'],
         'libelf': ['elfutils'],
         'libyaml': ['yaml'],
+        'linux-pam': ['Linux-PAM'],
         'lm-sensors': ['lm_sensors'],
         'wxWidgets': ['wxWidgets', 'wxwidgets'],
         'rust': ['rustc'],
@@ -3332,8 +3333,10 @@ class TestNightly227StageGuardrails:
         not one of the choices'.  polkit is a required package, so the
         whole display-manager stage died with it, taking gnome, kde,
         lxqt, xfce/systemd, java-dev, audio-studio and full along
-        (Nightly #227).  The flag must be omitted when no session
-        manager is present so meson falls back to polkit's own default.
+        (Nightly #227).  Omitting the flag - the #227 workaround - is no
+        longer an option either: polkit 126 defaults to logind and makes
+        libsystemd a hard requirement, so Nightly #230 replaced it with
+        an explicit provider choice driven by the init system.
         """
         code = self._code(self.DISPLAY_MANAGER.read_text())
         assert 'session_tracking=none' not in code, \
@@ -3342,11 +3345,10 @@ class TestNightly227StageGuardrails:
             'the invalid polkit default must stay removed'
         fn = code.split('build_commands_polkit() {', 1)[1]
         fn = fn.split('\n}\n', 1)[0]
-        # libsystemd means logind; the old code mapped it to elogind.
-        assert 'session_tracking=logind' in fn, \
-            'libsystemd must select logind, not elogind'
+        assert 'session_tracking=logind' in fn
         assert 'session_tracking=elogind' in fn
-        assert fn.index('libsystemd') < fn.index('session_tracking=logind')
+        assert 'session_tracking=ConsoleKit' in fn, \
+            'ConsoleKit is the only provider needing no session manager'
         # Empty-array expansion has to survive the inner script's set -u.
         assert '${tracking_args[@]+"${tracking_args[@]}"}' in fn, \
             'an unset tracking_args would trip set -u in the chroot'
@@ -3447,3 +3449,239 @@ class TestNightly227StageGuardrails:
         assert candidates.index('/dev/sda3') < candidates.index('/dev/sda2'), \
             'p3 is the root filesystem; p2 is swap'
 
+
+class TestNightly230StageGuardrails:
+    """Nightly #230: audio-studio and six more desktop profiles died.
+
+    Three independent defects, each one masked by the previous nightly's
+    fix letting the builds get a little further:
+
+    * lfs/06a passed four meson options systemd 257.8 renamed or dropped,
+      so setup aborted with 'Option "wheel-group" value wheel is not
+      boolean' - and build_pkg still printed "[SUCCESS] systemd
+      installed", because run_build calls it from an "if" condition where
+      set -e is suspended.  The systemd profiles therefore ran without an
+      init system and without libsystemd,
+    * polkit 126 dropped session_tracking=none and defaults to logind,
+      which turns libsystemd into a hard requirement, so #227's "omit the
+      flag" workaround became 'Dependency "libsystemd" not found' on every
+      profile - systemd included, since its build had silently failed,
+    * elogind, the session manager the System V book builds for polkit,
+      and Linux-PAM, which lightdm's configure hard-requires with
+      AC_MSG_ERROR(PAM not found), both shipped in sources.list but were
+      built by no stage.
+    """
+
+    INIT_SYSTEM = Path('lfs/06a-init-system.sh')
+    DISPLAY_MANAGER = Path('blfs/08d-build-display-manager.sh')
+    BASICNET = Path('blfs/23-basic-networking.sh')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @staticmethod
+    def _fn(content, name):
+        """Return the source of a shell function definition."""
+        body = content[content.index(f'{name}() {{'):]
+        return body[:body.index('\n}\n')]
+
+    @staticmethod
+    def _build_pos(content, mode, pkg):
+        """Offset of a run_build call, whatever its indentation or flags.
+
+        elogind sits inside the "not systemd" branch and is indented, so
+        the anchor cannot be pinned to column zero the way Nightly #213's
+        helper does.
+        """
+        match = re.search(rf'^\s*run_build {mode} {re.escape(pkg)}\b',
+                          content, re.MULTILINE)
+        return match.start() if match else -1
+
+    def test_systemd_options_match_the_257_8_schema(self):
+        """Every option passed to systemd must exist in 257.8 and take
+        the value type its schema declares.
+
+        wheel-group and adm-group are booleans, so the string "wheel"
+        aborted setup; admin-group and cgroup-controller do not exist at
+        all (cgroup-controller is an elogind option); man and polkit are
+        features whose =true turns a missing dependency into a hard
+        error - xsltproc arrives with blfs-libs and polkit-gobject-1 with
+        display-manager, three and five stages later.
+        """
+        code = self._code(self.INIT_SYSTEM.read_text())
+        block = code.split('run_build required systemd \\', 1)[1]
+        block = block.split('\n\n', 1)[0]
+        for gone in ('default-hierarchy', 'cgroup-controller',
+                     'admin-group', 'wheel-group=wheel', 'man=true',
+                     'polkit=true', 'homed=false'):
+            assert gone not in block, \
+                f'systemd 257.8 does not accept -D{gone}'
+        for want in ('-Dmode=release', '-Dadm-group=true',
+                     '-Dwheel-group=true', '-Dman=disabled',
+                     '-Dhtml=disabled', '-Dpolkit=disabled',
+                     '-Dhomed=disabled', '-Dlz4=enabled',
+                     '-Dzstd=enabled'):
+            assert want in block, f'systemd lost {want}'
+
+    def test_build_pkg_reports_failure_instead_of_success(self):
+        """A failed meson/ninja must never reach log_success.
+
+        run_build calls build_pkg from an "if" condition, which suspends
+        set -e for the whole call: Nightly #230 printed "[SUCCESS]
+        systemd installed" right after meson aborted, and the missing
+        libsystemd only surfaced an hour and a half later when polkit
+        killed the display-manager stage.  This is the same masking 08a
+        stopped doing after Nightly #213.
+        """
+        for script in (self.INIT_SYSTEM, self.DISPLAY_MANAGER):
+            fn = self._fn(self._code(script.read_text()), 'build_pkg')
+            assert 'rc=0' in fn, f'{script} build_pkg tracks no failure'
+            assert '|| rc=1' in fn, f'{script} does not capture failures'
+            check = 'if [ "$rc" -ne 0 ]; then'
+            assert check in fn, f'{script} never inspects the failure flag'
+            assert fn.index(check) < fn.index('log_success'), \
+                f'{script} logs success without checking the build'
+            # Every build command has to sit inside a chain: a bare
+            # statement cannot fail the function while set -e is off.
+            for line in fn.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(('meson setup', 'ninja', './configure',
+                                        './autogen.sh', 'make')):
+                    assert stripped.endswith(('&&', '|| rc=1')), \
+                        f'{script} has an unguarded build command: {stripped}'
+
+    def test_display_manager_builds_pam_and_elogind_before_polkit(self):
+        """polkit needs a session tracking provider, and every provider
+        but ConsoleKit needs a library that only elogind or systemd
+        installs.  lightdm needs Linux-PAM, elogind builds pam_elogind
+        only when libpam is present, and polkit's default authfw=pam
+        asserts on cc.find_library('pam') - so PAM comes first.
+        """
+        content = self.DISPLAY_MANAGER.read_text()
+        duktape = self._build_pos(content, 'required', 'duktape')
+        pam = self._build_pos(content, 'required', 'linux-pam')
+        elogind = self._build_pos(content, 'required', 'elogind')
+        polkit = self._build_pos(content, 'required', 'polkit')
+        lightdm = self._build_pos(content, 'required', 'lightdm')
+        assert -1 not in (duktape, pam, elogind, polkit, lightdm), \
+            'a required display-manager package lost its run_build call'
+        assert duktape < pam < elogind < polkit < lightdm, \
+            'PAM and elogind must be installed before polkit (#230)'
+        # elogind only runs when systemd is not the init system: systemd
+        # already provides logind, and two session managers would fight
+        # over the same D-Bus name.
+        branch = content.rindex('if [', 0, elogind)
+        assert '!= "systemd"' in content[branch:elogind], \
+            'elogind must stay inside the non-systemd branch'
+        # One build site each, so a second later call cannot satisfy the
+        # ordering assertion while the first one still runs too late.
+        assert content.count('run_build required linux-pam') == 1
+        assert content.count('run_build required elogind') == 1
+        assert 'build_commands_linux_pam()' in content
+        assert 'build_commands_elogind()' in content
+        assert re.search(r'^\s+linux-pam\).*have_pc pam', content,
+                         re.MULTILINE), \
+            'is_installed must detect Linux-PAM'
+        assert re.search(r'^\s+elogind\).*have_pc libelogind', content,
+                         re.MULTILINE), \
+            'is_installed must detect elogind through libelogind.pc'
+
+    def test_linux_pam_installs_the_book_pam_d_stacks(self):
+        """PAM fails closed: the book's restrictive /etc/pam.d/other
+        denies every PAM-aware program that has no stack of its own, so
+        the generic system-* files have to be created with the library.
+        """
+        content = self.DISPLAY_MANAGER.read_text()
+        body = self._fn(content, 'build_commands_linux_pam')
+        for flag in ('--prefix=/usr', '--buildtype=release',
+                     '-D docs=disabled', 'ninja install'):
+            assert flag in body, f'Linux-PAM meson lost {flag}'
+        assert 'chmod 4755 /usr/sbin/unix_checkpwd' in body, \
+            'pam_unix cannot verify a password without the setuid helper'
+        post = self._fn(content, 'linux_pam_post_install')
+        assert 'install -dm755 /etc/pam.d' in post
+        for pam_file in ('system-account', 'system-auth', 'system-session',
+                         'system-password', 'other'):
+            assert f'/etc/pam.d/{pam_file}' in post, \
+                f'the book mandates /etc/pam.d/{pam_file}'
+        # Created only when missing: 15-security-hardening rewrites
+        # system-password with pam_pwquality and a stage re-run must not
+        # clobber that.
+        assert post.count('if [ ! -f /etc/pam.d/') == 5, \
+            'every pam.d stack must be created idempotently'
+
+    def test_pam_does_not_fake_a_systemd_installation(self):
+        """pam_namespace.service lands in the default systemd unit
+        directory even on a System V system, which would flip every
+        downstream "[ -d /usr/lib/systemd/system ]" probe - HAVE_SYSTEMD
+        here and in 09a-09d - to true.  The book removes the stray tree,
+        but under systemd that directory belongs to systemd itself.
+        """
+        post = self._fn(self.DISPLAY_MANAGER.read_text(),
+                        'linux_pam_post_install')
+        assert 'pam_namespace.service' in post
+        assert '[ "$INIT_SYSTEM" != systemd ]' in post, \
+            'the cleanup must be gated on the init system'
+        assert 'rm -f /usr/lib/systemd/system/pam_namespace.service' in post
+        assert 'rm -rf /usr/lib/systemd' not in post, \
+            'a systemd profile must keep its own unit directory'
+
+    def test_elogind_registers_sessions_through_pam(self):
+        """general/elogind "Configuring elogind": without the PAM stack
+        elogind never sees a session, so polkit has nothing to authorise.
+        """
+        content = self.DISPLAY_MANAGER.read_text()
+        post = self._fn(content, 'elogind_post_install')
+        assert 'cat >> /etc/pam.d/system-session' in post
+        assert 'pam_elogind.so' in post
+        assert '/etc/pam.d/elogind-user' in post
+        assert 'grep -q pam_elogind /etc/pam.d/system-session' in post, \
+            'a stage re-run must not append the elogind stack twice'
+        # The book's elogind commands, minus the offline DocBook XSL man
+        # pages that aborted gtk3 (#224) and polkit (#227).
+        body = self._fn(content, 'build_commands_elogind')
+        for flag in ('-D cgroup-controller=elogind', '-D dev-kvm-mode=0660',
+                     '-D dbuspolicydir=/etc/dbus-1/system.d', '-D man=false'):
+            assert flag in body, f'elogind meson lost {flag}'
+        assert 'ln -sfv libelogind.pc /usr/lib/pkgconfig/libsystemd.pc' \
+            in body, 'polkit resolves the elogind provider as libsystemd'
+
+    def test_elogind_is_probed_through_its_real_pkgconfig_module(self):
+        """elogind installs libelogind.pc only, so probing the bare
+        "elogind" module never matched: accountsservice silently lost
+        elogind support and NetworkManager stayed on
+        session_tracking=none even where elogind had been built.
+        """
+        dm = self.DISPLAY_MANAGER.read_text()
+        net = self.BASICNET.read_text()
+        assert 'have_pc libelogind' in dm
+        assert 'pkg-config --exists libelogind' in dm
+        assert 'have_pc libelogind' in net
+        assert 'have_pc elogind;' not in net, \
+            'the bare elogind module name never resolves'
+        assert re.search(r'^\s+accountsservice\)', dm, re.MULTILINE)
+        fn = self._fn(dm, 'build_commands_accountsservice')
+        assert 'libelogind' in fn, \
+            'accountsservice must detect elogind through libelogind.pc'
+
+    def test_polkit_installs_its_pam_stack_where_libpam_looks(self):
+        """polkit's meson default for pam_prefix is <prefix>/lib/pam.d, a
+        directory libpam never reads, so the generated polkit-1 stack
+        would be unreachable and every authorisation would fall through
+        to the deny-all /etc/pam.d/other.  os_type=lfs is the book's flag
+        for a system without /etc/lfs-release, which no stage creates.
+        """
+        fn = self._fn(self.DISPLAY_MANAGER.read_text(),
+                      'build_commands_polkit')
+        assert '-D pam_prefix=/etc/pam.d' in fn
+        assert '-D os_type=lfs' in fn
+        assert 'authfw=shadow' not in fn, \
+            'Linux-PAM is installed, so polkit keeps the PAM backend'
+        assert '-D man=false' in fn
+        # The book's polkitd account: the daemon drops privileges to it
+        # and its D-Bus policy references the user by name.
+        assert 'groupadd -fg 27 polkitd' in fn
+        assert 'useradd -c "PolicyKit Daemon Owner"' in fn

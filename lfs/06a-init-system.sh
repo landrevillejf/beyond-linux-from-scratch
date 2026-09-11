@@ -27,7 +27,10 @@ if [ -f /.dockerenv ] || [ -f /run/.containerenv ] || grep -q docker /proc/1/cgr
 fi
 
 if [ "$IN_DOCKER" = true ]; then LFS=${LFS:-/output/image}; else LFS=${LFS:-/mnt/lfs}; fi
-[ -n "$LFS" ] || { log_error "LFS variable not set"; exit 1; }
+[ -n "$LFS" ] || {
+    log_error "LFS variable not set"
+    exit 1
+}
 
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
@@ -78,7 +81,10 @@ fi
 
 # Only sysvinit and systemd are handled directly by this script.
 
-[ -x "$LFS/bin/bash" ] || { log_error "/bin/bash not found in $LFS/bin"; exit 1; }
+[ -x "$LFS/bin/bash" ] || {
+    log_error "/bin/bash not found in $LFS/bin"
+    exit 1
+}
 if ! run_privileged chroot "$LFS" /bin/bash -c "exit 0" 2>/dev/null; then
     log_error "chroot not working"
     exit 1
@@ -241,7 +247,7 @@ is_installed() {
 }
 
 build_pkg() {
-    local pkg="$1" archive dir extra_opts=""
+    local pkg="$1" archive dir extra_opts="" rc=0
     shift
     extra_opts="$*"
     if is_installed "$pkg"; then log_info "$pkg already installed; skipping"; return 0; fi
@@ -253,24 +259,34 @@ build_pkg() {
     log_info "Building $pkg from $archive"
     dir="$(extract_archive "$archive")"
     pushd "$dir" >/dev/null
+    # run_build invokes this function from an "if" condition, which
+    # suspends set -e for the whole call.  Without the && chains below a
+    # failed meson/ninja fell through to log_success and reported the
+    # package as installed - Nightly #230 printed "[SUCCESS] systemd
+    # installed" right after meson aborted, and the missing libsystemd
+    # only surfaced 1.5 h later when polkit killed the display-manager
+    # stage of every systemd profile.
     if [ -f meson.build ]; then
         rm -rf builddir
         # shellcheck disable=SC2086
-        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts
-        ninja -C builddir
-        ninja -C builddir install
+        meson setup builddir --prefix=/usr --buildtype=release --sysconfdir=/etc --localstatedir=/var $extra_opts &&
+            ninja -C builddir &&
+            ninja -C builddir install || rc=1
     elif [ -x ./configure ] || [ -f configure ]; then
         # shellcheck disable=SC2086
-        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts
-        make -j"$JOBS"
-        make install
+        ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static $extra_opts &&
+            make -j"$JOBS" &&
+            make install || rc=1
     elif [ -f Makefile ]; then
-        make -j"$JOBS"
-        make install
+        make -j"$JOBS" && make install || rc=1
     else
         log_error "$pkg has no recognised build system"; popd >/dev/null; return 1
     fi
     popd >/dev/null
+    if [ "$rc" -ne 0 ]; then
+        log_error "$pkg failed to build or install"
+        return 1
+    fi
     rm -rf "$dir"
     touch "$(marker_for "$pkg")"
     log_success "$pkg installed"
@@ -334,14 +350,22 @@ elif [ "$INIT_SYSTEM" = "systemd" ]; then
     run_build required kmod
 
     log_info "Building systemd..."
+    # Option set validated against systemd 257.8's meson_options.txt.
+    # wheel-group is a boolean, so the string "wheel" aborted setup with
+    # 'Option "wheel-group" value wheel is not boolean'; admin-group and
+    # cgroup-controller do not exist at all - cgroup-controller is an
+    # elogind option - and man=enabled/polkit=enabled turn a missing
+    # dependency into a hard error: xsltproc arrives with libxslt
+    # (blfs-libs) and polkit-gobject-1 with display-manager, three and
+    # five stages later.  default-hierarchy is a deprecated no-op in 257.8.
+    # -Dmode=release is the LFS book's only extra flag.
     run_build required systemd \
-        -Ddefault-hierarchy=unified \
-        -Dcgroup-controller=systemd \
+        -Dmode=release \
         -Db_lto=false \
         -Dsysvinit-path= \
         -Dsysvrcnd-path= \
-        -Dadmin-group=wheel \
-        -Dwheel-group=wheel \
+        -Dadm-group=true \
+        -Dwheel-group=true \
         -Dbacklight=true \
         -Dbinfmt=true \
         -Dcoredump=true \
@@ -358,9 +382,9 @@ elif [ "$INIT_SYSTEM" = "systemd" ]; then
         -Dtimesyncd=true \
         -Dtmpfiles=true \
         -Duserdb=true \
-        -Dhomed=false \
-        -Dpolkit=true \
-        -Dman=true \
+        -Dhomed=disabled \
+        -Dpolkit=disabled \
+        -Dman=disabled \
         -Dhtml=disabled \
         -Dlz4=enabled \
         -Dzstd=enabled

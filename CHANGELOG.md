@@ -201,6 +201,87 @@
 
 ### Fixed
 
+- **nightly #230 lost audio-studio and six more desktop profiles, and
+  every systemd profile had already lost its init system**
+  (`lfs/06a-init-system.sh`, `blfs/08d-build-display-manager.sh`,
+  `blfs/23-basic-networking.sh`, `tests/test_acceptance_shell.py`)
+  - As with #227 and #228, every defect sat behind an earlier fix:
+    #228's duktape build let polkit get as far as its session-tracking
+    dependency, and the systemd profiles were running without an init
+    system three stages before the failure anyone actually saw
+  - **systemd 257.8 rejected four of the meson options `lfs/06a`
+    passed** -- every systemd profile.  `meson setup` aborted with
+    `Option "wheel-group" value wheel is not boolean (true or false)`:
+    `wheel-group` and `adm-group` are booleans in 257.8, `admin-group`
+    and `cgroup-controller` do not exist at all (`cgroup-controller` is
+    an *elogind* option), and `default-hierarchy` is a deprecated no-op.
+    `-Dman=true` and `-Dpolkit=true` were unbuildable as well -- feature
+    options turn a missing dependency into a hard error, `xsltproc`
+    arrives with libxslt (blfs-libs) and `polkit-gobject-1` with
+    display-manager, three and five stages later.  The set is now
+    `-Dmode=release` (the LFS book's only extra flag), `-Dadm-group=true
+    -Dwheel-group=true`, `-Dman=disabled -Dhtml=disabled
+    -Dpolkit=disabled -Dhomed=disabled`, `-Dlz4=enabled -Dzstd=enabled`
+  - **`build_pkg` reported success for a package that never built** --
+    `run_build` calls the helper from an `if` condition, which suspends
+    `set -e` for the whole call, so the bare `meson setup`, `ninja`,
+    `ninja install` statements fell through to `log_success`.  The gnome
+    log printed `[SUCCESS] systemd installed` immediately after
+    `ninja: error: loading 'build.ninja': No such file or directory`, and
+    the missing `libsystemd` only surfaced 1h30m later in
+    display-manager.  `lfs/06a` and `blfs/08d` now chain every build
+    command with `&&`, capture the failure in `rc` and return 1 before
+    any success message -- the same masking `blfs/08a` stopped doing
+    after #213
+  - **polkit 126 turned `libsystemd` into a hard requirement** -- all
+    seven desktop profiles died at `../meson.build:198:17: ERROR:
+    Dependency "libsystemd" not found`.  #227's fix was to omit
+    `-D session_tracking` and let meson fall back to polkit's own
+    default, but that default is `logind`, whose dependency is
+    `required`, and `session_tracking=none` no longer exists in the
+    combo at all.  `build_commands_polkit` now selects the provider
+    explicitly: `logind` under systemd, `elogind` when `libelogind`
+    resolves, `ConsoleKit` otherwise
+  - **elogind and Linux-PAM were downloaded but never built** -- both
+    ship in `sources.list` and no stage built either.  `general/elogind`
+    is the session manager `postlfs/polkit` configures on a System V
+    system, and `postlfs/linux-pam` is what `x/lightdm` lists as
+    *Required*: lightdm's configure aborts with
+    `AC_MSG_ERROR(PAM not found)` when `security/pam_appl.h` is missing,
+    elogind builds `pam_elogind` only against an installed libpam, and
+    polkit's default `authfw=pam` asserts on `cc.find_library('pam')`.
+    `blfs/08d` now builds PAM with the book commands plus its
+    "Configuring Linux-PAM" stacks (`system-account`, `system-auth`,
+    `system-session`, `system-password` and the restrictive `other`,
+    created only when missing so 15-security-hardening keeps ownership
+    of `system-password`), then elogind with the book commands and its
+    "Configuring elogind" PAM session registration, both ahead of
+    polkit.  PAM's stray `pam_namespace.service` is removed from
+    `/usr/lib/systemd/system` on System V systems -- left behind it
+    flips every downstream `[ -d /usr/lib/systemd/system ]` probe to
+    true -- but never under systemd, where that directory is systemd's
+    own
+  - **polkit installed its PAM stack where libpam never looks** -- its
+    meson default for `pam_prefix` is `<prefix>/lib/pam.d`, so the
+    generated `polkit-1` service file was unreachable and every
+    authorisation would have fallen through to the deny-all
+    `/etc/pam.d/other`.  `-D pam_prefix=/etc/pam.d` fixes the location,
+    and `-D os_type=lfs` replaces the distribution autodetection that
+    needs `/etc/lfs-release`, a file no stage creates and whose absence
+    the book says leaves you "unable to use Polkit".  The book's
+    `polkitd` account (`groupadd -fg 27` / `useradd -u 27`) is created
+    as well: the daemon drops privileges to it and nothing in the tree
+    ever did
+  - **elogind was probed under a pkg-config name it does not install**
+    (`blfs/08d`, `blfs/23`) -- elogind ships `libelogind.pc` only, so
+    `have_pc elogind` never matched: accountsservice silently lost the
+    book's `-D elogind=true` and NetworkManager stayed on
+    `session_tracking=none` even where elogind had been built.  Both
+    stages now probe `libelogind`
+  - Eight guardrail tests were added and confirmed to fail against the
+    pre-fix tree; #227's polkit provider test was rewritten for the
+    explicit selection
+
 - **all twelve nightly #228 jobs failed, on three unrelated defects**
   (`config/kernel-config`, `config/kernel-config-audio-studio`,
   `config/kernel-config-arm64`, `blfs/08d-build-display-manager.sh`,
