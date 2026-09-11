@@ -127,6 +127,10 @@ CONFIG_SYSFS=y
 # boot media (iso9660) and the live.squashfs it holds via a loop device.
 CONFIG_ISO9660_FS=y
 CONFIG_SQUASHFS=y
+# Both ISO stages compress with `mksquashfs -comp xz`; the decompressor is a
+# separate symbol that defaults to n, so SQUASHFS alone mounts nothing and
+# the live image dropped to a shell instead of switch_root'ing.
+CONFIG_SQUASHFS_XZ=y
 CONFIG_BLK_DEV_LOOP=y
 
 # ============================================================================

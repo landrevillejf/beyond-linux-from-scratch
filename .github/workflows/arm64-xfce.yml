@@ -29,11 +29,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
+          # squashfs-tools, grub-efi-arm64-bin and busybox-static are what
+          # final/12 and final/14 need now that the installer stage runs on
+          # aarch64 too: /usr/lib/grub/arm64-efi/ comes only from
+          # grub-efi-arm64-bin, and busybox.net publishes static binaries for
+          # i686 and x86_64 only, so there is nothing for final/12 to download
+          # on an ARM runner.
           sudo apt install -y build-essential bison flex gawk texinfo \
             wget curl git python3 python3-pip xorriso isolinux \
             mtools dosfstools parted rsync bc cpio kmod \
-            libssl-dev libelf-dev \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            libssl-dev libelf-dev squashfs-tools \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            grub-efi-arm64-bin busybox-static
 
       - name: Create lfs user
         run: |
@@ -78,28 +85,46 @@ jobs:
             --download-timeout 600 \
             --download-retries 5
 
+      - name: Resolve ISO name
+        id: iso_name
+        run: |
+          # Mirrors builder.py's get_iso_name(): lfs-{version}-{profile}-
+          # {arch}-{init}.iso, with no --milestone and no --nightly here, so
+          # no date component.  Guessing lfs-installer.iso instead would only
+          # ever find the backward-compatibility symlink build() leaves
+          # behind, which upload-artifact is not required to follow.
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          ISO_NAME="lfs-${BUILDER_VERSION}-arm64-aarch64-sysvinit.iso"
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+          echo "ISO name: $ISO_NAME"
+
       - name: Verify output image
         run: |
-          if [ -f /tmp/lfs-build/build-arm64/lfs-installer.img ]; then
-            echo "Found lfs-installer.img"
-          elif [ -f /tmp/lfs-build/build-arm64/lfs-arm64.img ]; then
-            echo "Found lfs-arm64.img"
-          elif [ -f /tmp/lfs-build/build-arm64/lfs-installer.iso ]; then
-            echo "Found lfs-installer.iso (fallback)"
+          # builder.py exports LFS as its --output directory, so the rootfs
+          # IS build-arm64/: the kernel is in build-arm64/boot and final/14
+          # writes the UEFI ISO there too.  The old
+          # build-arm64/image/boot/vmlinuz* belonged to a two-level layout
+          # that no longer exists, image/ being created empty and populated
+          # by nothing, and host/03 puts the disk image one level up, beside
+          # the output directory, not inside it.
+          ISO="/tmp/lfs-build/build-arm64/${{ steps.iso_name.outputs.iso_name }}"
+          IMG=/tmp/lfs-build/build-arm64.img
+          if [ -s "$ISO" ]; then
+            echo "Found $(basename "$ISO")"
+          elif [ -s "$IMG" ]; then
+            echo "Found build-arm64.img"
           else
-            echo "No image file found"
+            echo "No ISO or disk image found" >&2
             exit 1
           fi
-          ls /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+          ls /tmp/lfs-build/build-arm64/boot/vmlinuz*
 
       - name: Upload ARM64 artifacts
         uses: actions/upload-artifact@v4
         with:
           name: arm64-cross-build
           path: |
-            /tmp/lfs-build/build-arm64/lfs-installer.img
-            /tmp/lfs-build/build-arm64/lfs-arm64.img
-            /tmp/lfs-build/build-arm64/lfs-installer.iso
-            /tmp/lfs-build/build-arm64/image/boot/vmlinuz*
+            /tmp/lfs-build/build-arm64/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-arm64/boot/vmlinuz*
             /tmp/lfs-build/build-arm64/build_info.json
           if-no-files-found: warn

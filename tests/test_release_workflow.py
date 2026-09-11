@@ -190,8 +190,13 @@ class TestNightlyCoverageAndBootSmoke:
             assert "timeout 90s qemu-system-x86_64" not in workflow, name
 
     def test_nightly_headless_profiles_accept_disk_image(self):
-        """minimal/server ship no live ISO; verify and the smoke test
-        must fall back to the disk image instead of failing."""
+        """minimal/server ship no *live* ISO, so verify and the smoke test
+        must still accept the disk image instead of failing.
+
+        Since the Nightly #232 output-path fix they do ship an installer ISO
+        from final/14, which the smoke test prefers; this guards the
+        fallback that keeps a leg green when that ISO is absent.
+        """
         workflow = self._read("nightly.yml")
         assert "build-release.img" in workflow
 
@@ -778,3 +783,175 @@ class TestThirdPartyAptCdnResilience:
             offenders = [line for line in lines
                          if "apt-get update" in line and "|| true" in line]
             assert offenders == [], f"{name}: {offenders}"
+
+
+class TestNightly232IsoArtifacts:
+    """Nightly #232 published no ISO for any profile, and never an arm64 one.
+
+    builder.py exports LFS as its --output directory, so the rootfs *is*
+    build-release/ and final/14 writes the ISO there.  Two consequences the
+    workflows had to catch up with:
+
+    * every leg now runs the installer stage, including the aarch64 ones,
+      which needs /usr/lib/grub/arm64-efi/ (grub-efi-arm64-bin, not the
+      amd64 package the runner image happens to carry) and a static busybox
+      that busybox.net does not publish for aarch64 at all,
+    * the cache chain was broken at both ends: build-rootfs-cache.yml tarred
+      `image/`, which prepare_environment() creates empty and nothing ever
+      populates, so it published a near-empty archive, and
+      build-iso-from-cache.yml extracted to and looked for the kernel in the
+      same phantom directory - guaranteeing a failure at "Validate cache
+      content" no matter what the producer shipped.
+    """
+
+    # Legs that build for aarch64 and therefore run final/14's UEFI path.
+    AARCH64_WORKFLOWS = ("nightly.yml", "weekly-full.yml", "arm64-xfce.yml")
+    # Legs that build for x86_64 and run final/14's BIOS+UEFI hybrid path.
+    X86_64_WORKFLOWS = ("nightly.yml", "weekly-full.yml",
+                        "build-iso-from-cache.yml")
+    CACHE_WORKFLOWS = ("build-rootfs-cache.yml", "build-iso-from-cache.yml")
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, workflow, name):
+        """Slice out one step so assertions stay local to it."""
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        """Live lines only: every package below is also named in a comment
+        explaining why it is needed, so a whole-file substring test would
+        pass on documentation alone."""
+        return "\n".join(line for line in text.splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def test_aarch64_legs_install_arm64_grub_and_static_busybox(self):
+        """final/14 preflights /usr/lib/grub/arm64-efi/modinfo.sh and final/12
+        refuses a target with no static busybox.
+
+        Both abort the stage, and both abort it at the *end* of a multi-hour
+        build.  grub-efi-amd64-bin cannot satisfy the arm64 preflight, and
+        busybox.net publishes prebuilt statics for i686 and x86_64 only, so
+        there is nothing for final/12 to download on an ARM runner.
+        """
+        for name in self.AARCH64_WORKFLOWS:
+            workflow = self._read(name)
+            if "matrix.arch" in workflow:
+                step = self._step(workflow, "Install ARM64 cross tools")
+                assert "if: matrix.arch == 'aarch64'" in step, name
+                body = self._commands(step)
+            else:
+                # arm64-xfce.yml has a single unconditional leg on a native
+                # ARM runner.
+                body = self._commands(self._step(workflow,
+                                                 "Install dependencies"))
+            for package in ("grub-efi-arm64-bin", "busybox-static"):
+                assert package in body, f"{name}: {package} is not installed"
+
+    def test_x86_64_legs_pin_their_own_grub_efi_modules(self):
+        """The runner image has carried /usr/lib/grub/x86_64-efi/ so far, but
+        relying on that made a base-image rotation capable of failing every
+        x86_64 leg at the last stage of a multi-hour build.
+        """
+        for name in self.X86_64_WORKFLOWS:
+            workflow = self._read(name)
+            if "matrix.arch" in workflow:
+                step = self._step(workflow, "Install x86_64 GRUB EFI modules")
+                assert "if: matrix.arch == 'x86_64'" in step, name
+                body = self._commands(step)
+            else:
+                body = self._commands(self._step(workflow,
+                                                 "Install dependencies"))
+            assert "grub-efi-amd64-bin" in body, \
+                f"{name}: grub-efi-amd64-bin is not installed"
+            # amd64 and arm64 GRUB modules are separate packages; installing
+            # both on one leg would leave final/14 picking whichever the
+            # architecture case selected, masking a wrong --arch.
+            assert "grub-efi-arm64-bin" not in body, \
+                f"{name}: an x86_64 leg must not install the arm64 modules"
+
+    def test_cache_chain_no_longer_uses_the_phantom_image_dir(self):
+        """`image/` is created empty by prepare_environment() and populated by
+        nothing, so a producer tarring it publishes an empty archive and a
+        consumer looking in it can never validate one.
+
+        `--exclude=./image` is the one legitimate mention: it keeps the empty
+        directory out of the rootfs tarball.
+        """
+        for name in self.CACHE_WORKFLOWS:
+            offenders = [
+                line.strip()
+                for line in self._commands(self._read(name)).splitlines()
+                if "image/" in line
+            ]
+            assert offenders == [], f"{name}: phantom image/ path: {offenders}"
+
+    def test_rootfs_cache_producer_pins_the_architecture(self):
+        """config/build.conf ships architecture=aarch64 with cross_compile=true
+        and the xfce profile overrides neither, so a leg that does not pass
+        --arch cross-compiles an arm64 system on an x86_64 runner and
+        publishes a rootfs build-iso-from-cache.yml could never boot.
+        """
+        step = self._step(self._read("build-rootfs-cache.yml"),
+                          "Build LFS root filesystem")
+        assert "--arch x86_64" in self._commands(step), \
+            "the producer must pin the architecture it runs on"
+
+    def test_rootfs_cache_producer_keeps_the_switch_root_mount_points(self):
+        """This archive is re-extracted and booted, unlike nightly's rootfs
+        export which is only ever unpacked for inspection.
+
+        busybox switch_root MS_MOVEs /dev, /proc, /sys and /run into the new
+        root and fails outright when the mount points are absent, so the
+        producer has to exclude `dir/*` and not `dir`.
+        """
+        workflow = self._commands(self._read("build-rootfs-cache.yml"))
+        # Guards an existing release-workflow invariant: a single archive
+        # breaks the day it exceeds the 2 GB release-asset cap.
+        assert "split -b 1900m" in workflow
+        assert "-C /tmp/lfs-build/build-release" in workflow, \
+            "the producer must tar the rootfs itself"
+        for mountpoint in ("proc", "sys", "dev", "run"):
+            assert f"--exclude=./{mountpoint}/*" in workflow, \
+                f"{mountpoint}/ must be emptied, not removed"
+            assert f"--exclude=./{mountpoint} " not in workflow, \
+                f"removing {mountpoint} breaks switch_root in the consumer"
+
+    def test_arm64_xfce_looks_for_the_versioned_iso_name(self):
+        """get_iso_name() produces lfs-{version}-{profile}-{arch}-{init}.iso.
+
+        Guessing lfs-installer.iso would only ever find the
+        backward-compatibility symlink build() leaves behind, which
+        upload-artifact is not required to follow.
+        """
+        workflow = self._read("arm64-xfce.yml")
+        step = self._step(workflow, "Resolve ISO name")
+        assert "from builder import __version__" in self._commands(step), \
+            "the ISO name must come from the same version builder.py uses"
+        assert "steps.iso_name.outputs.iso_name" in workflow, \
+            "the verify and upload steps must use the resolved name"
+        offenders = [line.strip()
+                     for line in self._commands(workflow).splitlines()
+                     if "lfs-installer.iso" in line]
+        assert offenders == [], f"hardcoded fallback name: {offenders}"
+
+    def test_nightly_boots_the_iso_it_can_now_find(self):
+        """The smoke test prefers the ISO and falls back to the disk image.
+
+        Before the output-path fix the ISO was never at $ISO_PATH, so every
+        leg silently took the fallback and the published artifact was never
+        the thing being booted.
+        """
+        step = self._step(self._read("nightly.yml"),
+                          "Boot artifact in QEMU (smoke test)")
+        body = self._commands(step)
+        assert 'ISO_PATH="/tmp/lfs-build/build-release/' \
+            '${{ steps.iso_name.outputs.iso_name }}"' in body
+        assert body.index('if [ -f "$ISO_PATH" ]') < \
+            body.index("build-release.img \\"), \
+            "the ISO must be tried before the disk-image fallback"

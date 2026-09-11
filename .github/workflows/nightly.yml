@@ -203,8 +203,27 @@ jobs:
           # target, keeping an emulator installed would only offer a way to
           # regress into a build ~27x slower, and its absence makes such a
           # regression fail loudly instead.
+          #
+          # grub-efi-arm64-bin ships /usr/lib/grub/arm64-efi/, without which
+          # final/14 cannot build the UEFI ISO this cell now produces (it
+          # used to be skipped entirely for aarch64).  busybox-static is the
+          # only static busybox an arm64 target can get: busybox.net publishes
+          # prebuilt statics for i686 and x86_64 only, so final/12 has nothing
+          # to download here and would otherwise abort the initramfs stage.
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            grub-efi-arm64-bin busybox-static
+
+      - name: Install x86_64 GRUB EFI modules
+        if: matrix.arch == 'x86_64'
+        run: |
+          # final/14 preflights /usr/lib/grub/x86_64-efi/modinfo.sh and aborts
+          # with the package name when it is missing.  The runner image has
+          # carried it so far, but relying on that made a base-image rotation
+          # capable of failing every x86_64 leg at the last stage of a
+          # multi-hour build.  grub-efi-amd64-bin is amd64-only, so it cannot
+          # go into the shared step above.
+          sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin
 
       - name: Install Python dependencies
         run: |
@@ -415,8 +434,11 @@ jobs:
           # by prepare_environment() and populated by nothing.
           KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
           test -n "$KERNEL_SRC"
-          # Headless profiles (minimal, server) ship a disk image instead
-          # of a live ISO; accept either as the boot artifact.
+          # Every profile now ships an ISO: final/14 writes it into $LFS
+          # (== build-release/) for both x86_64 and aarch64.  The disk image
+          # stays as the fallback so a stage that failed to produce one is
+          # still reported against something bootable rather than silently
+          # passing with no artifact at all.
           if [ -f "$ISO" ]; then
             test -s "$ISO"
             ARTIFACT="$ISO"
@@ -447,7 +469,7 @@ jobs:
           sudo chmod 700 "$GNUPGHOME"
           echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | sudo -u lfs env GNUPGHOME="$GNUPGHOME" gpg --batch --import
           ISO="${{ steps.iso_name.outputs.iso_name }}"
-          # Headless profiles produce no ISO: nothing to sign.
+          # No ISO means final/14 never ran or failed: nothing to sign.
           [ -f "/tmp/lfs-build/build-release/$ISO" ] || { echo "No ISO for this profile, skipping"; sudo rm -rf "$GNUPGHOME"; exit 0; }
           # Passphrase travels through the environment, not the argv.
           sudo -u lfs env GNUPGHOME="$GNUPGHOME" GPG_PASS='${{ secrets.GPG_PASSPHRASE }}' bash -c '
@@ -464,8 +486,9 @@ jobs:
         run: |
           cd /tmp/lfs-build/build-release || exit 1
           ISO="${{ steps.iso_name.outputs.iso_name }}"
-          # Headless profiles (minimal, server) ship no ISO, hence no
-          # pointer either.
+          # A missing ISO here means final/14 never produced one, which the
+          # guard above already turned into a failed build; this stays
+          # tolerant so the pointer step never masks the real error.
           if [ ! -f "$ISO" ]; then
             echo "No ISO for this profile, skipping pointer"
             exit 0
@@ -546,8 +569,10 @@ jobs:
             /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
             /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
-          # The ISO and its signature are absent for headless profiles;
-          # kernel/sums/build_info always ship.
+          # if-no-files-found stays 'ignore' because the per-profile payload
+          # differs: the rootfs tarball only ships for xfce and arm64, and
+          # packages.list only exists when the profile builds base packages.
+          # The ISO and its signature are expected from every leg now.
           if-no-files-found: ignore
 
       - name: Boot artifact in QEMU (smoke test)

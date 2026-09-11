@@ -4,6 +4,64 @@
 
 ### Added
 
+- **a bootable installer ISO from every profile and every architecture**
+  (`builder.py`, `final/14-create-installer.sh`,
+  `final/12-create-initramfs.sh`, `config/kernel-config-arm64`,
+  `.github/workflows/nightly.yml`, `.github/workflows/weekly-full.yml`,
+  `.github/workflows/arm64-xfce.yml`, `README.md`)
+  - The `installer` stage was gated on `architecture == 'x86_64'`, which
+    made an ISO asset depend on the target rather than on the build and
+    left `arm64`, `pinebook` and `brax3` as rootfs-tarball-only releases
+    with no bootable medium.  The gate existed because `final/14` was an
+    x86-only hybrid -- isolinux for BIOS, `grub-install
+    --target=x86_64-efi`, `BOOTX64.EFI` and an isohybrid MBR -- and died
+    on the aarch64 legs with `grub-install: error:
+    /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist` (nightly #228).
+    `final/14` now emits a UEFI-only image for aarch64, so the stage runs
+    everywhere; an architecture it has no image type for is rejected by
+    the stage itself, with the offending value in the message
+  - The arm64 image is built with `grub-mkstandalone -O arm64-efi`, which
+    packs `grub.cfg` into a memdisk inside `EFI/BOOT/BOOTAA64.EFI`.  That
+    needs no loop mount, no `mkfs.vfat` and no root, so the stage keeps
+    running as the unprivileged builder user, and booting no longer
+    depends on GRUB's iso9660 driver finding the config on the media.
+    Nothing x86-only survives on that path: no isolinux directory, no
+    `insmod vbe` -- which makes GRUB report an error and stop reading the
+    file, taking the menu entries below it with it -- no `chainloader +1`,
+    and `-e` is the *primary* El Torito entry rather than an
+    `-eltorito-alt-boot` one, with no isohybrid MBR or GPT that arm64
+    firmware would never read
+  - `xorriso` accepts an `-e` path that is absent from the tree and still
+    exits 0 having written an ISO with no usable El Torito record, so
+    `final/14` now reads the loader back out of the finished image,
+    checks the `MZ` PE/COFF magic, and deletes the ISO and fails when it
+    is missing.  That self-check is the only verification the arm64
+    artifact gets: the nightly QEMU smoke test stays gated on
+    `matrix.arch == 'x86_64'`, so the arm64 ISO is published unbooted
+  - `final/12` gained an arch-correct static busybox.  The initramfs has
+    no libc yet, so a dynamic busybox is copied happily and then dies at
+    exec with `No such file or directory`, which reads like a missing
+    file rather than a missing interpreter; `readelf -lW` and the absent
+    `PT_INTERP` program header are now the discriminator.  busybox.net
+    publishes prebuilt statics for i686 and x86_64 only, so on any other
+    target the stage hard-fails naming `busybox-static` rather than
+    downloading an x86_64 binary that cannot exec
+  - The initramfs probes `/dev/sr0` ahead of the disk candidates.
+    `CONFIG_CMDLINE_FORCE=y` in `config/kernel-config-arm64` bakes
+    `root=/dev/mmcblk0p2` into the kernel, so the `root=` the ISO's GRUB
+    passes never arrives at all and probing the optical device is the
+    only way that image finds its own squashfs.  The same config gained
+    `CONFIG_ISO9660_FS`, `CONFIG_SQUASHFS`, `CONFIG_SQUASHFS_XZ` and
+    `CONFIG_BLK_DEV_LOOP` -- `SQUASHFS_XZ` is a separate symbol that
+    defaults to n, so `SQUASHFS` alone mounts nothing
+  - `live-system` is now the gated stage, on x86_64, and is skipped with
+    a warning instead of being scheduled: `final/15` builds an isolinux
+    image with an isohybrid MBR and neither has an aarch64 equivalent.
+    All three aarch64 profiles already set `live_system=False`, so this
+    only bites an explicit `--profile xfce --arch aarch64`, which used to
+    produce a silently unbootable x86 boot sector wrapping an arm64
+    rootfs -- after every hour of compilation had already been spent
+
 - **base prefix cache for the nightly matrix**
   (`.github/workflows/build-base-cache.yml`,
   `.github/workflows/nightly.yml`, `README.md`, `docs/stage-timings.md`)
@@ -200,6 +258,74 @@
     truth
 
 ### Fixed
+
+- **nightly #232 published no ISO: `final/14` and `final/15` wrote it one
+  directory above every consumer** (`final/14-create-installer.sh`,
+  `final/15-create-live-system.sh`, `builder.py`,
+  `.github/workflows/build-rootfs-cache.yml`,
+  `.github/workflows/build-iso-from-cache.yml`,
+  `.github/workflows/arm64-xfce.yml`, `tools/qemu-boot-smoke.sh`,
+  `tests/test_builder.py`, `tests/test_sbom_signiso.py`,
+  `tests/test_acceptance_shell.py`, `tests/test_release_workflow.py`)
+  - `builder.py` exports `LFS` as its `--output` directory, so the rootfs
+    *is* `build-release/`, and `build()`, `sign_iso()`, `generate_sbom()`,
+    `create_writable_media()` and every workflow resolve
+    `output_dir/ISO_NAME`.  Both stages derived their output from
+    `dirname "$LFS"` instead -- a leftover of a two-level layout that no
+    longer exists -- so the ISO landed one level above all of them.  The
+    minimal job ran `final/14` for 28m22s, exited 0, and still logged
+    `No ISO for this profile, skipping pointer`.  This corrects the
+    premise recorded in the #232 note below, that the four surviving
+    headless legs "never build an ISO at all": `installer` was gated on
+    architecture, not on `live_system`, so they built one and lost it
+  - Both `mksquashfs` calls packed `$LFS` whole with no exclusions, and
+    `$LFS` doubles as the build's scratch directory, so the image carried
+    a thousand source tarballs -- most of that 28m22s -- plus, on a
+    `--resume-from installer` run, the previous ISO inside the new one.
+    Both now pass `-wildcards` and exclude the scaffolding and `*.iso`.
+    `/dev`, `/proc`, `/sys` and `/run` are excluded as `dir/*` rather
+    than `dir` on purpose: busybox `switch_root` MS_MOVEs those four
+    mounts into the new root and fails outright when the mount points are
+    absent.  mksquashfs anchors exclude patterns at the source root, so
+    `proc/*` matches top-level `proc/` children and nothing deeper
+  - The scratch tree stays outside `$LFS` but is now named as such
+    (`iso-root/`, `efi.img`, `live.squashfs`, `iso-content/`): anything
+    growing inside the tree `mksquashfs` packs would be packed into the
+    very image it feeds, while changing size under the reader
+  - `generate_sbom()` looked for lpm's database at
+    `output_dir/image/var/lib/lpm/installed.list`, a path that never
+    existed at runtime, so every SBOM was published with an empty package
+    list no matter how much software the build had installed.  It now
+    reads `$LFS/var/lib/lpm/installed.list`, the same path
+    `final/16-validate-build.sh` counts
+  - The rootfs cache chain was broken at both ends.
+    `build-rootfs-cache.yml` tarred `-C image .`, and `image/` is created
+    empty by `prepare_environment()` and populated by nothing, so the
+    rolling `rootfs-cache-latest` release held a near-empty archive;
+    `build-iso-from-cache.yml` extracted to and looked for the kernel in
+    the same phantom directory, so it could only ever fail at "Validate
+    cache content" whatever the producer shipped.  Both ends now use
+    `build-release/`, and the producer keeps the four empty mount points
+    its consumer's boot needs -- nightly's rootfs export drops them,
+    because that archive is only ever unpacked for inspection
+  - `build-rootfs-cache.yml` also gains `--arch x86_64`.
+    `config/build.conf` ships `architecture=aarch64` with
+    `cross_compile=true` and the xfce profile overrides neither, so the
+    job was cross-compiling an arm64 system on an x86_64 runner and
+    publishing a rootfs `build-iso-from-cache.yml` could never boot
+  - Every leg in the aarch64 blast radius now installs
+    `grub-efi-arm64-bin` and `busybox-static`, which `final/14`'s
+    preflight and `final/12`'s new hard error require, and the x86_64
+    legs pin `grub-efi-amd64-bin` so a runner base-image rotation can no
+    longer fail the last stage of a multi-hour build.  `arm64-xfce.yml`
+    also resolves the versioned ISO name from `builder.__version__`
+    instead of guessing `lfs-installer.iso`, which is only ever the
+    best-effort compatibility symlink `upload-artifact` need not follow
+  - Known gaps left deliberately: `BuildCache.download_and_extract` still
+    unpacks the `--use-cache` tarball into `output_dir/image`, and
+    `config/kernel-config-pinebook` and `-brax3` have no file-system
+    section at all, so neither can mount an ISO; those two profiles are
+    not CI-built
 
 - **nightly #232 published no ISO: PAM's setuid helper was chmod'ed under
   a name that does not exist** (`blfs/08d-build-display-manager.sh`,

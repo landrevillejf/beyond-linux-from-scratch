@@ -19,11 +19,14 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+          # grub-efi-amd64-bin provides /usr/lib/grub/x86_64-efi/, which
+          # final/14 preflights by path before building the installer ISO.
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
             squashfs-tools jq zstd ca-certificates sed \
-            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev \
+            grub-efi-amd64-bin busybox-static
 
       - name: Install Python dependencies
         run: |
@@ -93,9 +96,15 @@ jobs:
       - name: Build LFS root filesystem
         run: |
           cd /tmp/lfs-build
+          # --arch x86_64 is not redundant.  config/build.conf ships
+          # architecture=aarch64 with cross_compile=true, and the xfce
+          # profile overrides neither, so without it this job would try to
+          # cross-compile an arm64 system on an x86_64 runner and publish a
+          # rootfs build-iso-from-cache.yml could never boot.
           sudo -u lfs python3 builder.py \
             --profile xfce \
             --init sysvinit \
+            --arch x86_64 \
             --output ./build-release \
             --verbose \
             --download-timeout 600 \
@@ -112,13 +121,41 @@ jobs:
 
       - name: Verify kernel presence
         run: |
-          ls -l /tmp/lfs-build/build-release/image/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
+          # builder.py sets LFS to the resolved output directory, so the
+          # rootfs *is* build-release/ and the kernel lands in
+          # build-release/boot.  build-release/image/ is created empty by
+          # prepare_environment() and populated by nothing, so the
+          # `ls image/boot/vmlinuz*` this replaced could never succeed and
+          # the tarball beside it shipped an empty archive.
+          ls -l /tmp/lfs-build/build-release/boot/vmlinuz* || { echo "No kernel built"; exit 1; }
 
       - name: Compress rootfs (split parts)
         run: |
           # Release assets are capped at 2 GB: stream the zstd tarball
           # straight into split parts, same convention as cache-packages.
-          sudo bash -c "cd /tmp/lfs-build/build-release && tar --zstd -cf - -C image . | split -b 1900m -d -a 2 - /tmp/lfs-build/rootfs-cache-$(date +%Y%m%d).tar.zst.part-"
+          #
+          # Tar build-release/ itself, not build-release/image/, and name the
+          # build scaffolding that shares it: the ISOs, the source tarballs
+          # and the logs would otherwise all be published as "rootfs".
+          #
+          # Unlike nightly.yml's rootfs export this keeps the empty /dev,
+          # /proc, /sys and /run mount points ("dir/*" rather than "dir"),
+          # because this archive is extracted and booted again by
+          # build-iso-from-cache.yml: busybox switch_root MS_MOVEs those four
+          # mounts into the new root and fails when the mount points are
+          # absent.
+          sudo tar --zstd -cf - -C /tmp/lfs-build/build-release \
+            --exclude=./sources --exclude=./logs --exclude=./cache \
+            --exclude=./backups --exclude=./live --exclude=./image \
+            --exclude=./tools --exclude=./packages --exclude=./lpm-repo \
+            --exclude=./sysroot --exclude=./lost+found \
+            --exclude=./proc/* --exclude=./sys/* --exclude=./dev/* \
+            --exclude=./run/* --exclude=./tmp/* \
+            --exclude=./build_info.json --exclude=./sbom.spdx.json \
+            --exclude=./*.iso --exclude=./*.iso.sig \
+            --exclude=./vmlinuz-* --exclude=./SHA256SUMS-* \
+            --exclude=./lfs-installer.iso.pointer \
+            . | sudo split -b 1900m -d -a 2 - "/tmp/lfs-build/rootfs-cache-$(date +%Y%m%d).tar.zst.part-"
           cd /tmp/lfs-build || exit 1
           sha256sum rootfs-cache-*.tar.zst.part-* > SHA256SUMS
           ls -lh rootfs-cache-*.tar.zst.part-*

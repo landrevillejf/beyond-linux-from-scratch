@@ -13,7 +13,16 @@ LFS="${LFS:-/output/image}"
 INITRAMFS_DIR="${LFS}/boot/initramfs-tmp"
 INITRAMFS_OUTPUT="${LFS}/boot/initramfs.img"
 
-echo "[INFO] Building initramfs for LFS..."
+# Target architecture, same convention as blfs/28-knowledge.sh.  uname -m is
+# only the last resort: on a cross-compile the host arch is not the target's,
+# and picking busybox by the host is what put an x86_64 shell into the arm64
+# initramfs.
+TARGET_ARCH="${LFS_CONFIG_ARCHITECTURE:-${ARCH:-$(uname -m)}}"
+case "$TARGET_ARCH" in
+arm64) TARGET_ARCH="aarch64" ;;
+esac
+
+echo "[INFO] Building initramfs for LFS (target: $TARGET_ARCH)..."
 
 rm -rf "$INITRAMFS_DIR"
 mkdir -pv "$INITRAMFS_DIR"/{bin,dev,etc,lib,lib64,mnt,proc,root,sbin,sys,tmp,usr,var}
@@ -21,27 +30,63 @@ mkdir -pv "$INITRAMFS_DIR"/{bin,dev,etc,lib,lib64,mnt,proc,root,sbin,sys,tmp,usr
 # --------------------------------------------------------------------------
 # Find or download busybox
 # --------------------------------------------------------------------------
-BUSYBOX_SRC=""
-if [ -f "$LFS/bin/busybox" ]; then
-    BUSYBOX_SRC="$LFS/bin/busybox"
-elif [ -f "$LFS/usr/bin/busybox" ]; then
-    BUSYBOX_SRC="$LFS/usr/bin/busybox"
-elif [ -f "$LFS/sbin/busybox" ]; then
-    BUSYBOX_SRC="$LFS/sbin/busybox"
-fi
+# The initramfs has no libc yet, so busybox must be statically linked: a
+# dynamic one is copied happily and then dies at exec with "No such file or
+# directory", which reads like a missing file rather than a missing
+# interpreter.  readelf is authoritative – a static executable carries no
+# PT_INTERP program header – and final/16 already relies on readelf being on
+# the host.
+is_static_binary() {
+    [ -f "$1" ] || return 1
+    command -v readelf >/dev/null 2>&1 || return 0
+    ! readelf -lW "$1" 2>/dev/null | grep -q 'INTERP'
+}
 
-if [ -z "$BUSYBOX_SRC" ] && command -v busybox >/dev/null 2>&1; then
-    BUSYBOX_SRC="$(command -v busybox)"
-    echo "[INFO] Using host busybox: $BUSYBOX_SRC"
-fi
+BUSYBOX_SRC=""
+for candidate in "$LFS/bin/busybox" "$LFS/usr/bin/busybox" \
+    "$LFS/sbin/busybox" "$LFS/usr/sbin/busybox"; do
+    if is_static_binary "$candidate"; then
+        BUSYBOX_SRC="$candidate"
+        break
+    fi
+done
 
 if [ -z "$BUSYBOX_SRC" ]; then
+    HOST_BUSYBOX="$(command -v busybox 2>/dev/null)"
+    if is_static_binary "$HOST_BUSYBOX"; then
+        BUSYBOX_SRC="$HOST_BUSYBOX"
+        echo "[INFO] Using host busybox: $BUSYBOX_SRC"
+    fi
+fi
+
+# busybox.net publishes prebuilt statics for i686 and x86_64 only – there is
+# no aarch64 musl build to fetch – so on any other target the host's
+# busybox-static is the only source.  Downloading the x86_64 binary there
+# produced an initramfs whose shell could not exec, and nothing caught it:
+# final/16 only checks that boot/initramfs* exists and no arm64 artifact was
+# ever booted.
+case "$TARGET_ARCH" in
+x86_64) BUSYBOX_TRIPLET="x86_64-linux-musl" ;;
+i686 | i386) BUSYBOX_TRIPLET="i686-linux-musl" ;;
+*) BUSYBOX_TRIPLET="" ;;
+esac
+
+if [ -z "$BUSYBOX_SRC" ] && [ -n "$BUSYBOX_TRIPLET" ]; then
     echo "[INFO] Busybox not found. Downloading static binary..."
-    BUSYBOX_URL="https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox"
+    BUSYBOX_URL="https://busybox.net/downloads/binaries/1.35.0-${BUSYBOX_TRIPLET}/busybox"
     wget -q -O /tmp/busybox "$BUSYBOX_URL"
     chmod +x /tmp/busybox
     BUSYBOX_SRC="/tmp/busybox"
     echo "[INFO] Downloaded busybox to $BUSYBOX_SRC"
+fi
+
+if [ -z "$BUSYBOX_SRC" ]; then
+    echo "[ERROR] No static busybox is available for target $TARGET_ARCH."
+    echo "        busybox.net publishes statics for i686 and x86_64 only, so on"
+    echo "        this architecture either install one on the host:"
+    echo "          apt-get install busybox-static"
+    echo "        or build busybox into the target rootfs."
+    exit 1
 fi
 
 cp -a "$BUSYBOX_SRC" "$INITRAMFS_DIR/bin/busybox"
@@ -177,12 +222,18 @@ else
         wait_for_dev "$ROOT_DEV" 10
     fi
 
-    # Fallback: try common root device names.  Partition 3 leads because
+    # Fallback: try common root device names.  /dev/sr0 leads because both
+    # ISO images keep live.squashfs on the boot media, and on aarch64
+    # CONFIG_CMDLINE_FORCE bakes root=/dev/mmcblk0p2 into the kernel, so the
+    # root= the ISO's GRUB passes never reaches the initramfs at all and
+    # probing the optical device is the only way that image finds its own
+    # squashfs.  Partition 3 leads the disk candidates because
     # host/03-create-disk-image.sh lays the image out as p1=ESP(/boot),
     # p2=swap, p3=root - probing p2 first tried to mount the swap partition
     # (the same mistake already fixed in tools/qemu-boot-smoke.sh).
     if [ -z "$ROOT_DEV" ] || [ ! -b "$ROOT_DEV" ]; then
-        for candidate in /dev/sda3 /dev/vda3 /dev/nvme0n1p3 \
+        for candidate in /dev/sr0 \
+                         /dev/sda3 /dev/vda3 /dev/nvme0n1p3 \
                          /dev/sda2 /dev/vda2 /dev/nvme0n1p2 \
                          /dev/xvda2 /dev/sda1 /dev/vda1; do
             if wait_for_dev "$candidate" 2; then
