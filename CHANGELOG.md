@@ -259,6 +259,35 @@
 
 ### Fixed
 
+- **build-base-cache #22 lost zlib and died 1h28m in at the lfs-system
+  extract** (`builder.py`, `tests/test_source_downloader.py`)
+  - The systemd/x86_64 prefix build ran the whole toolchain and chapter 8
+    up to glibc, then aborted with `ERROR: no source archive found for
+    zlib`.  zlib is served only by `zlib.net/fossils/zlib-1.3.1.tar.gz`,
+    and none of the three existing fallback tiers could reach it: the GNU
+    tier only rewrites GNU hosts, the BLFS conglomeration has no `zlib/`
+    directory at all, and Void keeps the current release (`zlib-1.3.2`)
+    but not the book-pinned `1.3.1` -- all three were probed and 404 for
+    `zlib-1.3.1`.  A transient `zlib.net` blip during the download window
+    therefore had no recovery path
+  - The failure surfaced an hour and a half late because
+    `download_sources()` only warns (`Some downloads failed, continuing
+    with available sources`) and the missing archive is not noticed until
+    `lfs/05b` calls `extract "$(find_archive zlib)"` in the chroot
+  - `SourceDownloader` gained a curated `GITHUB_RELEASE_MIRRORS` tier and
+    `_github_release_candidates()`, tried right after the GNU re-point and
+    before the two derived tiers.  zlib's maintainer publishes the
+    byte-identical, GPG-signed tarball as an official `madler/zlib`
+    release (verified: `zlib-1.3.1.tar.gz`, 1512791 bytes,
+    `application/x-gzip`, released 2024-01-22 by `madler`), so a
+    `zlib.net` outage now falls back to
+    `github.com/madler/zlib/releases/download/v<version>/`.  The map keys
+    the canonical host and builds the tag from the archive version, so a
+    book version bump needs no code change; only curated hosts serving a
+    versioned tarball are rewritten, everything else yields no candidate
+  - The primary stays the book's `zlib.net` URL (AGENTS.md rule 9: follow
+    the LFS/BLFS books), with GitHub strictly as a fallback
+
 - **nightly #232 published no ISO: `final/14` and `final/15` wrote it one
   directory above every consumer** (`final/14-create-installer.sh`,
   `final/15-create-live-system.sh`, `builder.py`,
