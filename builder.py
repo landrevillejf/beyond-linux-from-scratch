@@ -27,7 +27,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urlparse
 
 
@@ -2030,6 +2030,10 @@ class LFSBuilder:
         if not success:
             self.logger.warning("Some downloads failed, continuing with available sources")
 
+        # Done after the download pass so the listed archive is already in the
+        # tree when its stale duplicates are judged (see the method docstring).
+        self._prune_unlisted_source_duplicates(sources_list)
+
         if checksum_file.exists():
             self.downloader.verify_checksums(checksum_file)
 
@@ -2235,6 +2239,95 @@ class LFSBuilder:
     def _is_superseded_source(self, url: str) -> bool:
         """Return True for rolling snapshots a custom pin replaces."""
         return any(re.search(pattern, url) for pattern in self.SUPERSEDED_SOURCE_PATTERNS)
+
+    @staticmethod
+    def _package_stem(filename: str) -> str:
+        """Return the package name an archive filename carries, version removed.
+
+        Grouping has to match the prefix match find_archive() does inside the
+        stage scripts, or the two sides would disagree about which archives
+        are copies of one package: the extension comes off first, then the
+        trailing -<version> token (underscore separators and a leading 'v'
+        included), and the residue is lowercased with underscores folded to
+        dashes.  Filenames that carry no package name at all (the '0.63.3.tar.gz'
+        layout a GitHub archive URL produces) keep their full stem, which makes
+        them their own group and therefore never prunable.
+        """
+        stem = re.sub(r'\.(tar\.[A-Za-z0-9]+|tgz|txz|tar|zip|gz|xz|bz2)$', '', filename)
+        stem = re.sub(r'[-_]v?\d[A-Za-z0-9.+_~-]*$', '', stem)
+        return stem.lower().replace('_', '-')
+
+    def _prune_unlisted_source_duplicates(self, sources_list: Path) -> int:
+        """Delete cached archives the source list does not name but supersedes.
+
+        The CI packages cache is a snapshot of an older commit's pins, so a pin
+        dropped from packages/custom-sources.list still lands in sources/ long
+        after the list stopped naming it.  find_archive() resolves duplicates by
+        version sort, so a stale archive with a HIGHER version wins: nightly
+        #233 built the non-book accountsservice-26.27.3 the cache carried
+        instead of the book's 23.13.9, and every desktop profile died in
+        display-manager on its json-c dependency, which no stage builds.
+
+        Only archives sharing a package stem with exactly one listed archive are
+        removed.  A stem the list names twice (gtk-3.24.50 and gtk-4.18.6 are
+        co-installable series) cannot be disambiguated safely, and a stem the
+        list does not name at all may be something a stage fetches by itself.
+        Returns the number of archives removed.
+        """
+        # Same directory the SourceDownloader is constructed with; resolved here
+        # so the reconciliation never depends on the downloader's own state.
+        sources_dir = self.output_dir / 'sources'
+        if not sources_list.exists() or not sources_dir.is_dir():
+            return 0
+
+        try:
+            lines = sources_list.read_text().splitlines()
+        except OSError as exc:
+            self.logger.warning(f"Cannot read {sources_list} to prune stale archives: {exc}")
+            return 0
+
+        listed: Dict[str, Set[str]] = {}
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            name = Path(urlparse(line).path).name
+            if name:
+                listed.setdefault(self._package_stem(name), set()).add(name.lower())
+
+        present: Dict[str, List[Path]] = {}
+        for path in sources_dir.iterdir():
+            if path.is_file():
+                present.setdefault(self._package_stem(path.name), []).append(path)
+
+        removed = 0
+        for stem, files in sorted(present.items()):
+            expected = listed.get(stem)
+            if not expected or len(expected) != 1 or len(files) < 2:
+                continue
+            wanted = next(iter(expected))
+            if not any(p.name.lower() == wanted for p in files):
+                # The listed archive never arrived (mirror outage, 418, ...):
+                # the stale copy is the only source left, and deleting it would
+                # turn a download failure into a missing package.
+                self.logger.warning(
+                    f"Keeping stale archive(s) for {stem}: the listed {wanted} is absent from {sources_dir}"
+                )
+                continue
+            for path in sorted(files, key=lambda p: p.name):
+                if path.name.lower() == wanted:
+                    continue
+                try:
+                    path.unlink()
+                except OSError as exc:
+                    self.logger.warning(f"Could not remove stale archive {path.name}: {exc}")
+                    continue
+                removed += 1
+                self.logger.info(f"Removed stale archive {path.name} (the source list names {wanted})")
+
+        if removed:
+            self.logger.info(f"Pruned {removed} cached archive(s) the source list does not name")
+        return removed
 
     def _update_sources_list(self) -> bool:
         """Update packages/sources.list with official LFS/BLFS URLs + custom sources."""

@@ -259,6 +259,67 @@
 
 ### Fixed
 
+- **nightly #233 lost all eight desktop profiles to a source archive the
+  packages cache had stopped listing** (`builder.py`,
+  `.github/workflows/cache-packages.yml`, `tests/test_builder.py`,
+  `tests/test_release_workflow.py`)
+  - Every desktop leg (xfce/sysvinit, xfce/systemd, gnome, kde, lxqt,
+    full, java-dev, audio-studio) died at step 22 with `Stage failed:
+    display-manager (exit code: 1)`, and the four headless legs that did
+    pass (minimal x2, server, arm64) are exactly the ones that never
+    reach that stage, so the release published no desktop artifact again.
+    The eight logs carry one root cause: `../meson.build:162:11: ERROR:
+    Dependency "json-c" not found, tried pkgconfig and cmake` followed by
+    `[ERROR] Required package accountsservice failed - aborting stage`
+  - The log line above it names the culprit: `Building accountsservice
+    from accountsservice-26.27.3.tar.gz`, while the download pass had
+    fetched the book's `accountsservice-23.13.9.tar.xz`.  The rolling
+    `packages-cache-latest` release was generated on 2026-09-01, three
+    days before commit 861082b dropped the non-book pins
+    (accountsservice-26.27.3, wayland-1.26.0, xkbcommon-1.13.2,
+    poppler-26.08.0) from `packages/custom-sources.list`, and its
+    SHA256SUMS still lists `accountsservice-26.27.3.tar.gz`.  nightly
+    copies `/tmp/lfs-sources/*` into `build-release/sources`, so both
+    versions sit side by side, and `find_archive` -- the helper 18+ stage
+    scripts share -- ends in `sort -V | tail -n 1`: the highest version
+    wins whatever list produced it.  26.27.3 needs json-c, no stage
+    builds json-c, and the `required` flag turns that into a dead stage
+  - This is the first night the stage got far enough to show it: #232
+    died three packages earlier on the `unix_checkpwd` typo, so the stale
+    cache had been carrying these pins unnoticed
+  - `download_sources()` now reconciles the sources tree against the list
+    it just generated.  `_prune_unlisted_source_duplicates()` groups the
+    archives by `_package_stem()` -- the same case-insensitive,
+    version-stripped key `find_archive` matches on -- and deletes an
+    archive whose stem the list names exactly once under a different
+    filename.  It runs after the download pass so the listed archive is
+    already on disk when its duplicates are judged, and it deletes
+    nothing when the stem is unnamed (busybox-static and busybox both
+    live there), named twice (gtk 3 and gtk 4), or when the listed
+    archive is missing, which is what a mirror outage looks like.  Every
+    consumer benefits: nightly, weekly-full, release, rootfs-cache and
+    local builds all go through `download_sources()`
+  - `.github/workflows/cache-packages.yml` gained a "Drop superseded
+    cache parts" step, because `softprops/action-gh-release` only adds or
+    overwrites assets: 2026-09-01 published two parts and the
+    2026-08-03 `part-02`..`part-04` (4.8 GB) were still attached to the
+    release.  Consumers download `lfs-packages-part-*.tar.gz` whole and
+    cat the set into one tar stream, so each job of each build paid for
+    two cache generations and GNU tar's end-of-archive marker was the
+    only thing keeping the older one from being unpacked over the newer.
+    The step deletes assets whose index is at or beyond the number of
+    parts this generation produced, after the upload and never before, so
+    a build in flight always finds a complete set; the comparison goes
+    through `$((10#$index))` because the zero-padded `08` and `09` are not
+    valid octal
+  - Deliberately not changed: the cache keeps shipping the stale pins
+    until the next monthly run or a manual `workflow_dispatch`, which the
+    prune now makes harmless, and `cache-packages.yml` still only reads
+    `packages/sources.list` when it exists and never generates it, so the
+    release holds the ~269 custom pins while every nightly re-downloads
+    ~7.5 GB of book tarballs.  Caching the whole list risks the runner's
+    disk and needs its own change
+
 - **build-base-cache #22 lost zlib and died 1h28m in at the lfs-system
   extract** (`builder.py`, `tests/test_source_downloader.py`)
   - The systemd/x86_64 prefix build ran the whole toolchain and chapter 8

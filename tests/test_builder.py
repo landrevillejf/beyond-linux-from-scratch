@@ -1121,6 +1121,194 @@ class TestLFSBuilder:
             'https://mirrors.kernel.org/gnu/ncurses/ncurses-6.5.tar.gz',
         ]
 
+    # ---- stale source-cache reconciliation (Nightly #233) ----
+
+    def _prune_builder(self, builder, name):
+        """Point *builder* at an empty sources dir and silence its logger."""
+        sources = builder.output_dir / 'sources'
+        sources.mkdir(parents=True, exist_ok=True)
+        builder.logger = MagicMock()
+        sources_list = sources.parent.parent / f'sources-{name}.list'
+        return sources, sources_list
+
+    def test_package_stem_groups_every_version_of_one_package(self):
+        """The stem must group the filename variants find_archive() groups."""
+        cases = {
+            'accountsservice-23.13.9.tar.xz': 'accountsservice',
+            'accountsservice-26.27.3.tar.gz': 'accountsservice',
+            'wayland-protocols-1.44.tar.xz': 'wayland-protocols',
+            'libjpeg-turbo-3.0.1.tar.gz': 'libjpeg-turbo',
+            'xf86-video-vesa-2.4.4.tar.bz2': 'xf86-video-vesa',
+            'Python-3.13.7.tar.xz': 'python',
+            'flit_core-3.9.0.tar.gz': 'flit-core',
+            'luit-20240910.tgz': 'luit',
+            'coreutils-9.7-i18n-1.patch': 'coreutils',
+            'OpenJDK21U-jdk_x64_linux_hotspot_21.0.9_10.tar.gz':
+                'openjdk21u-jdk-x64-linux-hotspot',
+            # No package name to strip: these stay their own group, so the
+            # prune can never touch a GitHub-archive style filename.
+            '0.63.3.tar.gz': '0.63.3',
+            'expect5.45.4.tar.gz': 'expect5.45.4',
+            'nss-standalone-1.patch': 'nss-standalone',
+        }
+        for filename, expected in cases.items():
+            assert LFSBuilder._package_stem(filename) == expected, filename
+
+    def test_prune_removes_stale_archive_the_source_list_dropped(self, builder):
+        """A cached pin the list no longer names must not shadow the book tarball.
+
+        Nightly #233: the packages cache still carried the non-book
+        accountsservice-26.27.3 a pin had pulled in before it was dropped on
+        2026-09-04, find_archive's "newest wins" rule unpacked it, and all eight
+        desktop profiles died in display-manager on the json-c dependency that
+        release added and no stage builds.
+        """
+        sources, sources_list = self._prune_builder(builder, 'stale')
+        (sources / 'accountsservice-23.13.9.tar.xz').write_bytes(b'\xfd7zXZ\x00')
+        (sources / 'accountsservice-26.27.3.tar.gz').write_bytes(b'\x1f\x8b\x08\x00')
+        (sources / 'zlib-1.3.1.tar.gz').write_bytes(b'\x1f\x8b\x08\x00')
+        sources_list.write_text(
+            '# generated\n'
+            '\n'
+            'https://www.freedesktop.org/software/accountsservice/'
+            'accountsservice-23.13.9.tar.xz\n'
+            'https://zlib.net/zlib-1.3.1.tar.gz\n'
+        )
+
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 1
+        assert (sources / 'accountsservice-23.13.9.tar.xz').exists()
+        assert not (sources / 'accountsservice-26.27.3.tar.gz').exists()
+        assert (sources / 'zlib-1.3.1.tar.gz').exists()
+        builder.logger.info.assert_any_call(
+            'Removed stale archive accountsservice-26.27.3.tar.gz '
+            '(the source list names accountsservice-23.13.9.tar.xz)'
+        )
+        assert 'Pruned 1 cached archive(s)' in builder.logger.info.call_args[0][0]
+
+    def test_prune_matches_the_listed_archive_case_insensitively(self, builder):
+        """Python-3.13.7.tar.xz is the listed python-3.13.7.tar.xz.
+
+        find_archive() folds case and underscores, so the reconciliation has to
+        as well: comparing raw names would delete the only Python tarball the
+        cache carries and leave the toolchain stage without one.
+        """
+        sources, sources_list = self._prune_builder(builder, 'case')
+        (sources / 'Python-3.13.7.tar.xz').write_bytes(b'x')
+        (sources / 'python-3.13.6.tar.xz').write_bytes(b'x')
+        sources_list.write_text(
+            'https://www.python.org/ftp/python/3.13.7/python-3.13.7.tar.xz\n'
+        )
+
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 1
+        assert (sources / 'Python-3.13.7.tar.xz').exists()
+        assert not (sources / 'python-3.13.6.tar.xz').exists()
+
+    def test_prune_keeps_a_stem_the_list_names_twice(self, builder):
+        """gtk3 and gtk4 are co-installable series; neither copy may be pruned."""
+        sources, sources_list = self._prune_builder(builder, 'gtk')
+        for name in ('gtk-3.24.50.tar.xz', 'gtk-4.18.6.tar.xz', 'gtk-3.24.49.tar.xz'):
+            (sources / name).write_bytes(b'x')
+        sources_list.write_text(
+            'https://download.gnome.org/sources/gtk+/3.24/gtk-3.24.50.tar.xz\n'
+            'https://download.gnome.org/sources/gtk+/4.18/gtk-4.18.6.tar.xz\n'
+        )
+
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+        assert sorted(p.name for p in sources.iterdir()) == [
+            'gtk-3.24.49.tar.xz', 'gtk-3.24.50.tar.xz', 'gtk-4.18.6.tar.xz'
+        ]
+
+    def test_prune_keeps_the_stale_copy_when_the_listed_one_is_absent(self, builder):
+        """A mirror outage must not leave a stage with no archive at all."""
+        sources, sources_list = self._prune_builder(builder, 'absent')
+        (sources / 'accountsservice-26.27.3.tar.gz').write_bytes(b'x')
+        (sources / 'accountsservice-23.13.92.tar.xz').write_bytes(b'x')
+        sources_list.write_text(
+            'https://www.freedesktop.org/software/accountsservice/'
+            'accountsservice-23.13.9.tar.xz\n'
+        )
+
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+        assert (sources / 'accountsservice-26.27.3.tar.gz').exists()
+        assert (sources / 'accountsservice-23.13.92.tar.xz').exists()
+        assert 'Keeping stale archive(s) for accountsservice' in \
+            builder.logger.warning.call_args[0][0]
+
+    def test_prune_ignores_stems_the_list_does_not_name(self, builder):
+        """An archive a stage fetches by itself is none of the list's business."""
+        sources, sources_list = self._prune_builder(builder, 'unlisted')
+        (sources / 'busybox-1.37.0.tar.bz2').write_bytes(b'x')
+        (sources / 'busybox-1.36.1.tar.bz2').write_bytes(b'x')
+        sources_list.write_text(
+            '# a URL whose path carries no filename at all\n'
+            'https://example.com/\n'
+            'https://zlib.net/zlib-1.3.1.tar.gz\n'
+        )
+
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+        assert len(list(sources.iterdir())) == 2
+
+    def test_prune_is_a_noop_without_a_list_or_a_sources_dir(self, builder):
+        """Both guards keep the reconciliation away from an unprepared tree."""
+        import shutil
+
+        sources, sources_list = self._prune_builder(builder, 'noop')
+        (sources / 'pkg-1.0.tar.gz').write_bytes(b'x')
+        (sources / 'pkg-2.0.tar.gz').write_bytes(b'x')
+        sources_list.write_text('https://example.com/pkg-1.0.tar.gz\n')
+
+        assert builder._prune_unlisted_source_duplicates(
+            sources.parent / 'missing.list') == 0
+        shutil.rmtree(sources)
+        assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+
+    def test_prune_survives_an_unreadable_source_list(self, builder):
+        """An unreadable list is a warning, never a broken build."""
+        sources, sources_list = self._prune_builder(builder, 'unreadable')
+        (sources / 'pkg-1.0.tar.gz').write_bytes(b'x')
+        (sources / 'pkg-2.0.tar.gz').write_bytes(b'x')
+        sources_list.write_text('https://example.com/pkg-1.0.tar.gz\n')
+
+        with patch.object(Path, 'read_text', side_effect=OSError('boom')):
+            assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+        assert 'Cannot read' in builder.logger.warning.call_args[0][0]
+        assert (sources / 'pkg-2.0.tar.gz').exists()
+
+    def test_prune_reports_an_archive_it_cannot_remove(self, builder):
+        """A read-only sources dir downgrades the prune to a warning."""
+        sources, sources_list = self._prune_builder(builder, 'locked')
+        (sources / 'pkg-1.0.tar.gz').write_bytes(b'x')
+        stale = sources / 'pkg-2.0.tar.gz'
+        stale.write_bytes(b'x')
+        sources_list.write_text('https://example.com/pkg-1.0.tar.gz\n')
+
+        with patch.object(Path, 'unlink', side_effect=OSError('read-only file system')):
+            assert builder._prune_unlisted_source_duplicates(sources_list) == 0
+        assert 'Could not remove stale archive pkg-2.0.tar.gz' in \
+            builder.logger.warning.call_args[0][0]
+        assert stale.exists()
+
+    def test_download_sources_prunes_after_the_download_pass(self, builder):
+        """download_sources must reconcile the cache once the downloads are in."""
+        sources, sources_list = self._prune_builder(builder, 'download')
+        (sources / 'pkg-1.0.tar.gz').write_bytes(b'x')
+        (sources / 'pkg-2.0.tar.gz').write_bytes(b'x')
+        sources_list.write_text('https://example.com/pkg-1.0.tar.gz\n')
+
+        builder.downloader = MagicMock()
+        builder.downloader.download_from_list.return_value = True
+
+        def fake_update():
+            builder._generated_sources_list = sources_list
+            return True
+
+        with patch.object(builder, '_update_sources_list', side_effect=fake_update):
+            assert builder.download_sources() is True
+
+        builder.downloader.download_from_list.assert_called_once()
+        assert (sources / 'pkg-1.0.tar.gz').exists()
+        assert not (sources / 'pkg-2.0.tar.gz').exists()
+
     def test_source_downloader_download_retries_zero(self, sources_dir, mock_logger):
         """Couvre le return False final de download lorsque retries=0."""
         from builder import SourceDownloader
