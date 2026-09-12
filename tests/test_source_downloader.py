@@ -735,6 +735,101 @@ class TestGluedNameAndUnifontFallbacks:
         assert dest.exists()
 
 
+class TestBaseCacheRun22ZlibGithubFallback:
+    """Regression tests for the build-base-cache #22 zlib loss.
+
+    zlib is served only by zlib.net, and neither the BLFS conglomeration
+    (no zlib directory at all) nor Void (rotates to the current release)
+    keeps the book-pinned zlib-1.3.1, while _gnu_candidates yields nothing
+    for a non-GNU host, so a transient zlib.net blip had no fallback: the
+    systemd/x86_64 job ran 1h28m and then died at the lfs-system zlib
+    extract with "no source archive found for zlib".  The maintainer
+    publishes the byte-identical, GPG-signed tarball as an official
+    madler/zlib GitHub release, wired here as a curated fallback tier.
+    """
+
+    ZLIB_URL = 'https://zlib.net/fossils/zlib-1.3.1.tar.gz'
+    GITHUB_URL = ('https://github.com/madler/zlib/releases/download/v1.3.1/'
+                  'zlib-1.3.1.tar.gz')
+
+    def test_github_release_candidates_repoints_zlib_net(self, sources_dir, mock_logger):
+        """The fossils path and the www host both map to the release tag."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        assert downloader._github_release_candidates(self.ZLIB_URL) == [self.GITHUB_URL]
+        # A book version bump needs no edit: the tag follows the archive.
+        assert downloader._github_release_candidates(
+            'https://www.zlib.net/zlib-1.3.2.tar.gz'
+        ) == ['https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz']
+
+    def test_github_release_candidates_skips_uncurated_and_unversioned(
+            self, sources_dir, mock_logger):
+        """Only a curated host serving a versioned tarball is rewritten."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        for url in (
+            'https://example.com/zlib-1.3.1.tar.gz',           # host not curated
+            'https://zlib.net/fossils/OBSOLETE.txt',           # not a tarball
+            'https://zlib.net/fossils/zlib-1.3.1.tar.gz.asc',  # signature, not tar
+            'https://zlib.net/noversion.tar.gz',               # no trailing version
+            'https://zlib.net/',                               # no filename
+        ):
+            assert downloader._github_release_candidates(url) == [], url
+
+    def test_github_release_tier_is_tried_before_the_guessed_tiers(
+            self, sources_dir, mock_logger):
+        """A verified official release beats a directory derived from a name."""
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        candidates = (downloader._gnu_candidates(self.ZLIB_URL)
+                      + downloader._github_release_candidates(self.ZLIB_URL)
+                      + downloader._mirror_candidates(self.ZLIB_URL)
+                      + downloader._void_candidates(self.ZLIB_URL))
+        assert candidates[0] == self.GITHUB_URL
+
+    def test_download_recovers_zlib_from_github_when_zlib_net_fails(
+            self, sources_dir, mock_logger):
+        """The #22 path: zlib.net 503, GitHub serves the byte-identical tar."""
+        dest = sources_dir / 'zlib-1.3.1.tar.gz'
+        seen = []
+
+        def fake_retrieve(url, path, *args):
+            seen.append(url)
+            host = urlparse(url).hostname or ''
+            if host.endswith('zlib.net'):
+                raise urllib.error.HTTPError(url=url, code=503,
+                                             msg='Service Unavailable',
+                                             hdrs=None, fp=None)
+            if host != 'github.com':
+                # conglomeration and Void do not keep the pinned 1.3.1
+                raise urllib.error.HTTPError(url=url, code=404,
+                                             msg='Not Found', hdrs=None, fp=None)
+            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        with patch('builder.time.sleep'), \
+                patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
+            result = downloader.download(self.ZLIB_URL, retries=1)
+
+        assert result is True
+        assert seen == [self.ZLIB_URL, self.GITHUB_URL]
+        assert dest.exists()
+        mock_logger.warning.assert_any_call(
+            'Primary host failed for zlib-1.3.1.tar.gz, trying mirror: '
+            + self.GITHUB_URL
+        )
+
+    def test_pinned_zlib_source_is_covered_by_the_github_tier(
+            self, sources_dir, mock_logger):
+        """Guard the real pin: lfs/05b builds zlib as required, so an
+        unreachable zlib.net with no fallback is a dead base system."""
+        custom = Path('packages/custom-sources.list').read_text()
+        urls = [line.strip() for line in custom.splitlines()
+                if line.strip().startswith('http') and '/zlib-' in line]
+        assert urls, 'no zlib pin left in packages/custom-sources.list'
+        downloader = SourceDownloader(sources_dir, mock_logger)
+        for url in urls:
+            assert downloader._github_release_candidates(url), \
+                f'{url} has no GitHub release fallback'
+
+
 class TestArchiveFilename:
     """GitHub refs/tags archives must land under a find_archive-matchable name.
 

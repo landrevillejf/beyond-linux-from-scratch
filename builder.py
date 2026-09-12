@@ -748,6 +748,27 @@ class SourceDownloader:
         'https://mirror.team-cymru.com/gnu',
         'https://mirrors.ocf.berkeley.edu/gnu',
     )
+
+    # A few LFS/BLFS sources live on a single small upstream host that no
+    # mirror tier carries.  zlib.net is the only source for the book's
+    # pinned zlib, and neither the BLFS conglomeration nor Void keeps that
+    # exact version -- conglomeration has no zlib directory at all and Void
+    # rotates to the current release, so both 404 for the pinned 1.3.1 --
+    # while _gnu_candidates yields nothing for a non-GNU host.  A sustained
+    # zlib.net blip therefore has no fallback and, because download_sources()
+    # only warns on a failure, silently costs a whole prefix build:
+    # build-base-cache #22 ran 1h28m and then died at the lfs-system zlib
+    # extract with "no source archive found for zlib".  Where the maintainer
+    # also publishes the byte-identical, GPG-signed tarball as an official
+    # GitHub release, re-point at it.  Keys are the canonical hosts; each
+    # value is (owner/repo, tag template) with {version} filled from the
+    # archive name, so a book version bump needs no edit here.  madler/zlib's
+    # zlib-1.3.1.tar.gz is the same 1512791-byte file zlib.net/fossils
+    # serves, verified against the GitHub release asset in September 2026.
+    GITHUB_RELEASE_MIRRORS = {
+        'zlib.net': ('madler/zlib', 'v{version}'),
+        'www.zlib.net': ('madler/zlib', 'v{version}'),
+    }
     RETRY_BACKOFF_CAP = 30
     RATE_LIMIT_BACKOFF_CAP = 240
     MIRROR_RETRIES = 2
@@ -913,6 +934,32 @@ class SourceDownloader:
         return [f"{base}/{relative}" for base in self.GNU_MIRRORS
                 if urlparse(base).netloc != host]
 
+    def _github_release_candidates(self, url: str) -> List[str]:
+        """Return the official GitHub release URL for a single-host source.
+
+        Only hosts curated in GITHUB_RELEASE_MIRRORS are rewritten, and the
+        release tag is built from the archive version so the mapping keeps
+        working across a book version bump.  Like the derived tiers, a
+        filename with no recognisable trailing version yields no candidate:
+        guessing a tag would only buy extra 404s.
+        """
+        parsed = urlparse(url)
+        host = (parsed.hostname or '').lower()
+        entry = self.GITHUB_RELEASE_MIRRORS.get(host)
+        if entry is None:
+            return []
+        repo, tag_template = entry
+        filename = Path(parsed.path).name
+        match = re.match(r'^(.+?)\.(?:tar\.(?:gz|xz|bz2|lz|zst)|tgz|txz|zip)$', filename)
+        if not match:
+            return []
+        split = self._split_stem(match.group(1))
+        if split is None:
+            return []
+        _package, version, _dashed = split
+        tag = tag_template.format(version=version)
+        return [f"https://github.com/{repo}/releases/download/{tag}/{filename}"]
+
     def download(self, url: str, filename: Optional[str] = None, retries: Optional[int] = None) -> bool:
         """Download a file with backoff retries and a BLFS mirror fallback.
 
@@ -920,11 +967,12 @@ class SourceDownloader:
         418 anti-abuse response freedesktop.org's CDN returns under load)
         are retried with increasing delays.  Permanent client errors
         (other 4xx) fail immediately to avoid wasting time.  Once the
-        primary host has given up, the GNU mirrors, then the
-        conglomeration mirrors and finally the Void Linux mirror are
-        tried before the source is declared missing.  The GNU tier comes
-        first because it re-points an existing path instead of deriving a
-        package directory from the filename.
+        primary host has given up, the GNU mirrors, then a curated
+        official GitHub release, then the conglomeration mirrors and
+        finally the Void Linux mirror are tried before the source is
+        declared missing.  The two verified re-points (GNU, GitHub
+        release) come first because they rewrite a known path instead of
+        deriving a package directory from the filename.
         """
         if filename is None:
             filename = _archive_filename(url)
@@ -942,7 +990,9 @@ class SourceDownloader:
         if self._download_attempt(url, dest, filename, retries):
             return True
 
-        candidates = (self._gnu_candidates(url) + self._mirror_candidates(url)
+        candidates = (self._gnu_candidates(url)
+                      + self._github_release_candidates(url)
+                      + self._mirror_candidates(url)
                       + self._void_candidates(url))
         for mirror_url in candidates:
             self.logger.warning(f"Primary host failed for {filename}, trying mirror: {mirror_url}")
