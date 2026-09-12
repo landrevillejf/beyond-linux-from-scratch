@@ -793,7 +793,7 @@ class TestBaseCacheRun22ZlibGithubFallback:
         def fake_retrieve(url, path, *args):
             seen.append(url)
             host = urlparse(url).hostname or ''
-            if host.endswith('zlib.net'):
+            if host == 'zlib.net' or host.endswith('.zlib.net'):
                 raise urllib.error.HTTPError(url=url, code=503,
                                              msg='Service Unavailable',
                                              hdrs=None, fp=None)
