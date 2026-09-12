@@ -44,6 +44,14 @@ CONFIG_SYSFS=y
 CONFIG_TMPFS=y
 CONFIG_TMPFS_POSIX_ACL=y
 CONFIG_TMPFS_XATTR=y
+# Installer ISO boot: the initramfs (final/12-create-initramfs.sh) mounts the
+# boot media (iso9660) and the live.squashfs it holds via a loop device, and
+# both ISO stages compress with `mksquashfs -comp xz` whose decompressor is a
+# separate symbol defaulting to n.
+CONFIG_ISO9660_FS=y
+CONFIG_SQUASHFS=y
+CONFIG_SQUASHFS_XZ=y
+CONFIG_BLK_DEV_LOOP=y
 
 # ============================================================================
 # NETWORKING (libre)

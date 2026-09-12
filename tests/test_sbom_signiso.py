@@ -139,8 +139,13 @@ class TestGenerateSBOM:
         """SBOM includes packages from LPM installed.list (lines 1963-1970, 1990-2010)"""
         builder = self._make_builder(tmp_path)
 
-        # Create installed packages list
-        lpm_dir = tmp_path / 'image' / 'var' / 'lib' / 'lpm'
+        # Create installed packages list.  builder.py exports LFS as its
+        # --output directory, so the rootfs IS tmp_path and lpm's database
+        # lives at $LFS/var/lib/lpm/installed.list -- the path
+        # final/16-validate-build.sh counts.  An extra 'image' component
+        # here would resurrect the old two-level layout and silently
+        # produce an SBOM with zero packages.
+        lpm_dir = tmp_path / 'var' / 'lib' / 'lpm'
         lpm_dir.mkdir(parents=True)
         (lpm_dir / 'installed.list').write_text(
             "bash 5.2\ncoreutils 9.4\nglibc 2.39\n"
@@ -172,7 +177,7 @@ class TestGenerateSBOM:
         """SBOM sanitizes special chars in package SPDXID (line 1992)"""
         builder = self._make_builder(tmp_path)
 
-        lpm_dir = tmp_path / 'image' / 'var' / 'lib' / 'lpm'
+        lpm_dir = tmp_path / 'var' / 'lib' / 'lpm'
         lpm_dir.mkdir(parents=True)
         (lpm_dir / 'installed.list').write_text("libstdc++6 14.0\n")
 
@@ -193,7 +198,7 @@ class TestGenerateSBOM:
         (tmp_path / 'build_info.json').write_text(json.dumps(build_info))
 
         # Create installed packages
-        lpm_dir = tmp_path / 'image' / 'var' / 'lib' / 'lpm'
+        lpm_dir = tmp_path / 'var' / 'lib' / 'lpm'
         lpm_dir.mkdir(parents=True)
         (lpm_dir / 'installed.list').write_text("bash 5.2\n")
 

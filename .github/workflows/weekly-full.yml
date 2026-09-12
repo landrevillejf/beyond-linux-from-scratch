@@ -176,8 +176,26 @@ jobs:
           # host/00-setup-qemu.sh exits early when `uname -m` matches the
           # target, so an installed emulator would only offer a way to
           # regress into a build ~27x slower.
+          #
+          # grub-efi-arm64-bin ships /usr/lib/grub/arm64-efi/, without which
+          # final/14 cannot build the UEFI ISO these cells now produce (the
+          # installer stage used to be skipped entirely for aarch64).
+          # busybox-static is the only static busybox an arm64 target can
+          # get: busybox.net publishes prebuilt statics for i686 and x86_64
+          # only, so final/12 has nothing to download here and would
+          # otherwise abort the initramfs stage.
           sudo apt-get install -y --no-install-recommends \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            grub-efi-arm64-bin busybox-static
+
+      - name: Install x86_64 GRUB EFI modules
+        if: matrix.arch == 'x86_64'
+        run: |
+          # final/14 preflights /usr/lib/grub/x86_64-efi/modinfo.sh and
+          # aborts with the package name when it is missing.  Pinning it
+          # here keeps a runner base-image rotation from failing every
+          # x86_64 cell at the last stage of a multi-hour build.
+          sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin
 
       - name: Install Python dependencies
         run: |
@@ -397,8 +415,11 @@ jobs:
           # SUCCESSFULLY, among them arm64/sysvinit/x86_64 after 4h57m.
           KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
           test -n "$KERNEL_SRC"
-          # Headless profiles ship a disk image instead of a live ISO;
-          # accept either as the boot artifact.
+          # Every profile now ships an ISO: final/14 writes it into $LFS
+          # (== build-release/) for both x86_64 and aarch64.  The disk image
+          # stays as the fallback so a cell that failed to produce one is
+          # still reported against something bootable rather than silently
+          # passing with no artifact at all.
           if [ -f "$ISO" ]; then
             test -s "$ISO"
             ARTIFACT="$ISO"
@@ -421,7 +442,9 @@ jobs:
         run: |
           cd /tmp/lfs-build/build-release || exit 1
           ISO="${{ steps.iso_name.outputs.iso_name }}"
-          # Headless profiles ship no ISO, hence no pointer either.
+          # A missing ISO here means final/14 never produced one, which the
+          # guard above already turned into a failed build; this stays
+          # tolerant so the pointer step never masks the real error.
           if [ ! -f "$ISO" ]; then
             echo "No ISO for this profile, skipping pointer"
             exit 0
@@ -471,9 +494,10 @@ jobs:
             /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
             /tmp/lfs-build/build-release/lpm-repo/packages.list*
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
-          # The ISO and its pointer are absent for every profile with
-          # live_system: False; kernel, sums and build_info always ship.
-          # `error` made those cells fail after a successful build.
+          # `ignore` stays because the per-profile payload differs:
+          # packages.list only exists when the cell builds base packages.
+          # `error` made those cells fail after a successful build.  The ISO
+          # and its pointer are expected from every cell now.
           if-no-files-found: ignore
 
       - name: Boot artifact in QEMU (smoke test)

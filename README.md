@@ -185,8 +185,8 @@ cross-compiled architectures). The master ordered list is:
 36. `luks-encryption`
 37. `initramfs`
 38. `bootloader`
-39. `installer`
-40. `live-system` (when enabled)
+39. `installer` (every profile and architecture)
+40. `live-system` (when enabled, x86_64 only)
 41. `validate`
 
 ## Repository structure
@@ -438,20 +438,33 @@ Branding stage outputs:
 
 Default output tree (`--output`):
 
+`builder.py` exports `--output` as `$LFS`, so the directory below is both
+the rootfs and the build's scratch tree. The `installer` stage writes the
+ISO into it, and both squashfs calls exclude the scaffolding.
+
 ```text
-<output>/
+<output>/                       <- exported to stage scripts as $LFS
 |-- build_info.json
+|-- boot/
+|   |-- vmlinuz*
+|   `-- initramfs.img
+|-- etc/, usr/, var/, ...       <- the installed system
 |-- logs/
-|-- sources/
-|-- image/
-|   `-- boot/vmlinuz*
-`-- lfs-installer.iso   (if live enabled)
+|-- sources/, cache/, backups/, live/, image/   <- build scaffolding
+|-- lfs-<version>-<profile>-<arch>-<init>.iso   <- every profile
+`-- lfs-installer.iso           <- best-effort symlink to the above
 ```
+
+`image/` is created empty by `prepare_environment()` and populated by
+nothing; the kernel and the ISO live directly under `<output>/`.
 
 Typical outputs:
 
-- Live builds: ISO + kernel + logs + metadata
-- Non-live builds (`--no-live`): root filesystem image tree + kernel + logs
+- Live builds: live ISO + kernel + logs + metadata
+- Non-live builds (`--no-live`): installer ISO + root filesystem tree +
+  kernel + logs
+- aarch64 builds: UEFI-only installer ISO + root filesystem tree (no live
+  ISO; `final/15` is x86_64-only)
 - Cache workflows: compressed rootfs cache archive (`.tar.zst`)
 
 ## USB writing

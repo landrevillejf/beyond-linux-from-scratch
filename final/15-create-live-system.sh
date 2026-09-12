@@ -5,14 +5,36 @@
 set -e
 
 LFS="${LFS:-/output/image}"
-OUTPUT_DIR="$(dirname "$LFS")"
-SQUASHFS="${OUTPUT_DIR}/live.squashfs"
-ISO_OUT="${OUTPUT_DIR}/${ISO_NAME:-lfs-installer.iso}"
+# builder.py exports LFS as its --output directory, and every consumer of the
+# image resolves output_dir/ISO_NAME – build(), sign_iso(), generate_sbom(),
+# create_writable_media() and the nightly/release/xfce-live workflows alike.
+# The old "$(dirname "$LFS")" wrote it one level above all of them, so the
+# live ISO was built and then reported missing (Nightly #232).
+ISO_OUT="${LFS}/${ISO_NAME:-lfs-installer.iso}"
+# Scratch stays outside $LFS: mksquashfs packs $LFS, so a live.squashfs or
+# an iso-content/ growing inside it would be packed into itself.
+SCRATCH_DIR="$(dirname "$LFS")"
+SQUASHFS="${SCRATCH_DIR}/live.squashfs"
 
 # Paramètres du builder
 COMPRESSION="${LFS_CONFIG_LIVE_SYSTEM_SQUASHFS_COMPRESSION:-xz}"
 PERSISTENCE_SUPPORT="${LFS_CONFIG_LIVE_SYSTEM_PERSISTENCE_SUPPORT:-true}"
 DEFAULT_BOOT="${LFS_CONFIG_LIVE_SYSTEM_DEFAULT_BOOT:-live}"
+
+# This stage builds an x86 hybrid: isolinux for BIOS, an isohybrid MBR and
+# GPT, and an x86 BCJ filter for the squashfs.  No aarch64 profile enables
+# live_system – arm64/pinebook/brax3 ship the UEFI installer ISO from
+# final/14 plus a rootfs tarball – so fail loudly here rather than write an
+# image arm64 firmware cannot boot and nobody would notice until it shipped.
+ARCH="${LFS_CONFIG_ARCHITECTURE:-${ARCH:-$(uname -m)}}"
+case "$ARCH" in
+arm64) ARCH="aarch64" ;;
+esac
+if [ "$ARCH" = "aarch64" ]; then
+    echo "[ERROR] The live ISO stage is x86_64-only (isolinux + isohybrid MBR)."
+    echo "        aarch64 targets get the UEFI installer ISO from final/14."
+    exit 1
+fi
 
 echo "[INFO] Creating live system (squashfs + ISO)..."
 echo "[INFO] Compression: $COMPRESSION, Persistence: $PERSISTENCE_SUPPORT, Default boot: $DEFAULT_BOOT"
@@ -42,12 +64,23 @@ echo "[INFO] Initramfs: $INITRAMFS"
 
 # Créer le squashfs
 echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
+# $LFS is the rootfs *and* the build's output directory, so the scaffolding
+# has to be named or it gets packed.  "dir/*" rather than "dir" leaves the
+# empty directory behind, which matters for /dev, /proc, /sys and /run:
+# busybox switch_root moves those four mounts into the new root and fails
+# outright when the mount points are absent.  "*.iso" is what keeps the
+# installer ISO final/14 wrote into $LFS – and this stage's own output on a
+# --resume-from live-system run – out of the image being built.
 mksquashfs "$LFS" "$SQUASHFS" \
     -comp "$COMPRESSION" -Xbcj x86 -b 1M \
-    -wildcards -e "proc/*" "sys/*" "dev/*" "run/*" "tmp/*" "sources/*"
+    -wildcards \
+    -e "proc/*" "sys/*" "dev/*" "run/*" "tmp/*" "lost+found/*" \
+    "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
+    "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
+    "*.iso" "*.iso.sig"
 
 # Préparer l'arborescence ISO
-ISO_DIR="${OUTPUT_DIR}/iso-content"
+ISO_DIR="${SCRATCH_DIR}/iso-content"
 rm -rf "$ISO_DIR"
 mkdir -pv "$ISO_DIR"/{isolinux,boot/grub,EFI/BOOT}
 

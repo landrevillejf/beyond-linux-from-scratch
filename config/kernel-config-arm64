@@ -114,6 +114,29 @@ CONFIG_CMDLINE_FORCE=y
 CONFIG_EXT4_FS=y
 CONFIG_F2FS_FS=y
 CONFIG_VFAT_FS=y
+# Live/installer ISO boot, the same three config/kernel-config carries: the
+# initramfs (final/12-create-initramfs.sh) mounts the boot media (iso9660)
+# and the live.squashfs it holds through a loop device.  Without them the
+# arm64 ISO from final/14-create-installer.sh reaches the initramfs and then
+# drops to a shell, because neither the media nor the squashfs on it can be
+# mounted.
+CONFIG_ISO9660_FS=y
+CONFIG_SQUASHFS=y
+# Both ISO stages compress with `mksquashfs -comp xz`; the decompressor is a
+# separate symbol that defaults to n, so SQUASHFS alone mounts nothing.
+CONFIG_SQUASHFS_XZ=y
+CONFIG_BLK_DEV_LOOP=y
+
+# ============================================================================
+# UEFI (ARM64)
+# ============================================================================
+# arm64 has no BIOS, so the ISO from final/14 is UEFI-only: firmware loads
+# EFI/BOOT/BOOTAA64.EFI, which is GRUB, and GRUB hands the kernel over
+# through the EFI stub.  Both symbols default to y on arm64, but this file is
+# a seeded fragment passed through `make olddefconfig` and the block-device
+# symbols above prove the defaults cannot be relied on.
+CONFIG_EFI=y
+CONFIG_EFI_STUB=y
 
 # ============================================================================
 # NETWORKING (ARM64)

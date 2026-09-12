@@ -2135,24 +2135,43 @@ class LFSBuilder:
 
         stages.append(('initramfs', 'final/12-create-initramfs.sh'))
         stages.append(('bootloader', 'final/13-create-bootloader.sh'))
-        # The installer ISO (final/14) is an x86-only hybrid: isolinux BIOS
-        # boot + `grub-install --target=x86_64-efi` + BOOTX64.EFI + an
-        # isohybrid MBR.  On the aarch64 profiles (arm64/pinebook/brax3) it
-        # aborted the installer stage with "grub-install: error:
-        # /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist" (Nightly #228),
-        # and it could never produce a bootable arm64 medium anyway -- those
-        # boards boot the disk/SD image through U-Boot (host/05) or arm64
-        # UEFI.  nightly.yml already treats arm64 as a rootfs-tarball plus
-        # disk-image target and tolerates a missing ISO, so skip the stage
-        # for any non-x86_64 architecture.
-        if self.profile_config.get('architecture', 'x86_64') == 'x86_64':
-            stages.append(('installer', 'final/14-create-installer.sh'))
+        # The installer ISO runs on every profile and every architecture.
+        # It used to be gated on architecture == 'x86_64' because final/14
+        # was an x86-only hybrid (isolinux BIOS boot + `grub-install
+        # --target=x86_64-efi` + BOOTX64.EFI + an isohybrid MBR) and died on
+        # the aarch64 legs with "grub-install: error:
+        # /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist" (Nightly #228).
+        # final/14 now emits a UEFI-only image for aarch64 (grub-mkstandalone
+        # -O arm64-efi + BOOTAA64.EFI, no isolinux, no isohybrid), so there
+        # is nothing left to gate here: --arch only accepts x86_64 and
+        # aarch64, and final/14 rejects any other value itself with an
+        # actionable error.  Skipping the stage instead left
+        # arm64/pinebook/brax3 as rootfs-tarball-only releases with no
+        # bootable medium, and made an ISO asset depend on the profile
+        # rather than on the architecture.
+        stages.append(('installer', 'final/14-create-installer.sh'))
 
-        # Live system
+        # Live system.  final/15 builds an isolinux BIOS image with an
+        # isohybrid MBR, and neither has an aarch64 equivalent: arm64
+        # firmware is UEFI only and there is no isolinux port for it.  All
+        # three aarch64 profiles already set live_system=False, so this only
+        # bites an explicit `--profile xfce --arch aarch64`.  Scheduling the
+        # stage anyway used to produce a silently unbootable x86 boot sector
+        # wrapping an arm64 rootfs; skipping it here says so up front instead
+        # of letting final/15 abort after every hour of compilation.  Those
+        # targets still get a bootable medium from the installer stage above.
         live_from_profile = self.profile_config.get('live_system', True)
         live_from_config = self.config.get('live_system.enabled', live_from_profile)
         if live_from_profile and live_from_config:
-            stages.append(('live-system', 'final/15-create-live-system.sh'))
+            if self.get_target_architecture() == 'x86_64':
+                stages.append(('live-system', 'final/15-create-live-system.sh'))
+            else:
+                self.logger.warning(
+                    "Skipping live-system: final/15 is x86_64-only (isolinux "
+                    "+ isohybrid MBR) and the target is "
+                    f"{self.get_target_architecture()}. The UEFI installer ISO "
+                    "from final/14 is this target's bootable medium."
+                )
 
         # Post-build validation (always runs last)
         stages.append(('validate', 'final/16-validate-build.sh'))
@@ -2512,8 +2531,14 @@ class LFSBuilder:
             with open(build_info_file) as f:
                 build_info = json.load(f)
 
-        # Scan installed packages from LPM database
-        installed_list = self.output_dir / 'image' / 'var' / 'lib' / 'lpm' / 'installed.list'
+        # Scan installed packages from LPM database.  _get_env() exports LFS
+        # as output_dir, so the rootfs IS output_dir and lpm's database lands
+        # in $LFS/var/lib/lpm/installed.list -- the same path
+        # final/16-validate-build.sh counts.  The extra 'image' component was
+        # a leftover of the old two-level layout and never existed at
+        # runtime, so every SBOM was published with an empty package list no
+        # matter how much software the build had installed.
+        installed_list = self.output_dir / 'var' / 'lib' / 'lpm' / 'installed.list'
         packages = []
         if installed_list.exists():
             with open(installed_list) as f:

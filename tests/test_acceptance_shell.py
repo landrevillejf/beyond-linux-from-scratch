@@ -3436,16 +3436,35 @@ class TestNightly227StageGuardrails:
         p2=swap, p3=root, so leading with /dev/sda2 tried to mount the
         swap partition - the same mistake already corrected in
         tools/qemu-boot-smoke.sh, whose ROOT_DEV default is /dev/sda3.
+
+        /dev/sr0 is expected to lead ahead of the disk candidates: both
+        ISO images keep live.squashfs on the boot media, and on aarch64
+        CONFIG_CMDLINE_FORCE bakes root=/dev/mmcblk0p2 into the kernel,
+        so the root= the ISO's GRUB passes never reaches the initramfs
+        at all and probing the optical device is the only way that image
+        finds its own squashfs.
+
+        The loop is selected by content rather than by position.  The
+        arch-aware static-busybox probe added for the arm64 installer ISO
+        is also spelled `for candidate in ...; do`, and matching the
+        first occurrence silently asserted against a list of $LFS paths
+        that contains no device node at all.
         """
         content = self.INITRAMFS.read_text()
-        loop = re.search(r'for candidate in ([^;]*?); do', content,
-                         re.DOTALL)
-        assert loop, 'the initramfs fallback device loop is missing'
-        candidates = re.findall(r'/dev/\w+', loop.group(1))
+        loops = re.findall(r'for candidate in ([^;]*?); do', content,
+                           re.DOTALL)
+        root_loops = [body for body in loops if '/dev/' in body]
+        assert len(root_loops) == 1, \
+            f'expected one root-device fallback loop, got {len(root_loops)}'
+        candidates = re.findall(r'/dev/\w+', root_loops[0])
         assert candidates, 'the fallback loop lists no candidates'
-        assert candidates[0] in ('/dev/sda3', '/dev/vda3',
-                                 '/dev/nvme0n1p3'), \
-            f'fallback must lead with a root partition, got {candidates[0]}'
+        assert candidates[0] == '/dev/sr0', \
+            f'the boot media carries the squashfs, so it must be probed '\
+            f'first; got {candidates[0]}'
+        disks = [c for c in candidates if c != '/dev/sr0']
+        assert disks[0] in ('/dev/sda3', '/dev/vda3',
+                            '/dev/nvme0n1p3'), \
+            f'fallback must lead with a root partition, got {disks[0]}'
         assert candidates.index('/dev/sda3') < candidates.index('/dev/sda2'), \
             'p3 is the root filesystem; p2 is swap'
 
@@ -3764,3 +3783,255 @@ class TestNightly230StageGuardrails:
             'a failed build must not run the cleanup'
         assert '!= systemd' in tail, \
             'a systemd profile keeps its own sysusers.d and tmpfiles.d'
+
+
+class TestNightly232IsoOutputGuardrails:
+    """Nightly #232 published no ISO for any profile, and never an arm64 one.
+
+    Three independent defects, each of which alone was enough to lose the
+    artifact:
+
+    * final/14 and final/15 both derived their output directory from
+      `dirname "$LFS"`.  builder.py exports LFS as its --output directory,
+      so that put the ISO one level above where build(), sign_iso(),
+      generate_sbom(), create_writable_media() and every workflow look for
+      it.  The minimal job ran final/14 for 28m22s, exited 0, and still
+      logged "No ISO for this profile, skipping pointer",
+    * both mksquashfs calls packed $LFS whole, and $LFS doubles as the
+      build's scratch directory, so the image carried a thousand source
+      tarballs - most of that 28m22s - plus, on a --resume-from installer
+      run, the previous ISO,
+    * the installer stage was gated on architecture == x86_64 because
+      final/14 was an x86-only hybrid, which made an ISO asset depend on
+      the target rather than on the build and left arm64, pinebook and
+      brax3 as rootfs-tarball-only releases with no bootable medium.
+    """
+
+    INSTALLER = Path('final/14-create-installer.sh')
+    LIVE = Path('final/15-create-live-system.sh')
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+    ARM64_KERNEL = Path('config/kernel-config-arm64')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @staticmethod
+    def _mksquashfs(code):
+        """Return the mksquashfs statement with its continuation lines."""
+        match = re.search(r'mksquashfs "\$LFS"((?:[^\n]*\\\n)*[^\n]*)', code)
+        assert match, 'the stage no longer packs $LFS with mksquashfs'
+        return match.group(0)
+
+    def _assert_x86_only(self, code, needle):
+        """Assert needle only ever runs on a non-aarch64 target."""
+        index = code.index(needle)
+        branch = code.rindex('if [', 0, index)
+        assert '!= "aarch64"' in code[branch:index], \
+            f'{needle} must stay inside a non-aarch64 branch: arm64 ' \
+            f'firmware is UEFI only and has no BIOS equivalent to load'
+
+    def test_both_iso_stages_write_into_lfs(self):
+        """The ISO must land in $LFS, which is builder.py's output_dir.
+
+        Every consumer resolves output_dir/ISO_NAME.  Parenting the image
+        off `dirname "$LFS"` built it successfully and then reported it
+        missing, which is the worst failure mode available: a 28-minute
+        stage that exits 0 and produces nothing anyone can find.
+        """
+        installer = self._code(self.INSTALLER.read_text())
+        live = self._code(self.LIVE.read_text())
+        assert 'INSTALLER_ISO="${LFS}/${ISO_NAME:-lfs-installer.iso}"' \
+            in installer, 'final/14 must write the ISO into $LFS'
+        assert 'ISO_OUT="${LFS}/${ISO_NAME:-lfs-installer.iso}"' in live, \
+            'final/15 must write the ISO into $LFS'
+        for name, code in (('final/14', installer), ('final/15', live)):
+            assert not re.search(r'(INSTALLER_ISO|ISO_OUT)="\$\(dirname',
+                                 code), \
+                f'{name} must not write the ISO above $LFS'
+
+    def test_iso_scratch_stays_outside_the_packed_tree(self):
+        """Nothing mksquashfs feeds on may grow inside the tree it packs.
+
+        A live.squashfs or an iso-root/ under $LFS would be packed into the
+        very image it feeds, while changing size under the reader.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'SCRATCH_DIR="$(dirname "$LFS")"' in code, \
+                f'{script} keeps no scratch directory outside $LFS'
+            for var in ('ISO_ROOT', 'EFI_IMG', 'EFI_MOUNT', 'EFI_EXTRACT',
+                        'SQUASHFS', 'ISO_DIR', 'VERIFY_EFI'):
+                match = re.search(rf'^\s*{var}="([^"]+)"$', code,
+                                  re.MULTILINE)
+                if match:
+                    assert match.group(1).startswith('${SCRATCH_DIR}/'), \
+                        f'{script}: {var} must live outside $LFS, ' \
+                        f'got {match.group(1)}'
+
+    def test_installer_squashfs_excludes_build_tree_and_prior_iso(self):
+        """$LFS is the rootfs *and* the build's scratch directory.
+
+        Excluding "dir/*" rather than "dir" is deliberate and load-bearing:
+        busybox switch_root MS_MOVEs /dev, /proc, /sys and /run into the new
+        root and fails outright when those mount points are absent, so the
+        directories have to survive empty.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            call = self._mksquashfs(code)
+            assert '-wildcards' in call, \
+                f'{script}: exclude patterns are ignored without -wildcards'
+            for excluded in ('"sources/*"', '"logs/*"', '"cache/*"',
+                             '"backups/*"', '"live/*"', '"tools/*"',
+                             '"packages/*"', '"lpm-repo/*"', '"sysroot/*"',
+                             '"*.iso"', '"*.iso.sig"'):
+                assert excluded in call, \
+                    f'{script} packs the build tree: {excluded} is missing'
+            tokens = re.findall(r'"([^"]+)"', call.split('-e ', 1)[1])
+            for mountpoint in ('proc', 'sys', 'dev', 'run'):
+                assert f'{mountpoint}/*' in tokens, \
+                    f'{script} must empty {mountpoint}/ without removing it'
+                assert mountpoint not in tokens, \
+                    f'{script} removes the {mountpoint} mount point that ' \
+                    f'switch_root has to move into the new root'
+
+    def test_arm64_installer_is_uefi_only(self):
+        """The aarch64 image must carry no x86 boot structure at all.
+
+        isolinux has no arm64 port, an isohybrid MBR/GPT is x86 firmware
+        data, `insmod vbe` drives x86 BIOS video services and makes GRUB
+        stop reading the config file - taking the menu entries with it -
+        and chainloader is not built for arm64-efi.
+        """
+        code = self._code(self.INSTALLER.read_text())
+        arm = code[code.index('aarch64)'):code.index('x86_64)')]
+        assert 'GRUB_EFI_TARGET="arm64-efi"' in arm
+        assert 'EFI_BINARY_NAME="BOOTAA64.EFI"' in arm, \
+            'arm64 firmware looks for BOOTAA64.EFI on removable media'
+        # builder.py no longer gates the stage on x86_64, so the stage has
+        # to refuse an architecture it cannot build an image for itself.
+        assert 'Unsupported architecture' in code, \
+            'final/14 must reject an architecture it has no image type for'
+        for guarded in ('mkdir -p "$ISO_ROOT/isolinux"',
+                        'echo "    insmod vbe"',
+                        'chainloader +1'):
+            self._assert_x86_only(code, guarded)
+        # isolinux.bin and isohdpfx.bin are copied from the else arm of the
+        # EFI-image conditional rather than under an arch test of their own,
+        # so locate that arm instead of searching backwards for an `if [`.
+        efi = code[code.index('[INFO] Creating arm64 UEFI boot image'):]
+        split = efi.index('\nelse\n')
+        arm_arm, x86_arm = efi[:split], efi[split:]
+        x86_arm = x86_arm[:x86_arm.index('\nfi\n')]
+        for needle in ('cp /usr/lib/ISOLINUX/isolinux.bin',
+                       'cp /usr/lib/ISOLINUX/isohdpfx.bin'):
+            assert needle in x86_arm, \
+                f'{needle} must sit in the non-aarch64 arm of the EFI ' \
+                f'conditional: isolinux is an x86 BIOS loader with no ' \
+                f'arm64 port'
+            assert needle not in arm_arm, \
+                f'{needle} leaked into the aarch64 arm'
+        # grub-mkstandalone embeds grub.cfg in a memdisk inside the EFI
+        # image, so booting does not depend on GRUB's iso9660 driver
+        # finding it on the media - and needing no loop mount, no mkfs.vfat
+        # and no root is what lets the stage run as the unprivileged
+        # builder user.
+        standalone = arm_arm
+        assert 'grub-mkstandalone -O "$GRUB_EFI_TARGET"' in standalone
+        assert 'mount' not in standalone and 'mkfs.vfat' not in standalone, \
+            'the arm64 path must need no privileged loop mount'
+        assert 'boot/grub/grub.cfg=$GRUB_CFG' in standalone, \
+            'grub.cfg has to be packed into the memdisk'
+        xorriso = code[code.index('UEFI-only ISO with xorriso'):]
+        xorriso = xorriso[:xorriso.index('\nelse')]
+        assert '-e "EFI/BOOT/$EFI_BINARY_NAME"' in xorriso, \
+            'the EFI image must be the *primary* El Torito boot entry'
+        assert '-no-emul-boot' in xorriso
+        for x86_only in ('-eltorito-alt-boot', '-isohybrid-mbr',
+                         '-isohybrid-gpt-basdat',
+                         '-b isolinux/isolinux.bin'):
+            assert x86_only not in xorriso, \
+                f'{x86_only} writes an x86 boot structure arm64 ignores'
+
+    def test_installer_verifies_its_own_eltorito_entry(self):
+        """xorriso accepts an -e path that is absent from the tree.
+
+        It then writes an ISO with no usable El Torito record at all and
+        still exits 0, so the loader has to be read back out of the
+        finished image.  Every GRUB EFI image is PE/COFF and starts "MZ".
+        """
+        code = self._code(self.INSTALLER.read_text())
+        tail = code[code.index('-osirrox on'):]
+        assert '/EFI/BOOT/$EFI_BINARY_NAME' in tail
+        assert '"MZ"' in tail, \
+            'the PE/COFF magic has to be checked, not just the extract'
+        failure = tail[tail.index('carries no bootable'):]
+        assert '"$INSTALLER_ISO"' in failure and 'rm -f' in failure, \
+            'a rejected ISO must be deleted, or a later stage publishes it'
+        assert 'exit 1' in failure
+
+    def test_live_stage_refuses_aarch64(self):
+        """final/15 must say so up front instead of writing a dead image.
+
+        builder.py now skips the stage on aarch64, but the stages also run
+        by hand and from build-iso-from-cache.yml, where nothing gates
+        them.  An x86 boot sector wrapping an arm64 rootfs is silently
+        unbootable and nobody would notice until it shipped.
+        """
+        code = self._code(self.LIVE.read_text())
+        guard = code[code.index('if [ "$ARCH" = "aarch64" ]; then'):]
+        guard = guard[:guard.index('\nfi')]
+        assert 'x86_64-only' in guard
+        assert 'final/14' in guard, \
+            'the message must say where an arm64 target gets its medium'
+        assert 'exit 1' in guard
+
+    def test_initramfs_rejects_a_dynamic_or_foreign_busybox(self):
+        """The initramfs has no libc yet, so busybox must be static.
+
+        A dynamic one is copied happily and then dies at exec with "No such
+        file or directory", which reads like a missing file rather than a
+        missing interpreter.  busybox.net publishes statics for i686 and
+        x86_64 only, so on aarch64 there is nothing to download and the
+        absence has to be a hard error.
+        """
+        code = self._code(self.INITRAMFS.read_text())
+        fn = code[code.index('is_static_binary() {'):]
+        fn = fn[:fn.index('\n}\n')]
+        assert 'readelf -lW' in fn and 'INTERP' in fn, \
+            'PT_INTERP is the authoritative static/dynamic discriminator'
+        triplets = code[code.index('BUSYBOX_TRIPLET='):]
+        triplets = triplets[:triplets.index('if [ -z "$BUSYBOX_SRC" ]')]
+        assert 'x86_64-linux-musl' in triplets
+        assert 'i686-linux-musl' in triplets
+        assert 'aarch64' not in triplets, \
+            'there is no aarch64 static on busybox.net; the URL would 404'
+        error = code[code.index('[ERROR] No static busybox'):]
+        error = error[:error.index('cp -a "$BUSYBOX_SRC"')]
+        assert 'exit 1' in error, \
+            'a target with no static busybox must not fall through to a ' \
+            'dynamic one, which produces an initramfs that cannot exec'
+        assert 'busybox-static' in error, 'the message must name the fix'
+
+    def test_arm64_kernel_can_mount_its_own_iso(self):
+        """The arm64 ISO rootfs is an xz squashfs on ISO9660 behind a loop.
+
+        CONFIG_SQUASHFS_XZ is a separate symbol defaulting to n, so
+        CONFIG_SQUASHFS alone mounts nothing - the kernel would see the
+        media, fail the mount and drop to a shell.
+        """
+        code = self._code(self.ARM64_KERNEL.read_text())
+        for symbol in ('CONFIG_BLK_DEV_INITRD=y', 'CONFIG_DEVTMPFS=y',
+                       'CONFIG_ISO9660_FS=y', 'CONFIG_SQUASHFS=y',
+                       'CONFIG_SQUASHFS_XZ=y', 'CONFIG_BLK_DEV_LOOP=y'):
+            assert symbol in code, \
+                f'kernel-config-arm64 lacks {symbol}, so the ISO cannot ' \
+                f'mount its own rootfs'
+        # CONFIG_CMDLINE_FORCE overrides whatever the bootloader passes,
+        # which is exactly why the initramfs has to probe /dev/sr0 itself.
+        # If the FORCE is ever dropped, that coupling needs re-examining
+        # rather than being silently relied upon.
+        assert 'CONFIG_CMDLINE_FORCE=y' in code

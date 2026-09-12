@@ -321,32 +321,62 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'privacy' in stage_names
 
-    def test_get_build_stages_installer_iso_x86_64_only(self, builder):
-        """The x86-only installer ISO stage must be skipped on aarch64.
+    def test_get_build_stages_installer_iso_every_architecture(self, builder):
+        """Every profile and architecture gets a bootable installer ISO.
 
-        final/14 builds a hybrid isolinux/BIOS + `grub-install
-        --target=x86_64-efi` + BOOTX64.EFI ISO, so on the arm64
-        profile it aborted the installer stage with "grub-install:
-        error: /usr/lib/grub/x86_64-efi/modinfo.sh doesn't exist"
-        (Nightly #228).  aarch64 boards boot the disk/SD image via
-        U-Boot (host/05) or arm64 UEFI, and nightly ships arm64 as a
-        rootfs tarball + disk image while tolerating a missing ISO,
-        so the stage must not be scheduled for a non-x86_64 target --
-        but every other final stage still runs.
+        The stage used to be gated on architecture == 'x86_64' because
+        final/14 was an x86-only hybrid (isolinux BIOS + `grub-install
+        --target=x86_64-efi` + an isohybrid MBR) and aborted the arm64
+        legs with "grub-install: error: /usr/lib/grub/x86_64-efi/
+        modinfo.sh doesn't exist" (Nightly #228).  final/14 now emits a
+        UEFI-only image for aarch64 (grub-mkstandalone -O arm64-efi +
+        BOOTAA64.EFI), so the gate only kept arm64/pinebook/brax3 as
+        rootfs-tarball-only releases with no bootable medium.
         """
         from builder import ProfileManager
         # The default x86_64 target keeps the installer ISO.
         builder.profile_config['architecture'] = 'x86_64'
         assert 'installer' in [s[0] for s in builder.get_build_stages()]
 
-        # An aarch64 target drops it while keeping the rest of final/.
+        # An aarch64 target keeps it too, alongside the rest of final/.
         builder.profile = 'arm64'
         builder.profile_config = ProfileManager.get_profile('arm64')
         stage_names = [s[0] for s in builder.get_build_stages()]
-        assert 'installer' not in stage_names
+        assert 'installer' in stage_names
         assert 'initramfs' in stage_names
         assert 'bootloader' in stage_names
         assert 'validate' in stage_names
+
+    def test_installer_stage_precedes_live_system_and_validate(self, builder):
+        """final/15 packs the tree final/14 just wrote the ISO into.
+
+        Both stages now emit their ISO under $LFS (== output_dir), so the
+        ordering is what keeps the live image from swallowing the
+        installer image, and validate must still see the finished tree.
+        """
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert stage_names.index('installer') < stage_names.index('live-system')
+        assert stage_names.index('live-system') < stage_names.index('validate')
+
+    def test_get_build_stages_live_system_skipped_on_aarch64(self, builder):
+        """final/15 is x86_64-only, so an arm64 live target must skip it.
+
+        isolinux and the isohybrid MBR have no aarch64 equivalent.  All
+        three aarch64 profiles already set live_system=False, so this only
+        bites an explicit `--profile xfce --arch aarch64`; scheduling it
+        anyway produced a silently unbootable x86 boot sector around an
+        arm64 rootfs, and the operator only found out at boot time.
+        """
+        builder.profile_config['live_system'] = True
+        builder.config.set('live_system.enabled', True)
+        builder.config.set('architecture', 'x86_64')
+        assert 'live-system' in [s[0] for s in builder.get_build_stages()]
+
+        builder.config.set('architecture', 'aarch64')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'live-system' not in stage_names
+        # The bootable medium for that target still gets built.
+        assert 'installer' in stage_names
 
     def test_get_build_stages_audio_studio_builds_audio_stack(self, builder):
         """audio-studio must build the multimedia stack then NeuralRack.

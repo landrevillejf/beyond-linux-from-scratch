@@ -28,10 +28,14 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
+          # grub-efi-amd64-bin provides /usr/lib/grub/x86_64-efi/, which
+          # final/14 preflights by path; busybox-static keeps final/12 from
+          # depending on a busybox.net download for the initramfs shell.
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
             xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
-            squashfs-tools jq zstd ca-certificates sed
+            squashfs-tools jq zstd ca-certificates sed \
+            grub-efi-amd64-bin busybox-static
 
       - name: Create lfs user (if needed)
         run: |
@@ -66,7 +70,13 @@ jobs:
 
       - name: Download and extract cache
         run: |
-          sudo mkdir -p /tmp/lfs-build/image
+          # build-release/ is the layout every other workflow uses: builder.py
+          # exports LFS as its --output directory, so the rootfs *is* that
+          # directory and the final/ stages write the ISO into it.  The old
+          # /tmp/lfs-build/image came from a two-level layout that no longer
+          # exists, and left this job looking for the ISO one directory above
+          # where final/14 and final/15 now put it.
+          sudo mkdir -p /tmp/lfs-build/build-release
           cd /tmp/lfs-build || exit 1
           if [ -n "${{ steps.get_cache.outputs.single_url }}" ]; then
             sudo wget -q --show-progress "${{ steps.get_cache.outputs.single_url }}" -O rootfs-cache.tar
@@ -82,19 +92,19 @@ jobs:
             exit 1
           fi
           if file rootfs-cache.tar | grep -qi zstd; then
-            sudo tar --zstd -xf rootfs-cache.tar -C image/
+            sudo tar --zstd -xf rootfs-cache.tar -C build-release/
           else
-            sudo tar -xf rootfs-cache.tar -C image/
+            sudo tar -xf rootfs-cache.tar -C build-release/
           fi
-          sudo chown -R lfs:lfs image/ || true
-          ls -lh image/
+          sudo chown -R lfs:lfs build-release/ || true
+          ls -lh build-release/
           
       - name: Validate cache content
         run: |
-          if ! ls /tmp/lfs-build/image/boot/vmlinuz* >/dev/null 2>&1; then
+          if ! ls /tmp/lfs-build/build-release/boot/vmlinuz* >/dev/null 2>&1; then
             echo "Cache does not contain a kernel – cannot build ISO."
-            echo "Contents of /tmp/lfs-build/image/boot:"
-            ls -la /tmp/lfs-build/image/boot || true
+            echo "Contents of /tmp/lfs-build/build-release/boot:"
+            ls -la /tmp/lfs-build/build-release/boot || true
             exit 1
           fi
           echo "Cache appears valid"
@@ -119,7 +129,12 @@ jobs:
       - name: Run final stages for ISO generation
         id: build_iso
         run: |
-          LFS_PATH="/tmp/lfs-build/image"
+          # final/14 and final/15 both write $LFS/$ISO_NAME, so the live ISO
+          # from final/15 is what this job publishes, exactly as on a full
+          # xfce build.  LFS_CONFIG_ARCHITECTURE is unset here because the
+          # stages run directly rather than through builder.py; both scripts
+          # fall back to `uname -m`, which is x86_64 on this runner.
+          LFS_PATH="/tmp/lfs-build/build-release"
           cd /tmp/lfs-builder
           sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/12-create-initramfs.sh
           sudo LFS="$LFS_PATH" ISO_NAME="${{ steps.release_info.outputs.iso_name }}" ./final/13-create-bootloader.sh
@@ -128,24 +143,26 @@ jobs:
 
       - name: Verify kernel and ISO
         run: |
-          ls /tmp/lfs-build/image/boot/vmlinuz*
-          test -s /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
-          sha256sum /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }} > /tmp/lfs-build/SHA256SUMS
-          sha256sum /tmp/lfs-build/image/boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
+          ISO="/tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}"
+          ls /tmp/lfs-build/build-release/boot/vmlinuz*
+          test -s "$ISO"
+          cd /tmp/lfs-build/build-release || exit 1
+          sha256sum "$(basename "$ISO")" > /tmp/lfs-build/SHA256SUMS
+          sha256sum boot/vmlinuz* >> /tmp/lfs-build/SHA256SUMS
 
       - name: Boot ISO in QEMU (smoke test)
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-system-x86
-          bash tools/qemu-boot-smoke.sh "/tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}"
+          bash tools/qemu-boot-smoke.sh "/tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}"
 
       - name: Upload ISO artifact
         uses: actions/upload-artifact@v4
         with:
           name: iso-from-cache
           path: |
-            /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
-            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}
+            /tmp/lfs-build/build-release/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
           if-no-files-found: error
 
@@ -156,8 +173,8 @@ jobs:
           tag_name: ${{ steps.release_info.outputs.tag }}
           name: ${{ steps.release_info.outputs.name }}
           files: |
-            /tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}
-            /tmp/lfs-build/image/boot/vmlinuz*
+            /tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}
+            /tmp/lfs-build/build-release/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
           generate_release_notes: true
         env:
@@ -166,7 +183,7 @@ jobs:
       - name: Verify ISO presence
         if: always()
         run: |
-          if [ -f "/tmp/lfs-build/${{ steps.release_info.outputs.iso_name }}" ]; then
+          if [ -s "/tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}" ]; then
             echo "ISO built successfully"
           else
             echo "ISO not found"

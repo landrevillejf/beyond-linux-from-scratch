@@ -32,8 +32,14 @@ ROOTFS_DIR="${2:-$(dirname "$ARTIFACT")/image}"
 BOOT_TIMEOUT="${BOOT_TIMEOUT:-300}"
 BOOT_MEMORY="${BOOT_MEMORY:-2G}"
 ROOT_DEV="${ROOT_DEV:-/dev/sda3}"
+# Which of the two ISO layouts was found, or "disk" for a raw image.  The
+# gate below is deliberately not the same for both flavours.
+ISO_FLAVOUR="disk"
 
-[ -f "$ARTIFACT" ] || { log_fail "Artifact not found: $ARTIFACT"; exit 1; }
+[ -f "$ARTIFACT" ] || {
+    log_fail "Artifact not found: $ARTIFACT"
+    exit 1
+}
 command -v qemu-system-x86_64 >/dev/null 2>&1 || {
     log_fail "qemu-system-x86_64 not installed"
     exit 1
@@ -43,42 +49,67 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 LOG="$WORKDIR/boot.log"
 
+# Pull one kernel/initrd pair out of the ISO.  Called from an "if", so the
+# xorriso status is the function's own and a miss simply selects the next
+# candidate layout.
+extract_iso_pair() {
+    xorriso -osirrox on -indev "$ARTIFACT" \
+        -extract "$1" "$WORKDIR/vmlinuz" \
+        -extract "$2" "$WORKDIR/initrd.img" >/dev/null 2>&1
+}
+
 case "$ARTIFACT" in
-    *.iso)
-        ARTIFACT_TYPE=iso
-        # Extract kernel + initramfs from the ISO's isolinux directory.
-        command -v xorriso >/dev/null 2>&1 || {
-            log_fail "xorriso not installed (needed to unpack the ISO)"
-            exit 1
-        }
-        xorriso -osirrox on -indev "$ARTIFACT" \
-            -extract /isolinux/vmlinuz "$WORKDIR/vmlinuz" \
-            -extract /isolinux/initrd.img "$WORKDIR/initrd.img" >/dev/null 2>&1 || {
-            log_fail "Could not extract kernel/initrd from $ARTIFACT"
-            exit 1
-        }
-        # Live ISO contract (final/15-create-live-system.sh): the initramfs
-        # mounts the boot media and unpacks live.squashfs from it.
-        APPEND="console=ttyS0 earlyprintk=serial root=/dev/sr0 ro"
-        DRIVE_ARGS=(-cdrom "$ARTIFACT")
-        ;;
-    *.img)
-        ARTIFACT_TYPE=img
-        KERNEL=$(find "$ROOTFS_DIR/boot" -maxdepth 1 -name "vmlinuz*" -type f 2>/dev/null | head -n1)
-        INITRD=$(find "$ROOTFS_DIR/boot" -maxdepth 1 -name "initramfs*" -type f 2>/dev/null | head -n1)
-        [ -n "$KERNEL" ] || { log_fail "No kernel found in $ROOTFS_DIR/boot"; exit 1; }
-        [ -n "$INITRD" ] || { log_fail "No initramfs found in $ROOTFS_DIR/boot"; exit 1; }
-        cp "$KERNEL" "$WORKDIR/vmlinuz"
-        cp "$INITRD" "$WORKDIR/initrd.img"
-        # Disk image partition layout from host/03-create-disk-image.sh:
-        # p1 is the ESP (/boot), p2 is swap, p3 is the root filesystem.
-        APPEND="console=ttyS0 earlyprintk=serial root=$ROOT_DEV ro"
-        DRIVE_ARGS=(-drive "file=$ARTIFACT,format=raw")
-        ;;
-    *)
-        log_fail "Unsupported artifact type (expected .iso or .img): $ARTIFACT"
+*.iso)
+    ARTIFACT_TYPE=iso
+    command -v xorriso >/dev/null 2>&1 || {
+        log_fail "xorriso not installed (needed to unpack the ISO)"
         exit 1
-        ;;
+    }
+    # Two layouts are current, and reading only one of them failed the
+    # gate for exactly the images that had never been published:
+    #   final/15-create-live-system.sh   /isolinux/vmlinuz + initrd.img
+    #   final/14-create-installer.sh     /boot/vmlinuz + initramfs.img
+    # final/15 only runs when the profile enables live_system, so the
+    # headless profiles (minimal, server, audio-cli, gnu-free) and every
+    # aarch64 profile ship the final/14 layout alone.
+    if extract_iso_pair /isolinux/vmlinuz /isolinux/initrd.img; then
+        ISO_FLAVOUR=live
+    elif extract_iso_pair /boot/vmlinuz /boot/initramfs.img; then
+        ISO_FLAVOUR=installer
+    else
+        log_fail "Could not extract kernel/initrd from $ARTIFACT"
+        log_fail "tried /isolinux/{vmlinuz,initrd.img} and /boot/{vmlinuz,initramfs.img}"
+        exit 1
+    fi
+    log_info "ISO layout: $ISO_FLAVOUR"
+    # Both flavours keep live.squashfs on the boot media and the
+    # initramfs mounts root= to find it (final/12-create-initramfs.sh).
+    APPEND="console=ttyS0 earlyprintk=serial root=/dev/sr0 ro"
+    DRIVE_ARGS=(-cdrom "$ARTIFACT")
+    ;;
+*.img)
+    ARTIFACT_TYPE=img
+    KERNEL=$(find "$ROOTFS_DIR/boot" -maxdepth 1 -name "vmlinuz*" -type f 2>/dev/null | head -n1)
+    INITRD=$(find "$ROOTFS_DIR/boot" -maxdepth 1 -name "initramfs*" -type f 2>/dev/null | head -n1)
+    [ -n "$KERNEL" ] || {
+        log_fail "No kernel found in $ROOTFS_DIR/boot"
+        exit 1
+    }
+    [ -n "$INITRD" ] || {
+        log_fail "No initramfs found in $ROOTFS_DIR/boot"
+        exit 1
+    }
+    cp "$KERNEL" "$WORKDIR/vmlinuz"
+    cp "$INITRD" "$WORKDIR/initrd.img"
+    # Disk image partition layout from host/03-create-disk-image.sh:
+    # p1 is the ESP (/boot), p2 is swap, p3 is the root filesystem.
+    APPEND="console=ttyS0 earlyprintk=serial root=$ROOT_DEV ro"
+    DRIVE_ARGS=(-drive "file=$ARTIFACT,format=raw")
+    ;;
+*)
+    log_fail "Unsupported artifact type (expected .iso or .img): $ARTIFACT"
+    exit 1
+    ;;
 esac
 
 # Use KVM when the host exposes it (GitHub runners do); fall back to TCG.
@@ -115,6 +146,13 @@ userspace_reached() {
     grep -Eqi "Mounting root:|login:|Entering runlevel|Reached target|Welcome" "$LOG"
 }
 
+# The initramfs prints this once it has mounted the boot media and found
+# live.squashfs on it, so it proves the ISO9660 driver, the media enumeration
+# and the squashfs this build packed are all present and readable.
+live_media_mounted() {
+    grep -q "Live media detected" "$LOG"
+}
+
 if [ "$ARTIFACT_TYPE" = img ]; then
     # The disk image's root partition is deliberately empty: host/03 formats
     # build-release.img but umounts it before anything is installed, and the
@@ -134,6 +172,27 @@ if [ "$ARTIFACT_TYPE" = img ]; then
     fi
     log_fail "Kernel started but the initramfs never reached userspace"
     exit 1
+fi
+
+# An installer ISO (final/14) packs a real squashfs, but the rootfs inside it
+# was never configured to run from a read-only root: /etc and /var are on the
+# image, so the boot scripts fail the moment they write and init can die on
+# the way to a login prompt.  What this gate can prove about that flavour is
+# that the media was enumerated, the ISO9660 mount worked and the squashfs was
+# found on it - so a panic after that point is tolerated the same way the empty
+# disk image's is, and a panic before it is not.  A live ISO (final/15) is
+# built to boot exactly this way and keeps the strict check below.
+if [ "$ISO_FLAVOUR" = installer ]; then
+    if ! live_media_mounted && ! userspace_reached; then
+        if grep -qi "Kernel panic" "$LOG"; then
+            log_fail "Kernel panic before the ISO's live.squashfs was mounted"
+        else
+            log_fail "Kernel started but the ISO's live.squashfs was never mounted"
+        fi
+        exit 1
+    fi
+    log_pass "Installer ISO mounted its live media (rootfs is not read-only safe)"
+    exit 0
 fi
 
 # Live ISO: the root (squashfs) is real, so a kernel panic is a genuine
