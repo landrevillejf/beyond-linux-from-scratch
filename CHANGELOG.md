@@ -330,6 +330,43 @@
 
 ### Fixed
 
+- **build-rootfs-cache #23 lost the display-manager stage to a GCC 14
+  error in an accountsservice subproject**
+  (`blfs/08d-build-display-manager.sh`, `tests/test_acceptance_shell.py`)
+  - The xfce/sysvinit leg ran 4h3m26s and died at step 22 with `[ERROR]
+    Required package accountsservice failed - aborting stage`.  The ninja
+    log names the object: `FAILED: [code=1]
+    subprojects/mocklibc-1.0/src/mocklibc-debug-netgroup.p/netgroup-debug.c.o`,
+    followed by `../subprojects/mocklibc-1.0/src/netgroup-debug.c:25:3:
+    error: implicit declaration of function 'print_indent'
+    [-Wimplicit-function-declaration]` and `ninja: build stopped:
+    subcommand failed` at [20/109]
+  - mocklibc is the libc stub accountsservice bundles for its own test
+    harness, and `netgroup_debug_print_entry()` calls `print_indent()`
+    with no forward declaration and no `#include` of the header that
+    declares it.  GCC 14 promotes `-Wimplicit-function-declaration` from a
+    warning to a hard error, so a defect that had always been there only
+    became fatal once the toolchain the stage builds against moved to
+    GCC 14.  The same log shows the sibling deprecation warnings
+    (`g_spawn_check_exit_status`, `sd_seat_can_multi_session`) still
+    compiling through, which is what separates the two categories
+  - `build_commands_accountsservice` now passes
+    `-D c_args=-Wno-implicit-function-declaration` to `meson setup`.
+    `c_args` is a meson *base* option rather than a project option, so
+    setting it on the setup command line is what makes it reach the
+    subproject the failing object belongs to; a bare `export CFLAGS` would
+    only have covered the top-level targets.  The relaxation is scoped to
+    this one package - no other stage inherits it - and the book's own
+    flags (`--prefix=/usr`, `--buildtype=release`, `-D admin_group=adm`,
+    `-D elogind`, `-D systemdsystemunitdir`) are untouched, so the
+    deviation is limited to the one diagnostic GCC 14 turned fatal
+    (AGENTS.md rule 15: deviations from the book are documented)
+  - `tests/test_acceptance_shell.py` gains
+    `test_accountsservice_survives_gcc_14_implicit_declarations`, which
+    asserts the flag is present *and* that it sits on the `meson setup`
+    invocation rather than in the environment, since only the former
+    reaches mocklibc
+
 - **`docs/index.md` and `docs/content.md` stage lists had drifted from
   `BUILD_STAGES`** (`docs/index.md`, `docs/content.md`)
   - Both files still described a 40-stage pipeline with no `knowledge`

@@ -3728,6 +3728,32 @@ class TestNightly230StageGuardrails:
         assert 'libelogind' in fn, \
             'accountsservice must detect elogind through libelogind.pc'
 
+    def test_accountsservice_survives_gcc_14_implicit_declarations(self):
+        """GCC 14 promotes -Wimplicit-function-declaration to a hard error.
+
+        accountsservice's bundled mocklibc subproject calls print_indent()
+        in netgroup-debug.c with no forward declaration, so
+        build-rootfs-cache #23 died at [20/109] with 'ninja: build stopped:
+        subcommand failed' and the required flag turned that into
+        'Required package accountsservice failed - aborting stage'.  c_args
+        is a meson base option, so passing it to setup reaches the
+        subproject the failing object belongs to and not just the package.
+        """
+        fn = self._fn(self.DISPLAY_MANAGER.read_text(),
+                      'build_commands_accountsservice')
+        flag = '-D c_args=-Wno-implicit-function-declaration'
+        assert flag in fn, \
+            'mocklibc needs the GCC 14 implicit-declaration error relaxed'
+        # The flag has to sit on the meson setup invocation itself: a bare
+        # export reaches the top-level compiler but is not recorded as a
+        # base option, which is what makes it apply to subprojects too.
+        setup = fn[fn.index('meson setup'):]
+        assert flag in setup.split('&&', 1)[0], \
+            'c_args must be a meson setup option to reach mocklibc'
+        for want in ('--prefix=/usr', '--buildtype=release',
+                     '-D admin_group=adm', 'ninja install'):
+            assert want in fn, f'accountsservice meson lost {want}'
+
     def test_polkit_installs_its_pam_stack_where_libpam_looks(self):
         """polkit's meson default for pam_prefix is <prefix>/lib/pam.d, a
         directory libpam never reads, so the generated polkit-1 stack
