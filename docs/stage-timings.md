@@ -32,6 +32,8 @@ Times are practical ranges (not guarantees). Network and mirror health can move 
 | base-packages | 2-8 min |
 | security | 2-8 min |
 | branding | 1-3 min |
+| calamares-build | 45-90 min (only when `installer.type=calamares`) |
+| calamares | 1-2 min |
 | first-boot | 1-3 min |
 | system-updater | 1-3 min |
 | package-updater | 1-3 min |
@@ -55,6 +57,27 @@ Main factors:
 2. Compression-heavy stages (`installer`, `live-system`)
 3. Package compile cost in `desktop` and `applications`
 4. Whether failed stages are resumed (`--resume-from`) vs full rebuild
+
+### `calamares-build` cost
+
+The stage is off on every profile, so it adds nothing to the totals above
+until it is switched on with `--installer calamares` or a profile's
+`graphical_installer` flag. When it is on it becomes the most expensive
+optional stage in the pipeline: a *trimmed* Qt6 (only `qtbase`, `qtsvg`,
+`qttools` and `qttranslations`) is still roughly 30-60 min on
+`ubuntu-latest`, and the filesystem tools, extra-cmake-modules, the KF6
+trio, polkit-qt-1, yaml-cpp, kpmcore and Calamares add another 15-25 min
+on top. That is exactly why `blfs/29-build-calamares.sh` derives its
+`-skip` list from the tarball instead of configuring all of
+`qt-everywhere-src`: the full build is what already pushes the `kde` and
+`full` legs past GitHub's hard six-hour cap.
+
+Qt6 is only compiled when `have_pc Qt6Core` fails, so the `kde` and `lxqt`
+profiles -- whose `desktop` stage runs at position 18, well before
+`calamares-build` at 33 -- pay nothing extra for it. A profile that enables
+the installer and still starts timing out should move to the Tier-2 base
+cache (`BASE_STAGE=display-manager`) described below, which pulls xorg,
+wayland and the display manager into the cached prefix.
 
 ## Measured nightly prefix (Nightly #215)
 
