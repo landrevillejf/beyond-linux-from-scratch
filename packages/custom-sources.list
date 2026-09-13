@@ -733,3 +733,44 @@ https://www.linuxfromscratch.org/patches/blfs/12.4/libtirpc-1.3.6-gcc15_fixes-1.
 # is present in /sources; it adds the TearFree option to the modesetting
 # driver without changing any default.
 https://www.linuxfromscratch.org/patches/blfs/12.4/xorg-server-21.1.18-tearfree_backport-1.patch
+
+# ============================================================================
+# Graphical installer build chain (calamares-build stage,
+# blfs/29-build-calamares.sh).  yaml-cpp, kpmcore and calamares have no BLFS
+# book page, so their versions are documented deviations (AGENTS.md rule 15)
+# and every dependency fact below was read out of the upstream CMakeLists.
+# The KF6 trio is pinned only because the official wget-list carries just the
+# frameworks that have a book page of their own.
+# ============================================================================
+
+# KF6 CoreAddons / I18n / WidgetsAddons -- kpmcore requires all three and
+# Calamares' partition module calls
+# calamares_skip_module("partition (missing suitable KPMcore)") without it, so
+# this trio is what stands between the installer and having no partition page.
+# 6.17.0 is the series the kde/frameworks6 page points at, fetched from the
+# same download.kde.org directory layout.
+https://download.kde.org/stable/frameworks/6.17/kcoreaddons-6.17.0.tar.xz
+https://download.kde.org/stable/frameworks/6.17/ki18n-6.17.0.tar.xz
+https://download.kde.org/stable/frameworks/6.17/kwidgetsaddons-6.17.0.tar.xz
+
+# yaml-cpp -- Calamares 3.3 requires >= 0.5.1.  0.7.0 is the last release
+# before the 0.8 API break, i.e. the generation Calamares 3.3 was written
+# against, and FindYAMLCPP.cmake only needs yaml-cpp/yaml.h plus a
+# libyaml-cpp in lib64 or lib, which the shared build below provides.  Both
+# 0.7.0 and 0.8.0 declare cmake_minimum_required(VERSION 3.4), so the stage
+# passes -D CMAKE_POLICY_VERSION_MINIMUM=3.5 under the book's CMake 4.1.0.
+https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.tar.gz
+
+# kpmcore -- 25.08.0 is the same release-service series the book already pins
+# (ark/dolphin/kate 25.08.0).  Its CMakeLists needs Qt6 >= 6.5 (Core DBus Gui
+# Widgets), KF6 >= 5.240 (CoreAddons I18n WidgetsAddons), PolkitQt6-1, ECM and
+# blkid >= 2.33.2 -- no libparted, so gptfdisk/parted stay runtime helpers
+# that kpmcore shells out to rather than link-time dependencies.
+https://download.kde.org/stable/release-service/25.08.0/src/kpmcore-25.08.0.tar.xz
+
+# calamares -- the 3.3 release asset, published by upstream as a -src tarball.
+# Its CMakeLists needs Qt6 (Concurrent Core DBus Gui LinguistTools Network Svg
+# Widgets, plus Quick/QuickWidgets only when WITH_QML), yaml-cpp >= 0.5.1, ECM
+# >= 5.240, KF6CoreAddons and PolkitQt6-1.  The stage builds it with
+# WITH_QML=OFF, which is what keeps qtdeclarative out of the Qt6 build.
+https://github.com/calamares/calamares/releases/download/v3.3.14/calamares-3.3.14.tar.gz
