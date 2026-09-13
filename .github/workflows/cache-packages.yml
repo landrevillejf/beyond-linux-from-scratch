@@ -125,6 +125,40 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Drop superseded cache parts
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # softprops/action-gh-release only adds or overwrites assets, so a
+          # generation that splits into fewer parts than the previous one leaves
+          # the older tails attached to the release: the 2026-09-01 run published
+          # two parts and the 2026-08-03 part-02..04 (4.8 GB) are still there.
+          # Every consumer downloads all assets matching
+          # lfs-packages-part-*.tar.gz and cats them into one tar stream, so each
+          # job of each build pays for two cache generations and GNU tar's
+          # end-of-archive marker is the only thing that keeps the older one from
+          # being unpacked on top of the newer.  The tails are deleted after the
+          # upload, never before, so a build running while this step is in flight
+          # still finds a complete archive set.
+          new_parts=$(find /tmp/artifacts -maxdepth 1 -name 'lfs-packages-part-*.tar.gz' | wc -l)
+          assets=$(gh release view packages-cache-latest \
+                     --json assets --jq '.assets[].name' 2>/dev/null || true)
+          for asset in $assets; do
+            case "$asset" in
+              lfs-packages-part-*.tar.gz) ;;
+              *) continue ;;
+            esac
+            index=${asset#lfs-packages-part-}
+            index=${index%.tar.gz}
+            if [ "$((10#$index))" -ge "$new_parts" ]; then
+              echo "Removing superseded part: $asset"
+              gh release delete-asset packages-cache-latest "$asset" --yes || true
+            fi
+          done
+          echo "Release assets now:"
+          gh release view packages-cache-latest --json assets --jq '.assets[].name' || true
+
       - name: Create cache summary
         if: success()
         run: |

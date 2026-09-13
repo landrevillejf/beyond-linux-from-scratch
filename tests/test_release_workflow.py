@@ -955,3 +955,100 @@ class TestNightly232IsoArtifacts:
         assert body.index('if [ -f "$ISO_PATH" ]') < \
             body.index("build-release.img \\"), \
             "the ISO must be tried before the disk-image fallback"
+
+
+class TestPackagesCachePurge:
+    """Guardrails for the `packages-cache-latest` release-asset purge.
+
+    softprops/action-gh-release only adds or overwrites assets, so a
+    generation that splits into fewer parts than the previous one leaves
+    the older tails attached to the release: 2026-09-01 published two
+    parts and the 2026-08-03 part-02..04 were still there.  Every
+    consumer downloads the whole `lfs-packages-part-*.tar.gz` set and cats
+    it into one tar stream, so each job of each build paid for two cache
+    generations and GNU tar's end-of-archive marker was the only thing
+    keeping the older one from being unpacked over the newer.
+    """
+
+    WORKFLOW = "cache-packages.yml"
+    PURGE = "Drop superseded cache parts"
+    UPLOAD = "Upload packages to GitHub Release"
+
+    def _read(self):
+        return Path(f".github/workflows/{self.WORKFLOW}").read_text()
+
+    def _step(self, workflow, name):
+        """Slice out one step so assertions stay local to it."""
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        """Live lines only, so an assertion cannot pass on a comment."""
+        return "\n".join(line for line in text.splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def _purge(self):
+        return self._commands(self._step(self._read(), self.PURGE))
+
+    def test_purge_runs_after_the_upload(self):
+        """Deleting first would open a window where the release holds no
+        complete archive set, and a build starting inside it would restore
+        a truncated cache."""
+        workflow = self._read()
+        assert workflow.index(f"- name: {self.UPLOAD}") < \
+            workflow.index(f"- name: {self.PURGE}")
+        assert "if: success()" in self._step(workflow, self.PURGE), \
+            "a failed upload must not be followed by a purge"
+
+    def test_purge_counts_the_parts_this_generation_produced(self):
+        """The cut-off has to come from the freshly built parts, not from
+        the release itself: reading it back would keep every stale asset
+        it was meant to remove."""
+        body = self._purge()
+        assert "new_parts=$(find /tmp/artifacts -maxdepth 1 " \
+            "-name 'lfs-packages-part-*.tar.gz' | wc -l)" in body
+        # `ls` would abort the step on a glob that matches nothing, and
+        # `find | wc -l` is what the producer's own split step relies on.
+        assert "ls /tmp/artifacts" not in body
+
+    def test_purge_only_touches_numbered_part_assets(self):
+        """SHA256SUMS lives on the same release and every consumer
+        downloads it alongside the parts."""
+        body = self._purge()
+        assert "case \"$asset\" in" in body
+        assert "lfs-packages-part-*.tar.gz) ;;" in body
+        assert "*) continue ;;" in body
+        assert "delete-asset packages-cache-latest \"$asset\"" in body
+
+    def test_purge_compares_the_part_index_as_a_decimal_number(self):
+        """Parts are zero-padded to two digits, so `08` and `09` are not
+        valid octal: without the 10# prefix the arithmetic expansion fails
+        and the step dies on exactly the asset it wanted to drop."""
+        body = self._purge()
+        assert "index=${asset#lfs-packages-part-}" in body
+        assert "index=${index%.tar.gz}" in body
+        assert '[ "$((10#$index))" -ge "$new_parts" ]' in body
+
+    def test_purge_keeps_every_part_this_generation_published(self):
+        """`-ge` is the boundary that matters: part-00..part-(n-1) are the
+        new set, so anything strictly below the count must survive."""
+        body = self._purge()
+        assert '"$((10#$index))" -ge "$new_parts"' in body
+        assert "-lt" not in body and "-le" not in body
+        # Non-interactive and non-fatal: a token without contents:write or
+        # a transient API error must not fail a cache that just uploaded.
+        assert "--yes || true" in body
+
+    def test_purge_tolerates_a_release_that_does_not_exist_yet(self):
+        """The first run of the workflow publishes the release in the step
+        above; on a fork or after a manual deletion the view call finds
+        nothing and the loop has to stay empty instead of failing."""
+        body = self._purge()
+        assert "gh release view packages-cache-latest" in body
+        assert "--json assets --jq '.assets[].name' 2>/dev/null || true" \
+            in body
+        assert "for asset in $assets; do" in body
