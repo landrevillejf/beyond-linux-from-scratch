@@ -65,6 +65,9 @@ def mock_config_file(temp_dir):
             "persistence_support": True,
             "default_boot": "live"
         },
+        "installer": {
+            "type": "none"
+        },
         "java_dev": {
             "enabled": False,
             "version": "21.0.9",

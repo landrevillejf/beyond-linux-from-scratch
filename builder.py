@@ -93,6 +93,7 @@ BUILD_STAGES = [
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
     ('branding', 'blfs/20-branding.sh'),
+    ('calamares-build', 'blfs/29-build-calamares.sh'),
     ('calamares', 'blfs/22-calamares-installer.sh'),
     ('first-boot', 'blfs/17-first-boot-service.sh'),
     ('system-updater', 'blfs/18-system-updater.sh'),
@@ -191,6 +192,16 @@ class LFSConfig:
                 "squashfs_compression": "xz",
                 "persistence_support": True,
                 "default_boot": "live"
+            },
+
+            # Graphical installer.  "none" keeps the historical behaviour
+            # where blfs/22 only writes Calamares configuration;
+            # "calamares" additionally schedules the calamares-build stage
+            # that compiles the installer itself.  Profiles declare it
+            # through their graphical_installer flag and --installer
+            # overrides it.
+            "installer": {
+                "type": "none"
             },
 
             "java_dev": {
@@ -369,6 +380,7 @@ class ProfileManager:
             # only delegates to the lpm this profile already installs, so the
             # updater is no longer optional on the lean profile either.
             'system_updater': True,
+            'graphical_installer': False,
             'desktop_options': ['none'],
             'init_options': ['sysvinit', 'systemd', 'openrc'],
             'audio_options': ['none']
@@ -386,6 +398,7 @@ class ProfileManager:
             'privacy_tools': True,
             'live_system': False,
             'system_updater': True,
+            'graphical_installer': False,
             'gnu_free': True,
             'kernel': 'linux-libre'
         },
@@ -402,6 +415,7 @@ class ProfileManager:
             'privacy_tools': True,
             'live_system': True,
             'system_updater': True,
+            'graphical_installer': False,
             'gnu_free': True,
             'kernel': 'linux-libre'
         },
@@ -417,7 +431,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'gnome': {
             'description': 'GNOME desktop environment',
@@ -431,7 +446,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'java-dev': {
             'description': 'Java development environment with XFCE',
@@ -445,7 +461,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'secure': {
             'description': 'Security-hardened system with privacy tools',
@@ -459,7 +476,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': True,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'full': {
             'description': 'Complete system with everything',
@@ -473,7 +491,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': True,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'arm64': {
             'description': 'ARM64 server (Raspberry Pi, Orange Pi)',
@@ -488,6 +507,7 @@ class ProfileManager:
             'privacy_tools': False,
             'live_system': False,
             'system_updater': True,
+            'graphical_installer': False,
             'cross_compile': True,
             'architecture': 'aarch64',
             'bootloader': 'uboot'
@@ -504,7 +524,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': False,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'pinebook': {
             'description': 'Pinebook / Pinebook Pro ARM64 laptop',
@@ -519,6 +540,7 @@ class ProfileManager:
             'privacy_tools': False,
             'live_system': False,
             'system_updater': True,
+            'graphical_installer': False,
             'cross_compile': True,
             'architecture': 'aarch64',
             'bootloader': 'uboot'
@@ -535,7 +557,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'kde': {
             'description': 'KDE Plasma full-featured desktop environment',
@@ -549,7 +572,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'lxqt': {
             'description': 'LXQt extremely lightweight Qt desktop environment',
@@ -563,7 +587,8 @@ class ProfileManager:
             'security_hardening': False,
             'privacy_tools': False,
             'live_system': True,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'server': {
             'description': 'Production-optimized server configuration',
@@ -577,7 +602,8 @@ class ProfileManager:
             'security_hardening': True,
             'privacy_tools': False,
             'live_system': False,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         },
         'brax3': {
             'description': 'Brax3 Linux smartphone (Qualcomm Snapdragon)',
@@ -592,6 +618,7 @@ class ProfileManager:
             'privacy_tools': False,
             'live_system': False,
             'system_updater': True,
+            'graphical_installer': False,
             'cross_compile': True,
             'architecture': 'aarch64',
             'bootloader': 'aboot'
@@ -608,7 +635,8 @@ class ProfileManager:
             'security_hardening': False,
             'privacy_tools': False,
             'live_system': False,
-            'system_updater': True
+            'system_updater': True,
+            'graphical_installer': False
         }
     }
 
@@ -1578,6 +1606,16 @@ class LFSBuilder:
         self.config.set('live_system.enabled', self.profile_config.get('live_system', True))
         self.config.set('system_updater.enabled', self.profile_config.get('system_updater', True))
 
+        # Resolve the graphical installer here so installer.type always
+        # exists in the exported environment (LFS_CONFIG_INSTALLER_TYPE),
+        # even against a config file written before the key existed.  The
+        # --installer CLI override is applied later in main() and refreshes
+        # the executor.
+        self.config.set(
+            'installer.type',
+            'calamares' if self.profile_config.get('graphical_installer', False) else 'none'
+        )
+
         if self.profile_config.get('security_hardening', False):
             self.config.set('security.kernel_hardening', True)
             self.config.set('security.firewall.enabled', True)
@@ -1632,6 +1670,22 @@ class LFSBuilder:
             init = 'sysvinit'
 
         return init
+
+    def get_installer_type(self) -> str:
+        """Get the graphical installer choice from config.
+
+        Mirrors get_init_system(): an unknown value warns and falls back to
+        'none' rather than scheduling calamares-build, whose own guard would
+        abort the stage minutes into a multi-hour build.
+        """
+        installer_choices = ['none', 'calamares']
+        installer = self.config.get('installer.type', 'none')
+
+        if installer not in installer_choices:
+            self.logger.warning(f"Unknown installer type: {installer}, using none")
+            installer = 'none'
+
+        return installer
 
     def get_iso_name(self, dated: Optional[bool] = None) -> str:
         """Generate the versioned ISO filename.
@@ -2171,6 +2225,14 @@ class LFSBuilder:
         calamares_live = self.profile_config.get('live_system', True)
         calamares_desktop = _desktop and _desktop != 'none'
         if calamares_desktop and calamares_live:
+            # calamares-build compiles the installer itself (popt, the
+            # filesystem tools, Qt6, ECM, the KF6 trio, polkit-qt-1,
+            # yaml-cpp, kpmcore and Calamares) and is strictly opt-in;
+            # blfs/22 only writes configuration, which configures nothing
+            # unless the binary exists.  It must run first so blfs/22 can
+            # probe the real module list.
+            if self.get_installer_type() == 'calamares':
+                stages.append(('calamares-build', 'blfs/29-build-calamares.sh'))
             stages.append(('calamares', 'blfs/22-calamares-installer.sh'))
 
         # First boot service
@@ -2926,6 +2988,12 @@ Examples:
     parser.add_argument('--with-knowledge', action='store_true',
                         help='Enable the local "knowledge" AI assistant (Ollama, opt-in)')
 
+    parser.add_argument('--installer',
+                        choices=['none', 'calamares'],
+                        default=None,
+                        help='Override the graphical installer (calamares builds and installs the '
+                             'real Calamares chain; default: from the profile, currently none)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -2968,6 +3036,8 @@ def main():
             print(f"    Architecture: {info.get('architecture', 'x86_64')}")
             print(f"    Security: {'Yes' if info.get('security_hardening', False) else 'No'}")
             print(f"    Live USB: {'Yes' if info.get('live_system', True) else 'No'}")
+            print(f"    Graphical installer: "
+                  f"{'Calamares' if info.get('graphical_installer', False) else 'None'}")
         print()
         return
 
@@ -3057,6 +3127,11 @@ def main():
         builder.logger.info("Local AI assistant 'knowledge' enabled")
         refresh_executor = True
 
+    if args.installer:
+        builder.config.set('installer.type', args.installer)
+        builder.logger.info(f"Graphical installer overridden to: {args.installer}")
+        refresh_executor = True
+
     if refresh_executor:
         builder.refresh_executor()
 
@@ -3093,6 +3168,7 @@ def main():
     # Lignes supplémentaires (pour info)
     print(f"  Init System:    {effective_init}")
     print(f"  Live System:    {'Yes' if effective_live else 'No'}")
+    print(f"  Installer:      {builder.get_installer_type()}")
     print(f"  Cross-Compile:  {'Yes (' + builder.get_target_architecture() + ')' if builder.is_cross_compile() else 'No'}")
     print(f"  Output:         {args.output}")
     print(f"  Host System:    {builder.system}")

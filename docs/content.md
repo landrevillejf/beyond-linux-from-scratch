@@ -1,6 +1,6 @@
 # LFS/BLFS Builder – Documentation
 
-**Version 0.55.1** – *Works on Linux, macOS, and Windows (WSL2)*  
+**Version 0.57.0** – *Works on Linux, macOS, and Windows (WSL2)*  
 **Author:** Jean-Francois Landreville
 
 ---
@@ -9,7 +9,7 @@
 
 The **LFS/BLFS Builder** is a Python‑based orchestrator that automates the creation of a custom Linux system from scratch, following the Linux From Scratch (LFS) and Beyond Linux From Scratch (BLFS) books. It downloads source tarballs, runs a series of shell scripts to compile the toolchain, the base system, desktop environments, and additional packages, and finally produces a bootable ISO image.
 
-The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC, runit, s6), desktop environments (XFCE, GNOME, KDE, LXQt, Phosh), cross‑compilation for ARM64, a cache mechanism to speed up repeated builds, LUKS full‑disk encryption, the Calamares graphical installer, professional branding, and supply‑chain artifacts (GPG signing and SPDX SBOM).
+The builder supports multiple profiles, init systems (sysvinit, systemd, OpenRC, runit, s6), desktop environments (XFCE, GNOME, KDE, LXQt, Phosh), cross‑compilation for ARM64, a cache mechanism to speed up repeated builds, LUKS full‑disk encryption, an opt‑in Calamares graphical installer build chain, professional branding, and supply‑chain artifacts (GPG signing and SPDX SBOM).
 
 ---
 
@@ -142,6 +142,7 @@ python3 builder.py --write-usb /dev/sdb
 | `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`). |
 | `--nightly` | Nightly build mode: append today's date to the ISO filename. |
 | `--skip-man-pages` | Export `SKIP_MAN_PAGES=true` so stage scripts skip man page generation. |
+| `--installer` | Graphical installer override (`none`, `calamares`; default from the profile, currently `none`). `calamares` adds the `calamares-build` stage, which compiles Qt6, ECM, KF6, polkit-qt-1, yaml-cpp, kpmcore and Calamares. |
 
 ---
 
@@ -161,6 +162,7 @@ The builder comes with a set of predefined profiles that configure the target sy
 - Privacy tools
 - Live system support
 - System updater
+- Graphical installer (`graphical_installer`, resolved into `installer.type`)
 - Cross‑compilation settings (for ARM profiles)
 
 ### Available Profiles
@@ -197,6 +199,7 @@ The builder uses a JSON configuration file (default: `config/build.conf`). It co
 - Init system options
 - Package manager settings
 - Live system parameters
+- Graphical installer choice (`installer.type`: `none` or `calamares`)
 - Desktop settings
 - Security options
 - Kernel version and modules
@@ -238,20 +241,22 @@ The build process is divided into ordered stages. Profiles include or skip stage
 24. **server** – install server packages (profiles declaring `ssh`/`server-tools`).
 25. **printing-scanning** – install CUPS/SANE (profiles declaring `printing` or `all`).
 26. **audio-studio** – install pro audio tooling (audio profiles only).
-27. **package-manager** – install the LPM package manager.
-28. **base-packages** – install base packages via LPM.
-29. **security** – apply security hardening.
-30. **privacy** – install privacy tools.
-31. **branding** – apply custom branding (themes, wallpapers).
-32. **calamares** – install the Calamares graphical installer.
-33. **first-boot** – set up first-boot services.
-34. **system-updater** – install the system updater.
-35. **luks-encryption** – set up LUKS full-disk encryption support.
-36. **initramfs** – create the initramfs.
-37. **bootloader** – install the bootloader (GRUB).
-38. **installer** – create the bootable ISO.
-39. **live-system** – generate the live squashfs and final ISO (when enabled).
-40. **validate** – validate the produced build before publication.
+27. **knowledge** – install the opt-in local AI assistant (Ollama).
+28. **package-manager** – install the LPM package manager.
+29. **base-packages** – install base packages via LPM.
+30. **security** – apply security hardening.
+31. **privacy** – install privacy tools.
+32. **branding** – apply custom branding (themes, wallpapers).
+33. **calamares-build** – compile the Calamares installer chain (only when `installer.type` is `calamares`).
+34. **calamares** – configure the Calamares graphical installer.
+35. **first-boot** – set up first-boot services.
+36. **system-updater** – install the system updater.
+37. **luks-encryption** – set up LUKS full-disk encryption support.
+38. **initramfs** – create the initramfs.
+39. **bootloader** – install the bootloader (GRUB).
+40. **installer** – create the bootable ISO.
+41. **live-system** – generate the live squashfs and final ISO (when enabled).
+42. **validate** – validate the produced build before publication.
 
 If a stage fails, you can resume from that stage using `--resume-from`, or stop early with `--stop-after`.
 

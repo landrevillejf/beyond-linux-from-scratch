@@ -2,7 +2,7 @@
 
 Way Beyond Linux From Scratch is an automated LFS/BLFS distribution builder. It orchestrates host preparation, toolchain construction, LFS core build, BLFS layers, kernel generation, installer creation, and optional live ISO output through a single Python entry point (`builder.py`). Works on Linux, macOS, and Windows (WSL2).
 
-**Version:** 0.55.1  
+**Version:** 0.57.0  
 **Author:** Jean-Francois Landreville
 
 This repository is designed for reproducible, profile‑driven builds and CI/CD publication workflows that separate:
@@ -181,20 +181,22 @@ cross-compiled architectures). The master ordered list is:
 24. `server` (profiles declaring `ssh` or `server-tools`)
 25. `printing-scanning` (profiles declaring `printing`, or `all`)
 26. `audio-studio` (audio profiles only)
-27. `package-manager`
-28. `base-packages`
-29. `security`
-30. `privacy`
-31. `branding`
-32. `calamares`
-33. `first-boot`
-34. `system-updater`
-35. `luks-encryption`
-36. `initramfs`
-37. `bootloader`
-38. `installer`
-39. `live-system` (when enabled)
-40. `validate`
+27. `knowledge` (when enabled)
+28. `package-manager`
+29. `base-packages`
+30. `security`
+31. `privacy`
+32. `branding`
+33. `calamares-build` (when `installer.type` is `calamares`)
+34. `calamares`
+35. `first-boot`
+36. `system-updater`
+37. `luks-encryption`
+38. `initramfs`
+39. `bootloader`
+40. `installer`
+41. `live-system` (when enabled)
+42. `validate`
 
 ---
 

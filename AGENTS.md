@@ -81,6 +81,28 @@ Stage execution order (xfce profile, live enabled):
 6. `lfs-system` → `lfs/06-build-lfs-system.sh`
 7. … (see `BUILD_STAGES` in `builder.py` for the complete list)
 
+Two conditional stages sit between `branding` and `first-boot`, and their
+relative order matters:
+
+- `calamares-build` → `blfs/29-build-calamares.sh`, scheduled only when
+  `installer.type` is `calamares`. It compiles the installer itself: popt,
+  the filesystem tools (dosfstools, gptfdisk, parted), a trimmed Qt6,
+  extra-cmake-modules, the KF6 CoreAddons/I18n/WidgetsAddons trio,
+  polkit-qt-1, yaml-cpp, kpmcore and Calamares. It fails the stage unless
+  `libcalamares_viewmodule_partition.so` was installed, because without it
+  Calamares starts with no partition page.
+- `calamares` → `blfs/22-calamares-installer.sh`, which only writes
+  configuration, so it must run once the binary exists.
+
+`installer.type` is part of the core configuration schema but is not taken
+from `config/build.conf` as authored: `_apply_profile_settings()` resolves
+it from the profile's `graphical_installer` flag (currently `False` on all
+17 profiles), and `--installer {none,calamares}` overrides it in `main()`
+and refreshes the `ScriptExecutor` so the new stage list reaches the
+scripts. Both `LFS_CONFIG_INSTALLER_TYPE` and
+`LFS_PROFILE_GRAPHICAL_INSTALLER` are exported through the usual
+`_flatten_config()` path, so no extra export code exists for them.
+
 ### `branding/`
 
 Contains branding presets (subdirectories) and a `branding.toml` central config. Branding is applied during the `branding` stage. Configuration is driven from `config/build.conf` under the `branding` key.
@@ -89,7 +111,7 @@ Contains branding presets (subdirectories) and a `branding.toml` central config.
 
 ## Build profiles
 
-Profiles live in `ProfileManager` (inside `builder.py`). Each profile specifies: desktop environment, init system, target architecture, live ISO flag, and included/excluded stages.
+Profiles live in `ProfileManager` (inside `builder.py`). Each profile specifies: desktop environment, init system, target architecture, live ISO flag, graphical installer flag, and included/excluded stages.
 
 Available profiles: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `kde`, `lxqt`, `java-dev`, `server`, `secure`, `full`, `audio-cli`, `audio-studio`, `arm64`, `pinebook`, `brax3`, `custom`.
 

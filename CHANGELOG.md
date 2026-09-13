@@ -4,6 +4,77 @@
 
 ### Added
 
+- **a real Calamares build chain, off by default** (`builder.py`,
+  `blfs/29-build-calamares.sh`, `packages/custom-sources.list`,
+  `config/build.conf`, `config/build.conf.json`, `config/default.json`,
+  `tests/test_builder.py`, `tests/test_config.py`,
+  `tests/test_acceptance_shell.py`, `tests/conftest.py`, `README.md`,
+  `docs/features.md`, `docs/stage-timings.md`, `docs/index.md`,
+  `docs/content.md`, `AGENTS.md`)
+  - `blfs/22-calamares-installer.sh` has always written a complete
+    Calamares configuration -- `settings.conf`, `unpackfs.conf`, branding,
+    a polkit rule and an autostart entry -- into a system with no
+    `/usr/bin/calamares` in it.  Nothing ever built the installer, so the
+    ISO's `install` boot entry could not offer to partition a disk or ask
+    where to install.  A new `calamares-build` stage compiles the chain
+    instead of leaving the configuration stage to describe software that
+    is not there
+  - The stage builds, in dependency order, popt, dosfstools, gptfdisk and
+    parted -- the tools kpmcore shells out to for `mkfs.vfat`, `sgdisk`
+    and GPT resizing, none of which exist in the target today -- then a
+    trimmed Qt6, extra-cmake-modules, the KF6 CoreAddons/I18n/
+    WidgetsAddons trio, polkit-qt-1, yaml-cpp, kpmcore and Calamares
+    3.3.14.  Every package that has a book page is built with the book's
+    own commands through the shared `book_install` / `build_commands_*`
+    idiom, and `tests/test_acceptance_shell.py` cross-checks them against
+    the vendored `docs/books/` HTML when it is present
+  - Qt6 is configured with a `-skip` list *derived from the tarball*
+    instead of being hardcoded, keeping only `qtbase`, `qtsvg`, `qttools`
+    and `qttranslations` -- the closed set Calamares' `find_package(Qt6)`
+    needs once `WITH_QML=OFF`.  A full `qt-everywhere-src` build is what
+    already pushes the `kde` and `full` legs past GitHub's six-hour cap,
+    so a derivation that yields an empty skip list is refused outright
+    rather than allowed to degrade into compiling everything.  The whole
+    pass is skipped when `have_pc Qt6Core` succeeds, which is the case
+    for the `kde` and `lxqt` profiles
+  - kpmcore is not optional: Calamares' `KPMcoreHelper.cmake` calls
+    `calamares_skip_module("partition (missing suitable KPMcore)")`
+    without it, and a skipped module yields an installer that starts with
+    no partition page and only fails once the user reaches it -- the
+    exact silent failure the config-only stage produced.  The stage
+    therefore ends on a hard post-condition, asserted inside the chroot
+    and again from the host against `$LFS/usr/lib` and `$LFS/usr/lib64`:
+    no `libcalamares_viewmodule_partition.so`, or no
+    `$LFS/usr/bin/calamares`, and the stage exits non-zero
+  - yaml-cpp 0.7.0, kpmcore 25.08.0 and calamares 3.3.14 have no BLFS
+    book page, so they are pinned in `packages/custom-sources.list`
+    alongside the KF6 trio (6.17.0).  kpmcore 25.08.0 is the same
+    release-service series the book already pins for ark, dolphin and
+    kate; yaml-cpp 0.7.0 is the last release before the 0.8 API break
+    that Calamares 3.3's `FindYAMLCPP.cmake` was written against.  Both
+    0.7.0 and 0.8.0 declare `cmake_minimum_required(VERSION 3.4)`, so the
+    stage passes `-D CMAKE_POLICY_VERSION_MINIMUM=3.5` -- the book's CMake
+    4.1 refuses to configure anything older without it.  New tests prove
+    all six pins survive `_update_sources_list()`'s `source_key()` dedup
+    and the unused/superseded filters, and that the KF6 pins evict an
+    older series rather than sitting next to it
+  - The chain is strictly opt-in.  `graphical_installer` was added to all
+    17 profiles as `False`, `_apply_profile_settings()` resolves it into
+    a new `installer.type` config key so the exported
+    `LFS_CONFIG_INSTALLER_TYPE` exists even against a config file written
+    before the key did, and `--installer {none,calamares}` overrides it
+    and refreshes the `ScriptExecutor`.  `get_installer_type()` warns and
+    falls back to `none` on an unknown value instead of scheduling a
+    multi-hour build that its own guard would then abort.  `builder.py`
+    stays at 100% coverage
+  - `docs/features.md` claimed "Calamares graphical installer
+    integration"; it now states what actually exists.  Booting into the
+    installer is still not wired -- `final/12-create-initramfs.sh` parses
+    nothing from the `install` kernel argument, `final/13` installs only
+    the `i386-pc` GRUB target, and `blfs/22`'s `unpackfs.conf` points at
+    a squashfs path `final/12` and `final/14` do not produce -- which is
+    left to the follow-up change that enables the flag on a profile
+
 - **a bootable installer ISO from every profile and every architecture**
   (`builder.py`, `final/14-create-installer.sh`,
   `final/12-create-initramfs.sh`, `config/kernel-config-arm64`,
@@ -258,6 +329,15 @@
     truth
 
 ### Fixed
+
+- **`docs/index.md` and `docs/content.md` stage lists had drifted from
+  `BUILD_STAGES`** (`docs/index.md`, `docs/content.md`)
+  - Both files still described a 40-stage pipeline with no `knowledge`
+    stage, so the opt-in AI assistant added to `BUILD_STAGES` between
+    `audio-studio` and `package-manager` was documented nowhere outside
+    `README.md`.  Adding `calamares-build` would have made the numbering
+    wrong in a second way, so both lists are now the full 42 stages and
+    agree with `README.md` and `builder.py` (AGENTS.md rule 16)
 
 - **nightly #233 lost all eight desktop profiles to a source archive the
   packages cache had stopped listing** (`builder.py`,

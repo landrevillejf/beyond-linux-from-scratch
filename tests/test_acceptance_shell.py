@@ -1316,6 +1316,7 @@ class TestLFSComplianceGuardrails:
             'blfs/24-multimedia.sh',
             'blfs/25-server.sh',
             'blfs/26-printing-scanning.sh',
+            'blfs/29-build-calamares.sh',
         ]
         for script in scripts:
             content = Path(script).read_text()
@@ -1430,6 +1431,7 @@ class TestBLFSErrorPolicyGuardrails:
         'blfs/24-multimedia.sh',
         'blfs/25-server.sh',
         'blfs/26-printing-scanning.sh',
+        'blfs/29-build-calamares.sh',
     ]
 
     # Tarball base names that differ from the script package name.
@@ -4035,3 +4037,392 @@ class TestNightly232IsoOutputGuardrails:
         # If the FORCE is ever dropped, that coupling needs re-examining
         # rather than being silently relied upon.
         assert 'CONFIG_CMDLINE_FORCE=y' in code
+
+
+class TestCalamaresBuildStageGuardrails:
+    """Guardrails for the opt-in 'calamares-build' stage (blfs/29).
+
+    blfs/22 has only ever written Calamares configuration: nothing in the
+    built system compiled the installer, so the live media shipped an
+    "Install" boot entry pointing at a binary that did not exist.  blfs/29
+    compiles the chain - popt, gptfdisk, dosfstools, parted, Qt6, ECM, the
+    KF6 trio, polkit-qt-1, yaml-cpp, kpmcore and Calamares - and is
+    strictly opt-in through installer.type, because it adds hours of
+    compilation to legs that already run near GitHub's six-hour cap.
+
+    The post-condition matters more than the package list: Calamares'
+    KPMcoreHelper.cmake skips the partition module with a single cmake
+    status line when it cannot find a suitable kpmcore, so a build that
+    "succeeded" without libcalamares_viewmodule_partition.so reproduces
+    exactly the silent hole this stage exists to close.
+    """
+
+    SCRIPT = Path('blfs/29-build-calamares.sh')
+    SOURCES = Path('packages/custom-sources.list')
+
+    BOOKS = {
+        'popt': Path('docs/books/general/popt.html'),
+        'dosfstools': Path('docs/books/postlfs/dosfstools.html'),
+        'gptfdisk': Path('docs/books/postlfs/gptfdisk.html'),
+        'parted': Path('docs/books/postlfs/parted.html'),
+        'polkit-qt-1': Path('docs/books/kde/polkit-qt.html'),
+        'qt6': Path('docs/books/x/qt6.html'),
+    }
+
+    # The order the stage builds in.  Each entry is a hard prerequisite of
+    # the ones after it: gptfdisk's sgdisk links popt, the KF6 trio and
+    # kpmcore need Qt6 plus ECM, kpmcore needs PolkitQt6-1, and Calamares
+    # needs all of that plus yaml-cpp.
+    ORDER = ('popt', 'gptfdisk', 'dosfstools', 'parted', 'qt6',
+             'extra-cmake-modules', 'kcoreaddons', 'ki18n',
+             'kwidgetsaddons', 'polkit-qt-1', 'yaml-cpp', 'kpmcore',
+             'calamares')
+
+    # Pins the stage cannot build without.  None of yaml-cpp, kpmcore or
+    # calamares has a BLFS book page and the official wget-list carries
+    # only the KF6 frameworks that have one of their own, so all six live
+    # in the override file.
+    PINS = (
+        'https://download.kde.org/stable/frameworks/6.17/'
+        'kcoreaddons-6.17.0.tar.xz',
+        'https://download.kde.org/stable/frameworks/6.17/ki18n-6.17.0.tar.xz',
+        'https://download.kde.org/stable/frameworks/6.17/'
+        'kwidgetsaddons-6.17.0.tar.xz',
+        'https://github.com/jbeder/yaml-cpp/archive/refs/tags/'
+        'yaml-cpp-0.7.0.tar.gz',
+        'https://download.kde.org/stable/release-service/25.08.0/src/'
+        'kpmcore-25.08.0.tar.xz',
+        'https://github.com/calamares/calamares/releases/download/'
+        'v3.3.14/calamares-3.3.14.tar.gz',
+    )
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/29 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    @classmethod
+    def _book(cls, name):
+        """Text of every <pre class="userinput"> block of a vendored page.
+
+        The book pages are optional in a checkout, so callers skip when the
+        page is absent; when it is present the stage must agree with it.
+        """
+        from html import unescape
+        page = cls.BOOKS[name]
+        if not page.exists():
+            return None
+        html = page.read_text(errors='replace')
+        blocks = re.findall(r'<pre class="userinput">(.*?)</pre>',
+                            html, re.DOTALL)
+        return unescape(re.sub(r'<[^>]+>', '', ' '.join(blocks)))
+
+    def test_script_exists_is_strict_and_executable(self, content):
+        assert self.SCRIPT.exists(), '29-build-calamares.sh must exist'
+        assert 'set -euo pipefail' in content
+        assert os.access(self.SCRIPT, os.X_OK), \
+            'the stage must be executable like every other stage script'
+
+    def test_stage_is_opt_in_on_the_installer_type(self, content):
+        """The guard reads installer.type, not the profile flag.
+
+        Gating on LFS_PROFILE_GRAPHICAL_INSTALLER as well would make
+        --installer calamares a no-op on every profile that declares the
+        flag off, i.e. on all of them until the plumbing PR flips one.
+        """
+        code = self._code(content)
+        assert 'INSTALLER_TYPE="${LFS_CONFIG_INSTALLER_TYPE:-none}"' in code
+        assert 'if [ "$INSTALLER_TYPE" != "calamares" ]; then' in code
+        assert 'calamares-build stage skipped' in code
+        guard = code[code.index('INSTALLER_TYPE='):code.index('IN_DOCKER=')]
+        assert 'LFS_PROFILE_GRAPHICAL_INSTALLER' not in guard, \
+            'the CLI override must be able to enable the stage on its own'
+        assert 'exit 0' in guard, 'a disabled stage must exit cleanly'
+
+    def test_disabled_stage_exits_zero(self, tmp_path):
+        env = dict(os.environ)
+        env['LFS'] = str(tmp_path)
+        env.pop('LFS_CONFIG_INSTALLER_TYPE', None)
+        result = subprocess.run(['bash', str(self.SCRIPT)],
+                                capture_output=True, text=True, env=env)
+        assert result.returncode == 0, result.stderr
+        assert 'calamares-build stage skipped' in result.stdout
+
+    def test_docker_mode_skips_before_touching_the_chroot(self, content):
+        code = self._code(content)
+        assert 'Docker mode - skipping the Calamares build chain' in code
+        docker = code.index('Docker mode - skipping the Calamares build chain')
+        assert docker < code.index('[ -x "$LFS/bin/bash" ]'), \
+            'the container has no LFS tree to chroot into'
+        assert 'exit 0' in code[docker:docker + 200]
+
+    def test_chroot_runs_with_a_clean_env(self, content):
+        assert 'chroot "$LFS" /usr/bin/env -i' in content
+
+    def test_every_package_is_required(self, content):
+        """Each package is a link in the chain the partition page needs.
+
+        An 'optional' classification here would let a failed kpmcore or
+        yaml-cpp produce a Calamares with no partition module - a green
+        stage and a decorative installer.
+        """
+        code = self._code(self._inner(content))
+        assert 'run_build optional' not in code
+        called = re.findall(r'run_build\s+(\w+)\s+(\S+)', code)
+        assert called, 'the stage schedules nothing'
+        assert all(mode == 'required' for mode, _ in called)
+        assert tuple(pkg for _, pkg in called) == self.ORDER
+        assert 'aborting stage' in code
+        assert 'declare -F "$fn"' in code
+
+    def test_dependency_order(self, content):
+        """popt before gptfdisk, Qt6/ECM before the KF6 trio, kpmcore
+        before Calamares."""
+        code = self._code(self._inner(content))
+        positions = [code.index(f'run_build required {pkg}')
+                     for pkg in self.ORDER]
+        assert positions == sorted(positions), \
+            'the build order no longer matches the dependency chain'
+        assert positions[0] == min(positions), \
+            'popt must be first: sgdisk cannot link without it'
+
+    def test_partition_module_is_a_hard_postcondition(self, content):
+        """The plugin is asserted inside the chroot and again from the host.
+
+        The host-side check is the one that survives a --resume-from run
+        which skipped the build: an in-chroot marker file cannot prove
+        anything about the tree the release pipeline ships.
+        """
+        plugin = 'libcalamares_viewmodule_partition.so'
+        inner_code = self._code(self._inner(content))
+        assert plugin in inner_code
+        assert inner_code.index('run_build required calamares') < \
+            inner_code.index('verify_partition_module\n'), \
+            'the post-condition must run after Calamares is installed'
+        assert 'refusing to continue' in inner_code
+        assert 'return 1' in self._fn(inner_code, 'verify_partition_module')
+
+        outer_code = self._code(content).split('INNEREOF')[2]
+        assert plugin in outer_code, \
+            'the host side must re-assert the partition plugin'
+        assert '[ ! -x "$LFS/usr/bin/calamares" ]' in outer_code
+        # Both checks must fail the stage, not warn about it.
+        tail = outer_code[outer_code.index(plugin):]
+        assert 'exit 1' in tail
+        assert 'log_warning' not in tail
+
+    def test_is_installed_covers_every_package(self, content):
+        """Idempotency: a re-run must recognise all thirteen packages."""
+        cases = self._fn(self._inner(content), 'is_installed')
+        for pkg in self.ORDER:
+            assert f'{pkg})' in cases, \
+                f'is_installed has no {pkg} case, so a re-run rebuilds it'
+        assert '/var/lib/lfs-builder/calamares' in self._inner(content), \
+            'the stage must keep its idempotency markers'
+
+    def test_qt6_is_trimmed_and_cannot_degrade_to_a_full_build(self, content):
+        """The keep list is a documented deviation; the skip list is derived.
+
+        Building all of qt-everywhere-src is what pushes the kde and full
+        legs past GitHub's six-hour cap, so a keep list that stopped
+        matching anything must fail instead of silently falling back to a
+        full build.
+        """
+        code = self._code(content)
+        assert 'QT_KEEP_MODULES="qtbase qtsvg qttools qttranslations"' in code
+        body = self._fn(self._inner(content), 'build_qt6')
+        assert 'skip+=(-skip "$module")' in body
+        assert 'refusing to build all of qt-everywhere-src' in body
+        # rc tracking: run_build calls build_qt6 from an "if" condition,
+        # where set -e is suspended (nightly #232).
+        assert 'rc=0' in body and '|| rc=1' in body, \
+            'a failed ninja must not reach the marker file'
+        assert body.rstrip().endswith('log_success "qt6 installed"')
+
+    def test_qt6_keeps_every_flag_the_book_passes(self, content):
+        book = self._book('qt6')
+        if book is None:
+            pytest.skip('docs/books/x/qt6.html is not vendored')
+        body = self._fn(self._inner(content), 'build_qt6')
+        for flag in ('-sysconfdir /etc/xdg', '-dbus-linked',
+                     '-openssl-linked', '-system-sqlite',
+                     '-nomake examples', '-no-rpath', '-no-sbom',
+                     '-syslog'):
+            assert flag in book, f'the book dropped {flag}'
+            assert flag in body, f'qt6 configure lost {flag}'
+        # The two documented deviations: /usr instead of the book's
+        # /opt/qt6 (same choice blfs/09c makes) and a derived skip list
+        # instead of the book's three hardcoded -skip modules.
+        assert '-prefix /usr' in body
+        assert '-prefix $QT6PREFIX' not in body
+        assert 'ninja install' in body
+        # No profile targets i686, so the book's 32-bit qtypes.h sed is
+        # deliberately not reproduced.
+        assert 'qtypes.h' not in self._code(content)
+
+    def test_yaml_cpp_raises_the_cmake_policy_floor(self, content):
+        """yaml-cpp declares cmake_minimum_required(VERSION 3.4) and the
+        book's cmake is 4.1, which refuses to configure anything older
+        than 3.5 without the floor (same reason 08a and 09c pass it).
+        """
+        body = self._fn(self._inner(content), 'build_commands_yaml_cpp')
+        assert '-D CMAKE_POLICY_VERSION_MINIMUM=3.5' in body
+        assert '-D YAML_BUILD_SHARED_LIBS=ON' in body, \
+            'Calamares\' FindYAMLCPP looks for a libyaml-cpp to link'
+        assert '-D YAML_CPP_BUILD_TESTS=OFF' in body, \
+            'the tests pull a bundled googletest the offline chroot lacks'
+
+    def test_calamares_flags_match_its_cmakelists(self, content):
+        body = self._fn(self._inner(content), 'build_commands_calamares')
+        for flag in ('-D WITH_QT6=ON', '-D WITH_QML=OFF',
+                     '-D WITH_PYTHON=OFF', '-D BUILD_CRASH_REPORTING=OFF',
+                     '-D INSTALL_POLKIT=ON', '-D INSTALL_CONFIG=ON',
+                     '-D BUILD_TESTING=OFF'):
+            assert flag in body, f'calamares cmake lost {flag}'
+        assert '-D CMAKE_INSTALL_LIBDIR=lib' in body, \
+            'the partition plugin path must not depend on a lib64 libdir'
+
+    def test_polkit_qt_uses_the_books_qt6_flag(self, content):
+        """The book's flag is -D QT_MAJOR_VERSION=6, not -DWITH_QT6=ON.
+
+        Only the former makes polkit-qt install libpolkit-qt6-*-1.so and
+        PolkitQt6-1Config.cmake, which is what kpmcore's
+        find_package(PolkitQt6-1 REQUIRED) resolves.
+        """
+        body = self._fn(self._inner(content), 'build_commands_polkit_qt_1')
+        assert '-D QT_MAJOR_VERSION=6' in body
+        assert 'WITH_QT6' not in body, \
+            'polkit-qt has no WITH_QT6 option; that flag is Calamares\''
+        book = self._book('polkit-qt-1')
+        if book is not None:
+            assert '-D QT_MAJOR_VERSION=6' in book, \
+                'the book changed how it selects the Qt major version'
+
+    def test_book_commands_stay_faithful(self, content):
+        """Cross-check the book-backed packages against the vendored pages.
+
+        A literal copied from the code under test cannot catch a typo in
+        it (nightly #232's unix_checkpwd), so the expected text comes
+        from the book whenever the book is vendored.
+        """
+        inner = self._inner(content)
+        expected = {
+            'build_commands_popt': ['./configure --prefix=/usr '
+                                    '--disable-static'],
+            'build_commands_dosfstools': ['--enable-compat-symlinks',
+                                          '--mandir=/usr/share/man'],
+            'build_commands_gptfdisk': ["sed -i 's|ncursesw/||' "
+                                        'gptcurses.cc',
+                                        "sed -i 's|sbin|usr/sbin|' Makefile"],
+            'build_commands_parted': ['do_version (PedDevice** dev, '
+                                      'PedDisk** diskp)'],
+        }
+        for fn, fragments in expected.items():
+            body = self._fn(inner, fn)
+            for fragment in fragments:
+                assert fragment in body, f'{fn} lost {fragment!r}'
+        gptfdisk_book = self._book('gptfdisk')
+        if gptfdisk_book is not None:
+            assert 'convenience' in gptfdisk_book, \
+                'the book no longer ships a gptfdisk convenience patch'
+        popt_book = self._book('popt')
+        if popt_book is not None:
+            assert './configure --prefix=/usr --disable-static' in popt_book
+
+    def test_optional_offline_doc_passes_are_deliberately_absent(self, content):
+        """texlive is dropped from the sources and no stage installs
+        doxygen, so the books' optional documentation passes would only
+        fail offline.  Their absence must stay a decision, not an accident.
+        """
+        code = self._code(content)
+        for tool in ('makeinfo', 'texi2pdf', 'doxygen'):
+            assert tool not in code, \
+                f'{tool} cannot run offline; remove it or vendor it'
+        parted_book = self._book('parted')
+        if parted_book is not None:
+            assert 'makeinfo' in parted_book, \
+                'the book dropped the parted doc pass this test guards'
+
+    def test_dosfstools_docdir_is_derived_not_hardcoded(self, content):
+        """The book hardcodes dosfstools-4.2; a version bump must not
+        leave the stage installing docs under a stale directory name.
+        """
+        body = self._fn(self._inner(content), 'build_commands_dosfstools')
+        assert '--docdir="/usr/share/doc/$srcname"' in body
+        assert 'docdir=/usr/share/doc/dosfstools-' not in body
+
+    def test_prerequisites_never_list_what_the_stage_builds(self, content):
+        """nightly #183: blfs-libs verified its own pcre2 and aborted.
+
+        Everything verify_prerequisites demands must already be installed
+        by an earlier stage of a desktop profile - cmake by blfs-base,
+        ninja by lfs-system, dbus and openssl by blfs-libs, polkit by
+        display-manager, blkid and sqlite3 by LFS chapter 8.  The two
+        probe lists are asserted exactly, so adding a module this stage
+        builds itself fails here rather than in CI.
+        """
+        body = self._fn(self._inner(content), 'verify_prerequisites')
+        listed = re.search(r'for pc in ([^;]+); do', body)
+        assert listed, 'verify_prerequisites must probe a pkg-config list'
+        assert listed.group(1).split() == [
+            'blkid', 'dbus-1', 'openssl', 'sqlite3', 'polkit-gobject-1']
+        assert re.findall(r'have_cmd (\w+)', body) == ['cmake', 'ninja']
+        assert 'exit 1' in body
+
+    def test_patch_application_is_never_silent(self, content):
+        """A missing patch must warn and a failing one must abort."""
+        inner = self._inner(content)
+        for fn in ('build_commands_gptfdisk',
+                   'build_commands_extra_cmake_modules'):
+            body = self._fn(inner, fn)
+            assert 'patched=0' in body and 'patched=1' in body, \
+                f'{fn} does not track whether a patch was applied'
+            assert 'log_warning' in body, \
+                f'{fn} silently builds an unpatched tree'
+            assert 'return 1' in body, \
+                f'{fn} swallows a patch that failed to apply'
+
+    def test_custom_sources_pin_the_unpaged_packages(self):
+        content = self.SOURCES.read_text()
+        for url in self.PINS:
+            assert content.count(url) == 1, \
+                f'{url} must be pinned exactly once in custom-sources.list'
+
+    def test_shellcheck_clean_outer_and_inner(self, content):
+        try:
+            subprocess.run(['shellcheck', '--version'],
+                           capture_output=True, check=True)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pytest.skip('shellcheck not installed')
+        result = subprocess.run(['shellcheck', str(self.SCRIPT)],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout
+        with tempfile.NamedTemporaryFile(
+                mode='w', suffix='.sh', delete=False) as tmp:
+            tmp.write(self._inner(content))
+            tmp_path = tmp.name
+        try:
+            result = subprocess.run(['shellcheck', tmp_path],
+                                    capture_output=True, text=True)
+            assert result.returncode == 0, \
+                f'shellcheck failed on the inner payload:\n{result.stdout}'
+        finally:
+            os.unlink(tmp_path)

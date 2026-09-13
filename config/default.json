@@ -42,6 +42,9 @@
     "persistence_support": true,
     "default_boot": "live"
   },
+  "installer": {
+    "type": "none"
+  },
   "java_dev": {
     "enabled": false,
     "version": "21.0.9",

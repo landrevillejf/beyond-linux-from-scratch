@@ -48,7 +48,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 - **Cache support**: restore a pre-built root filesystem from a remote cache to skip compilation (`--use-cache`, `--cache-only`; useful for CI/CD).
 - **Live ISO generation**: produce a hybrid BIOS/UEFI ISO with a squashfs live system and persistence support.
 - **LUKS encryption**: full-disk encryption support via the `luks-encryption` stage.
-- **Calamares installer**: graphical system installer integration.
+- **Calamares installer**: an opt-in `calamares-build` stage compiles the real Calamares chain (filesystem tools, Qt6, ECM, KF6, polkit-qt-1, yaml-cpp, kpmcore, Calamares) and `calamares` configures it; off on every profile by default, enable with `--installer calamares`.
 - **Complete software stacks**: basic networking, multimedia (PipeWire/PulseAudio, GStreamer, ffmpeg, mpv, VLC), server packages (Apache, MariaDB, PostgreSQL, Samba, OpenSSH, ...), printing and scanning (CUPS, SANE, Gutenprint).
 - **Security and privacy**: kernel hardening, nftables firewall, fail2ban, auditing (AIDE), and privacy tools.
 - **Java development stack**: JDK, Maven, Gradle, Tomcat and containers tooling via the `java-dev` stage.
@@ -179,15 +179,16 @@ cross-compiled architectures). The master ordered list is:
 30. `security`
 31. `privacy`
 32. `branding`
-33. `calamares`
-34. `first-boot`
-35. `system-updater`
-36. `luks-encryption`
-37. `initramfs`
-38. `bootloader`
-39. `installer` (every profile and architecture)
-40. `live-system` (when enabled, x86_64 only)
-41. `validate`
+33. `calamares-build` (when `installer.type` is `calamares`)
+34. `calamares`
+35. `first-boot`
+36. `system-updater`
+37. `luks-encryption`
+38. `initramfs`
+39. `bootloader`
+40. `installer` (every profile and architecture)
+41. `live-system` (when enabled, x86_64 only)
+42. `validate`
 
 ## Repository structure
 
@@ -320,6 +321,7 @@ python3 builder.py --generate-sources-list
 | `--nightly` | Nightly build mode: append today's date to the ISO filename |
 | `--skip-man-pages` | Export `SKIP_MAN_PAGES=true` so stage scripts skip man page generation even when `rst2man` is present |
 | `--with-knowledge` | Enable the local "knowledge" AI assistant (Ollama, opt-in; see `docs/KNOWLEDGE_DESIGN.md`) |
+| `--installer` | Graphical installer override (`none`, `calamares`; default: from the profile's `graphical_installer` flag, currently `none` everywhere). `calamares` schedules the `calamares-build` stage, which compiles Qt6, KF6, kpmcore and Calamares before `blfs/22-calamares-installer.sh` configures them |
 
 ## Professional Branding System
 

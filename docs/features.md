@@ -29,7 +29,8 @@ The LFS/BLFS builder is a single Python orchestrator (`builder.py`) that provide
 ### 💿 **Live System & Installer**
 - Live ISO with squashfs compression (xz) and persistence support.
 - Hybrid BIOS/UEFI bootable installer ISO generation.
-- Initramfs creation and Calamares graphical installer integration.
+- Initramfs creation for the live system.
+- Opt-in Calamares build chain: the `calamares-build` stage compiles popt, the filesystem tools (dosfstools, gptfdisk, parted), a trimmed Qt6, extra-cmake-modules, the KF6 CoreAddons/I18n/WidgetsAddons trio, polkit-qt-1, yaml-cpp, kpmcore and Calamares 3.3, and refuses to pass unless `libcalamares_viewmodule_partition.so` exists; `calamares` then writes the configuration. Disabled on every profile for now - turn it on with `--installer calamares` or a profile's `graphical_installer` flag. Nothing boots into it yet: the ISO's `install` GRUB entry still chains to the same live session, and `blfs/22-calamares-installer.sh` only writes configuration.
 
 ### 🔐 **Encryption**
 - Full-disk LUKS encryption via the `luks-encryption` stage, with encrypted swap support.
