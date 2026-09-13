@@ -445,6 +445,122 @@ class TestLFSBuilder:
         assert names.index('audio-studio') < names.index('knowledge')
         assert names.index('knowledge') < names.index('base-packages')
 
+    def test_get_build_stages_calamares_build_disabled_by_default(self, builder):
+        """The Calamares build chain is opt-in and off by default.
+
+        blfs/29 compiles popt, the filesystem tools, Qt6, ECM, the KF6
+        trio, polkit-qt-1, yaml-cpp, kpmcore and Calamares itself: hours
+        of work no profile asks for yet.  The 'calamares' stage still
+        runs, because blfs/22 only writes configuration.
+        """
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'calamares-build' not in stage_names
+        assert 'calamares' in stage_names
+
+    def test_get_build_stages_with_calamares_installer(self, builder):
+        """installer.type=calamares schedules blfs/29 ahead of blfs/22.
+
+        blfs/22 probes the installed module list to write settings.conf,
+        so the binary and its partition plugin must already exist.
+        """
+        builder.config.set('installer.type', 'calamares')
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'calamares-build' in stage_names
+        assert stage_names.index('calamares-build') < \
+            stage_names.index('calamares')
+        assert dict(stages)['calamares-build'] == \
+            'blfs/29-build-calamares.sh'
+
+    def test_calamares_build_follows_a_desktop_live_profile(self, builder):
+        """A headless profile gets neither installer stage.
+
+        The chain is gated on the same desktop+live condition as blfs/22,
+        so enabling it there must stay a no-op rather than compile Qt6
+        for a system that never boots to a display manager.
+        """
+        from builder import ProfileManager
+        builder.config.set('installer.type', 'calamares')
+        for profile in ('minimal', 'server'):
+            builder.profile = profile
+            builder.profile_config = ProfileManager.get_profile(profile)
+            stage_names = [s[0] for s in builder.get_build_stages()]
+            assert 'calamares-build' not in stage_names, profile
+            assert 'calamares' not in stage_names, profile
+
+    def test_master_stage_list_places_calamares_build_before_calamares(self):
+        """BUILD_STAGES lists calamares-build between branding and
+        calamares."""
+        from builder import BUILD_STAGES
+        names = [name for name, _ in BUILD_STAGES]
+        assert names.index('branding') < names.index('calamares-build')
+        assert names.index('calamares-build') < names.index('calamares')
+
+    def test_every_profile_declares_graphical_installer(self):
+        """The flag must exist on every profile and stay off for now.
+
+        This release lands the build chain only; a later change flips it
+        on for a single profile once a nightly run has proven the chain.
+        """
+        from builder import ProfileManager
+        for name, profile in ProfileManager.PROFILES.items():
+            assert 'graphical_installer' in profile, \
+                f"profile {name} does not declare graphical_installer"
+            assert profile['graphical_installer'] is False, \
+                f"profile {name} enables the installer early"
+
+    def test_graphical_installer_flag_resolves_installer_type(self, builder):
+        """The profile flag must resolve into installer.type.
+
+        The resolution lives in _apply_profile_settings so a config file
+        written before the key existed still exports a value.
+        """
+        assert builder.config.get('installer.type') == 'none'
+        builder.profile_config['graphical_installer'] = True
+        builder._apply_profile_settings()
+        assert builder.get_installer_type() == 'calamares'
+        builder.profile_config['graphical_installer'] = False
+        builder._apply_profile_settings()
+        assert builder.get_installer_type() == 'none'
+
+    def test_installer_choice_reaches_the_stage_environment(self, builder):
+        """Stage scripts only see the environment, so both the resolved
+        installer.type and the profile flag must be exported."""
+        env = builder._get_env()
+        assert env['LFS_CONFIG_INSTALLER_TYPE'] == 'none'
+        assert env['LFS_PROFILE_GRAPHICAL_INSTALLER'] == 'false'
+        builder.config.set('installer.type', 'calamares')
+        assert builder._get_env()['LFS_CONFIG_INSTALLER_TYPE'] == 'calamares'
+
+    def test_get_installer_type_falls_back_on_unknown_value(self, builder):
+        """An unknown value must warn and fall back to 'none'.
+
+        Mirrors get_init_system(): scheduling calamares-build on a typo
+        would abort the stage minutes into a multi-hour Qt6 build.
+        """
+        builder.config.set('installer.type', 'anaconda')
+        with patch.object(builder.logger, 'warning') as warn:
+            assert builder.get_installer_type() == 'none'
+        warn.assert_called_once()
+        assert 'anaconda' in warn.call_args[0][0]
+
+    def test_installer_cli_rejects_an_unknown_choice(self, tmp_path):
+        """--installer is a closed choice list, so a typo fails fast in
+        argparse instead of silently building nothing."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--installer', 'anaconda',
+        ]
+        with patch('sys.argv', test_args):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 2
+
     def test_get_build_stages_cross_compile(self, builder):
         """Test build stages with cross-compilation"""
         with patch.object(builder, 'is_cross_compile', return_value=True):
@@ -579,9 +695,14 @@ class TestLFSBuilder:
         for profile in ('xfce', 'minimal', 'server', 'full', 'audio-studio'):
             builder.profile = profile
             builder.profile_config = ProfileManager.get_profile(profile)
-            for stage in builder.get_build_stages():
-                assert stage in master, \
-                    f"{stage} ({profile}) missing from BUILD_STAGES"
+            # Both installer settings: calamares-build only appears in
+            # the emitted list once the chain is switched on.
+            for installer in ('none', 'calamares'):
+                builder.config.set('installer.type', installer)
+                for stage in builder.get_build_stages():
+                    assert stage in master, \
+                        f"{stage} ({profile}, {installer}) missing " \
+                        "from BUILD_STAGES"
 
     def test_build_stages_has_no_duplicate_scripts(self):
         """Each stage script must be scheduled exactly once.
@@ -1532,6 +1653,35 @@ class TestLFSBuilder:
                 'knowledge.enabled', True)
             mock_instance.refresh_executor.assert_called()
 
+    def test_main_installer_flag(self, tmp_path):
+        """--installer calamares overrides the profile and refreshes the
+        executor, so the new stage list reaches the scripts."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--installer', 'calamares',
+            '--no-live',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            mock_instance.config.set.assert_any_call(
+                'installer.type', 'calamares')
+            mock_instance.refresh_executor.assert_called()
+
     @patch('builder.LFSBuilder._update_sources_list')
     @patch('builtins.print')
     def test_generate_sources_list_option(self, mock_print, mock_update):
@@ -2226,6 +2376,103 @@ class TestNightly212SourceKey:
             'https://mirrors.kernel.org/gnu/gawk/gawk-5.4.0.tar.xz\n')
         assert 'gawk-5.4.0.tar.xz' in content
         assert 'gawk-5.3.2.tar.xz' not in content
+
+
+class TestCalamaresSourcePins:
+    """The calamares-build pins must survive sources.list generation.
+
+    builder.py regenerates packages/sources.list from the official
+    wget-lists, applies packages/custom-sources.list on top (deduping
+    through source_key()) and then drops anything UNUSED_SOURCE_PATTERNS
+    or SUPERSEDED_SOURCE_PATTERNS matches.  yaml-cpp, kpmcore and
+    calamares have no BLFS book page at all and the KF6 trio is pinned to
+    a series the wget-list may not carry, so a pin lost at any of those
+    steps would make blfs/29 abort with "Source archive missing" hours
+    into the stage -- after Qt6 has already been compiled.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    PINS = (
+        'https://download.kde.org/stable/frameworks/6.17/kcoreaddons-6.17.0.tar.xz',
+        'https://download.kde.org/stable/frameworks/6.17/ki18n-6.17.0.tar.xz',
+        'https://download.kde.org/stable/frameworks/6.17/kwidgetsaddons-6.17.0.tar.xz',
+        'https://github.com/jbeder/yaml-cpp/archive/refs/tags/yaml-cpp-0.7.0.tar.gz',
+        'https://download.kde.org/stable/release-service/25.08.0/src/kpmcore-25.08.0.tar.xz',
+        'https://github.com/calamares/calamares/releases/download/v3.3.14/calamares-3.3.14.tar.gz',
+    )
+
+    # Official wget-list entries that must not evict a pin, or be evicted
+    # by one: an older KF6 series sharing the major version (source_key
+    # keeps only the first version token), the book's libyaml -- a
+    # different package from yaml-cpp despite the shared "yaml" stem --
+    # and a sibling of kpmcore from the same 25.08.0 release-service
+    # batch that the kde profile already builds.
+    OFFICIAL = (
+        'https://download.kde.org/stable/frameworks/6.16/kcoreaddons-6.16.0.tar.xz\n'
+        'https://download.kde.org/stable/frameworks/6.16/ki18n-6.16.0.tar.xz\n'
+        'https://download.kde.org/stable/frameworks/6.16/kwidgetsaddons-6.16.0.tar.xz\n'
+        'https://pyyaml.org/download/libyaml/yaml-0.2.5.tar.gz\n'
+        'https://download.kde.org/stable/release-service/25.08.0/src/ark-25.08.0.tar.xz\n'
+    )
+
+    def _generate(self, tmp_path, monkeypatch):
+        """Generate a sources.list using the repo's real custom pins."""
+        custom = (self.ROOT / 'packages' / 'custom-sources.list').read_text()
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'config.json'
+        config_file.write_text(json.dumps({
+            'repositories': ['https://example.com/wget-list'],
+        }))
+        builder = LFSBuilder(profile='minimal',
+                             output_dir=tmp_path / 'out',
+                             config_file=config_file)
+        builder.logger = MagicMock()
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir(exist_ok=True)
+        (packages_dir / 'custom-sources.list').write_text(custom)
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.OFFICIAL.encode('utf-8')
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            assert builder._update_sources_list() is True
+        return builder._generated_sources_list.read_text()
+
+    def test_custom_pins_survive_generation(self, tmp_path, monkeypatch):
+        """All six URLs must land verbatim in the generated list."""
+        content = self._generate(tmp_path, monkeypatch)
+        for url in self.PINS:
+            assert url in content, f"{url} was dropped or evicted"
+
+    def test_pins_override_the_older_kf6_series(self, tmp_path, monkeypatch):
+        """Two kcoreaddons tarballs in /sources would make find_archive's
+        `sort -V | tail -n 1` pick whichever series sorts higher, so the
+        pin has to replace the official entry, not sit next to it."""
+        content = self._generate(tmp_path, monkeypatch)
+        for framework in ('kcoreaddons', 'ki18n', 'kwidgetsaddons'):
+            assert f'{framework}-6.17.0.tar.xz' in content, framework
+            assert f'{framework}-6.16.0.tar.xz' not in content, framework
+
+    def test_yaml_cpp_does_not_collide_with_libyaml(self, tmp_path, monkeypatch):
+        """libyaml (yaml-0.2.5) and yaml-cpp must both remain.
+
+        A "yaml" stem that deduped to one key would leave Calamares
+        without yaml-cpp/yaml.h, which its FindYAMLCPP.cmake requires.
+        """
+        content = self._generate(tmp_path, monkeypatch)
+        assert 'yaml-cpp-0.7.0.tar.gz' in content
+        assert 'yaml-0.2.5.tar.gz' in content
+
+    def test_kpmcore_pin_keeps_its_release_batch(self, tmp_path, monkeypatch):
+        """kpmcore shares the 25.08.0 release-service path with the KDE
+        applications the kde profile builds; the pin must not evict
+        them."""
+        content = self._generate(tmp_path, monkeypatch)
+        assert 'kpmcore-25.08.0.tar.xz' in content
+        assert 'ark-25.08.0.tar.xz' in content
 
 
 class TestStopAfter:

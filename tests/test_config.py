@@ -63,7 +63,7 @@ class TestLFSConfig:
             'init_system', 'package_manager', 'system_updater', 'live_system',
             'java_dev', 'desktop', 'security', 'bootloader', 'filesystem',
             'kernel', 'locale', 'timezone', 'hostname', 'users', 'network',
-            'build_options', 'logging'
+            'build_options', 'logging', 'installer'
         ]
 
         for section in required_sections:
@@ -88,6 +88,25 @@ class TestLFSConfig:
             data = json.loads(Path(name).read_text())
             assert data['system_updater']['enabled'] is True, \
                 f"{name} disagrees with the code default on system_updater"
+
+    def test_installer_type_agrees_across_config_sources(self, temp_dir):
+        """Every checked-in preset must default the installer to 'none'.
+
+        installer.type is resolved from the profile's graphical_installer
+        flag and exported as LFS_CONFIG_INSTALLER_TYPE, which is the only
+        thing blfs/29-build-calamares.sh reads to decide whether to spend
+        hours compiling Qt6, KF6, kpmcore and Calamares.  A preset that
+        disagreed with the code default would schedule that chain for
+        whoever happened to pass --config with it.
+        """
+        generated = LFSConfig(temp_dir / "fresh.conf")
+        assert generated.data['installer']['type'] == 'none'
+
+        for name in ('config/build.conf', 'config/build.conf.json',
+                     'config/default.json'):
+            data = json.loads(Path(name).read_text())
+            assert data['installer']['type'] == 'none', \
+                f"{name} disagrees with the code default on installer.type"
 
     def test_init_system_choices(self, lfs_config):
         """Test init system configuration"""
