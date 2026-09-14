@@ -2566,6 +2566,69 @@ class TestNightly212SourceKey:
         assert 'gawk-5.3.2.tar.xz' not in content
 
 
+class TestNightly236KernelMatch:
+    """Regression tests for the arm64 (cross-compile) util-linux loss.
+
+    In cross-compile mode _update_sources_list() strips every kernel-like
+    entry before injecting the target kernel.  The match used to test the
+    whole URL path for the substring ``linux-``, which also caught
+    util-linux: it is served from www.kernel.org (an allowed kernel host)
+    under ``.../util-linux/util-linux-2.41.1.tar.xz``.  The tarball was
+    dropped from the generated list, never downloaded, and lfs/05b died at
+    ``find_archive util-linux`` (nightly #236, arm64 leg).
+    """
+
+    OFFICIAL = (
+        'https://www.kernel.org/pub/linux/utils/util-linux/v2.41/'
+        'util-linux-2.41.1.tar.xz\n'
+        'https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.10.0.tar.xz\n'
+    )
+
+    def _generate(self, tmp_path, monkeypatch):
+        """Run _update_sources_list in cross-compile mode with a fake list."""
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'config.json'
+        config_file.write_text(json.dumps({
+            'repositories': ['https://example.com/wget-list'],
+            'cross_compile': True,
+            'architecture': 'aarch64',
+            'kernel': {'version': '6.16.1', 'type': 'linux'},
+            'init_system': {'choice': 'sysvinit'},
+            'target_triplet': 'aarch64-lfs-linux-gnu',
+        }))
+        builder = LFSBuilder(profile='arm64',
+                             output_dir=tmp_path / 'out',
+                             config_file=config_file)
+        builder.logger = MagicMock()
+
+        packages_dir = tmp_path / 'packages'
+        packages_dir.mkdir(exist_ok=True)
+        (packages_dir / 'custom-sources.list').write_text('')
+
+        mock_response = MagicMock()
+        mock_response.read.return_value = self.OFFICIAL.encode('utf-8')
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        with patch('urllib.request.urlopen', return_value=mock_response):
+            assert builder._update_sources_list() is True
+        return builder._generated_sources_list.read_text()
+
+    def test_util_linux_survives_kernel_substitution(self, tmp_path, monkeypatch):
+        """util-linux is not a kernel and must stay in the generated list."""
+        content = self._generate(tmp_path, monkeypatch)
+        assert 'util-linux-2.41.1.tar.xz' in content
+
+    def test_real_kernel_entry_is_still_removed(self, tmp_path, monkeypatch):
+        """The stale official kernel must still be stripped in cross-compile."""
+        content = self._generate(tmp_path, monkeypatch)
+        assert 'linux-6.10.0.tar.xz' not in content
+
+    def test_target_kernel_is_substituted(self, tmp_path, monkeypatch):
+        """The configured target kernel URL replaces the removed one."""
+        content = self._generate(tmp_path, monkeypatch)
+        assert 'linux-6.16.1.tar.xz' in content
+
+
 class TestCalamaresSourcePins:
     """The calamares-build pins must survive sources.list generation.
 
