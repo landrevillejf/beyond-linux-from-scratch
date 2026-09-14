@@ -540,13 +540,19 @@ build_commands_accountsservice() {
     else
         unitdir=no
     fi
+    # GCC 14 promotes -Wimplicit-function-declaration to a hard error.
+    # The bundled mocklibc subproject calls print_indent() without a
+    # forward declaration in netgroup-debug.c, which aborts the build.
+    # Suppress the error for this package only; the code is functionally
+    # correct and the upstream fix has not landed in a release yet.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
           -D admin_group=adm \
           -D elogind="$elogind" \
-          -D systemdsystemunitdir="$unitdir" &&
+          -D systemdsystemunitdir="$unitdir" \
+          -D c_args=-Wno-implicit-function-declaration &&
     ninja && ninja install
 }
 
