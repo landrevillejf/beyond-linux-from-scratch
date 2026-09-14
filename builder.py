@@ -2488,10 +2488,18 @@ class LFSBuilder:
                         parsed = urlparse(v)
                         # Sécurité: valider que le hostname est autorisé avant de vérifier le path
                         if parsed.hostname and parsed.hostname in allowed_kernel_domains:
-                            # Ensuite vérifier les patterns dans le chemin pour identifier les kernels
-                            path = parsed.path.lower()
-                            if ('linux-' in path or 'linux-libre' in path or
-                                'hurd-' in path or 'freebsd' in path):
+                            # Identifier le noyau sur le NOM DE FICHIER ancré, jamais sur
+                            # une sous-chaîne du chemin.  L'ancien test `'linux-' in path`
+                            # supprimait util-linux, qui est servi par www.kernel.org sous
+                            # .../util-linux/util-linux-2.41.1.tar.xz: le domaine est
+                            # autorisé et «util-linux-» contient «linux-».  Les builds en
+                            # cross-compilation arrivaient donc à lfs-system sans archive
+                            # util-linux et find_archive échouait (arm64, nightly #236).
+                            # Un vrai noyau a toujours un basename préfixé linux-/hurd-.
+                            filename = Path(parsed.path).name.lower()
+                            if (filename.startswith('linux-') or
+                                filename.startswith('hurd-') or
+                                filename.startswith('freebsd-')):
                                 keys_to_remove.append(k)
                     except Exception:
                         # Si l'URL ne peut pas être parsée, on la garde

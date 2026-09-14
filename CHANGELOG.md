@@ -330,6 +330,40 @@
 
 ### Fixed
 
+- **cross-compile builds dropped util-linux and died at lfs-system**
+  (`builder.py`, `tests/test_builder.py`)
+  - The arm64/aarch64 legs (nightly #236 and ARM64 XFCE Build #49) ran
+    the toolchain and chapter 7 up to texinfo, then aborted with `ERROR:
+    no source archive found for util-linux` followed by `extract called
+    with no archive`.  util-linux was never downloaded: it was missing
+    from the generated `packages/sources.list`, so `lfs/05b`'s
+    `extract "$(find_archive util-linux)"` had nothing to extract.  The
+    x86_64 legs never showed it because they resume from the base prefix
+    cache at `init-system`, after `lfs-system` has already run
+  - `_update_sources_list()` only rewrites the kernel in cross-compile
+    mode, and before injecting the target kernel it strips every
+    "kernel-like" entry.  The match tested the whole URL path for the
+    substring `linux-` on any host in `allowed_kernel_domains`.  That
+    caught util-linux, which the book serves from
+    `https://www.kernel.org/pub/linux/utils/util-linux/v2.41/util-linux-2.41.1.tar.xz`:
+    `www.kernel.org` is an allowed kernel host and `util-linux-`
+    contains `linux-`, so the tarball was deleted alongside the real
+    kernel.  Non-cross-compile builds skip the whole block, which is why
+    only the aarch64 legs lost it
+  - The match now anchors on the URL *basename* instead of a path
+    substring: an entry is treated as a kernel only when its filename
+    starts with `linux-`, `hurd-` or `freebsd-`.  A real kernel tarball
+    is always named that way (`linux-6.16.1.tar.xz`,
+    `linux-libre-6.16.1-gnu.tar.xz`), while `util-linux-2.41.1.tar.xz`
+    starts with `util-` and is kept.  The change is strictly narrower
+    than before - anything the old test spared, the new one spares too
+  - `tests/test_builder.py` gains `TestNightly236KernelMatch`, which runs
+    `_update_sources_list()` in cross-compile mode over a list holding
+    both util-linux and a stale official kernel and asserts util-linux
+    survives, the stale kernel is still removed, and the configured
+    target kernel is substituted.  Verified non-vacuous: the util-linux
+    assertion fails against the unpatched path-substring match
+
 - **build-rootfs-cache #23 lost the display-manager stage to a GCC 14
   error in an accountsservice subproject**
   (`blfs/08d-build-display-manager.sh`, `tests/test_acceptance_shell.py`)
