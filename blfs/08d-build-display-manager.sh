@@ -193,6 +193,7 @@ is_installed() {
         elogind)            have_pc libelogind || [ -x /usr/lib/elogind/elogind ] ;;
         polkit)             have_pc polkit-gobject-1 ;;
         accountsservice)    have_pc accountsservice-glib ;;
+        libxklavier)        have_pc libxklavier ;;
         lightdm)            [ -x /usr/sbin/lightdm ] || [ -x /usr/bin/lightdm ] ;;
         lightdm-gtk-greeter) have_pc lightdm-gtk-greeter || [ -f /etc/lightdm/lightdm-gtk-greeter.conf ] ;;
         *) return 1 ;;
@@ -556,6 +557,20 @@ build_commands_accountsservice() {
     ninja && ninja install
 }
 
+# BLFS x/libxklavier -- lightdm 1.32.0 requires libxklavier as part of its
+# LIBLIGHTDM_GOBJECT pkg-config check.  The tarball ships in sources.list
+# but no stage ever built it, so lightdm's configure aborts with "Package
+# 'libxklavier' not found" (Nightly #237).  Build it before lightdm.
+build_libxklavier() { book_install libxklavier build_commands_libxklavier; }
+build_commands_libxklavier() {
+    ./configure --prefix=/usr \
+                --sysconfdir=/etc \
+                --disable-static \
+                --docdir="/usr/share/doc/$dir" &&
+    make -j"$JOBS" &&
+    make install
+}
+
 # BLFS x/lightdm – the pam sed of the sysvinit page only applies when
 # systemd is not the init system.
 build_lightdm() { book_install lightdm build_commands_lightdm; }
@@ -668,6 +683,11 @@ run_build required polkit
 log_info "Building accountsservice"
 # accountsservice: depends on glib2, dbus, polkit
 run_build required accountsservice
+
+log_info "Building libxklavier (keyboard layout switching library)"
+# libxklavier: required by lightdm 1.32.0 (LIBLIGHTDM_GOBJECT pkg-config
+# check includes libxklavier).  Depends on glib2, libxml2, Xorg libs.
+run_build required libxklavier
 
 log_info "Building LightDM"
 # LightDM: depends on glib2, dbus, Xorg, gtk3
