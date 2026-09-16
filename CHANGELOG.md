@@ -330,6 +330,26 @@
 
 ### Fixed
 
+- **lightdm configure aborts with "itstool not found"**
+  (`blfs/08d-build-display-manager.sh`)
+  - After PR #125 wired iso-codes and libxklavier into the
+    display-manager stage, the same 8 x86_64 desktop legs of nightly #239
+    (xfce sysvinit+systemd, gnome, kde, lxqt, full, java-dev,
+    audio-studio) advanced one more package and failed at lightdm:
+    `checking for itstool... no` then `configure: error: itstool not
+    found` followed by `[ERROR] Required package lightdm failed -
+    aborting stage`.  The arm64, minimal and server legs passed
+  - lightdm 1.32.0 drives its documentation build through itstool and
+    its configure treats the tool as required.  The itstool tarball ships
+    in `packages/stable/12.4/sources.list` and downloads fine, but no
+    stage script ever built it, so lightdm could not find `/usr/bin/itstool`
+    in the chroot
+  - The stage now builds itstool before lightdm, following the BLFS
+    pst/itstool page (the Python-3.12+ `re.sub`/`re.compile` raw-string
+    sed, then `PYTHON=/usr/bin/python3 ./configure --prefix=/usr && make`
+    and `make install`), through the same `is_installed` / `book_install`
+    idiom as the stage's other packages
+
 - **libxklavier configure aborts with "You must have iso-codes"**
   (`blfs/08d-build-display-manager.sh`)
   - After PR #124 wired libxklavier into the display-manager stage, the
