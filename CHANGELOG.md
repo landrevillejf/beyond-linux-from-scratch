@@ -330,6 +330,33 @@
 
 ### Fixed
 
+- **libxfce4windowing configure aborts on missing libwnck and
+  libdisplay-info** (`blfs/09a-build-xfce.sh`,
+  `tests/test_acceptance_shell.py`)
+  - After PR #126 built itstool so lightdm could configure, the xfce-based
+    legs of nightly #240 (java-dev first, then xfce sysvinit+systemd,
+    full, audio-studio) advanced to the desktop stage and died on
+    `libxfce4windowing`: `checking if the X11 windowing system is
+    enabled... dependencies missing: libwnck-3.0 >= 3.14, libdisplay-info
+    >= 0.1.1` then `configure: error: support for the X11 windowing system
+    was required, but dependencies were not met` followed by `[ERROR]
+    Required package libxfce4windowing failed - aborting stage`
+  - The BLFS xfce/libxfce4windowing page lists libdisplay-info-0.3.0 and
+    libwnck-43.2 as Required for its `--enable-x11` backend, and
+    general/libdisplay-info lists hwdata as Required.  All three tarballs
+    ship in `packages/stable/12.4/sources.list` and download fine, but no
+    stage script ever built them (pciutils only installs into
+    `/usr/share/hwdata`, it does not build the hwdata package)
+  - The xfce stage now builds hwdata, then libdisplay-info and libwnck,
+    before libxfce4windowing, following the BLFS pages (`hwdata`:
+    `./configure --prefix=/usr --disable-blacklist` + `make install`;
+    `libdisplay-info` and `libwnck`: `meson setup --prefix=/usr
+    --buildtype=release` + `ninja install`) through the same
+    `is_installed` / `book_install` idiom as the stage's other packages.
+    `tests/test_acceptance_shell.py` gains
+    `TestNightly240XfceWindowingDeps`, pinning the build order and the
+    per-package book command functions
+
 - **lightdm configure aborts with "itstool not found"**
   (`blfs/08d-build-display-manager.sh`)
   - After PR #125 wired iso-codes and libxklavier into the

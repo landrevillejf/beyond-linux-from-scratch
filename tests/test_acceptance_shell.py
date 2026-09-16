@@ -2978,6 +2978,56 @@ class TestBLFSBookCommandGuardrails:
                 f"{script} must keep the generic build_pkg fallback"
 
 
+class TestNightly240XfceWindowingDeps:
+    """Nightly #240: libxfce4windowing's --enable-x11 backend aborted with
+    "dependencies missing: libwnck-3.0 >= 3.14, libdisplay-info >= 0.1.1",
+    so every xfce-based leg died at the desktop stage.  No stage built
+    libwnck, libdisplay-info or libdisplay-info's own hwdata dependency,
+    even though all three tarballs ship in sources.list.
+    """
+
+    XFCE = Path('blfs/09a-build-xfce.sh')
+
+    @staticmethod
+    def _loop(content):
+        match = re.search(
+            r'for pkg in ([^;\n]+); do\n\s*run_build required "\$pkg"',
+            content)
+        assert match, 'xfce build-order loop not found'
+        return match.group(1).split()
+
+    @staticmethod
+    def _fn(content, name):
+        body = content[content.index(f'{name}() {{'):]
+        return body[:body.index('\n}\n')]
+
+    def test_windowing_deps_built_before_libxfce4windowing(self):
+        order = self._loop(self.XFCE.read_text())
+        for dep in ('hwdata', 'libdisplay-info', 'libwnck'):
+            assert dep in order, f'{dep} missing from the xfce build order'
+        windowing = order.index('libxfce4windowing')
+        assert order.index('hwdata') < order.index('libdisplay-info') \
+            < windowing, \
+            'hwdata and libdisplay-info must precede libxfce4windowing (#240)'
+        assert order.index('libwnck') < windowing, \
+            'libwnck must precede libxfce4windowing (#240)'
+
+    def test_windowing_deps_have_book_command_functions(self):
+        content = self.XFCE.read_text()
+        for fn in ('build_commands_hwdata', 'build_commands_libdisplay_info',
+                   'build_commands_libwnck'):
+            assert f'{fn}()' in content, f'{fn} missing from the xfce stage'
+        # hwdata is a data package: configure then make install.
+        hwdata = self._fn(content, 'build_commands_hwdata')
+        assert '--disable-blacklist' in hwdata, \
+            'hwdata must follow the book configure line'
+        # libdisplay-info and libwnck are meson packages per the book.
+        for pkg in ('libdisplay_info', 'libwnck'):
+            body = self._fn(content, f'build_commands_{pkg}')
+            assert 'meson setup' in body and 'ninja install' in body, \
+                f'{pkg} must build with meson/ninja'
+
+
 class TestInitSystemErrorPolicyGuardrails:
     """Guardrail tests for the wave 4 init-system remediation.
 

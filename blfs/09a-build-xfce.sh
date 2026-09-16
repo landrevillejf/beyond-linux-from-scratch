@@ -283,6 +283,9 @@ is_installed() {
         libxfce4util) pkg-config --exists libxfce4util-1.0 2>/dev/null ;;
         xfconf) [ -x /usr/bin/xfconf-query ] ;;
         libxfce4ui) pkg-config --exists libxfce4ui-2 2>/dev/null ;;
+        hwdata) [ -f /usr/share/hwdata/pnp.ids ] ;;
+        libdisplay-info) pkg-config --exists libdisplay-info 2>/dev/null ;;
+        libwnck) pkg-config --exists libwnck-3.0 2>/dev/null ;;
         libxfce4windowing) pkg-config --exists libxfce4windowing-0 2>/dev/null ;;
         garcon) pkg-config --exists garcon-1 2>/dev/null ;;
         exo) pkg-config --exists exo-2 2>/dev/null ;;
@@ -403,6 +406,40 @@ build_commands_libxfce4ui() {
     make -j"$JOBS" && make install
 }
 
+# BLFS general/hwdata -- libdisplay-info's meson pulls its PNP/PCI ID
+# database from hwdata, which BLFS lists as a Required dependency.
+# pciutils only installs into /usr/share/hwdata; it never builds the
+# package, so is_installed probes pnp.ids to detect a real hwdata.
+build_hwdata() { book_install hwdata build_commands_hwdata; }
+build_commands_hwdata() {
+    ./configure --prefix=/usr --disable-blacklist &&
+    make install
+}
+
+# BLFS general/libdisplay-info -- Required by libxfce4windowing 4.20's
+# X11 backend.  Nightly #240: libxfce4windowing's configure aborted with
+# "dependencies missing: libwnck-3.0 >= 3.14, libdisplay-info >= 0.1.1"
+# because nothing built either library even though both tarballs ship in
+# sources.list.  Needs hwdata first.
+build_libdisplay_info() { book_install libdisplay-info build_commands_libdisplay_info; }
+build_commands_libdisplay_info() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS xfce/libwnck -- Window Navigator Construction Kit, Required by
+# libxfce4windowing 4.20's X11 backend (Nightly #240).  Depends on GTK-3,
+# which verify_prerequisites already checked for.
+build_libwnck() { book_install libwnck build_commands_libwnck; }
+build_commands_libwnck() {
+    mkdir build && cd build &&
+    meson setup --prefix=/usr --buildtype=release .. &&
+    ninja && ninja install
+}
+
+# BLFS xfce/libxfce4windowing -- --enable-x11 requires libwnck-3.0 and
+# libdisplay-info, both built immediately above.
 build_libxfce4windowing() { book_install libxfce4windowing build_commands_libxfce4windowing; }
 build_commands_libxfce4windowing() {
     ./configure --prefix=/usr     \
@@ -568,7 +605,7 @@ fi
 log_info "systemd detected: $HAVE_SYSTEMD"
 
 log_info "Building XFCE 4.20 core in dependency order"
-for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
+for pkg in xfce4-dev-tools libxfce4util xfconf libxfce4ui hwdata libdisplay-info libwnck libxfce4windowing garcon exo tumbler xfce4-panel thunar thunar-volman xfwm4 xfce4-session xfdesktop xfce4-settings xfce4-appfinder xfce4-terminal xfce4-notifyd xfce4-power-manager; do
     run_build required "$pkg"
 done
 # picom is not in packages/stable/12.4/sources.list; optional compositor
