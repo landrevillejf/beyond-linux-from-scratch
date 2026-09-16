@@ -3616,6 +3616,33 @@ class TestNightly230StageGuardrails:
                          re.MULTILINE), \
             'is_installed must detect elogind through libelogind.pc'
 
+    def test_display_manager_builds_itstool_before_lightdm(self):
+        """lightdm 1.32.0 drives its documentation build through itstool
+        and configure aborts with "itstool not found" when the tool is
+        missing, so every desktop profile dies at the display-manager
+        stage (Nightly #239).  The tarball ships in sources.list but no
+        stage built it, so itstool must be installed before lightdm,
+        following the BLFS pst/itstool page.
+        """
+        content = self.DISPLAY_MANAGER.read_text()
+        libxklavier = self._build_pos(content, 'required', 'libxklavier')
+        itstool = self._build_pos(content, 'required', 'itstool')
+        lightdm = self._build_pos(content, 'required', 'lightdm')
+        assert -1 not in (libxklavier, itstool, lightdm), \
+            'a required display-manager package lost its run_build call'
+        assert libxklavier < itstool < lightdm, \
+            'itstool must be installed before lightdm (#239)'
+        assert content.count('run_build required itstool') == 1
+        body = self._fn(self._code(content), 'build_commands_itstool')
+        # The book fixes Python-3.12 raw-string regexes before building.
+        assert 're.sub(r' in body and 're.compile(r' in body, \
+            'the Python-3.12 compatibility sed is missing'
+        assert 'PYTHON=/usr/bin/python3 ./configure --prefix=/usr' in body, \
+            'itstool must be configured with the book PYTHON override'
+        assert re.search(r'^\s+itstool\).*-x /usr/bin/itstool', content,
+                         re.MULTILINE), \
+            'is_installed must detect itstool'
+
     def test_linux_pam_installs_the_book_pam_d_stacks(self):
         """PAM fails closed: the book's restrictive /etc/pam.d/other
         denies every PAM-aware program that has no stack of its own, so

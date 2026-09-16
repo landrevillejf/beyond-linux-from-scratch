@@ -195,6 +195,7 @@ is_installed() {
         accountsservice)    have_pc accountsservice-glib ;;
         iso-codes)          [ -d /usr/share/iso-codes ] ;;
         libxklavier)        have_pc libxklavier ;;
+        itstool)            [ -x /usr/bin/itstool ] ;;
         lightdm)            [ -x /usr/sbin/lightdm ] || [ -x /usr/bin/lightdm ] ;;
         lightdm-gtk-greeter) have_pc lightdm-gtk-greeter || [ -f /etc/lightdm/lightdm-gtk-greeter.conf ] ;;
         *) return 1 ;;
@@ -584,6 +585,21 @@ build_commands_libxklavier() {
     make install
 }
 
+# BLFS pst/itstool -- lightdm 1.32.0 drives its documentation build
+# through itstool and its configure aborts with "itstool not found" when
+# the tool is missing (Nightly #239).  The tarball ships in sources.list
+# but no stage ever built it.  Build it before lightdm using the book's
+# own commands, including the Python-3.12+ raw-string regex fix.
+build_itstool() { book_install itstool build_commands_itstool; }
+build_commands_itstool() {
+    # Fix compatibility problems with Python-3.12 and later.
+    sed -i 's/re.sub(/re.sub(r/'         itstool.in &&
+    sed -i 's/re.compile(/re.compile(r/' itstool.in &&
+    PYTHON=/usr/bin/python3 ./configure --prefix=/usr &&
+    make &&
+    make install
+}
+
 # BLFS x/lightdm – the pam sed of the sysvinit page only applies when
 # systemd is not the init system.
 build_lightdm() { book_install lightdm build_commands_lightdm; }
@@ -708,6 +724,12 @@ log_info "Building libxklavier (keyboard layout switching library)"
 # check includes libxklavier).  Depends on glib2, libxml2, Xorg libs,
 # iso-codes.
 run_build required libxklavier
+
+log_info "Building itstool (XML translation tool required by lightdm docs)"
+# itstool: lightdm 1.32.0's configure aborts with "itstool not found"
+# (Nightly #239).  Needs python3 and the libxml2 Python bindings; the
+# book lists docbook-xml as a runtime dependency.
+run_build required itstool
 
 log_info "Building LightDM"
 # LightDM: depends on glib2, dbus, Xorg, gtk3
