@@ -330,6 +330,23 @@
 
 ### Fixed
 
+- **libxklavier configure aborts with "You must have iso-codes"**
+  (`blfs/08d-build-display-manager.sh`)
+  - After PR #124 wired libxklavier into the display-manager stage, the
+    8 x86_64 desktop legs of nightly #238 (xfce sysvinit+systemd, gnome,
+    kde, lxqt, full, java-dev, audio-studio) failed one step earlier than
+    before: libxklavier's configure aborts with `configure: error: You
+    must have iso-codes.`  The arm64, minimal and server legs passed
+  - The BLFS x/libxklavier page lists ISO Codes-4.18.0 as a Required
+    dependency.  The iso-codes tarball ships in
+    `packages/stable/12.4/sources.list` and downloads fine, but no stage
+    script ever built it, so libxklavier could not find the data package
+    in the chroot
+  - The stage now builds iso-codes before libxklavier, following the
+    BLFS general/iso-codes page (`./configure --prefix=/usr && make`,
+    then `make install LN_S='ln -sfn'`), through the same
+    `is_installed` / `book_install` idiom as the stage's other packages
+
 - **cross-compile builds dropped util-linux and died at lfs-system**
   (`builder.py`, `tests/test_builder.py`)
   - The arm64/aarch64 legs (nightly #236 and ARM64 XFCE Build #49) ran

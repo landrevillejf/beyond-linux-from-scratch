@@ -193,6 +193,7 @@ is_installed() {
         elogind)            have_pc libelogind || [ -x /usr/lib/elogind/elogind ] ;;
         polkit)             have_pc polkit-gobject-1 ;;
         accountsservice)    have_pc accountsservice-glib ;;
+        iso-codes)          [ -d /usr/share/iso-codes ] ;;
         libxklavier)        have_pc libxklavier ;;
         lightdm)            [ -x /usr/sbin/lightdm ] || [ -x /usr/bin/lightdm ] ;;
         lightdm-gtk-greeter) have_pc lightdm-gtk-greeter || [ -f /etc/lightdm/lightdm-gtk-greeter.conf ] ;;
@@ -557,6 +558,18 @@ build_commands_accountsservice() {
     ninja && ninja install
 }
 
+# BLFS general/iso-codes -- the x/libxklavier page lists ISO Codes as a
+# Required dependency; libxklavier's configure aborts with "You must
+# have iso-codes" when the data package is missing (Nightly #238).  The
+# tarball ships in sources.list but no stage ever built it.  Build it
+# before libxklavier.
+build_iso_codes() { book_install iso-codes build_commands_iso_codes; }
+build_commands_iso_codes() {
+    ./configure --prefix=/usr &&
+    make -j"$JOBS" &&
+    make install LN_S='ln -sfn'
+}
+
 # BLFS x/libxklavier -- lightdm 1.32.0 requires libxklavier as part of its
 # LIBLIGHTDM_GOBJECT pkg-config check.  The tarball ships in sources.list
 # but no stage ever built it, so lightdm's configure aborts with "Package
@@ -684,9 +697,16 @@ log_info "Building accountsservice"
 # accountsservice: depends on glib2, dbus, polkit
 run_build required accountsservice
 
+log_info "Building iso-codes (country/language/currency name database)"
+# iso-codes: required by libxklavier, whose configure aborts with "You
+# must have iso-codes" (Nightly #238).  Only needs gettext from the LFS
+# base system.
+run_build required iso-codes
+
 log_info "Building libxklavier (keyboard layout switching library)"
 # libxklavier: required by lightdm 1.32.0 (LIBLIGHTDM_GOBJECT pkg-config
-# check includes libxklavier).  Depends on glib2, libxml2, Xorg libs.
+# check includes libxklavier).  Depends on glib2, libxml2, Xorg libs,
+# iso-codes.
 run_build required libxklavier
 
 log_info "Building LightDM"
