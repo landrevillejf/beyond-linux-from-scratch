@@ -259,6 +259,7 @@ is_installed() {
         xf86-video-vesa)    [ -f /usr/lib/xorg/modules/drivers/vesa_drv.so ] ;;
         xf86-video-vmware)  [ -f /usr/lib/xorg/modules/drivers/vmware_drv.so ] ;;
         xinit)              [ -x /usr/bin/startx ] ;;
+        iceauth)            [ -x /usr/bin/iceauth ] ;;
         twm)                [ -x /usr/bin/twm ] ;;
         xterm)              [ -x /usr/bin/xterm ] ;;
         xclock)             [ -x /usr/bin/xclock ] ;;
@@ -647,6 +648,17 @@ build_commands_xclock() {
     make install
 }
 
+# iceauth (Nightly #241) -- the ICE authorisation utility.  No BLFS book
+# page, but xfce4-session's configure hard-aborts with "iceauth missing,
+# please check your X11 installation" without it, so the xorg stage builds
+# it with the standard Xorg-app autotools sequence (same shape as xclock).
+build_iceauth() { book_install iceauth build_commands_iceauth; }
+build_commands_iceauth() {
+    ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var --disable-static
+    make -j"$JOBS"
+    make install
+}
+
 # BLFS x/libepoxy
 build_libepoxy() { book_install libepoxy build_commands_libepoxy; }
 build_commands_libepoxy() {
@@ -934,6 +946,8 @@ run_build optional xf86-video-vmware
 # ======================================================================
 log_info "Phase 7: Xorg applications"
 run_build required xinit
+# iceauth: xfce4-session's configure aborts without it (Nightly #241).
+run_build required iceauth
 # twm/xterm/xclock/xeyes are book test clients, not desktop requirements
 run_build optional twm
 run_build optional xterm

@@ -330,6 +330,34 @@
 
 ### Fixed
 
+- **xfce4-session configure aborts with "iceauth missing"**
+  (`blfs/08b-build-xorg.sh`, `packages/custom-sources.list`,
+  `tests/test_acceptance_shell.py`)
+  - After PR #127 built libwnck, libdisplay-info and hwdata so
+    libxfce4windowing could configure, the xfce-based legs of nightly #241
+    (xfce sysvinit first) advanced further into the desktop stage and died
+    on `xfce4-session`: `checking for iceauth... no` then `configure:
+    error: iceauth missing, please check your X11 installation` followed by
+    `[ERROR] Required package xfce4-session failed - aborting stage`
+  - xfce4-session 4.20 requires the ICE authorisation utility at configure
+    time, but the BLFS xfce4-session page does not list iceauth as a
+    dependency and no BLFS stage builds it, so the tarball was in neither
+    `packages/stable/12.4/sources.list` nor `packages/custom-sources.list`
+    and `/usr/bin/iceauth` never existed in the chroot
+  - iceauth 1.0.10 is now pinned in `packages/custom-sources.list`
+    (the x.org archive URL, the same generation as the twm/xinit/xclock
+    app pins) and built as a required Xorg application in
+    `blfs/08b-build-xorg.sh` Phase 7, before the GTK phase and long before
+    the desktop stage, using the standard Xorg-app autotools sequence
+    (`./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var
+    --disable-static` + `make install`) through the same `is_installed` /
+    `book_install` idiom as the stage's other packages.  It is a genuine
+    build dependency, not a book test client, so it is `required`
+  - `tests/test_acceptance_shell.py` gains `TestNightly241XfceSessionIceauth`,
+    pinning the required classification, its position among the Xorg
+    applications, the book command function, the `is_installed` probe, the
+    source pin, and that xfce4-session stays a required desktop package
+
 - **libxfce4windowing configure aborts on missing libwnck and
   libdisplay-info** (`blfs/09a-build-xfce.sh`,
   `tests/test_acceptance_shell.py`)
