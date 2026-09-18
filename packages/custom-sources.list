@@ -413,6 +413,15 @@ https://xorg.freedesktop.org/archive/individual/app/xinit-1.4.3.tar.xz
 # xclock
 https://xorg.freedesktop.org/archive/individual/app/xclock-1.1.1.tar.xz
 
+# iceauth (Nightly #241) -- xfce4-session's configure aborts with
+# "iceauth missing, please check your X11 installation" when the ICE
+# authorisation utility is absent.  iceauth has no BLFS book page (the
+# xfce4-session page does not even list it as a dependency), so the
+# official wget-list omits it and this pin is its only home, exactly
+# like the x7lib chapter libraries above.  1.0.10 is the book-vintage
+# x.org release (2024-03), matching the twm/xinit/xclock generation.
+https://xorg.freedesktop.org/archive/individual/app/iceauth-1.0.10.tar.xz
+
 # xeyes -- the xorg archive only ships a .tar.gz for 1.2.0 (the .tar.xz
 # 404s); pinned below.
 

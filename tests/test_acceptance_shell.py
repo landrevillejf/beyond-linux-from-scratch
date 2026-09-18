@@ -3028,6 +3028,64 @@ class TestNightly240XfceWindowingDeps:
                 f'{pkg} must build with meson/ninja'
 
 
+class TestNightly241XfceSessionIceauth:
+    """Nightly #241: xfce4-session's configure aborted with "iceauth
+    missing, please check your X11 installation", killing the desktop
+    stage of every xfce-based leg.  No stage built iceauth and its
+    tarball was in neither sources list, so the fix pins the source and
+    builds the ICE authorisation utility in the xorg stage (08b), which
+    runs before the desktop stage (09a).
+    """
+
+    XORG = Path('blfs/08b-build-xorg.sh')
+    XFCE = Path('blfs/09a-build-xfce.sh')
+    SOURCES = Path('packages/custom-sources.list')
+
+    def test_iceauth_built_required_in_xorg_stage(self):
+        content = self.XORG.read_text()
+        assert 'run_build required iceauth' in content, \
+            'iceauth must be built as a required xorg-stage package (#241)'
+        # It must be an Xorg application (Phase 7), i.e. before the GTK
+        # phase and long before the desktop stage that needs it.
+        iceauth = content.find('run_build required iceauth')
+        gtk3 = content.find('run_build required gtk3')
+        assert iceauth != -1 and gtk3 != -1 and iceauth < gtk3, \
+            'iceauth must be built with the Xorg applications (#241)'
+
+    def test_iceauth_has_book_command_function(self):
+        content = self.XORG.read_text()
+        assert 'build_commands_iceauth()' in content, \
+            'build_commands_iceauth missing from the xorg stage'
+        body = content[content.index('build_commands_iceauth() {'):]
+        body = body[:body.index('\n}\n')]
+        assert './configure' in body and 'make install' in body, \
+            'iceauth must use the standard Xorg-app autotools sequence'
+
+    def test_iceauth_is_installed_probe_present(self):
+        content = self.XORG.read_text()
+        assert 'iceauth)            [ -x /usr/bin/iceauth ] ;;' in content \
+            or re.search(r'iceauth\)\s*\[ -x /usr/bin/iceauth \]', content), \
+            'is_installed must probe /usr/bin/iceauth (#241)'
+
+    def test_iceauth_source_is_pinned(self):
+        sources = (
+            Path('packages/stable/12.4/sources.list').read_text()
+            + self.SOURCES.read_text()
+        )
+        assert '/iceauth-' in sources, \
+            'iceauth tarball must be pinned in a sources list (#241)'
+
+    def test_xfce4_session_still_required(self):
+        """Guard the regression the other way: xfce4-session stays a
+        required desktop-stage package, so iceauth must be present."""
+        content = self.XFCE.read_text()
+        match = re.search(
+            r'for pkg in ([^;\n]+); do\n\s*run_build required "\$pkg"',
+            content)
+        assert match and 'xfce4-session' in match.group(1).split(), \
+            'xfce4-session must remain in the required xfce build order'
+
+
 class TestInitSystemErrorPolicyGuardrails:
     """Guardrail tests for the wave 4 init-system remediation.
 
