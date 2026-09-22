@@ -40,7 +40,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 
 ## Features
 
-- **Profile-based builds**: choose from 17 predefined profiles (minimal, full desktop, security-hardened, audio production, ARM64, etc.).
+- **Profile-based builds**: choose from 18 predefined profiles (minimal, full desktop, security-hardened, audio production, ARM64, Project Looking Glass, etc.).
 - **Flexible init systems**: sysvinit, systemd, OpenRC, runit, s6.
 - **Desktop environments**: XFCE, GNOME, KDE Plasma, LXQt, Phosh (mobile), or no GUI.
 - **Book compliance**: stages follow LFS 13.0 / BLFS 13.0: packages are built with the exact commands from the books, with the books' error policy enforced.
@@ -376,6 +376,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |
+| `lg3d` | Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor | none | No | 6 | 5 |
 | `custom` | User-defined profile template | none | No | 5 | 5 |
 
 ---

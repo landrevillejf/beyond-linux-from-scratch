@@ -358,6 +358,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `arm64` | ARM64 server profile | none | sysvinit | aarch64 | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | sysvinit | aarch64 | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | systemd | aarch64 | No | 4 | 5 |
+| `lg3d` | Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor | none | systemd | x86_64 | No | 6 | 5 |
 | `custom` | User-defined profile template | none | sysvinit | x86_64 | No | 5 | 5 |
 
 ---

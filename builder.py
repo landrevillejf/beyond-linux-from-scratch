@@ -637,6 +637,22 @@ class ProfileManager:
             'live_system': False,
             'system_updater': True,
             'graphical_installer': False
+        },
+        'lg3d': {
+            'description': 'Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor',
+            'size_gb': 6,
+            'build_time_hours': 5,
+            'packages': ['base', 'network', 'ssh', 'xorg'],
+            'desktop': 'none',
+            'init_system': 'systemd',
+            'java_dev': True,
+            'package_manager': True,
+            'security_hardening': True,
+            'privacy_tools': False,
+            'live_system': False,
+            'system_updater': True,
+            'graphical_installer': False,
+            'xorg_only': True
         }
     }
 
@@ -2152,11 +2168,16 @@ class LFSBuilder:
 
         # BLFS core libraries and display stack (only when a desktop is requested)
         _desktop = self.profile_config.get('desktop')
+        _xorg_only = self.profile_config.get('xorg_only', False)
         if _desktop and _desktop != 'none':
             stages.append(('blfs-libs', 'blfs/08a-build-blfs-libs.sh'))
             stages.append(('xorg', 'blfs/08b-build-xorg.sh'))
             stages.append(('wayland', 'blfs/08c-build-wayland.sh'))
             stages.append(('display-manager', 'blfs/08d-build-display-manager.sh'))
+        elif _xorg_only:
+            # X11-only for Project Looking Glass: no Wayland, no display manager
+            stages.append(('blfs-libs', 'blfs/08a-build-blfs-libs.sh'))
+            stages.append(('xorg', 'blfs/08b-build-xorg.sh'))
 
         # Build kernel
         stages.append(('build-kernel', 'lfs/08-build-kernel.sh'))

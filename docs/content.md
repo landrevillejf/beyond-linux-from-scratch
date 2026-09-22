@@ -112,7 +112,7 @@ python3 builder.py --write-usb /dev/sdb
 
 | Option | Description |
 |--------|-------------|
-| `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`. |
+| `--profile` | Build profile (default: `xfce`). Choices: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `lg3d`, `custom`. |
 | `--output` | Output directory (default: `./lfs-build`). |
 | `--config` | Configuration file path (default: `config/build.conf`). |
 | `--download-timeout` | Timeout in seconds for each download (default: from config or 300). |
@@ -185,6 +185,7 @@ The builder comes with a set of predefined profiles that configure the target sy
 | `lxqt` | LXQt extremely lightweight Qt desktop |
 | `server` | Production‑optimised server configuration |
 | `brax3` | Brax3 Linux smartphone (Qualcomm Snapdragon) |
+| `lg3d` | Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor |
 | `custom` | User‑defined custom profile template |
 
 ---

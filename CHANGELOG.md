@@ -4,6 +4,24 @@
 
 ### Added
 
+- **a `lg3d` profile for Project Looking Glass** (`builder.py`,
+  `README.md`, `lfs-x11-contract.md`, `AGENTS.md`, `docs/features.md`,
+  `docs/index.md`, `docs/content.md`, `tests/test_builder.py`,
+  `tests/test_profile_manager.py`)
+  - Adds an 18th build profile that provisions a bare X11/Xorg host for
+    Project Looking Glass (lg3d), which runs as the display's window
+    manager + compositor.  lg3d claims `SubstructureRedirect` on the X
+    root and composites real X11 clients as textured 3D windows, so it
+    must be the sole WM on a real Xorg `:0`; Wayland and XWayland cannot
+    host it.  The binding host contract is vendored as
+    `lfs-x11-contract.md` (X11-only: Composite/DAMAGE/XFIXES/XTEST/SHAPE/
+    MIT-SHM, GLX+DRI3, the libX* client stack, no Wayland, no display
+    manager, lg3d started as the session via `xinit`).
+  - A new `xorg_only` profile flag schedules `blfs-libs` + `xorg` while
+    deliberately omitting the `wayland` and `display-manager` stages every
+    desktop profile pulls in; `desktop: none` keeps the
+    `desktop`/`applications`/`configure-desktop` stages off, and
+    `java_dev: true` installs the JDK 21 (Temurin) the contract requires.
 - **a real Calamares build chain, off by default** (`builder.py`,
   `blfs/29-build-calamares.sh`, `packages/custom-sources.list`,
   `config/build.conf`, `config/build.conf.json`, `config/default.json`,

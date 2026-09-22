@@ -113,7 +113,13 @@ Contains branding presets (subdirectories) and a `branding.toml` central config.
 
 Profiles live in `ProfileManager` (inside `builder.py`). Each profile specifies: desktop environment, init system, target architecture, live ISO flag, graphical installer flag, and included/excluded stages.
 
-Available profiles: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `kde`, `lxqt`, `java-dev`, `server`, `secure`, `full`, `audio-cli`, `audio-studio`, `arm64`, `pinebook`, `brax3`, `custom`.
+Available profiles: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `kde`, `lxqt`, `java-dev`, `server`, `secure`, `full`, `audio-cli`, `audio-studio`, `arm64`, `pinebook`, `brax3`, `lg3d`, `custom`.
+
+The `lg3d` profile is X11-only: it sets `desktop: none` plus an `xorg_only`
+flag, so `get_build_stages()` schedules `blfs-libs` + `xorg` but never the
+`wayland` or `display-manager` stages. This satisfies `lfs-x11-contract.md`,
+which requires a bare Xorg `:0` with no display manager and no competing
+WM/compositor so Project Looking Glass can own the display.
 
 ---
 

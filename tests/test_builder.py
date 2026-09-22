@@ -226,6 +226,18 @@ class TestLFSBuilder:
         assert 'wayland' not in stage_names
         assert 'display-manager' not in stage_names
 
+    def test_get_build_stages_xorg_only_includes_xorg_excludes_wayland(self, builder):
+        """xorg_only flag must include Xorg but exclude Wayland and display manager"""
+        builder.profile_config['desktop'] = 'none'
+        builder.profile_config['xorg_only'] = True
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+        assert 'desktop' not in stage_names
+
     @pytest.mark.parametrize('desktop', ['xfce', 'gnome', 'kde', 'lxqt', 'phosh'])
     def test_get_build_stages_all_desktops_include_blfs(self, builder, desktop):
         """Every supported desktop type must include the BLFS display stack stages"""
@@ -296,6 +308,20 @@ class TestLFSBuilder:
         assert profile['kernel'] == 'linux-libre'
         assert profile['desktop'] == 'xfce'
         assert profile['live_system'] is True
+
+    def test_get_profile_lg3d_schedules_xorg_only(self, builder):
+        """lg3d profile must schedule Xorg but exclude Wayland and display manager"""
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+        assert 'desktop' not in stage_names
+        assert 'java-dev' in stage_names
 
     def test_get_build_stages_with_java_dev(self, builder):
         """Test build stages with Java development enabled"""
