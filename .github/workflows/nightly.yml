@@ -83,6 +83,15 @@ jobs:
           - profile: lxqt
             arch: x86_64
             init: systemd
+          # lg3d is the X11-only Project Looking Glass session: the profile
+          # pins init_system=systemd (its lg3d-compositor.service unit is
+          # what blfs/30-install-lg3d.sh writes), java_dev (the JDK that
+          # stage runs on) and xorg_only, so it builds on x86_64/systemd
+          # like the desktop environments above and is the only leg that
+          # exercises the lg3d stage.
+          - profile: lg3d
+            arch: x86_64
+            init: systemd
           # Audit G4: only sysvinit was CI-proven; the two cheapest
           # profiles now also prove the systemd path on every nightly.
           - profile: minimal
