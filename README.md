@@ -168,27 +168,28 @@ cross-compiled architectures). The master ordered list is:
 19. `applications`
 20. `configure-desktop`
 21. `java-dev`
-22. `basic-networking` (profiles declaring the `network` package)
-23. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
-24. `server` (profiles declaring `ssh` or `server-tools`)
-25. `printing-scanning` (profiles declaring `printing`, or `all`)
-26. `audio-studio` (audio profiles only)
-27. `knowledge` (when enabled)
-28. `package-manager`
-29. `base-packages`
-30. `security`
-31. `privacy`
-32. `branding`
-33. `calamares-build` (when `installer.type` is `calamares`)
-34. `calamares`
-35. `first-boot`
-36. `system-updater`
-37. `luks-encryption`
-38. `initramfs`
-39. `bootloader`
-40. `installer` (every profile and architecture)
-41. `live-system` (when enabled, x86_64 only)
-42. `validate`
+22. `lg3d` (lg3d profile: Project Looking Glass X11 session)
+23. `basic-networking` (profiles declaring the `network` package)
+24. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
+25. `server` (profiles declaring `ssh` or `server-tools`)
+26. `printing-scanning` (profiles declaring `printing`, or `all`)
+27. `audio-studio` (audio profiles only)
+28. `knowledge` (when enabled)
+29. `package-manager`
+30. `base-packages`
+31. `security`
+32. `privacy`
+33. `branding`
+34. `calamares-build` (when `installer.type` is `calamares`)
+35. `calamares`
+36. `first-boot`
+37. `system-updater`
+38. `luks-encryption`
+39. `initramfs`
+40. `bootloader`
+41. `installer` (every profile and architecture)
+42. `live-system` (when enabled, x86_64 only)
+43. `validate`
 
 ## Repository structure
 

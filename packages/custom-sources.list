@@ -701,6 +701,15 @@ https://get.jenkins.io/war-stable/2.555.3/jenkins.war
 https://download.docker.com/linux/static/stable/x86_64/docker-28.3.3.tgz
 https://dl.k8s.io/release/v1.32.4/bin/linux/amd64/kubectl
 
+# Project Looking Glass (lg3d profile, blfs/30-install-lg3d.sh).  No BLFS
+# book page; the stage installs the upstream source tree to /opt/lg3d and
+# launches it through run-lg3d.sh + the Gradle wrapper on the JDK 21 the
+# java-dev stage above installs.  SourceDownloader skips git:// and .git
+# URLs, so this is the GitHub archive of the default branch (which carries
+# run-lg3d.sh, gradlew and lg3d-core); _archive_filename() stores it as
+# ProjectLookingGlass-main.tar.gz, the name the stage globs for.
+https://github.com/landrevillejf/ProjectLookingGlass/archive/refs/heads/main.tar.gz
+
 # libtirpc -- pinned to the BLFS 12.4 book version so the tarball and
 # the gcc15_fixes patch below stay in lockstep when the stable book
 # moves on (Nightly #194)

@@ -5,6 +5,7 @@
 ### Added
 
 - **a `lg3d` profile for Project Looking Glass** (`builder.py`,
+  `blfs/30-install-lg3d.sh`, `packages/custom-sources.list`,
   `README.md`, `lfs-x11-contract.md`, `AGENTS.md`, `docs/features.md`,
   `docs/index.md`, `docs/content.md`, `tests/test_builder.py`,
   `tests/test_profile_manager.py`)
@@ -22,6 +23,21 @@
     desktop profile pulls in; `desktop: none` keeps the
     `desktop`/`applications`/`configure-desktop` stages off, and
     `java_dev: true` installs the JDK 21 (Temurin) the contract requires.
+  - A `lg3d_session` flag schedules a new conditional `lg3d` stage
+    (`blfs/30-install-lg3d.sh`) right after `java-dev`.  It installs the
+    upstream tree -- pinned as the `ProjectLookingGlass` GitHub `main`
+    archive in `packages/custom-sources.list`, which `_archive_filename()`
+    stores as `ProjectLookingGlass-main.tar.gz` -- into `/opt/lg3d`, links
+    `/opt/jdk-21` at the JDK the `java-dev` stage installed, and writes the
+    contract's section 3.6 systemd session
+    (`xinit /opt/lg3d/run-lg3d.sh <flag> -- /usr/bin/Xorg :0 vt1`), enabled
+    into `graphical.target`.  The launch mode comes from the `lg3d_mode`
+    profile key (exported as `LFS_PROFILE_LG3D_MODE`): `compositor` (the
+    default, `-x`) plus `2d` (`-2`), `swing` (`-w`) and `dev`, matching
+    `run-lg3d.sh`.  Docker mode scaffolds the unit only, as `java-dev`
+    skips there.  lg3d is not compiled by the stage; `run-lg3d.sh` drives
+    the Gradle wrapper at session start, so the first boot needs network
+    or a warm Gradle cache.
 - **a real Calamares build chain, off by default** (`builder.py`,
   `blfs/29-build-calamares.sh`, `packages/custom-sources.list`,
   `config/build.conf`, `config/build.conf.json`, `config/default.json`,

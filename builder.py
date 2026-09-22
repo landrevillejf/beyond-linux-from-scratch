@@ -82,6 +82,7 @@ BUILD_STAGES = [
     ('applications', 'blfs/10-build-applications.sh'),
     ('configure-desktop', 'blfs/11-configure-desktop.sh'),
     ('java-dev', 'blfs/12-install-java-dev.sh'),
+    ('lg3d', 'blfs/30-install-lg3d.sh'),
     ('basic-networking', 'blfs/23-basic-networking.sh'),
     ('multimedia', 'blfs/24-multimedia.sh'),
     ('server', 'blfs/25-server.sh'),
@@ -652,7 +653,9 @@ class ProfileManager:
             'live_system': False,
             'system_updater': True,
             'graphical_installer': False,
-            'xorg_only': True
+            'xorg_only': True,
+            'lg3d_session': True,
+            'lg3d_mode': 'compositor'
         }
     }
 
@@ -2191,6 +2194,13 @@ class LFSBuilder:
         # Java development
         if self.profile_config.get('java_dev', False):
             stages.append(('java-dev', 'blfs/12-install-java-dev.sh'))
+
+        # Project Looking Glass session.  Runs after java-dev (it launches
+        # through the JDK that stage installs) and after xorg (the session
+        # unit hands off to xinit/Xorg).  Gated on its own flag rather than
+        # xorg_only so a future X11-only profile is not forced to ship lg3d.
+        if self.profile_config.get('lg3d_session', False):
+            stages.append(('lg3d', 'blfs/30-install-lg3d.sh'))
 
         # BLFS layer stages declared by the profile package list.  Audit
         # G1/G2: these scripts were implemented but never scheduled, so

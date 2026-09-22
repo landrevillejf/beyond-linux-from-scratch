@@ -97,7 +97,7 @@ relative order matters:
 `installer.type` is part of the core configuration schema but is not taken
 from `config/build.conf` as authored: `_apply_profile_settings()` resolves
 it from the profile's `graphical_installer` flag (currently `False` on all
-17 profiles), and `--installer {none,calamares}` overrides it in `main()`
+18 profiles), and `--installer {none,calamares}` overrides it in `main()`
 and refreshes the `ScriptExecutor` so the new stage list reaches the
 scripts. Both `LFS_CONFIG_INSTALLER_TYPE` and
 `LFS_PROFILE_GRAPHICAL_INSTALLER` are exported through the usual
@@ -120,6 +120,16 @@ flag, so `get_build_stages()` schedules `blfs-libs` + `xorg` but never the
 `wayland` or `display-manager` stages. This satisfies `lfs-x11-contract.md`,
 which requires a bare Xorg `:0` with no display manager and no competing
 WM/compositor so Project Looking Glass can own the display.
+
+A third flag, `lg3d_session`, schedules the conditional `lg3d` stage
+(`blfs/30-install-lg3d.sh`) right after `java-dev`. It installs the upstream
+lg3d tree (pinned as the `ProjectLookingGlass` GitHub archive in
+`packages/custom-sources.list`) into `/opt/lg3d` and writes the contract's
+`xinit` -> `run-lg3d.sh` systemd session unit, enabled into
+`graphical.target`. The `lg3d_mode` key (`compositor` by default, also
+`2d`/`swing`/`dev`) selects the `run-lg3d.sh` launch flag and is exported as
+`LFS_PROFILE_LG3D_MODE`. The stage runs on the JDK the `java-dev` stage
+installs, so it must stay ordered after it.
 
 ---
 

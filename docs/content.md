@@ -237,27 +237,28 @@ The build process is divided into ordered stages. Profiles include or skip stage
 19. **applications** – install desktop applications.
 20. **configure-desktop** – configure the desktop.
 21. **java-dev** – install the Java development stack (if enabled).
-22. **basic-networking** – configure networking (profiles declaring `network`).
-23. **multimedia** – install the multimedia stack (audio/multimedia profiles).
-24. **server** – install server packages (profiles declaring `ssh`/`server-tools`).
-25. **printing-scanning** – install CUPS/SANE (profiles declaring `printing` or `all`).
-26. **audio-studio** – install pro audio tooling (audio profiles only).
-27. **knowledge** – install the opt-in local AI assistant (Ollama).
-28. **package-manager** – install the LPM package manager.
-29. **base-packages** – install base packages via LPM.
-30. **security** – apply security hardening.
-31. **privacy** – install privacy tools.
-32. **branding** – apply custom branding (themes, wallpapers).
-33. **calamares-build** – compile the Calamares installer chain (only when `installer.type` is `calamares`).
-34. **calamares** – configure the Calamares graphical installer.
-35. **first-boot** – set up first-boot services.
-36. **system-updater** – install the system updater.
-37. **luks-encryption** – set up LUKS full-disk encryption support.
-38. **initramfs** – create the initramfs.
-39. **bootloader** – install the bootloader (GRUB).
-40. **installer** – create the bootable ISO.
-41. **live-system** – generate the live squashfs and final ISO (when enabled).
-42. **validate** – validate the produced build before publication.
+22. **lg3d** – install Project Looking Glass and wire its X11 session (lg3d profile).
+23. **basic-networking** – configure networking (profiles declaring `network`).
+24. **multimedia** – install the multimedia stack (audio/multimedia profiles).
+25. **server** – install server packages (profiles declaring `ssh`/`server-tools`).
+26. **printing-scanning** – install CUPS/SANE (profiles declaring `printing` or `all`).
+27. **audio-studio** – install pro audio tooling (audio profiles only).
+28. **knowledge** – install the opt-in local AI assistant (Ollama).
+29. **package-manager** – install the LPM package manager.
+30. **base-packages** – install base packages via LPM.
+31. **security** – apply security hardening.
+32. **privacy** – install privacy tools.
+33. **branding** – apply custom branding (themes, wallpapers).
+34. **calamares-build** – compile the Calamares installer chain (only when `installer.type` is `calamares`).
+35. **calamares** – configure the Calamares graphical installer.
+36. **first-boot** – set up first-boot services.
+37. **system-updater** – install the system updater.
+38. **luks-encryption** – set up LUKS full-disk encryption support.
+39. **initramfs** – create the initramfs.
+40. **bootloader** – install the bootloader (GRUB).
+41. **installer** – create the bootable ISO.
+42. **live-system** – generate the live squashfs and final ISO (when enabled).
+43. **validate** – validate the produced build before publication.
 
 If a stage fails, you can resume from that stage using `--resume-from`, or stop early with `--stop-after`.
 
