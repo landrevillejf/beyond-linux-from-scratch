@@ -364,6 +364,29 @@
 
 ### Fixed
 
+- **java-dev aborted with exit code 141 (SIGPIPE) on the JDK tarball**
+  (`blfs/12-install-java-dev.sh`)
+  - The `lg3d` leg of nightly #248 -- the first nightly to reach the
+    `java-dev` stage since the profile landed -- died 115 ms in with
+    `Stage failed: java-dev (exit code: 141)`.  `java-dev.log` held only
+    the four banner lines up to `Native mode - installing Java tools
+    inside chroot`, with nothing from the inner chroot script, so the
+    failure looked like it happened before the JDK was even touched
+  - 141 is 128 + SIGPIPE.  The inner `install_tarball` helper resolved
+    an archive's top-level directory with
+    `dir="$(tar -tf "$archive" | head -n1 | cut -d/ -f1)"`.  The 207 MB
+    Temurin JDK 21 holds ~80k entries, so `tar -tf` emits far more than
+    the 64 KB pipe buffer; `head -n1` exits after the first line and tar
+    then takes SIGPIPE writing the rest.  Under the script's
+    `set -euo pipefail` that 141 propagates through `pipefail` and `set -e`
+    kills the chroot script on the very first `install_tarball` call,
+    before it prints anything -- which is why the log stops at the banner
+  - The pipeline's exit status is now discarded with `|| true` (head still
+    yields the first entry, so `dir` is unchanged for every archive), and
+    an explicit `[ -n "$dir" ] || fail ...` guard preserves the stage's
+    fail-fast promise for a genuinely unreadable or corrupt archive that
+    the discarded status would otherwise let through silently
+
 - **xfce4-session configure aborts with "iceauth missing"**
   (`blfs/08b-build-xorg.sh`, `packages/custom-sources.list`,
   `tests/test_acceptance_shell.py`)

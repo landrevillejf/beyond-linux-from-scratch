@@ -106,7 +106,14 @@ require_file() {
 
 install_tarball() {
     local archive="$1" target="$2" dir
-    dir="$(tar -tf "$archive" | head -n1 | cut -d/ -f1)"
+    # `tar -tf` on a large archive (e.g. the ~207 MB Temurin JDK, ~80k entries)
+    # writes far more than the 64 KB pipe buffer, so `head -n1` closing the pipe
+    # after the first entry sends SIGPIPE to tar.  Under `set -o pipefail` that
+    # 141 would abort the whole stage before any output, so discard the pipeline
+    # status; head still yields the first entry.  The empty-dir guard below keeps
+    # the fail-fast promise for genuinely unreadable/corrupt archives.
+    dir="$(tar -tf "$archive" | head -n1 | cut -d/ -f1 || true)"
+    [ -n "$dir" ] || fail "cannot read top-level directory of $archive"
     tar -xf "$archive"
     rm -rf "$target"
     mv "$dir" "$target"
