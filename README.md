@@ -40,7 +40,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 
 ## Features
 
-- **Profile-based builds**: choose from 17 predefined profiles (minimal, full desktop, security-hardened, audio production, ARM64, etc.).
+- **Profile-based builds**: choose from 18 predefined profiles (minimal, full desktop, security-hardened, audio production, ARM64, Project Looking Glass, etc.).
 - **Flexible init systems**: sysvinit, systemd, OpenRC, runit, s6.
 - **Desktop environments**: XFCE, GNOME, KDE Plasma, LXQt, Phosh (mobile), or no GUI.
 - **Book compliance**: stages follow LFS 13.0 / BLFS 13.0: packages are built with the exact commands from the books, with the books' error policy enforced.
@@ -168,27 +168,28 @@ cross-compiled architectures). The master ordered list is:
 19. `applications`
 20. `configure-desktop`
 21. `java-dev`
-22. `basic-networking` (profiles declaring the `network` package)
-23. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
-24. `server` (profiles declaring `ssh` or `server-tools`)
-25. `printing-scanning` (profiles declaring `printing`, or `all`)
-26. `audio-studio` (audio profiles only)
-27. `knowledge` (when enabled)
-28. `package-manager`
-29. `base-packages`
-30. `security`
-31. `privacy`
-32. `branding`
-33. `calamares-build` (when `installer.type` is `calamares`)
-34. `calamares`
-35. `first-boot`
-36. `system-updater`
-37. `luks-encryption`
-38. `initramfs`
-39. `bootloader`
-40. `installer` (every profile and architecture)
-41. `live-system` (when enabled, x86_64 only)
-42. `validate`
+22. `lg3d` (lg3d profile: Project Looking Glass X11 session)
+23. `basic-networking` (profiles declaring the `network` package)
+24. `multimedia` (audio profiles and profiles declaring the `multimedia` package)
+25. `server` (profiles declaring `ssh` or `server-tools`)
+26. `printing-scanning` (profiles declaring `printing`, or `all`)
+27. `audio-studio` (audio profiles only)
+28. `knowledge` (when enabled)
+29. `package-manager`
+30. `base-packages`
+31. `security`
+32. `privacy`
+33. `branding`
+34. `calamares-build` (when `installer.type` is `calamares`)
+35. `calamares`
+36. `first-boot`
+37. `system-updater`
+38. `luks-encryption`
+39. `initramfs`
+40. `bootloader`
+41. `installer` (every profile and architecture)
+42. `live-system` (when enabled, x86_64 only)
+43. `validate`
 
 ## Repository structure
 
@@ -376,6 +377,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |
+| `lg3d` | Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor | none | No | 6 | 5 |
 | `custom` | User-defined profile template | none | No | 5 | 5 |
 
 ---

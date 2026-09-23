@@ -16,7 +16,7 @@ class TestProfileManager:
         expected_profiles = [
             'minimal', 'gnu-free', 'gnu-free-full', 'xfce', 'gnome', 'java-dev',
             'secure', 'full', 'arm64', 'audio-cli', 'audio-studio',
-            'pinebook', 'kde', 'lxqt', 'server', 'brax3', 'custom'
+            'pinebook', 'kde', 'lxqt', 'server', 'brax3', 'lg3d', 'custom'
         ]
         for profile in expected_profiles:
             assert profile in profiles
@@ -171,6 +171,21 @@ class TestProfileManager:
         assert profile['live_system'] is True
         assert profile['system_updater'] is True
 
+    def test_get_profile_lg3d(self):
+        """Test getting Project Looking Glass profile"""
+        profile = ProfileManager.get_profile('lg3d')
+        assert profile['description'] == 'Project Looking Glass: minimal X11 with Java, lg3d as WM/compositor'
+        assert profile['desktop'] == 'none'
+        assert profile['init_system'] == 'systemd'
+        assert profile['java_dev'] is True
+        assert profile['xorg_only'] is True
+        assert profile['lg3d_session'] is True
+        assert profile['lg3d_mode'] == 'compositor'
+        assert profile['size_gb'] == 6
+        assert profile['build_time_hours'] == 5
+        assert profile['security_hardening'] is True
+        assert profile['live_system'] is False
+
     def test_list_profiles_includes_all(self):
         """Test that list_profiles includes all expected profiles"""
         profiles = ProfileManager.list_profiles()
@@ -178,7 +193,7 @@ class TestProfileManager:
             'minimal', 'gnu-free', 'gnu-free-full', 'xfce', 'gnome',
             'java-dev', 'secure', 'full', 'arm64', 'audio-cli',
             'pinebook', 'audio-studio', 'kde', 'lxqt', 'server',
-            'brax3', 'custom'
+            'brax3', 'lg3d', 'custom'
         ]
         for name in expected:
             assert name in profiles, f"Profile '{name}' missing from list_profiles()"

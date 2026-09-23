@@ -2,10 +2,11 @@ The LFS/BLFS builder is a single Python orchestrator (`builder.py`) that provide
 
 ---
 
-### 🧩 **Build Profiles** (17)
-- 16 predefined profiles + 1 custom template (`minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `custom`).
+### 🧩 **Build Profiles** (18)
+- 17 predefined profiles + 1 custom template (`minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `lg3d`, `custom`).
 - Each profile defines packages, desktop, init system, live-system flag, security hardening, privacy tools, package manager, system updater and (for ARM/mobile) cross-compilation and bootloader.
 - Inspect them with `--list-profiles` and `--profile-info <profile>`.
+- `lg3d` provisions a bare X11/Xorg host (no Wayland, no display manager), installs Project Looking Glass to `/opt/lg3d`, and wires it as the X11 session -- a systemd unit hands off to `xinit` -> `run-lg3d.sh`, in compositor mode by default (`2d`/`swing`/`dev` selectable via the profile's `lg3d_mode`) -- so lg3d runs as the window manager + compositor; the binding host contract lives in `lfs-x11-contract.md`.
 
 ### ⚙️ **Init Systems** (5)
 - Choice of `sysvinit`, `systemd`, `openrc`, `runit`, or `s6` (via `--init`).

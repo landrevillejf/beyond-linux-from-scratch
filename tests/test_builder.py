@@ -226,6 +226,18 @@ class TestLFSBuilder:
         assert 'wayland' not in stage_names
         assert 'display-manager' not in stage_names
 
+    def test_get_build_stages_xorg_only_includes_xorg_excludes_wayland(self, builder):
+        """xorg_only flag must include Xorg but exclude Wayland and display manager"""
+        builder.profile_config['desktop'] = 'none'
+        builder.profile_config['xorg_only'] = True
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+        assert 'desktop' not in stage_names
+
     @pytest.mark.parametrize('desktop', ['xfce', 'gnome', 'kde', 'lxqt', 'phosh'])
     def test_get_build_stages_all_desktops_include_blfs(self, builder, desktop):
         """Every supported desktop type must include the BLFS display stack stages"""
@@ -297,6 +309,22 @@ class TestLFSBuilder:
         assert profile['desktop'] == 'xfce'
         assert profile['live_system'] is True
 
+    def test_get_profile_lg3d_schedules_xorg_only(self, builder):
+        """lg3d profile must schedule Xorg but exclude Wayland and display manager"""
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' not in stage_names
+        assert 'desktop' not in stage_names
+        assert 'java-dev' in stage_names
+        assert 'lg3d' in stage_names
+        assert stage_names.index('java-dev') < stage_names.index('lg3d')
+
     def test_get_build_stages_with_java_dev(self, builder):
         """Test build stages with Java development enabled"""
         builder.profile_config['java_dev'] = True
@@ -304,6 +332,34 @@ class TestLFSBuilder:
 
         stage_names = [s[0] for s in stages]
         assert 'java-dev' in stage_names
+
+    def test_get_build_stages_with_lg3d_session(self, builder):
+        """lg3d_session flag must schedule the lg3d install/session stage."""
+        builder.profile_config['lg3d_session'] = True
+        stages = builder.get_build_stages()
+
+        stage_names = [s[0] for s in stages]
+        assert 'lg3d' in stage_names
+        assert ('lg3d', 'blfs/30-install-lg3d.sh') in stages
+
+    def test_get_build_stages_without_lg3d_session(self, builder):
+        """The lg3d stage must stay opt-in: no session flag, no stage."""
+        builder.profile_config.pop('lg3d_session', None)
+        assert 'lg3d' not in [s[0] for s in builder.get_build_stages()]
+
+    def test_get_env_exports_lg3d_mode(self, builder):
+        """The lg3d profile's mode must reach stage scripts verbatim.
+
+        blfs/30-install-lg3d.sh maps LFS_PROFILE_LG3D_MODE onto the
+        run-lg3d.sh launch flag, so the flattened value and the boolean
+        session gate both have to be exported.
+        """
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        env = builder._get_env()
+        assert env['LFS_PROFILE_LG3D_MODE'] == 'compositor'
+        assert env['LFS_PROFILE_LG3D_SESSION'] == 'true'
 
     def test_get_build_stages_with_security(self, builder):
         """Test build stages with security hardening"""
@@ -692,7 +748,7 @@ class TestLFSBuilder:
         """
         from builder import BUILD_STAGES, ProfileManager
         master = set(BUILD_STAGES)
-        for profile in ('xfce', 'minimal', 'server', 'full', 'audio-studio'):
+        for profile in ('xfce', 'minimal', 'server', 'full', 'audio-studio', 'lg3d'):
             builder.profile = profile
             builder.profile_config = ProfileManager.get_profile(profile)
             # Both installer settings: calamares-build only appears in
