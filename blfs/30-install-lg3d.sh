@@ -3,6 +3,7 @@
 # Project Looking Glass (lg3d): install the desktop tree and wire the X11
 # session that lfs-x11-contract.md mandates.
 # Author : Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
+set -euo pipefail
 #
 # lg3d is NOT compiled here.  The stage installs the upstream source tree
 # (run-lg3d.sh + the Gradle wrapper) into /opt/lg3d and writes the systemd
@@ -18,7 +19,6 @@
 #   swing      -> run-lg3d.sh -w  (Swing desktop, Metal look and feel)
 #   dev        -> run-lg3d.sh     (3D desktop in an ordinary window)
 # An unknown value warns and falls back to compositor, the contract target.
-set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
