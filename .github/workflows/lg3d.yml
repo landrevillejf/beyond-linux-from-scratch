@@ -1,0 +1,699 @@
+name: Nightly Project Looking Glass Builds
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Without a group, two overlapping dispatches push 26 jobs against the
+# 20-job limit and silently queue; the second run must wait, not cancel
+# a build that has already burned hours.  The group is lg3d-specific so this
+# workflow never serialises against (or is cancelled by) nightly.yml.
+concurrency:
+  group: lg3d-builds
+  cancel-in-progress: false
+
+jobs:
+  check_changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.check.outputs.has_changes }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Vérifier les commits des dernières 24 heures
+        id: check
+        run: |
+          if [ -n "$(git log --since='24 hours ago' --oneline)" ]; then
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-profiles:
+    needs: check_changes
+    if: needs.check_changes.outputs.has_changes == 'true'
+    # The runner follows the target arch instead of becoming a fourth matrix
+    # dimension: every include entry below pins profile/arch/init and none of
+    # them a runner, so adding one would leave those entries partial.  Deriving
+    # it here also means a future aarch64 entry lands on ARM unaided.
+    #
+    # aarch64 has to be native.  Emulated on x86_64 it cannot finish at any
+    # timeout: nightly #221's aarch64 job had built 14 of the 86 packages
+    # x86_64's lfs-system does in 59m33s, was still compiling 4h20m into that
+    # stage, and was cancelled at the 5h30m workflow budget.  A log-volume
+    # projection puts the stage near 11h against GitHub's hard 6h per-job cap,
+    # so --stage-timeout 18000 below was never what killed it.
+    # ubuntu-24.04-arm is free for public repositories.
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    # 480 sits above GitHub's hard 6 h per-job cap, so a runaway job was
+    # killed by the platform rather than by us and never reached the
+    # log-upload step.  5h30m produces a clean cancelled() instead.
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        # arm64 is deliberately absent from this list: ProfileManager pins
+        # that profile to architecture=aarch64 and cross_compile=True no
+        # matter what --arch says, so an arm64 x x86_64 cell built an
+        # aarch64 kernel while skipping the "Install ARM64 cross tools"
+        # step (gated on matrix.arch == 'aarch64') and then ran the boot
+        # smoke test (gated on matrix.arch == 'x86_64'), which panicked
+        # instantly under qemu-system-x86_64 (Nightly #227).  The include
+        # entry below is the only arm64 job we want.
+        profile: [ minimal, xfce, server, java-dev, audio-studio, full ]
+        init: [ sysvinit ]
+        arch: [ x86_64 ]
+        include:
+          # lg3d is the X11-only Project Looking Glass session: the profile
+          # pins init_system=systemd (its lg3d-compositor.service unit is what
+          # blfs/30-install-lg3d.sh writes on that path), java_dev (the JDK
+          # that stage runs on) and xorg_only.  --init overrides the pinned
+          # value, and the stage now also wires a sysvinit session (an
+          # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel
+          # 5), so both init flavours are built and exercised here.  These are
+          # the only legs that run the lg3d stage.
+          - profile: lg3d
+            arch: x86_64
+            init: systemd
+          - profile: lg3d
+            arch: x86_64
+            init: sysvinit
+    permissions:
+      contents: write
+    env:
+      # Empty-string check on a secret is allowed in expressions; the
+      # signing step below skips entirely until the repo secrets exist.
+      HAVE_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY != '' }}
+      # minimal/sysvinit/x86_64 stays an uncached canary: it is the
+      # cheapest complete from-scratch build (3h47m to bootloader) and it
+      # re-proves the whole prefix every night.  An expression avoids
+      # restructuring the profile x init x arch cross-product just to hang
+      # a per-entry flag on one cell.
+      USE_BASE_CACHE: ${{ !(matrix.profile == 'minimal' && matrix.init == 'sysvinit' && matrix.arch == 'x86_64') }}
+      # Where the published base prefix ends, expressed as the stage this
+      # job picks up at.  Moving the boundary means editing these two
+      # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
+      BASE_CACHE_RESUME_STAGE: init-system
+      BASE_CACHE_IMAGE_STAGE: disk-image
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          clean: true
+
+      # ---------- RESTAURATION DU CACHE ----------
+      - name: Restore package cache from release
+        run: |
+          mkdir -p /tmp/artifacts
+          cd /tmp/artifacts
+          gh release download packages-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "lfs-packages-part-*.tar.gz" \
+            --pattern "SHA256SUMS" \
+            2>/dev/null || echo "⚠️ No cache release found"
+          mkdir -p /tmp/lfs-sources
+          if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
+            cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
+            echo "✅ Cache restored successfully"
+          else
+            echo "⚠️ No cached packages found, will download during build"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Check cache status
+        id: check_cache
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            echo "hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+          else
+            echo "hit=false" >> $GITHUB_OUTPUT
+            echo "❌ Cache MISS: Will download packages during build"
+          fi
+
+      - name: Free disk space
+        run: |
+          df -h
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo apt-get clean
+          docker system prune -af || true
+          df -h
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check LFS compatibility of shell scripts
+        run: python3 lfs_check.py --shellcheck
+
+      - name: Install dependencies
+        run: |
+          # Drop the third-party apt sources ubuntu-latest ships (Chrome,
+          # Microsoft) and retry the update: nothing below comes from them,
+          # and build-base-cache #17 lost both matrix jobs in 57s to a
+          # "Hash Sum mismatch" on dl.google.com mid-republish.  Full
+          # post-mortem in build-base-cache.yml's copy of this step.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
+          sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed, attempt $attempt of 3"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bison flex gawk texinfo wget git python3 python3-pip \
+            xorriso isolinux mtools dosfstools parted rsync bc cpio kmod \
+            libssl-dev libelf-dev squashfs-tools ca-certificates \
+            libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev
+
+      - name: Install ARM64 cross tools
+        if: matrix.arch == 'aarch64'
+        run: |
+          # builder.py sets cross_compile for any --arch other than x86_64, so
+          # host/05-build-uboot.sh still hard-requires ${CROSS_COMPILE}gcc even
+          # on the native ARM runner this cell now uses - where these two
+          # packages are the native compiler and binutils under their triplet
+          # names, and host/04 derives LFS_TGT from `uname -m` accordingly.
+          #
+          # qemu-user-static and binfmt-support are deliberately gone: with
+          # host/00-setup-qemu.sh now exiting early when `uname -m` matches the
+          # target, keeping an emulator installed would only offer a way to
+          # regress into a build ~27x slower, and its absence makes such a
+          # regression fail loudly instead.
+          #
+          # grub-efi-arm64-bin ships /usr/lib/grub/arm64-efi/, without which
+          # final/14 cannot build the UEFI ISO this cell now produces (it
+          # used to be skipped entirely for aarch64).  busybox-static is the
+          # only static busybox an arm64 target can get: busybox.net publishes
+          # prebuilt statics for i686 and x86_64 only, so final/12 has nothing
+          # to download here and would otherwise abort the initramfs stage.
+          sudo apt-get install -y --no-install-recommends \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
+            grub-efi-arm64-bin busybox-static
+
+      - name: Install x86_64 GRUB EFI modules
+        if: matrix.arch == 'x86_64'
+        run: |
+          # final/14 preflights /usr/lib/grub/x86_64-efi/modinfo.sh and aborts
+          # with the package name when it is missing.  The runner image has
+          # carried it so far, but relying on that made a base-image rotation
+          # capable of failing every x86_64 leg at the last stage of a
+          # multi-hour build.  grub-efi-amd64-bin is amd64-only, so it cannot
+          # go into the shared step above.
+          sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r tests/requirements-test.txt
+
+      - name: Generate sources.list
+        run: python3 builder.py --generate-sources-list
+
+      - name: Create lfs user
+        run: |
+          sudo useradd -m -s /bin/bash lfs 2>/dev/null || true
+          echo "lfs ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/lfs >/dev/null
+          sudo chmod 440 /etc/sudoers.d/lfs
+          sudo -u lfs touch /home/lfs/.bashrc
+
+      # ---------- TESTS (exécutés AVANT de préparer le build) ----------
+      - name: Run tests
+        run: python3 -m pytest tests/ -q
+
+      # ---------- PREPARATION DU BUILD ----------
+      - name: Prepare lfs build directory
+        run: |
+          sudo rm -rf /tmp/lfs-build
+          sudo mkdir -p /tmp/lfs-build
+          sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
+          sudo chown -R lfs:lfs /tmp/lfs-build
+
+      - name: Link cached packages to build directory
+        run: |
+          if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
+            sudo mkdir -p /tmp/lfs-build/build-release/sources
+            sudo cp -v /tmp/lfs-sources/* /tmp/lfs-build/build-release/sources/ 2>/dev/null || true
+            sudo chown -R lfs:lfs /tmp/lfs-build/build-release
+            echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
+            # The copy above duplicates several GB of tarballs; the base
+            # prefix restore that follows needs the room.
+            sudo rm -rf /tmp/lfs-sources
+            df -h /tmp
+          fi
+
+      - name: Ensure fresh kernel
+        run: |
+          sudo rm -f /tmp/lfs-build/build-release/sources/linux-*.tar.xz
+          echo "🗑️ Removed cached kernel to force fresh download for all architectures"
+
+      # ------- DEBUG (optionnel) -------
+      # awk consomme toute l'entree; head fermerait le pipe et ls
+      # mourrait en SIGPIPE, ce qui fait echouer l'etape (pipefail).
+      - name: Debug sources directory before build
+        run: |
+          echo "Sources directory:"
+          ls -la /tmp/lfs-build/build-release/sources/ | awk 'NR <= 30'
+          echo "files in sources : $(find /tmp/lfs-build/build-release/sources/ -maxdepth 1 -type f | wc -l)"
+
+      - name: Ensure build directory is fully owned by lfs user
+        run: sudo chown -R lfs:lfs /tmp/lfs-build
+
+      # ------- BASE PREFIX CACHE -------
+      - name: Restore base prefix cache
+        id: base_cache
+        if: env.USE_BASE_CACHE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A cache miss must degrade to today's from-scratch build, never
+          # break the job: every failure path below leaves hit=false and
+          # the step still succeeds.
+          INIT="${{ matrix.init }}"
+          ARCH="${{ matrix.arch }}"
+          # Same key the publisher computes: git ls-tree -r emits blob
+          # SHAs, so a nightly can never restore a base built from
+          # different inputs.
+          BASE_KEY=$(git ls-tree -r HEAD -- host \
+            lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            config packages/sources.list packages/custom-sources.list \
+            builder.py VERSION | sha256sum | cut -c1-12)
+          PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
+          HIT=false
+          mkdir -p /tmp/base-cache
+          cd /tmp/base-cache
+          echo "Looking for ${PREFIX} in base-cache-latest"
+          if gh release download base-cache-latest \
+            --repo ${{ github.repository }} \
+            --pattern "${PREFIX}.tar.zst.part-*" \
+            --pattern "${PREFIX}.sha256"; then
+            # Verify before extracting.  The package-cache step above
+            # downloads SHA256SUMS and never checks it; do not repeat that.
+            if sha256sum -c "${PREFIX}.sha256"; then
+              df -h /tmp
+              sudo mkdir -p /tmp/lfs-build/build-release
+              if cat $(ls -v "${PREFIX}".tar.zst.part-*) \
+                | sudo tar --zstd --numeric-owner --xattrs \
+                  -xf - -C /tmp/lfs-build/build-release; then
+                # The lfs uid is not guaranteed identical across runners,
+                # and the resumed build must be able to write anywhere in the
+                # restored rootfs, not just in the top-level scaffolding.
+                sudo chown lfs:lfs /tmp/lfs-build
+                sudo chown -R "$(id -u lfs):$(id -g lfs)" \
+                  /tmp/lfs-build/build-release
+                HIT=true
+              else
+                echo "Base cache extraction failed - building from scratch"
+              fi
+            else
+              echo "Base cache checksum mismatch - building from scratch"
+            fi
+          else
+            echo "No base cache published for ${PREFIX} - building from scratch"
+          fi
+          # The parts are several GB and the runner disk is tight; they are
+          # useless once extracted.
+          rm -f "${PREFIX}".tar.zst.part-* "${PREFIX}.sha256"
+          df -h /tmp
+          du -sh /tmp/lfs-build/build-release 2>/dev/null || true
+          echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
+          echo "Base prefix cache hit: ${HIT}"
+
+      - name: Recreate disk image after cache restore
+        if: steps.base_cache.outputs.hit == 'true'
+        run: |
+          cd /tmp/lfs-build
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+          # host/03 umounts the loop partition when the stage exits, so
+          # re-running it hides nothing: it recreates build-release.img,
+          # which the headless-profile artifact check and the QEMU smoke
+          # test both look for, and leaves the restored rootfs untouched.
+          # Resuming and stopping on the same stage runs host/03 alone -
+          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
+          # the system is self-hosting.
+          sudo -u lfs python3 builder.py \
+            --profile "$PROFILE" \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --resume-from "$BASE_CACHE_IMAGE_STAGE" \
+            --stop-after "$BASE_CACHE_IMAGE_STAGE" \
+            --download-timeout 600 \
+            --download-retries 5 \
+            --stage-timeout 18000
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
+      # ------- BUILD -------
+      - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
+        run: |
+          cd /tmp/lfs-build
+          CACHE_STATUS="${{ steps.check_cache.outputs.hit }}"
+          echo "📦 Package cache status: $CACHE_STATUS"
+
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+
+          # Only a verified cache hit may skip the prefix; anything else
+          # runs the full build exactly as before.
+          RESUME_ARGS=""
+          if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
+            RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
+            echo "♻️ Base cache hit: resuming from $BASE_CACHE_RESUME_STAGE"
+          fi
+
+          sudo -u lfs python3 builder.py \
+            --profile "$PROFILE" \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --nightly \
+            --sbom \
+            $RESUME_ARGS \
+            --stage-timeout 18000 \
+            --download-timeout 600 \
+            --download-retries 5
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
+      - name: Resolve ISO name
+        id: iso_name
+        run: |
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+            ARCH="aarch64"
+          else
+            PROFILE="${{ matrix.profile }}"
+            ARCH="${{ matrix.arch }}"
+          fi
+          BUILDER_VERSION=$(python3 -c "from builder import __version__; print(__version__)")
+          DATE=$(date +%Y%m%d)
+          ISO_NAME="lfs-${BUILDER_VERSION}-${PROFILE}-${ARCH}-${{ matrix.init }}-${DATE}.iso"
+          echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
+          echo "📀 ISO name: $ISO_NAME"
+
+      - name: Verify kernel and boot artifact
+        run: |
+          SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
+          ISO="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          # builder.py sets LFS to the resolved output directory, so the
+          # rootfs *is* build-release/ and every stage script installs the
+          # kernel into $LFS/boot.  build-release/image/ is created empty
+          # by prepare_environment() and populated by nothing.
+          KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
+          test -n "$KERNEL_SRC"
+          # Every profile now ships an ISO: final/14 writes it into $LFS
+          # (== build-release/) for both x86_64 and aarch64.  The disk image
+          # stays as the fallback so a stage that failed to produce one is
+          # still reported against something bootable rather than silently
+          # passing with no artifact at all.
+          if [ -f "$ISO" ]; then
+            test -s "$ISO"
+            ARTIFACT="$ISO"
+          else
+            ARTIFACT="/tmp/lfs-build/build-release.img"
+            test -s "$ARTIFACT"
+          fi
+          # Give the kernel a per-profile name so release assets from
+          # different matrix jobs never collide.
+          #
+          # Every write from here to the artifact upload needs sudo.
+          # builder.py runs as lfs but the stage scripts install inside a
+          # chroot, so build-release/ and most of what it holds are
+          # root-owned and the runner user cannot create a file there.
+          # Nightly #221 threw away three profiles (minimal x2 and
+          # arm64/x86_64) that had completed the entire build, on
+          # "cp: cannot create regular file ... Permission denied".
+          sudo cp "$KERNEL_SRC" "/tmp/lfs-build/build-release/vmlinuz-${SUFFIX}"
+          cd /tmp/lfs-build/build-release || exit 1
+          sudo sha256sum "$ARTIFACT" "vmlinuz-${SUFFIX}" | sudo tee "SHA256SUMS-${SUFFIX}" >/dev/null
+
+      - name: Sign ISO with GPG
+        if: env.HAVE_GPG_KEY == 'true'
+        run: |
+          export GNUPGHOME=/tmp/gpg-nightly
+          sudo mkdir -p "$GNUPGHOME"
+          sudo chown lfs:lfs "$GNUPGHOME"
+          sudo chmod 700 "$GNUPGHOME"
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | sudo -u lfs env GNUPGHOME="$GNUPGHOME" gpg --batch --import
+          ISO="${{ steps.iso_name.outputs.iso_name }}"
+          # No ISO means final/14 never ran or failed: nothing to sign.
+          [ -f "/tmp/lfs-build/build-release/$ISO" ] || { echo "No ISO for this profile, skipping"; sudo rm -rf "$GNUPGHOME"; exit 0; }
+          # Passphrase travels through the environment, not the argv.
+          sudo -u lfs env GNUPGHOME="$GNUPGHOME" GPG_PASS='${{ secrets.GPG_PASSPHRASE }}' bash -c '
+            gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASS" \
+              --local-user "${{ vars.GPG_KEY_ID }}" \
+              --detach-sign --armor \
+              --output "/tmp/lfs-build/build-release/${0}.sig" \
+              "/tmp/lfs-build/build-release/${0}"
+          ' "$ISO"
+          echo "ISO signed: ${ISO}.sig"
+          sudo rm -rf "$GNUPGHOME"
+
+      - name: Create compat ISO pointer
+        run: |
+          cd /tmp/lfs-build/build-release || exit 1
+          ISO="${{ steps.iso_name.outputs.iso_name }}"
+          # A missing ISO here means final/14 never produced one, which the
+          # guard above already turned into a failed build; this stays
+          # tolerant so the pointer step never masks the real error.
+          if [ ! -f "$ISO" ]; then
+            echo "No ISO for this profile, skipping pointer"
+            exit 0
+          fi
+          # Release assets cannot be symlinks and copying the ISO would
+          # duplicate gigabytes, so publish a tiny pointer that resolves
+          # the backward-compatible lfs-installer.iso name.
+          SHA=$(sudo sha256sum "$ISO" | awk '{print $1}')
+          {
+            echo "iso_name=$ISO"
+            echo "sha256=$SHA"
+            echo "download_url=https://github.com/${{ github.repository }}/releases/download/lg3d-nightly-$(date +%Y%m%d)/$ISO"
+          } | sudo tee lfs-installer.iso.pointer >/dev/null
+
+      - name: Export split rootfs tarball
+        if: matrix.profile == 'xfce' || matrix.profile == 'arm64'
+        run: |
+          SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
+          # Release assets are capped at 2 GB: stream the zstd tarball
+          # straight into split parts, same convention as cache-packages.
+          #
+          # Tar build-release/ itself, not build-release/image/: $LFS is
+          # build-release/, image/ is created empty and never populated, so
+          # the old export shipped a zero-byte archive.  The build
+          # scaffolding and the release artifacts share that directory and
+          # are excluded by name.  Parts are written to the parent while tar
+          # reads, then moved in, so the archive never contains itself.
+          sudo tar --zstd -cf - -C /tmp/lfs-build/build-release \
+            --exclude=./sources --exclude=./logs --exclude=./cache \
+            --exclude=./backups --exclude=./live --exclude=./image \
+            --exclude=./tools --exclude=./packages --exclude=./lpm-repo \
+            --exclude=./proc --exclude=./sys --exclude=./dev \
+            --exclude=./run --exclude=./lost+found \
+            --exclude=./build_info.json --exclude=./sbom.spdx.json \
+            --exclude=./*.iso --exclude=./*.iso.sig \
+            --exclude=./vmlinuz-* --exclude=./SHA256SUMS-* \
+            --exclude=./lfs-installer.iso.pointer \
+            . | sudo split -b 1900m -d -a 2 - "/tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-"
+          sudo mv /tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-* /tmp/lfs-build/build-release/
+          cd /tmp/lfs-build/build-release || exit 1
+          sudo chown lfs:lfs rootfs-${SUFFIX}.tar.zst.part-*
+          # Appending needs sudo: SHA256SUMS was created root-owned by the
+          # kernel verification step above.
+          sha256sum rootfs-${SUFFIX}.tar.zst.part-* | sudo tee -a "SHA256SUMS-${SUFFIX}" >/dev/null
+          du -h rootfs-${SUFFIX}.tar.zst.part-*
+
+      - name: Rename shared-name artifacts per profile
+        run: |
+          cd /tmp/lfs-build/build-release || exit 1
+          SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
+          # Renaming needs write permission on the containing directory,
+          # which the runner user does not have (see the kernel step).
+          sudo mv build_info.json "build_info-${SUFFIX}.json"
+          if [ -f sbom.spdx.json ]; then
+            sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"
+          fi
+          if ls lpm-repo/packages.list* >/dev/null 2>&1; then
+            for f in lpm-repo/packages.list*; do
+              sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
+            done
+          fi
+          # Base binary package tarballs are deliberately not uploaded
+          # on nightlies: matrix jobs would collide on the same asset
+          # names when the release is flattened. The binary repository
+          # ships with stable releases only (release.yml).
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          path: |
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
+            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
+            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
+            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
+          # if-no-files-found stays 'ignore' because the per-profile payload
+          # differs: the rootfs tarball only ships for xfce and arm64, and
+          # packages.list only exists when the profile builds base packages.
+          # The ISO and its signature are expected from every leg now.
+          if-no-files-found: ignore
+
+      - name: Boot artifact in QEMU (smoke test)
+        if: success() && matrix.arch == 'x86_64'
+        run: |
+          # Same third-party CDN hazard as the Install dependencies step,
+          # but far more expensive here: this runs after a multi-hour build,
+          # so one bad Packages.gz from dl.google.com would discard the
+          # whole job's work.  The sources were already removed earlier in
+          # the job, so only the retry is needed.
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              break
+            fi
+            echo "apt-get update failed, attempt $attempt of 3"
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 15))
+          done
+          sudo apt-get install -y qemu-system-x86
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          # QEMU attaches a raw disk image with -drive file=...,format=raw,
+          # which it opens read-write, but host/03 creates build-release.img
+          # under sudo and this step runs as the runner user while the build
+          # ran as lfs.  Nightly #223 lost minimal/sysvinit here on "Could
+          # not open build-release.img: Permission denied" after the whole
+          # build had succeeded.  Loosen the mode instead of elevating the
+          # script: running it as root would also flip its /dev/kvm probe
+          # and silently move the smoke test onto an untested accel path.
+          if [ -f /tmp/lfs-build/build-release.img ]; then
+            sudo chmod a+rw /tmp/lfs-build/build-release.img
+          fi
+          if [ -f "$ISO_PATH" ]; then
+            bash tools/qemu-boot-smoke.sh "$ISO_PATH"
+          elif [ -f /tmp/lfs-build/build-release.img ]; then
+            # The image is formatted but empty - host/03 umounts the loop
+            # partition when the stage exits - so the kernel and initramfs
+            # come from the rootfs tree, which is build-release/ itself.
+            bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \
+              /tmp/lfs-build/build-release
+          else
+            echo "No bootable artifact (ISO or disk image) found" >&2
+            exit 1
+          fi
+
+      - name: Upload logs on failure
+        # Cancelled jobs must leave logs behind as well, otherwise a timeout
+        # is undiagnosable (Nightly #194).  This is also the only reason
+        # nightly #221's aarch64 overrun was measurable at all: the job was
+        # cancelled at the 5h30m workflow budget, and the uploaded stage log
+        # is what showed it had built 14 of the 86 packages x86_64 finishes
+        # in 59m33s rather than having hung.
+        if: failure() || cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-logs-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          path: /tmp/lfs-build/build-release/logs/
+          if-no-files-found: ignore
+
+  create-release:
+    needs: build-profiles
+    runs-on: ubuntu-latest
+    # A matrix job's aggregate result is `failure` as soon as one leg
+    # fails, so requiring `== 'success'` threw away everything the green
+    # legs had built: nightly #230 completed arm64, minimal/sysvinit,
+    # minimal/systemd and server, uploaded their artifacts, and published
+    # no release at all.  Publish whatever completed instead.  Only a
+    # cancelled run is worthless, and the all-legs-failed case is caught
+    # by the guard below so it never creates an empty release.
+    if: always() && needs.build-profiles.result != 'cancelled'
+    permissions:
+      contents: write
+    steps:
+      - name: Compute nightly date
+        id: date
+        run: echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # Failed legs upload release-logs-* archives.  Those belong to
+          # the run page, not to the release assets, so the download is
+          # scoped to the per-profile payloads.  A pattern that matches
+          # nothing is not an error for this action -- it reports "Total
+          # of 0 artifact(s) downloaded" and succeeds -- which is what
+          # lets the next step decide whether a release is warranted.
+          pattern: release-artifacts-*
+          path: artifacts
+
+      - name: Check that a profile produced artifacts
+        id: artifacts
+        run: |
+          if [ -n "$(find artifacts -type f -print -quit 2>/dev/null)" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            find artifacts -type f
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+            echo "No profile produced release artifacts; skipping the release."
+          fi
+
+      - name: Create Release
+        if: steps.artifacts.outputs.found == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          # Unique dated tag so each Project Looking Glass nightly gets its
+          # own release instead of overwriting nightly.yml's nightly-<date>
+          # release (or a release tagged with the branch name).
+          tag_name: lg3d-nightly-${{ steps.date.outputs.date }}
+          name: Project Looking Glass Nightly Build ${{ steps.date.outputs.date }}
+          files: artifacts/**/*
+          generate_release_notes: true
+          # Nightly releases are prereleases: GitHub's "latest" pointer
+          # skips them, so `lpm update-db` (releases/latest/download)
+          # keeps serving the stable repository manifest.
+          prerelease: true
+          make_latest: false
+
+      - name: Prune lg3d nightly releases older than 30 days
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CUTOFF=$(date -d '30 days ago' +%Y%m%d)
+          gh release list --repo "${{ github.repository }}" --limit 100 --json tagName,isPrerelease \
+            | jq -r '.[] | select(.isPrerelease==true and (.tagName|startswith("lg3d-nightly-"))) | .tagName' \
+            | while read -r tag; do
+                day="${tag#lg3d-nightly-}"
+                if [ "$day" -lt "$CUTOFF" ] 2>/dev/null; then
+                  echo "Deleting old lg3d nightly release: $tag"
+                  gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag || true
+                fi
+              done
