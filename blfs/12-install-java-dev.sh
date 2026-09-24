@@ -148,6 +148,12 @@ gradle_zip="$(require_file 'gradle-*-bin.zip')"
 rm -rf /usr/lib/gradle
 python3 -m zipfile -e "$gradle_zip" /usr/lib
 mv /usr/lib/gradle-* /usr/lib/gradle
+# `python3 -m zipfile -e` drops the Unix permission bits stored in the zip,
+# so the extracted bin/gradle launcher lands non-executable and invoking it
+# aborts the stage with exit 126 ("Permission denied").  Every other tool
+# here is unpacked with tar (mode-preserving) or install -m, so Gradle is the
+# only one that needs the executable bit restored explicitly.
+chmod +x /usr/lib/gradle/bin/*
 cat > /etc/profile.d/gradle.sh << 'EOF'
 export GRADLE_HOME=/usr/lib/gradle
 export PATH=$GRADLE_HOME/bin:$PATH

@@ -364,6 +364,27 @@
 
 ### Fixed
 
+- **java-dev aborted with exit code 126 (Permission denied) on Gradle**
+  (`blfs/12-install-java-dev.sh`, `tests/test_acceptance_shell.py`)
+  - The `lg3d` leg of nightly #251 -- resuming from the base prefix cache
+    at `init-system` -- reached the `java-dev` stage and died at
+    `Stage failed: java-dev (exit code: 126)`.  `java-dev.log` showed the
+    JDK and Maven installed and verified cleanly, then
+    `/install-java.sh: line 71: /usr/lib/gradle/bin/gradle: Permission
+    denied`.  126 is "command found but not executable"
+  - Gradle is the only java-dev component unpacked with
+    `python3 -m zipfile -e` (LFS ships python3, not unzip).  Python's
+    `zipfile` CLI does not restore the Unix permission bits stored in the
+    archive, so the extracted `/usr/lib/gradle/bin/gradle` launcher lands
+    mode 0644 and invoking it fails.  Every other tool in the stage is
+    unpacked with `tar -xf` (Maven, Tomcat, Docker -- mode-preserving) or
+    `install -m 755` (kubectl), which is why only Gradle broke
+  - The stage now runs `chmod +x /usr/lib/gradle/bin/*` immediately after
+    the unzip and rename, before the `gradle --version` probe that
+    verifies the install.  `tests/test_acceptance_shell.py` gains
+    `test_java_dev_restores_gradle_executable_bit`, which pins both the
+    chmod and its position ahead of the probe
+
 - **java-dev aborted with exit code 141 (SIGPIPE) on the JDK tarball**
   (`blfs/12-install-java-dev.sh`)
   - The `lg3d` leg of nightly #248 -- the first nightly to reach the
