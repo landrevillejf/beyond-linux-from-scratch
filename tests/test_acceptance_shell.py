@@ -2697,6 +2697,24 @@ class TestProfilePromiseGuardrails:
             "java-dev stage must resolve required archives via require_file"
         assert 'set -euo pipefail' in content
 
+    def test_java_dev_restores_gradle_executable_bit(self):
+        """Gradle is unzipped with `python3 -m zipfile -e`, which drops the
+        Unix permission bits, so bin/gradle lands non-executable.
+
+        Nightly #251 (lg3d/systemd/x86_64) died at java-dev exit 126 with
+        `/usr/lib/gradle/bin/gradle: Permission denied`: the chmod +x must
+        run before the `gradle --version` probe that verifies the install.
+        """
+        content = Path('blfs/12-install-java-dev.sh').read_text()
+        chmod = 'chmod +x /usr/lib/gradle/bin/*'
+        probe = '/usr/lib/gradle/bin/gradle --version'
+        assert chmod in content, \
+            "gradle launcher must be made executable after unzip " \
+            "(python3 -m zipfile drops the permission bits)"
+        assert content.index(chmod) < content.index(probe), \
+            "chmod +x must precede the `gradle --version` probe " \
+            "(nightly #251, exit 126 Permission denied)"
+
     def test_networking_stage_builds_dhcpcd_and_networkmanager(self):
         content = Path('blfs/23-basic-networking.sh').read_text()
         assert 'run_build required dhcpcd' in content
