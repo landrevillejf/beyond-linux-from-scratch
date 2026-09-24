@@ -785,6 +785,19 @@ class TestLFSComplianceGuardrails:
         assert content.count('write_session\n') >= 2, \
             "Docker and native paths must both call write_session"
 
+        # Nightly #252: the session files land in root-owned directories
+        # ($LFS/etc/systemd/system, $LFS/etc/rc.d/init.d) created by
+        # run_privileged mkdir, but the build runs as the unprivileged lfs
+        # user, so an unprivileged `cat >"$LFS/..."` redirect dies with
+        # "Permission denied".  The heredocs must stream through
+        # run_privileged tee instead.
+        assert 'cat >"$LFS/' not in content, \
+            "lg3d stage must not write into $LFS with an unprivileged " \
+            "redirect; use run_privileged tee"
+        assert content.count('run_privileged tee "$LFS/') >= 3, \
+            "systemd unit, sysvinit launcher and install-lg3d.sh must all " \
+            "be written via run_privileged tee"
+
     def test_inkscape_overridden_via_conglomeration_mirror(self):
         """The dead inkscape.org gallery URL must be overridden.
 

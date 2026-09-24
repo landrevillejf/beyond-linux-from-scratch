@@ -115,7 +115,11 @@ log_info "========================================="
 # the admin-writable unit path) so it lands in both Docker and native trees.
 write_session_unit() {
     run_privileged mkdir -p "$LFS/etc/systemd/system"
-    cat >"$LFS/etc/systemd/system/${UNIT_NAME}" <<UNIT
+    # tee (not `cat >`) so the write runs with the same privileges as the
+    # mkdir above: $LFS/etc/systemd/system is root-owned, and the build runs
+    # as the unprivileged lfs user, so an unprivileged redirect fails with
+    # "Permission denied".
+    run_privileged tee "$LFS/etc/systemd/system/${UNIT_NAME}" >/dev/null <<UNIT
 [Unit]
 Description=Project Looking Glass as the X11 session (${LG3D_DESC})
 After=systemd-user-sessions.service
@@ -142,7 +146,7 @@ UNIT
 # file write, so it works host-side in an offline chroot with no systemctl.
 write_sysv_session() {
     run_privileged mkdir -p "$LFS/etc/rc.d/init.d"
-    cat >"$LFS/etc/rc.d/init.d/lg3d" <<INITD
+    run_privileged tee "$LFS/etc/rc.d/init.d/lg3d" >/dev/null <<INITD
 #!/bin/sh
 # Project Looking Glass X11 session (${LG3D_DESC}).
 # Run directly from inittab:
@@ -228,7 +232,7 @@ fi
 # Written host-side so it is present before the chroot enables it below.
 write_session
 
-cat >"$LFS/install-lg3d.sh" <<'INNEREOF'
+run_privileged tee "$LFS/install-lg3d.sh" >/dev/null <<'INNEREOF'
 #!/bin/bash
 set -euo pipefail
 cd /sources

@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`lg3d` stage "Permission denied" writing the session artifact**
+  (`blfs/30-install-lg3d.sh`)
+  - Nightly #252 (`lg3d`, x86_64, systemd) died at the `lg3d` stage with
+    `blfs/30-install-lg3d.sh: line 107:
+    /tmp/lfs-build/build-release/etc/systemd/system/lg3d-compositor.service:
+    Permission denied`.  `write_session_unit()` created
+    `$LFS/etc/systemd/system` with `run_privileged mkdir` (root-owned) but
+    then wrote the unit with an unprivileged `cat >` redirect; the build
+    runs as the non-root `lfs` user per the BLFS convention, so the shell
+    redirect could not create a file in the root-owned directory.  The
+    systemd unit, the sysvinit `/etc/rc.d/init.d/lg3d` launcher and the
+    host-side `/install-lg3d.sh` now stream their heredocs through
+    `run_privileged tee` (matching the existing inittab append), so the
+    writes carry the same privileges as the `mkdir` that created the target
+    directory.  Both the systemd and sysvinit nightly legs were affected.
+
 ### Added
 
 - **a sysvinit session for the `lg3d` profile and a dedicated nightly**
