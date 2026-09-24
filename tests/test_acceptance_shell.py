@@ -747,6 +747,57 @@ class TestLFSComplianceGuardrails:
         assert 'make -f Makefile.sharedlibrary INSTALL_PREFIX=/usr' \
             in content
 
+    def test_lg3d_stage_wires_both_init_systems(self):
+        """The lg3d stage must wire a session for systemd AND sysvinit.
+
+        The lg3d profile pins init_system=systemd, but the lg3d.yml nightly
+        matrix builds the profile on both systemd and sysvinit via --init,
+        which overrides the pinned value.  blfs/30-install-lg3d.sh therefore
+        has to branch on INIT_SYSTEM: keep the systemd graphical.target unit
+        and, on the sysvinit path, write the BLFS-style init.d launcher plus
+        the runlevel-5 inittab respawn entry so the session actually starts at
+        boot.  Without the sysvinit branch that leg installed /opt/lg3d but
+        booted to a getty with no lg3d session.
+        """
+        content = Path('blfs/30-install-lg3d.sh').read_text()
+
+        # The stage keys off the effective init system builder.py exports.
+        assert 'INIT="${INIT_SYSTEM:-systemd}"' in content, \
+            "lg3d stage must read INIT_SYSTEM to pick the session wiring"
+
+        # systemd path is preserved.
+        assert 'write_session_unit()' in content
+        assert 'WantedBy=graphical.target' in content
+
+        # sysvinit path: BLFS-style init.d launcher respawned from inittab.
+        assert 'write_sysv_session()' in content
+        assert '$LFS/etc/rc.d/init.d/lg3d' in content
+        assert 'exec /usr/bin/xinit ${LG3D_RUN} -- /usr/bin/Xorg :0 vt1 ' \
+            '-nolisten tcp' in content
+        assert 'export JAVA_HOME=/opt/jdk-21' in content
+        assert "echo 'lg3d:5:respawn:/etc/rc.d/init.d/lg3d'" in content
+        assert "sed -i 's/^id:[0-9]*:initdefault:/id:5:initdefault:/'" \
+            in content, "sysvinit leg must boot into runlevel 5"
+
+        # Both artifacts flow through one dispatcher so Docker and native
+        # paths stay init-aware.
+        assert 'write_session()' in content
+        assert content.count('write_session\n') >= 2, \
+            "Docker and native paths must both call write_session"
+
+        # Nightly #252: the session files land in root-owned directories
+        # ($LFS/etc/systemd/system, $LFS/etc/rc.d/init.d) created by
+        # run_privileged mkdir, but the build runs as the unprivileged lfs
+        # user, so an unprivileged `cat >"$LFS/..."` redirect dies with
+        # "Permission denied".  The heredocs must stream through
+        # run_privileged tee instead.
+        assert 'cat >"$LFS/' not in content, \
+            "lg3d stage must not write into $LFS with an unprivileged " \
+            "redirect; use run_privileged tee"
+        assert content.count('run_privileged tee "$LFS/') >= 3, \
+            "systemd unit, sysvinit launcher and install-lg3d.sh must all " \
+            "be written via run_privileged tee"
+
     def test_inkscape_overridden_via_conglomeration_mirror(self):
         """The dead inkscape.org gallery URL must be overridden.
 

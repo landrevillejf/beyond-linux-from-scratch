@@ -93,10 +93,21 @@ if [ -n "$LG3D_FLAG" ]; then
     LG3D_RUN="/opt/lg3d/run-lg3d.sh ${LG3D_FLAG}"
 fi
 
+# --- Init system ------------------------------------------------------------
+# builder.py exports INIT_SYSTEM as the effective init: the --init override
+# wins over the profile's pinned systemd, so the very same stage wires either
+# a systemd unit or a sysvinit inittab respawn depending on what the build
+# selected.  lfs-x11-contract.md only mandates the bare Xorg :0 session, not
+# the init flavour that starts it.
+INIT="${INIT_SYSTEM:-systemd}"
+
 log_info "========================================="
 log_info "Project Looking Glass (lg3d) session"
 log_info "  mode : ${LG3D_MODE} (${LG3D_DESC})"
-log_info "  unit : ${UNIT_NAME}"
+log_info "  init : ${INIT}"
+if [ "$INIT" = "systemd" ]; then
+    log_info "  unit : ${UNIT_NAME}"
+fi
 log_info "========================================="
 
 # Write the systemd session unit from lfs-x11-contract.md section 3.6.  It is
@@ -104,7 +115,11 @@ log_info "========================================="
 # the admin-writable unit path) so it lands in both Docker and native trees.
 write_session_unit() {
     run_privileged mkdir -p "$LFS/etc/systemd/system"
-    cat >"$LFS/etc/systemd/system/${UNIT_NAME}" <<UNIT
+    # tee (not `cat >`) so the write runs with the same privileges as the
+    # mkdir above: $LFS/etc/systemd/system is root-owned, and the build runs
+    # as the unprivileged lfs user, so an unprivileged redirect fails with
+    # "Permission denied".
+    run_privileged tee "$LFS/etc/systemd/system/${UNIT_NAME}" >/dev/null <<UNIT
 [Unit]
 Description=Project Looking Glass as the X11 session (${LG3D_DESC})
 After=systemd-user-sessions.service
@@ -121,16 +136,67 @@ UNIT
     log_info "systemd ${UNIT_NAME} installed"
 }
 
+# Write the sysvinit equivalent of the systemd unit.  BLFS starts a display
+# manager straight from inittab with a respawn entry that runs a tiny
+# foreground launcher (bootscripts .../blfs/init.d/xdm, sourced by
+# /etc/sysconfig/xdm).  lg3d is the sole session on a bare X server, so it is
+# wired the same way: an init.d launcher that execs the contract's xinit
+# command, plus a runlevel-5 respawn line -- the sysvinit analogue of
+# WantedBy=graphical.target and Restart=on-failure.  Everything is a plain
+# file write, so it works host-side in an offline chroot with no systemctl.
+write_sysv_session() {
+    run_privileged mkdir -p "$LFS/etc/rc.d/init.d"
+    run_privileged tee "$LFS/etc/rc.d/init.d/lg3d" >/dev/null <<INITD
+#!/bin/sh
+# Project Looking Glass X11 session (${LG3D_DESC}).
+# Run directly from inittab:
+#   lg3d:5:respawn:/etc/rc.d/init.d/lg3d
+# A bare Xorg :0 with lg3d as the sole window manager / compositor, matching
+# the systemd lg3d-<mode>.service unit's ExecStart.
+export JAVA_HOME=/opt/jdk-21
+exec /usr/bin/xinit ${LG3D_RUN} -- /usr/bin/Xorg :0 vt1 -nolisten tcp
+INITD
+    run_privileged chmod 0755 "$LFS/etc/rc.d/init.d/lg3d"
+    log_info "sysvinit /etc/rc.d/init.d/lg3d installed"
+
+    # A getty on runlevel 5 would fight lg3d for the console, so register the
+    # respawn entry and boot straight into runlevel 5 (the sysvinit equivalent
+    # of `systemctl set-default graphical.target`).  inittab is written by the
+    # lfs configure stage, so it is present in any native tree; guard anyway so
+    # Docker scaffolding never aborts on a missing file.
+    if [ ! -f "$LFS/etc/inittab" ]; then
+        log_warning "$LFS/etc/inittab missing; lg3d session not wired into boot"
+        return 0
+    fi
+    if ! grep -q '^lg3d:5:respawn:' "$LFS/etc/inittab"; then
+        echo 'lg3d:5:respawn:/etc/rc.d/init.d/lg3d' |
+            run_privileged tee -a "$LFS/etc/inittab" >/dev/null
+        log_info "inittab respawn entry added for lg3d"
+    fi
+    run_privileged sed -i 's/^id:[0-9]*:initdefault:/id:5:initdefault:/' \
+        "$LFS/etc/inittab"
+    log_info "Default runlevel set to 5"
+}
+
+# Write the session artifact for whichever init the build selected.
+write_session() {
+    if [ "$INIT" = "systemd" ]; then
+        write_session_unit
+    else
+        write_sysv_session
+    fi
+}
+
 # --- Docker mode: scaffold only --------------------------------------------
 # The Docker rootfs carries no JDK (java-dev skips there) and no Xorg, so the
-# session cannot run; install the unit and the /opt/lg3d directory and leave
-# populating the tree to a native build.
+# session cannot run; install the init artifact and the /opt/lg3d directory and
+# leave populating the tree to a native build.
 if [ "$IN_DOCKER" = true ]; then
     log_info "Docker mode - scaffolding lg3d session in $LFS"
     run_privileged mkdir -p "$LFS/opt/lg3d"
-    write_session_unit
+    write_session
     log_warning "Docker mode - /opt/lg3d left empty (no JDK/Xorg in this rootfs)"
-    log_success "lg3d session unit created (Docker mode)"
+    log_success "lg3d session artifact created (Docker mode)"
     exit 0
 fi
 
@@ -164,9 +230,9 @@ if [ -d "$SOURCES_HOST" ] && [ "$(ls -A "$SOURCES_HOST" 2>/dev/null)" ]; then
 fi
 
 # Written host-side so it is present before the chroot enables it below.
-write_session_unit
+write_session
 
-cat >"$LFS/install-lg3d.sh" <<'INNEREOF'
+run_privileged tee "$LFS/install-lg3d.sh" >/dev/null <<'INNEREOF'
 #!/bin/bash
 set -euo pipefail
 cd /sources
@@ -225,26 +291,32 @@ INNEREOF
 run_privileged chmod +x "$LFS/install-lg3d.sh"
 run_privileged chroot "$LFS" /bin/bash /install-lg3d.sh
 
-# Wire the session into the boot graph.  The wants symlink is created
-# directly so it survives an offline chroot where systemctl refuses to run;
-# systemctl enable/set-default are then attempted best-effort.
-run_privileged mkdir -p "$LFS/etc/systemd/system/graphical.target.wants"
-run_privileged ln -sf "/etc/systemd/system/${UNIT_NAME}" \
-    "$LFS/etc/systemd/system/graphical.target.wants/${UNIT_NAME}"
-run_privileged chroot "$LFS" systemctl enable "$UNIT_NAME" 2>/dev/null ||
-    log_warning "Could not enable ${UNIT_NAME} via systemctl (offline chroot)"
+# Wire the session into the boot graph.  The systemd path creates the wants
+# symlink directly so it survives an offline chroot where systemctl refuses to
+# run; systemctl enable/set-default are then attempted best-effort.  The
+# sysvinit path needs nothing here: write_sysv_session already wrote the init.d
+# launcher, the inittab respawn entry and the runlevel-5 default host-side.
+if [ "$INIT" = "systemd" ]; then
+    run_privileged mkdir -p "$LFS/etc/systemd/system/graphical.target.wants"
+    run_privileged ln -sf "/etc/systemd/system/${UNIT_NAME}" \
+        "$LFS/etc/systemd/system/graphical.target.wants/${UNIT_NAME}"
+    run_privileged chroot "$LFS" systemctl enable "$UNIT_NAME" 2>/dev/null ||
+        log_warning "Could not enable ${UNIT_NAME} via systemctl (offline chroot)"
 
-if run_privileged chroot "$LFS" systemctl set-default graphical.target 2>/dev/null; then
-    log_info "Default boot target set to graphical.target"
+    if run_privileged chroot "$LFS" systemctl set-default graphical.target 2>/dev/null; then
+        log_info "Default boot target set to graphical.target"
+    else
+        for target in "$LFS/usr/lib/systemd/system/graphical.target" \
+            "$LFS/lib/systemd/system/graphical.target"; do
+            if [ -e "$target" ]; then
+                run_privileged ln -sf "${target#"$LFS"}" "$LFS/etc/systemd/system/default.target"
+                log_info "default.target -> ${target#"$LFS"} (symlink fallback)"
+                break
+            fi
+        done
+    fi
 else
-    for target in "$LFS/usr/lib/systemd/system/graphical.target" \
-        "$LFS/lib/systemd/system/graphical.target"; do
-        if [ -e "$target" ]; then
-            run_privileged ln -sf "${target#"$LFS"}" "$LFS/etc/systemd/system/default.target"
-            log_info "default.target -> ${target#"$LFS"} (symlink fallback)"
-            break
-        fi
-    done
+    log_info "sysvinit session wired via inittab respawn (runlevel 5)"
 fi
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
@@ -253,4 +325,4 @@ run_privileged umount "$LFS"/proc 2>/dev/null || true
 run_privileged umount "$LFS"/sys 2>/dev/null || true
 run_privileged umount "$LFS"/run 2>/dev/null || true
 
-log_success "Project Looking Glass installed and ${UNIT_NAME} wired"
+log_success "Project Looking Glass installed and lg3d session wired (${INIT})"

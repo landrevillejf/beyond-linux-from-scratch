@@ -2,7 +2,55 @@
 
 ## Unreleased
 
+### Fixed
+
+- **`lg3d` stage "Permission denied" writing the session artifact**
+  (`blfs/30-install-lg3d.sh`)
+  - Nightly #252 (`lg3d`, x86_64, systemd) died at the `lg3d` stage with
+    `blfs/30-install-lg3d.sh: line 107:
+    /tmp/lfs-build/build-release/etc/systemd/system/lg3d-compositor.service:
+    Permission denied`.  `write_session_unit()` created
+    `$LFS/etc/systemd/system` with `run_privileged mkdir` (root-owned) but
+    then wrote the unit with an unprivileged `cat >` redirect; the build
+    runs as the non-root `lfs` user per the BLFS convention, so the shell
+    redirect could not create a file in the root-owned directory.  The
+    systemd unit, the sysvinit `/etc/rc.d/init.d/lg3d` launcher and the
+    host-side `/install-lg3d.sh` now stream their heredocs through
+    `run_privileged tee` (matching the existing inittab append), so the
+    writes carry the same privileges as the `mkdir` that created the target
+    directory.  Both the systemd and sysvinit nightly legs were affected.
+
 ### Added
+
+- **a sysvinit session for the `lg3d` profile and a dedicated nightly**
+  (`blfs/30-install-lg3d.sh`, `.github/workflows/lg3d.yml`,
+  `tests/test_acceptance_shell.py`, `AGENTS.md`, `docs/features.md`)
+  - `blfs/30-install-lg3d.sh` only wired the Project Looking Glass session
+    for systemd (`lg3d-<mode>.service` enabled into `graphical.target`), so
+    an `--init sysvinit` lg3d build installed `/opt/lg3d` but booted to a
+    getty with no session.  The stage now branches on the exported
+    `INIT_SYSTEM`: on systemd it keeps the existing unit, and on any other
+    init it writes a BLFS-style `/etc/rc.d/init.d/lg3d` launcher that
+    `export JAVA_HOME=/opt/jdk-21` and `exec`s the contract's
+    `xinit /opt/lg3d/run-lg3d.sh <flag> -- /usr/bin/Xorg :0 vt1 -nolisten
+    tcp`, registers an `lg3d:5:respawn:/etc/rc.d/init.d/lg3d` inittab entry
+    and sets `id:5:initdefault:` -- the sysvinit analogue of
+    `WantedBy=graphical.target` plus `Restart=on-failure`, mirroring how the
+    vendored blfs-bootscripts start a display manager from inittab.  Both
+    the Docker scaffold and the native chroot paths go through one
+    `write_session` dispatcher, so they stay init-aware.
+  - `.github/workflows/lg3d.yml` ("Nightly Project Looking Glass Builds")
+    keeps the full nightly profile matrix and adds the `lg3d` profile on
+    both `systemd` and `sysvinit` (x86_64) as `include` legs, so both
+    session-wiring paths are exercised.  It publishes to its own
+    `lg3d-nightly-<date>` prerelease under a `lg3d-builds` concurrency
+    group, and prunes only `lg3d-nightly-*` tags, so it never clobbers
+    `nightly.yml`'s `nightly-<date>` release.
+  - `tests/test_acceptance_shell.py` gains
+    `test_lg3d_stage_wires_both_init_systems`, a guardrail asserting the
+    stage reads `INIT_SYSTEM`, preserves the systemd `graphical.target`
+    unit, and writes the sysvinit launcher, inittab respawn entry and
+    runlevel-5 default.
 
 - **a `lg3d` profile for Project Looking Glass** (`builder.py`,
   `blfs/30-install-lg3d.sh`, `packages/custom-sources.list`,
