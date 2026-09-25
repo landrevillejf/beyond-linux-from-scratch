@@ -124,12 +124,17 @@ WM/compositor so Project Looking Glass can own the display.
 A third flag, `lg3d_session`, schedules the conditional `lg3d` stage
 (`blfs/30-install-lg3d.sh`) right after `java-dev`. It installs the upstream
 lg3d tree (pinned as the `ProjectLookingGlass` GitHub archive in
-`packages/custom-sources.list`) into `/opt/lg3d` and writes the contract's
-`xinit` -> `run-lg3d.sh` systemd session unit, enabled into
-`graphical.target`. The `lg3d_mode` key (`compositor` by default, also
-`2d`/`swing`/`dev`) selects the `run-lg3d.sh` launch flag and is exported as
-`LFS_PROFILE_LG3D_MODE`. The stage runs on the JDK the `java-dev` stage
-installs, so it must stay ordered after it.
+`packages/custom-sources.list`) into `/opt/lg3d` and wires the contract's
+`xinit` -> `run-lg3d.sh` session for whichever init the build selected: on
+`systemd` a unit enabled into `graphical.target`, on `sysvinit` a BLFS-style
+`/etc/rc.d/init.d/lg3d` launcher respawned from `inittab` on runlevel 5 (the
+stage branches on the exported `INIT_SYSTEM`). The `lg3d_mode` key
+(`compositor` by default, also `2d`/`swing`/`dev`) selects the `run-lg3d.sh`
+launch flag and is exported as `LFS_PROFILE_LG3D_MODE`. The stage runs on the
+JDK the `java-dev` stage installs, so it must stay ordered after it. The
+profile pins `init_system: systemd`, but `.github/workflows/lg3d.yml` builds it
+on both `systemd` and `sysvinit` via `--init` (which overrides the pinned
+value), so both session-wiring paths are exercised nightly.
 
 ---
 
@@ -196,6 +201,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 | `xfce-live-boot-iso.yml` | manual/tag | Full live ISO release pipeline |
 | `release.yml` | tag push | Tagged release build pipeline |
 | `nightly.yml` | schedule | Matrix nightly profile builds |
+| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: full matrix plus lg3d on systemd and sysvinit, published to its own `lg3d-nightly-<date>` release |
 | `cross-compile.yml` | push/PR | ARM64 cross-compile verification |
 
 ---
