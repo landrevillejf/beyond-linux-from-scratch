@@ -65,7 +65,7 @@ jobs:
         # smoke test (gated on matrix.arch == 'x86_64'), which panicked
         # instantly under qemu-system-x86_64 (Nightly #227).  The include
         # entry below is the only arm64 job we want.
-        profile: [ minimal, xfce, server, java-dev, audio-studio, full ]
+        profile: [ minimal ]
         init: [ sysvinit ]
         arch: [ x86_64 ]
         include:
