@@ -232,6 +232,38 @@ fi
 # Written host-side so it is present before the chroot enables it below.
 write_session
 
+# --- XSession entries for Display Manager selection ---
+# We provide .desktop entries in /usr/share/xsessions so that if a Display Manager
+# (like LightDM) is installed, the user can choose the LG3D mode at login.
+run_privileged mkdir -p "$LFS/usr/share/xsessions"
+
+# 3D Desktop (Compositor / WM)
+run_privileged tee "$LFS/usr/share/xsessions/lg3d-compositor.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Name=Project Looking Glass (3D)
+Comment=LG3D as Window Manager and Compositor
+Exec=/opt/lg3d/run-lg3d.sh -x
+Type=Application
+EOF
+
+# 2D Desktop
+run_privileged tee "$LFS/usr/share/xsessions/lg3d-2d.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Name=Project Looking Glass (2D)
+Comment=LG3D conventional Swing 2D desktop
+Exec=/opt/lg3d/run-lg3d.sh -2
+Type=Application
+EOF
+
+# Swing Desktop (Metal)
+run_privileged tee "$LFS/usr/share/xsessions/lg3d-swing.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Name=Project Looking Glass (Swing)
+Comment=LG3D Swing desktop (Metal Look & Feel)
+Exec=/opt/lg3d/run-lg3d.sh -w
+Type=Application
+EOF
+
 run_privileged tee "$LFS/install-lg3d.sh" >/dev/null <<'INNEREOF'
 #!/bin/bash
 set -euo pipefail
@@ -282,10 +314,52 @@ fi
 # Convenience launcher on PATH.
 ln -sf /opt/lg3d/run-lg3d.sh /usr/bin/lg3d
 
-[ -x /usr/bin/xinit ] || \
+    [ -x /usr/bin/xinit ] || \
     log_warning "/usr/bin/xinit missing; the lg3d session unit needs it (xorg stage)"
 
-log_info "lg3d installed to /opt/lg3d."
+    # Add a simple selector script for console login / .xinitrc usage
+    cat > /usr/bin/lg3d-session-select <<'SELECTOR'
+#!/bin/bash
+# If we have a terminal, allow selection. Otherwise fall back to profile default.
+if [ -t 0 ]; then
+    echo "Select Project Looking Glass mode:"
+    echo "1) 3D Desktop (Compositor/WM)"
+    echo "2) 2D Desktop (Swing)"
+    echo "3) Swing Desktop (Metal)"
+    read -t 10 -p "Choice [1-3] (default in 10s): " choice || choice=""
+    case $choice in
+        1) exec /opt/lg3d/run-lg3d.sh -x ;;
+        2) exec /opt/lg3d/run-lg3d.sh -2 ;;
+        3) exec /opt/lg3d/run-lg3d.sh -w ;;
+        *) # Fallback to exported mode or compositor
+           MODE="${LFS_PROFILE_LG3D_MODE:-compositor}"
+           case "$MODE" in
+               2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
+               swing) exec /opt/lg3d/run-lg3d.sh -w ;;
+               *) exec /opt/lg3d/run-lg3d.sh -x ;;
+           esac
+           ;;
+    esac
+else
+    # Non-interactive: use profile default
+    MODE="${LFS_PROFILE_LG3D_MODE:-compositor}"
+    case "$MODE" in
+        2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
+        swing) exec /opt/lg3d/run-lg3d.sh -w ;;
+        *) exec /opt/lg3d/run-lg3d.sh -x ;;
+    esac
+fi
+SELECTOR
+    chmod +x /usr/bin/lg3d-session-select
+
+    # Write a default .xinitrc for the 'lfs' user that uses the selector
+    cat > /home/lfs/.xinitrc <<'EOF'
+exec lg3d-session-select
+EOF
+    chown lfs:lfs /home/lfs/.xinitrc
+    chmod 0644 /home/lfs/.xinitrc
+
+    log_info "lg3d installed to /opt/lg3d."
 INNEREOF
 
 run_privileged chmod +x "$LFS/install-lg3d.sh"

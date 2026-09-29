@@ -655,7 +655,8 @@ class ProfileManager:
             'graphical_installer': False,
             'xorg_only': True,
             'lg3d_session': True,
-            'lg3d_mode': 'compositor'
+            'lg3d_mode': 'compositor',
+            'display_manager': True
         }
     }
 
