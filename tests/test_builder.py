@@ -309,8 +309,8 @@ class TestLFSBuilder:
         assert profile['desktop'] == 'xfce'
         assert profile['live_system'] is True
 
-    def test_get_profile_lg3d_schedules_xorg_only(self, builder):
-        """lg3d profile must schedule Xorg but exclude Wayland and display manager"""
+    def test_get_profile_lg3d_schedules_xorg_and_display_manager(self, builder):
+        """lg3d profile must schedule Xorg and display manager but exclude Wayland"""
         from builder import ProfileManager
         builder.profile = 'lg3d'
         builder.profile_config = ProfileManager.get_profile('lg3d')
@@ -319,7 +319,7 @@ class TestLFSBuilder:
         assert 'blfs-libs' in stage_names
         assert 'xorg' in stage_names
         assert 'wayland' not in stage_names
-        assert 'display-manager' not in stage_names
+        assert 'display-manager' in stage_names
         assert 'desktop' not in stage_names
         assert 'java-dev' in stage_names
         assert 'lg3d' in stage_names
