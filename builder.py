@@ -655,7 +655,8 @@ class ProfileManager:
             'graphical_installer': False,
             'xorg_only': True,
             'lg3d_session': True,
-            'lg3d_mode': 'compositor'
+            'lg3d_mode': 'compositor',
+            'display_manager': True
         }
     }
 
@@ -2178,9 +2179,11 @@ class LFSBuilder:
             stages.append(('wayland', 'blfs/08c-build-wayland.sh'))
             stages.append(('display-manager', 'blfs/08d-build-display-manager.sh'))
         elif _xorg_only:
-            # X11-only for Project Looking Glass: no Wayland, no display manager
+            # X11-only for Project Looking Glass: no Wayland
             stages.append(('blfs-libs', 'blfs/08a-build-blfs-libs.sh'))
             stages.append(('xorg', 'blfs/08b-build-xorg.sh'))
+            if self.profile_config.get('display_manager', False):
+                stages.append(('display-manager', 'blfs/08d-build-display-manager.sh'))
 
         # Build kernel
         stages.append(('build-kernel', 'lfs/08-build-kernel.sh'))
