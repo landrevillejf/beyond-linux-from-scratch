@@ -238,6 +238,20 @@ class LFSConfig:
                 "extras": ["firefox", "libreoffice", "gimp", "vlc", "thunar", "xfce4-terminal"]
             },
 
+            # GL stack.  lfs-x11-contract.md 3.3 wants GLX + DRI3 on a
+            # hardware DDX, but most hardware gallium drivers need an
+            # LLVM/libclc (or rustc) toolchain the offline chroot cannot
+            # build, so the default stays the pure-software softpipe
+            # rasteriser that keeps CI green.  A production lg3d host opts
+            # into a real driver (e.g. iris, which needs no LLVM, or
+            # radeonsi with mesa_llvm enabled) by overriding these keys;
+            # blfs/08b-build-xorg.sh reads them as LFS_CONFIG_GRAPHICS_MESA_*
+            # and always enables DRI3.
+            "graphics": {
+                "mesa_gallium_drivers": "softpipe",
+                "mesa_llvm": "disabled"
+            },
+
             "branding": {
                 "preset": "default",
                 "dir": "",
@@ -655,8 +669,15 @@ class ProfileManager:
             'graphical_installer': False,
             'xorg_only': True,
             'lg3d_session': True,
-            'lg3d_mode': 'compositor',
-            'display_manager': True
+            # lfs-iso-contract.md 3: --iso runs the composited 2D desktop AND
+            # the X11 WM/compositor in one JVM (process-isolated MDI apps); it
+            # is a strict superset of compositor mode, so it is the default.
+            'lg3d_mode': 'iso',
+            # lfs-x11-contract.md 1/4: no display manager, lg3d is the sole WM
+            # on a bare Xorg :0.  lightdm would fight the lg3d session unit for
+            # :0 and autologin into a desktop this desktop:none profile never
+            # builds, so the display-manager stage stays off.
+            'display_manager': False
         }
     }
 

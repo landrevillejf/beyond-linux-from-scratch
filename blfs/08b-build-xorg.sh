@@ -44,6 +44,17 @@ run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 DESKTOP_TYPE="${LFS_CONFIG_DESKTOP_TYPE:-xfce}"
 export DESKTOP_TYPE
 
+# Mesa GL driver selection (lfs-x11-contract.md 3.3 wants GLX + DRI3 on a
+# hardware DDX).  The offline chroot cannot build the LLVM/libclc/rustc stack
+# most hardware gallium drivers need, so the default stays the pure-software
+# softpipe rasteriser that keeps CI green; a production lg3d host opts into a
+# real driver (e.g. iris, which needs no LLVM, or radeonsi with mesa_llvm
+# enabled) via config/build.conf's graphics section, exported as
+# LFS_CONFIG_GRAPHICS_MESA_*.  DRI3 is enabled regardless of driver.
+MESA_GALLIUM_DRIVERS="${LFS_CONFIG_GRAPHICS_MESA_GALLIUM_DRIVERS:-softpipe}"
+MESA_LLVM="${LFS_CONFIG_GRAPHICS_MESA_LLVM:-disabled}"
+export MESA_GALLIUM_DRIVERS MESA_LLVM
+
 log_info "========================================="
 log_info "Building Xorg display server and libraries"
 log_info "Desktop type: $DESKTOP_TYPE"
@@ -525,14 +536,22 @@ build_commands_mesa() {
     done
     platforms=x11
     have_pc wayland-scanner && platforms=x11,wayland
+    # gallium/llvm come from the graphics.mesa_* config keys (default softpipe
+    # + disabled, the offline-safe combo); a production lg3d host overrides
+    # them for a hardware DDX.  DRI3 is always on: lfs-x11-contract.md 3.3
+    # requires GLX + DRI3 and it needs no LLVM.
+    gallium="${MESA_GALLIUM_DRIVERS:-softpipe}"
+    llvm="${MESA_LLVM:-disabled}"
+    log_info "Mesa GL: gallium-drivers=$gallium llvm=$llvm dri3=enabled"
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
           -D platforms="$platforms" \
-          -D gallium-drivers=softpipe \
+          -D gallium-drivers="$gallium" \
           -D vulkan-drivers="" \
-          -D llvm=disabled \
+          -D llvm="$llvm" \
+          -D dri3=enabled \
           -D valgrind=disabled \
           -D libunwind=disabled &&
     ninja && ninja install
@@ -896,9 +915,10 @@ log_info "Phase 4: DRM, Mesa and libepoxy"
 run_build required libpciaccess
 run_build required libdrm
 
-# Mesa follows the software-only flags explained in build_commands_mesa;
-# it is built here and not in blfs-libs (08a) because the book lists the
-# Xorg Libraries above as a REQUIRED mesa dependency (Nightly #213).
+# Mesa defaults to the software-only flags explained in build_commands_mesa
+# (override via graphics.mesa_* for a hardware DDX); it is built here and not
+# in blfs-libs (08a) because the book lists the Xorg Libraries above as a
+# REQUIRED mesa dependency (Nightly #213).
 run_build required mesa
 
 # libepoxy needs mesa's GL/EGL headers and xorg-server's glamor module
@@ -994,6 +1014,8 @@ run_privileged chmod +x "$LFS/build-xorg.sh"
 run_privileged chroot "$LFS" /usr/bin/env -i \
     HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
     LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    MESA_GALLIUM_DRIVERS="$MESA_GALLIUM_DRIVERS" \
+    MESA_LLVM="$MESA_LLVM" \
     /bin/bash /build-xorg.sh
 
 log_success "Xorg display server built successfully"

@@ -22,22 +22,43 @@
 
 ### Added
 
-- **support for LG3D session selection and Display Manager integration**
-  (`blfs/30-install-lg3d.sh`, `builder.py`, `tests/test_builder.py`,
-  `tests/test_profile_manager.py`)
-  - The `lg3d` profile now includes `display_manager: true` by default,
-    enabling the `display-manager` stage (LightDM) even in `xorg_only` mode.
-  - `blfs/30-install-lg3d.sh` now installs `.desktop` files in
-    `/usr/share/xsessions` for each LG3D mode (3D, 2D, Swing), allowing
-    users to choose their preferred session from the graphical login screen.
-  - A new `lg3d-session-select` script is installed to `/usr/bin`, providing
-    an interactive menu for choosing the session type when starting X from
-    the console or via a default `.xinitrc`.
-  - Fixed `LFSBuilder.get_build_stages()` to correctly schedule the
-    `display-manager` stage in `xorg_only` profiles when `display_manager`
-    is enabled.
-  - Added comprehensive tests in `tests/test_profile_manager.py` and
-    `tests/test_builder.py` to ensure 100% coverage of the new logic.
+- **LG3D iso-contract session mode, bare Xorg and a hardware GL path**
+  (`blfs/30-install-lg3d.sh`, `blfs/08b-build-xorg.sh`, `builder.py`,
+  `config/build.conf`, `config/build.conf.json`, `config/default.json`,
+  `tests/test_builder.py`, `tests/test_profile_manager.py`,
+  `tests/test_config.py`, `tests/test_acceptance_shell.py`, `AGENTS.md`,
+  `README.md`, `docs/features.md`)
+  - The `lg3d` profile now defaults `lg3d_mode` to `iso`, launching
+    `run-lg3d.sh --iso -x`.  Per `docs/lfs-iso-contract.md` this runs the
+    composited 2D desktop AND the X11 window manager/compositor in one JVM
+    (process-isolated MDI apps), a strict superset of the previous
+    `compositor` (`-x`) default.  `--iso` alone would load
+    `lgconfig_1p_nox.xml` with no `X11CompositorSession` and silently
+    disable the feature, so the stage always pairs it with `-x`; the
+    unknown-mode fallback and the `lg3d-session-select` default are `iso`
+    too, and a `lg3d-iso.desktop` entry joins the 3D/2D/Swing xsessions.
+  - The profile's `display_manager` flag is back to `False`.  This branch
+    had set it `True`, scheduling LightDM even in `xorg_only` mode, but
+    `docs/lfs-x11-contract.md` 1/4 require a bare Xorg `:0` with no display
+    manager fighting the `lg3d-compositor.service` unit for the display,
+    and LightDM autologs into an `xfce` session this `desktop: none` profile
+    never builds.  The generic `display_manager`-in-`xorg_only` scheduling
+    added to `get_build_stages()` stays, for profiles that opt in.
+  - Mesa gains a hardware GL path.  `blfs/08b-build-xorg.sh` reads a new
+    `graphics` config section (`mesa_gallium_drivers`, `mesa_llvm`,
+    flattened to `LFS_CONFIG_GRAPHICS_*`) and always builds Mesa with
+    `-D dri3=enabled`, satisfying the contract's GLX+DRI3 requirement.  The
+    default stays `softpipe`/`disabled` because the offline CI chroot cannot
+    build the LLVM/libclc/rustc stack that `iris`/`radeonsi` need; set those
+    keys to opt into a hardware driver.  The `graphics` defaults live in
+    `builder.py` and all three checked-in config presets.
+  - Tests updated for the new default and the reversal:
+    `tests/test_profile_manager.py` and `tests/test_builder.py` assert
+    `lg3d_mode == 'iso'` and no `display-manager` stage,
+    `tests/test_config.py` pins the `graphics` defaults across all config
+    sources, and `tests/test_acceptance_shell.py` gains
+    `test_lg3d_stage_wires_iso_contract_mode` plus a rewritten Mesa guard
+    allowing the hardware path.  `builder.py` stays at 100% coverage.
 
 - **a sysvinit session for the `lg3d` profile and a dedicated nightly**
   (`blfs/30-install-lg3d.sh`, `.github/workflows/lg3d.yml`,

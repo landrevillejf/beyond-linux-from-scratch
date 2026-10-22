@@ -61,7 +61,7 @@ class TestLFSConfig:
         required_sections = [
             'lfs_version', 'blfs_version', 'architecture', 'target_triplet',
             'init_system', 'package_manager', 'system_updater', 'live_system',
-            'java_dev', 'desktop', 'security', 'bootloader', 'filesystem',
+            'java_dev', 'desktop', 'graphics', 'security', 'bootloader', 'filesystem',
             'kernel', 'locale', 'timezone', 'hostname', 'users', 'network',
             'build_options', 'logging', 'installer'
         ]
@@ -107,6 +107,29 @@ class TestLFSConfig:
             data = json.loads(Path(name).read_text())
             assert data['installer']['type'] == 'none', \
                 f"{name} disagrees with the code default on installer.type"
+
+    def test_graphics_mesa_defaults_agree_across_config_sources(self, temp_dir):
+        """Every checked-in preset must match the code default for Mesa.
+
+        graphics.mesa_gallium_drivers and graphics.mesa_llvm drive the Mesa
+        build in blfs/08b-build-xorg.sh.  lfs-x11-contract.md 3.3 wants a DRI3
+        hardware GL path, but the offline CI chroot cannot build the
+        LLVM/libclc/rustc stack that iris/radeonsi need, so the default stays
+        software (softpipe, llvm disabled) and hardware drivers are opt-in via
+        these keys.  A preset that disagreed would silently change what every
+        --config build compiles.
+        """
+        generated = LFSConfig(temp_dir / "fresh.conf")
+        assert generated.data['graphics']['mesa_gallium_drivers'] == 'softpipe'
+        assert generated.data['graphics']['mesa_llvm'] == 'disabled'
+
+        for name in ('config/build.conf', 'config/build.conf.json',
+                     'config/default.json'):
+            data = json.loads(Path(name).read_text())
+            assert data['graphics']['mesa_gallium_drivers'] == 'softpipe', \
+                f"{name} disagrees with the code default on mesa_gallium_drivers"
+            assert data['graphics']['mesa_llvm'] == 'disabled', \
+                f"{name} disagrees with the code default on mesa_llvm"
 
     def test_init_system_choices(self, lfs_config):
         """Test init system configuration"""

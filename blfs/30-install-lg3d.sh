@@ -14,11 +14,15 @@ set -euo pipefail
 #
 # The launch mode comes from the profile (LFS_PROFILE_LG3D_MODE), matching
 # the run-lg3d.sh flags:
-#   compositor -> run-lg3d.sh -x  (contract default: WM + compositor)
+#   iso        -> run-lg3d.sh --iso -x  (lfs-iso-contract.md default: the
+#                 composited 2D desktop AND the X11 WM/compositor in one JVM,
+#                 so external X clients are hosted as process-isolated MDI
+#                 windows; both --iso and -x are required, see iso contract 5.1)
+#   compositor -> run-lg3d.sh -x  (lfs-x11-contract.md: WM + compositor)
 #   2d         -> run-lg3d.sh -2  (conventional Swing 2D desktop)
 #   swing      -> run-lg3d.sh -w  (Swing desktop, Metal look and feel)
 #   dev        -> run-lg3d.sh     (3D desktop in an ordinary window)
-# An unknown value warns and falls back to compositor, the contract target.
+# An unknown value warns and falls back to iso, the contract target.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -58,35 +62,47 @@ run_privileged() {
 
 # --- Launch mode (from the profile) ----------------------------------------
 # builder.py exports the lg3d profile's lg3d_mode key as LFS_PROFILE_LG3D_MODE.
-LG3D_MODE="${LFS_PROFILE_LG3D_MODE:-compositor}"
+LG3D_MODE="${LFS_PROFILE_LG3D_MODE:-iso}"
 case "$LG3D_MODE" in
+iso)
+    LG3D_FLAG="--iso -x"
+    LG3D_DESC="--iso composited 2D desktop + WM/compositor"
+    UNIT_BASE="compositor"
+    ;;
 compositor)
     LG3D_FLAG="-x"
     LG3D_DESC="window manager + compositor"
+    UNIT_BASE="compositor"
     ;;
 2d)
     LG3D_FLAG="-2"
     LG3D_DESC="2D Swing desktop"
+    UNIT_BASE="2d"
     ;;
 swing)
     LG3D_FLAG="-w"
     LG3D_DESC="Swing desktop (Metal look and feel)"
+    UNIT_BASE="swing"
     ;;
 dev)
     LG3D_FLAG=""
     LG3D_DESC="3D desktop (development mode)"
+    UNIT_BASE="dev"
     ;;
 *)
-    log_warning "Unknown lg3d_mode '$LG3D_MODE'; falling back to compositor"
-    LG3D_MODE="compositor"
-    LG3D_FLAG="-x"
-    LG3D_DESC="window manager + compositor"
+    log_warning "Unknown lg3d_mode '$LG3D_MODE'; falling back to iso"
+    LG3D_MODE="iso"
+    LG3D_FLAG="--iso -x"
+    LG3D_DESC="--iso composited 2D desktop + WM/compositor"
+    UNIT_BASE="compositor"
     ;;
 esac
-# Contract section 3.6 names the compositor unit lg3d-compositor.service;
-# deriving the name from the mode keeps that exact name for the default and
-# stays self-documenting for the other modes (lg3d-2d.service, ...).
-UNIT_NAME="lg3d-${LG3D_MODE}.service"
+# lfs-x11-contract.md 3.6 names the compositor session unit
+# lg3d-compositor.service.  --iso is that same compositor session with the
+# composited 2D desktop layered on top (lfs-iso-contract.md 3 keeps the
+# lg3d-compositor.service name), so iso and compositor both map to it, while
+# the other modes stay self-documenting (lg3d-2d.service, ...).
+UNIT_NAME="lg3d-${UNIT_BASE}.service"
 # run-lg3d.sh portion of ExecStart (dev mode passes no flag).
 LG3D_RUN="/opt/lg3d/run-lg3d.sh"
 if [ -n "$LG3D_FLAG" ]; then
@@ -237,6 +253,15 @@ write_session
 # (like LightDM) is installed, the user can choose the LG3D mode at login.
 run_privileged mkdir -p "$LFS/usr/share/xsessions"
 
+# --iso composited desktop (process-isolated MDI apps) - the contract default
+run_privileged tee "$LFS/usr/share/xsessions/lg3d-iso.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Name=Project Looking Glass (ISO)
+Comment=LG3D --iso composited 2D desktop + WM/compositor
+Exec=/opt/lg3d/run-lg3d.sh --iso -x
+Type=Application
+EOF
+
 # 3D Desktop (Compositor / WM)
 run_privileged tee "$LFS/usr/share/xsessions/lg3d-compositor.desktop" >/dev/null <<EOF
 [Desktop Entry]
@@ -323,30 +348,34 @@ ln -sf /opt/lg3d/run-lg3d.sh /usr/bin/lg3d
 # If we have a terminal, allow selection. Otherwise fall back to profile default.
 if [ -t 0 ]; then
     echo "Select Project Looking Glass mode:"
-    echo "1) 3D Desktop (Compositor/WM)"
-    echo "2) 2D Desktop (Swing)"
-    echo "3) Swing Desktop (Metal)"
-    read -t 10 -p "Choice [1-3] (default in 10s): " choice || choice=""
+    echo "1) ISO Desktop (composited 2D + WM/compositor, process-isolated)"
+    echo "2) 3D Desktop (Compositor/WM)"
+    echo "3) 2D Desktop (Swing)"
+    echo "4) Swing Desktop (Metal)"
+    read -t 10 -p "Choice [1-4] (default in 10s): " choice || choice=""
     case $choice in
-        1) exec /opt/lg3d/run-lg3d.sh -x ;;
-        2) exec /opt/lg3d/run-lg3d.sh -2 ;;
-        3) exec /opt/lg3d/run-lg3d.sh -w ;;
-        *) # Fallback to exported mode or compositor
-           MODE="${LFS_PROFILE_LG3D_MODE:-compositor}"
+        1) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
+        2) exec /opt/lg3d/run-lg3d.sh -x ;;
+        3) exec /opt/lg3d/run-lg3d.sh -2 ;;
+        4) exec /opt/lg3d/run-lg3d.sh -w ;;
+        *) # Fallback to exported mode or iso
+           MODE="${LFS_PROFILE_LG3D_MODE:-iso}"
            case "$MODE" in
+               compositor) exec /opt/lg3d/run-lg3d.sh -x ;;
                2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
                swing) exec /opt/lg3d/run-lg3d.sh -w ;;
-               *) exec /opt/lg3d/run-lg3d.sh -x ;;
+               *) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
            esac
            ;;
     esac
 else
     # Non-interactive: use profile default
-    MODE="${LFS_PROFILE_LG3D_MODE:-compositor}"
+    MODE="${LFS_PROFILE_LG3D_MODE:-iso}"
     case "$MODE" in
+        compositor) exec /opt/lg3d/run-lg3d.sh -x ;;
         2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
         swing) exec /opt/lg3d/run-lg3d.sh -w ;;
-        *) exec /opt/lg3d/run-lg3d.sh -x ;;
+        *) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
     esac
 fi
 SELECTOR

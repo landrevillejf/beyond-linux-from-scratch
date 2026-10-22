@@ -180,8 +180,8 @@ class TestProfileManager:
         assert profile['java_dev'] is True
         assert profile['xorg_only'] is True
         assert profile['lg3d_session'] is True
-        assert profile['lg3d_mode'] == 'compositor'
-        assert profile['display_manager'] is True
+        assert profile['lg3d_mode'] == 'iso'
+        assert profile['display_manager'] is False
         assert profile['size_gb'] == 6
         assert profile['build_time_hours'] == 5
         assert profile['security_hardening'] is True
