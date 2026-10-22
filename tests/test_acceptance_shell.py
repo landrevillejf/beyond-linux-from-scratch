@@ -2554,25 +2554,17 @@ class TestProfilePromiseGuardrails:
         assert 'ALLOW_EXTERNAL_SPIRV_TOOLS=ON' in content
         assert 'SPIRV-Headers_SOURCE_DIR=/usr' in content
 
-    def test_xorg_stage_mesa_is_software_only_offline_safe(self):
-        """mesa must build software-only: softpipe, no Vulkan, no LLVM.
+    def test_xorg_stage_mesa_defaults_software_only_but_allows_hardware(self):
+        """mesa defaults to software-only softpipe but honours a hardware knob.
 
-        Nightly #208 (all desktop jobs) died at mesa meson with
-        "Unknown compiler(s): [['rustc']]": -D vulkan-drivers=auto pulls
-        in the Nouveau driver (nak, needs rustc + network) and the Intel
-        driver (anv, needs ply).  Enumerating amd,swrast cleared that,
-        but Nightly #210 then died on "Run-time dependency libclc found:
-        NO" because radv/lavapipe pull in libclc, which needs a full
-        LLVM/clang toolchain that no stage builds.  The offline chroot
-        can only build the pure-software rasteriser, so the stage uses
-        softpipe (the book's no-LLVM gallium driver), empty
-        vulkan-drivers and -D llvm=disabled, and drops the optional
-        -D video-codecs=all (softpipe has no video backend).
-
-        Nightly #213 moved mesa from blfs-libs (08a) to the xorg stage
-        (08b): the book lists the Xorg Libraries as a REQUIRED mesa
-        dependency and its wayland platform needs wayland-scanner, so
-        these software-only flags now live in 08b.
+        Nightly #208/#210 proved the offline chroot cannot build the
+        LLVM/libclc/rustc stack that -D vulkan-drivers=auto or a hardware
+        gallium driver needs, so the DEFAULT must stay softpipe + no Vulkan +
+        -D llvm=disabled to keep CI green.  lfs-x11-contract.md 3.3 still wants
+        GLX + DRI3 on a hardware DDX for a real lg3d host, so the gallium driver
+        and the llvm toggle are now read from the graphics.mesa_* config keys
+        (LFS_CONFIG_GRAPHICS_MESA_*) and DRI3 is always enabled; a production
+        host overrides the defaults instead of the stage hardcoding software GL.
         """
         content = Path('blfs/08b-build-xorg.sh').read_text()
         # Comment lines may quote the book's default; only the actual
@@ -2587,12 +2579,41 @@ class TestProfilePromiseGuardrails:
             "mesa must not use gallium-drivers=auto offline (nightly #210)"
         assert '-D video-codecs=all' not in code, \
             "mesa must drop video-codecs (softpipe has no video backend)"
-        assert '-D gallium-drivers=softpipe' in code, \
-            "mesa must use the no-LLVM softpipe driver (nightly #210)"
         assert '-D vulkan-drivers=""' in code, \
             "mesa must build no Vulkan drivers offline (nightly #210)"
-        assert '-D llvm=disabled' in code, \
-            "mesa must disable LLVM so libclc is never required (#210)"
+        # Driver + LLVM are config-driven; DRI3 is always on (contract 3.3).
+        assert '-D gallium-drivers="$gallium"' in code, \
+            "gallium driver must come from the graphics.mesa_gallium_drivers knob"
+        assert '-D llvm="$llvm"' in code, \
+            "llvm toggle must come from the graphics.mesa_llvm knob"
+        assert '-D dri3=enabled' in code, \
+            "DRI3 must always be enabled (lfs-x11-contract.md 3.3)"
+        assert 'MESA_GALLIUM_DRIVERS="${LFS_CONFIG_GRAPHICS_MESA_GALLIUM_DRIVERS:-softpipe}"' \
+            in content, "the default gallium driver must stay softpipe offline"
+        assert 'MESA_LLVM="${LFS_CONFIG_GRAPHICS_MESA_LLVM:-disabled}"' \
+            in content, "the default llvm toggle must stay disabled (#210)"
+
+    def test_lg3d_stage_wires_iso_contract_mode(self):
+        """The lg3d stage must default to the --iso composited-desktop mode.
+
+        lfs-iso-contract.md 3 mandates launching `run-lg3d.sh --iso -x` (BOTH
+        flags): --iso alone adds only -PcompositedDesktop and silently loads the
+        non-compositor lgconfig_1p_nox.xml, so no X11CompositorSession is
+        published and the process-isolated MDI hosting never starts (5.1).  The
+        stage maps the `iso` profile mode onto `--iso -x`, falls back to iso when
+        LFS_PROFILE_LG3D_MODE is unset, and keeps the contract's canonical
+        lg3d-compositor.service unit name for that session.
+        """
+        content = Path('blfs/30-install-lg3d.sh').read_text()
+        assert 'LG3D_MODE="${LFS_PROFILE_LG3D_MODE:-iso}"' in content, \
+            "the lg3d stage must default to the --iso contract mode"
+        assert 'LG3D_FLAG="--iso -x"' in content, \
+            "iso mode must pass both --iso and -x (lfs-iso-contract.md 5.1)"
+        assert 'run-lg3d.sh --iso -x' in content, \
+            "the xsessions entry / selector must launch run-lg3d.sh --iso -x"
+        # iso keeps the contract's canonical lg3d-compositor.service unit name.
+        assert 'UNIT_NAME="lg3d-${UNIT_BASE}.service"' in content
+        assert 'UNIT_BASE="compositor"' in content
 
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.

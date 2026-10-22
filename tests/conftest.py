@@ -78,6 +78,10 @@ def mock_config_file(temp_dir):
             "display_manager": "lightdm",
             "theme": "adwaita"
         },
+        "graphics": {
+            "mesa_gallium_drivers": "softpipe",
+            "mesa_llvm": "disabled"
+        },
         "security": {
             "kernel_hardening": True,
             "firewall": {"enabled": True},

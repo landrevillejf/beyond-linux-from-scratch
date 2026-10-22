@@ -6,7 +6,7 @@ The LFS/BLFS builder is a single Python orchestrator (`builder.py`) that provide
 - 17 predefined profiles + 1 custom template (`minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `java-dev`, `secure`, `full`, `arm64`, `audio-cli`, `pinebook`, `audio-studio`, `kde`, `lxqt`, `server`, `brax3`, `lg3d`, `custom`).
 - Each profile defines packages, desktop, init system, live-system flag, security hardening, privacy tools, package manager, system updater and (for ARM/mobile) cross-compilation and bootloader.
 - Inspect them with `--list-profiles` and `--profile-info <profile>`.
-- `lg3d` provisions a bare X11/Xorg host (no Wayland, no display manager), installs Project Looking Glass to `/opt/lg3d`, and wires it as the X11 session -- on `systemd` a unit hands off to `xinit` -> `run-lg3d.sh` from `graphical.target`, on `sysvinit` an `/etc/rc.d/init.d/lg3d` launcher is respawned from `inittab` on runlevel 5 -- in compositor mode by default (`2d`/`swing`/`dev` selectable via the profile's `lg3d_mode`), so lg3d runs as the window manager + compositor; the binding host contract lives in `lfs-x11-contract.md`. The dedicated `lg3d.yml` nightly builds the profile on both init systems.
+- `lg3d` provisions a bare X11/Xorg host (no Wayland, no display manager), installs Project Looking Glass to `/opt/lg3d`, and wires it as the X11 session -- on `systemd` a unit hands off to `xinit` -> `run-lg3d.sh` from `graphical.target`, on `sysvinit` an `/etc/rc.d/init.d/lg3d` launcher is respawned from `inittab` on runlevel 5 -- in `iso` mode by default (`run-lg3d.sh --iso -x`, which runs the composited 2D desktop and the window manager/compositor in one JVM; `compositor`/`2d`/`swing`/`dev` selectable via the profile's `lg3d_mode`); the binding host contracts live in `docs/lfs-x11-contract.md` and `docs/lfs-iso-contract.md`. The dedicated `lg3d.yml` nightly builds the profile on both init systems.
 
 ### ⚙️ **Init Systems** (5)
 - Choice of `sysvinit`, `systemd`, `openrc`, `runit`, or `s6` (via `--init`).
@@ -16,6 +16,7 @@ The LFS/BLFS builder is a single Python orchestrator (`builder.py`) that provide
 - XFCE, GNOME, KDE Plasma, LXQt and Phosh (mobile), or no GUI.
 - Display manager (LightDM and friends), Xorg and Wayland stacks.
 - Desktop extras such as Firefox, LibreOffice, GIMP and VLC.
+- Mesa GL is built with DRI3 enabled; `graphics.mesa_gallium_drivers` and `graphics.mesa_llvm` default to software (`softpipe`/`disabled`) for offline builds and can opt into a hardware driver (`iris`, `radeonsi`).
 
 ### 📚 **Book Compliance**
 - Stages follow LFS 13.0 / BLFS 13.0: packages are built with the exact commands from the books, with the books' error policy enforced.

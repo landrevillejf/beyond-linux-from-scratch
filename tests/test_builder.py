@@ -238,6 +238,26 @@ class TestLFSBuilder:
         assert 'display-manager' not in stage_names
         assert 'desktop' not in stage_names
 
+    def test_get_build_stages_xorg_only_with_display_manager_opt_in(self, builder):
+        """An xorg_only profile that opts into display_manager gets the DM stage.
+
+        The lg3d profile keeps display_manager False so lg3d owns a bare
+        Xorg :0 (lfs-x11-contract.md 1/4), but the scheduling branch stays
+        generic: any future X11-only profile can set display_manager True to
+        pull blfs/08d back in without editing get_build_stages().  This is the
+        only path that reaches that append, so it is pinned here.
+        """
+        builder.profile_config['desktop'] = 'none'
+        builder.profile_config['xorg_only'] = True
+        builder.profile_config['display_manager'] = True
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'blfs-libs' in stage_names
+        assert 'xorg' in stage_names
+        assert 'wayland' not in stage_names
+        assert 'display-manager' in stage_names
+        assert ('display-manager', 'blfs/08d-build-display-manager.sh') in stages
+
     @pytest.mark.parametrize('desktop', ['xfce', 'gnome', 'kde', 'lxqt', 'phosh'])
     def test_get_build_stages_all_desktops_include_blfs(self, builder, desktop):
         """Every supported desktop type must include the BLFS display stack stages"""
@@ -309,8 +329,15 @@ class TestLFSBuilder:
         assert profile['desktop'] == 'xfce'
         assert profile['live_system'] is True
 
-    def test_get_profile_lg3d_schedules_xorg_and_display_manager(self, builder):
-        """lg3d profile must schedule Xorg and display manager but exclude Wayland"""
+    def test_get_profile_lg3d_schedules_xorg_without_display_manager(self, builder):
+        """lg3d profile must schedule Xorg but exclude Wayland AND the DM.
+
+        lfs-x11-contract.md 1/4 require a bare Xorg :0 with lg3d as the sole
+        window manager and no display manager: lightdm would fight the
+        lg3d-compositor.service unit for :0 and autologin into an xfce session
+        this desktop:none profile never builds.  So display-manager must not be
+        scheduled, and the session comes from the lg3d stage's own unit.
+        """
         from builder import ProfileManager
         builder.profile = 'lg3d'
         builder.profile_config = ProfileManager.get_profile('lg3d')
@@ -319,7 +346,7 @@ class TestLFSBuilder:
         assert 'blfs-libs' in stage_names
         assert 'xorg' in stage_names
         assert 'wayland' not in stage_names
-        assert 'display-manager' in stage_names
+        assert 'display-manager' not in stage_names
         assert 'desktop' not in stage_names
         assert 'java-dev' in stage_names
         assert 'lg3d' in stage_names
@@ -358,7 +385,7 @@ class TestLFSBuilder:
         builder.profile = 'lg3d'
         builder.profile_config = ProfileManager.get_profile('lg3d')
         env = builder._get_env()
-        assert env['LFS_PROFILE_LG3D_MODE'] == 'compositor'
+        assert env['LFS_PROFILE_LG3D_MODE'] == 'iso'
         assert env['LFS_PROFILE_LG3D_SESSION'] == 'true'
 
     def test_get_build_stages_with_security(self, builder):

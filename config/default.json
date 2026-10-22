@@ -76,6 +76,10 @@
       "xfce4-terminal"
     ]
   },
+  "graphics": {
+    "mesa_gallium_drivers": "softpipe",
+    "mesa_llvm": "disabled"
+  },
   "security": {
     "kernel_hardening": true,
     "firewall": {
