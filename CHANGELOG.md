@@ -4,6 +4,45 @@
 
 ### Added
 
+- **Boot integrity: IMA/EVM measured-boot scaffolding and optional UEFI
+  Secure Boot signing (Phase 5 of the hardening program)**
+  (`final/13-create-bootloader.sh`, `blfs/15-security-hardening.sh`,
+  `tests/test_acceptance_shell.py`)
+  - `final/13-create-bootloader.sh` appends
+    `ima_policy=appraise ima_appraise=fix evm=fix` to the GRUB kernel
+    command line only when `security.boot_integrity.measured_boot` is on
+    (Phase 0 schema, off by default), so the default cmdline stays
+    byte-identical.  IMA/EVM are armed in FIX mode (label, never deny) so
+    the first boot writes the `security.ima`/`security.evm` xattrs instead
+    of bricking an unattended nightly; switching to `enforce` is a
+    deliberate operator step afterwards.  No `lockdown=` token is added
+    because lockdown is already forced at compile time by
+    `CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY` (Phase 1).
+  - `blfs/15-security-hardening.sh` supplies the userspace half when
+    measured boot is on: a conservative custom IMA policy at
+    `/etc/ima/ima-policy` (measure+appraise exec/mmap/module owned by
+    root), an EVM HMAC key generated at build time to
+    `/etc/keys/evm-key.pem` (mode 600), and a boot-time loader
+    `/usr/sbin/ima-evm-load.sh` that imports the key and loads the policy
+    into the kernel keyrings.  The loader is wired for both init systems --
+    a systemd oneshot ordered `Before=sysinit.target` and a BLFS-style
+    `/etc/rc.d/init.d/ima-evm-load` launcher at runlevel S.
+  - `final/13-create-bootloader.sh` adds an optional Secure Boot signing
+    block gated on `security.boot_integrity.secure_boot` (off by default).
+    When enabled it generates a Machine Owner Key (MOK), signs the installed
+    kernel with `sbsign` inside the chroot, and writes the
+    `mokutil --import` enrollment step to `/etc/secure-boot/ENROLL.txt`.
+    It never writes the firmware key database itself -- enrolling a MOK is
+    an interactive physical-presence action an unattended build must not
+    attempt -- and missing tools (`sbsign`) are a warning, not a failure,
+    so a non-UEFI or cross build that left the knob on still completes.
+  - Both knobs default off, so `minimal`/`server` and every existing
+    profile keep their exact boot behaviour.  No `builder.py` change was
+    needed (both keys already flatten to `LFS_CONFIG_SECURITY_*`).  The
+    loader is a best-effort scaffold; validate it on real hardware before
+    flipping IMA/EVM to enforce.  The nightly is the first true end-to-end
+    check.
+
 - **Runtime hardening deepening: expanded sysctls, fstab/core-dump
   hardening, and a fail2ban/rkhunter/lynis build stage (Phase 4 of the
   hardening program)**

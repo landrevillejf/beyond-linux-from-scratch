@@ -474,6 +474,116 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 11d. IMA/EVM measured-boot provisioning (Phase 5)
+# ---------------------------------------------------------------------------
+# Opt-in via security.boot_integrity.measured_boot.  When on, final/13 puts
+# ima_appraise=fix / evm=fix on the kernel command line; this block supplies
+# the userspace half: a custom IMA policy, an EVM HMAC key, and a boot-time
+# loader that imports both into the kernel keyrings before appraisal runs.
+# Everything is provisioned in FIX mode (label, never deny), so a first boot
+# writes the security.ima/security.evm xattrs instead of bricking; switching
+# to enforce is a deliberate operator step afterwards.  The loader is a
+# best-effort scaffold -- validate it on real hardware before enforcing.  With
+# the knob off (the default) nothing here runs and the posture is unchanged.
+if [ "${LFS_CONFIG_SECURITY_BOOT_INTEGRITY_MEASURED_BOOT:-false}" = "true" ]; then
+    log_info "Provisioning IMA/EVM measured-boot scaffolding (fix mode)"
+    run_privileged mkdir -p "$LFS/etc/ima" "$LFS/etc/keys"
+
+    # Conservative custom policy: measure + appraise exec, mmap and module
+    # loads owned by root.  fix mode labels them on first boot.
+    write_file /etc/ima/ima-policy 0640 <<'IMAPOLICY'
+# Managed by 15-security-hardening.sh (Phase 5).  Written to
+# /sys/kernel/security/ima/policy at boot; paired with ima_appraise=fix.
+measure func=BPRM_CHECK
+measure func=FILE_MMAP
+measure func=MODULE_CHECK
+appraise func=BPRM_CHECK fowner=0
+appraise func=FILE_MMAP fowner=0
+appraise func=MODULE_CHECK fowner=0
+IMAPOLICY
+
+    # EVM HMAC key.  Generated once at build time; the same key must be
+    # present on every boot or the security.evm xattrs will not verify.
+    if [ ! -f "$LFS/etc/keys/evm-key.pem" ]; then
+        if command -v openssl >/dev/null 2>&1; then
+            log_info "Generating EVM HMAC key (/etc/keys/evm-key.pem)"
+            run_privileged openssl genrsa -out "$LFS/etc/keys/evm-key.pem" 2048 2>/dev/null ||
+                log_warning "openssl could not generate the EVM key"
+        else
+            log_warning "openssl not on the build host; EVM key not generated"
+        fi
+    fi
+    [ -f "$LFS/etc/keys/evm-key.pem" ] && run_privileged chmod 600 "$LFS/etc/keys/evm-key.pem" || true
+    run_privileged chmod 700 "$LFS/etc/keys" 2>/dev/null || true
+
+    # Boot-time loader script (shared by systemd and sysvinit).
+    write_file /usr/sbin/ima-evm-load.sh 0755 <<'IMALOAD'
+#!/bin/sh
+# Managed by 15-security-hardening.sh (Phase 5).  Imports the EVM HMAC key and
+# the custom IMA policy into the kernel keyrings.  Fix mode: a missing key or
+# policy is logged, never fatal.
+EVM_KEY=/etc/keys/evm-key.pem
+IMA_POLICY=/etc/ima/ima-policy
+if [ -f "$EVM_KEY" ]; then
+    if command -v evmctl >/dev/null 2>&1; then
+        evmctl import "$EVM_KEY" evm-key >/dev/null 2>&1 || echo "evmctl import failed"
+    else
+        echo "evmctl (ima-evm-utils) not installed; EVM key not imported"
+    fi
+fi
+if [ -f "$IMA_POLICY" ] && [ -w /sys/kernel/security/ima/policy ]; then
+    cat "$IMA_POLICY" > /sys/kernel/security/ima/policy || echo "IMA policy load failed"
+fi
+exit 0
+IMALOAD
+
+    # systemd: load before sysinit so appraisal sees the key/policy.
+    write_file /etc/systemd/system/ima-evm-load.service 0644 <<'IMASVC'
+[Unit]
+Description=Load IMA policy and EVM key into the kernel keyrings
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/ima-evm-load.sh
+
+[Install]
+WantedBy=sysinit.target
+IMASVC
+
+    # sysvinit equivalent (BLFS-style init.d launcher, runlevel S).
+    write_file /etc/rc.d/init.d/ima-evm-load 0755 <<'IMAINIT'
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          ima-evm-load
+# Required-Start:    $local_fs
+# Default-Start:     S
+# Default-Stop:
+# Short-Description: Load IMA policy and EVM key
+### END INIT INFO
+case "$1" in
+    start)
+        /usr/sbin/ima-evm-load.sh
+        ;;
+    stop|reload|restart|status)
+        ;;
+    *)
+        echo "Usage: $0 {start}" >&2
+        exit 1
+        ;;
+esac
+exit 0
+IMAINIT
+
+    log_success "IMA/EVM measured-boot scaffolding provisioned (fix mode)"
+else
+    log_info "measured boot disabled - skipping IMA/EVM provisioning"
+fi
+
+# ---------------------------------------------------------------------------
 # 12. SELinux targeted policy (if SELinux userspace is installed)
 # ---------------------------------------------------------------------------
 if [ -x "$LFS/usr/sbin/selinuxenabled" ] || [ -x "$LFS/usr/sbin/getenforce" ]; then
