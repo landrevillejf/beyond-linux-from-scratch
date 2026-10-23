@@ -548,11 +548,15 @@ build_commands_mesa() {
     have_pc wayland-scanner && platforms=x11,wayland
     # gallium/llvm come from the graphics.mesa_* config keys (default softpipe
     # + disabled, the offline-safe combo); a production lg3d host overrides
-    # them for a hardware DDX.  DRI3 is always on: lfs-x11-contract.md 3.3
-    # requires GLX + DRI3 and it needs no LLVM.
+    # them for a hardware DDX.  DRI3 is no longer a meson toggle: Mesa dropped
+    # the `dri3` option upstream (Sept 2024) and now builds DRI3
+    # unconditionally for the X11/GLX platform, so passing -D dri3=enabled
+    # makes meson abort with `ERROR: Unknown options: "dri3"` on Mesa 25.1.8
+    # (Nightly Project Looking Glass Builds #36).  lfs-x11-contract.md 3.3's
+    # GLX + DRI3 requirement is therefore met by simply not passing the flag.
     gallium="${MESA_GALLIUM_DRIVERS:-softpipe}"
     llvm="${MESA_LLVM:-disabled}"
-    log_info "Mesa GL: gallium-drivers=$gallium llvm=$llvm dri3=enabled"
+    log_info "Mesa GL: gallium-drivers=$gallium llvm=$llvm (DRI3 built-in)"
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
@@ -561,7 +565,6 @@ build_commands_mesa() {
           -D gallium-drivers="$gallium" \
           -D vulkan-drivers="" \
           -D llvm="$llvm" \
-          -D dri3=enabled \
           -D valgrind=disabled \
           -D libunwind=disabled &&
     ninja && ninja install

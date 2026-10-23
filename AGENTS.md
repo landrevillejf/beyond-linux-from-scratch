@@ -142,11 +142,13 @@ value), so both session-wiring paths are exercised nightly.
 
 `docs/lfs-x11-contract.md` 3.3 also wants a GLX+DRI3 hardware GL path, so
 `blfs/08b-build-xorg.sh` reads a new `graphics` config section
-(`mesa_gallium_drivers`, `mesa_llvm`, flattened to `LFS_CONFIG_GRAPHICS_*`)
-and always builds Mesa with `-D dri3=enabled`. The default stays
-`softpipe`/`disabled` because the offline CI chroot cannot build the
-LLVM/libclc/rustc stack hardware gallium drivers need; set those keys to
-`iris`/`radeonsi` + `enabled` to opt into hardware GL.
+(`mesa_gallium_drivers`, `mesa_llvm`, flattened to `LFS_CONFIG_GRAPHICS_*`).
+DRI3 is not passed as a meson option: Mesa removed the `dri3` option upstream
+(Sept 2024) and builds DRI3 unconditionally for the X11/GLX platform, so
+`-D dri3=enabled` aborts Mesa 25.1.8 with `ERROR: Unknown options: "dri3"`.
+The default stays `softpipe`/`disabled` because the offline CI chroot cannot
+build the LLVM/libclc/rustc stack hardware gallium drivers need; set those keys
+to `iris`/`radeonsi` + `enabled` to opt into hardware GL.
 
 ---
 

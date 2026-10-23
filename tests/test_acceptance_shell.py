@@ -2563,8 +2563,12 @@ class TestProfilePromiseGuardrails:
         -D llvm=disabled to keep CI green.  lfs-x11-contract.md 3.3 still wants
         GLX + DRI3 on a hardware DDX for a real lg3d host, so the gallium driver
         and the llvm toggle are now read from the graphics.mesa_* config keys
-        (LFS_CONFIG_GRAPHICS_MESA_*) and DRI3 is always enabled; a production
-        host overrides the defaults instead of the stage hardcoding software GL.
+        (LFS_CONFIG_GRAPHICS_MESA_*).  DRI3 is no longer a meson option: Mesa
+        dropped it upstream (Sept 2024) and builds DRI3 unconditionally for the
+        X11/GLX platform, so passing -D dri3=enabled aborts Mesa 25.1.8 with
+        `ERROR: Unknown options: "dri3"` (Nightly Project Looking Glass Builds
+        #36).  The flag must therefore be absent; contract 3.3 is satisfied by
+        Mesa's built-in DRI3.
         """
         content = Path('blfs/08b-build-xorg.sh').read_text()
         # Comment lines may quote the book's default; only the actual
@@ -2581,13 +2585,15 @@ class TestProfilePromiseGuardrails:
             "mesa must drop video-codecs (softpipe has no video backend)"
         assert '-D vulkan-drivers=""' in code, \
             "mesa must build no Vulkan drivers offline (nightly #210)"
-        # Driver + LLVM are config-driven; DRI3 is always on (contract 3.3).
+        # Driver + LLVM are config-driven.  DRI3 is built-in to Mesa 25.1+
+        # (the `dri3` meson option was removed upstream), so the flag must NOT
+        # be passed or meson aborts with `Unknown options: "dri3"` (#36).
         assert '-D gallium-drivers="$gallium"' in code, \
             "gallium driver must come from the graphics.mesa_gallium_drivers knob"
         assert '-D llvm="$llvm"' in code, \
             "llvm toggle must come from the graphics.mesa_llvm knob"
-        assert '-D dri3=enabled' in code, \
-            "DRI3 must always be enabled (lfs-x11-contract.md 3.3)"
+        assert '-D dri3=' not in code, \
+            "Mesa 25.1+ removed the dri3 option; passing it aborts meson (#36)"
         assert 'MESA_GALLIUM_DRIVERS="${LFS_CONFIG_GRAPHICS_MESA_GALLIUM_DRIVERS:-softpipe}"' \
             in content, "the default gallium driver must stay softpipe offline"
         assert 'MESA_LLVM="${LFS_CONFIG_GRAPHICS_MESA_LLVM:-disabled}"' \
