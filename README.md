@@ -397,7 +397,15 @@ Key sections:
 - `live_system`: live ISO behavior (compression, persistence, default boot)
 - `package_manager`: LPM behavior
 - `system_updater`: update policy
-- `security`: hardening, firewall, auditing, privacy flags
+- `security`: hardening, firewall, auditing, privacy flags, plus the resolved
+  posture knobs `selinux.mode`, `fips.enabled`, `boot_integrity.*`,
+  `supply_chain.*`, `compliance.{profiles,fail_on_gap}` and
+  `baseline_all_profiles`. Setting `baseline_all_profiles: true` rolls the
+  hardened baseline (the `security` stage plus its `selinux`/`runtime-hardening`
+  companions) out to every profile regardless of the per-profile
+  `security_hardening` flag, while heavier items (LUKS, the privacy/Tor stack,
+  FIPS-mode, compliance evidence) stay opt-in. See
+  [docs/security-hardening.md](docs/security-hardening.md).
 - `bootloader`: grub/uboot metadata
 - `repositories`: source list endpoints
 
