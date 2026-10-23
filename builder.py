@@ -709,11 +709,16 @@ class ProfileManager:
             # the X11 WM/compositor in one JVM (process-isolated MDI apps); it
             # is a strict superset of compositor mode, so it is the default.
             'lg3d_mode': 'iso',
-            # lfs-x11-contract.md 1/4: no display manager, lg3d is the sole WM
-            # on a bare Xorg :0.  lightdm would fight the lg3d session unit for
-            # :0 and autologin into a desktop this desktop:none profile never
-            # builds, so the display-manager stage stays off.
-            'display_manager': False
+            # lfs-x11-contract.md 74-75 permits a display manager as long as it
+            # launches a bare Xorg session with no WM.  LightDM does exactly
+            # that: it owns :0, shows the greeter, then runs the chosen
+            # /usr/share/xsessions/lg3d-*.desktop Exec (run-lg3d.sh <flag>),
+            # which attaches to the existing DISPLAY as the sole WM/compositor.
+            # So the user picks a mode at a real login screen.  blfs/08d writes
+            # an lg3d greeter config (no autologin, no startxfce4 wrapper) and
+            # blfs/30 stops enabling the standalone :0-grabbing lg3d unit when
+            # the DM is present, so the two never fight for :0.
+            'display_manager': True
         }
     }
 

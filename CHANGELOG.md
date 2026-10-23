@@ -4,6 +4,37 @@
 
 ### Added
 
+- **LG3D all-modes login greeter** (`builder.py`,
+  `blfs/08d-build-display-manager.sh`, `blfs/30-install-lg3d.sh`,
+  `tests/test_builder.py`, `tests/test_profile_manager.py`,
+  `tests/test_acceptance_shell.py`, `README.md`, `AGENTS.md`)
+  - The `lg3d` profile now sets `display_manager: True`, so
+    `get_build_stages()` schedules the `display-manager` stage for it. This is
+    contract-compliant: `lfs-x11-contract.md` 3.1 permits a display manager as
+    long as it launches a bare Xorg `:0` with no WM, and LightDM owns `:0`,
+    shows the greeter, then runs the chosen `lg3d-*.desktop` `Exec`
+    (`run-lg3d.sh <flag>`), which attaches to the existing `DISPLAY` as the
+    sole WM/compositor. The user now picks a mode at a real login screen.
+  - `blfs/08d` no longer early-exits for this profile. It reads the exported
+    `LFS_PROFILE_XORG_ONLY` + `LFS_PROFILE_DISPLAY_MANAGER` flags and, for a
+    `desktop: none` profile that requested a DM, writes an lg3d-specific
+    `/etc/lightdm/lightdm.conf` (`greeter-session=lightdm-gtk-greeter`,
+    `user-session=lg3d-iso`, NO `session-wrapper`, NO `autologin-*` keys). The
+    xfce/autologin config path is left byte-identical for real desktops, and
+    every other `desktop: none` profile still skips the stage. The greeter
+    decision is passed into the `env -i` chroot script explicitly.
+  - `blfs/30-install-lg3d.sh` now writes all five xsessions entries -- the
+    missing `dev` mode (`lg3d-dev.desktop`, `Exec=/opt/lg3d/run-lg3d.sh` with
+    no flag) joins iso/compositor/2d/swing -- and offers `dev` in
+    `lg3d-session-select` (interactive choice 5 plus both non-interactive
+    fallbacks). Its boot-graph enable is gated on `DM_OWNS_DISPLAY`: when
+    LightDM owns `:0` the standalone `lg3d-<mode>.service` unit is installed
+    but NOT enabled into `graphical.target` and the sysvinit `inittab` respawn
+    is skipped (runlevel 5 still set), so the two never fight for `:0` and a
+    DM-less boot still works. The unit/launcher files are always written.
+  - LG3D-only: no other profile's display-manager or autologin behaviour
+    changes. `builder.py` stays at 100% coverage.
+
 - **Hardened baseline rollout to every profile (Phase 8 of the hardening
   program)**
   (`builder.py`, `tests/test_builder.py`, `README.md`, `AGENTS.md`,

@@ -241,11 +241,13 @@ class TestLFSBuilder:
     def test_get_build_stages_xorg_only_with_display_manager_opt_in(self, builder):
         """An xorg_only profile that opts into display_manager gets the DM stage.
 
-        The lg3d profile keeps display_manager False so lg3d owns a bare
-        Xorg :0 (lfs-x11-contract.md 1/4), but the scheduling branch stays
-        generic: any future X11-only profile can set display_manager True to
-        pull blfs/08d back in without editing get_build_stages().  This is the
-        only path that reaches that append, so it is pinned here.
+        The lg3d profile now sets display_manager True so LightDM owns :0 and
+        shows a greeter listing every lg3d mode (lfs-x11-contract.md 74-75
+        permits a DM that launches a bare Xorg session with no WM).  The
+        scheduling branch stays generic: any X11-only profile can set
+        display_manager True to pull blfs/08d back in without editing
+        get_build_stages().  This is the only path that reaches that append,
+        so it is pinned here.
         """
         builder.profile_config['desktop'] = 'none'
         builder.profile_config['xorg_only'] = True
@@ -329,14 +331,17 @@ class TestLFSBuilder:
         assert profile['desktop'] == 'xfce'
         assert profile['live_system'] is True
 
-    def test_get_profile_lg3d_schedules_xorg_without_display_manager(self, builder):
-        """lg3d profile must schedule Xorg but exclude Wayland AND the DM.
+    def test_get_profile_lg3d_schedules_xorg_and_display_manager(self, builder):
+        """lg3d profile must schedule Xorg AND the display-manager greeter.
 
-        lfs-x11-contract.md 1/4 require a bare Xorg :0 with lg3d as the sole
-        window manager and no display manager: lightdm would fight the
-        lg3d-compositor.service unit for :0 and autologin into an xfce session
-        this desktop:none profile never builds.  So display-manager must not be
-        scheduled, and the session comes from the lg3d stage's own unit.
+        lfs-x11-contract.md 74-75 permits a display manager as long as it
+        launches a bare Xorg session with no WM.  LightDM does exactly that:
+        it owns :0, shows the greeter, then runs the chosen
+        /usr/share/xsessions/lg3d-*.desktop Exec (run-lg3d.sh), which attaches
+        to the existing DISPLAY as the sole WM/compositor.  So lg3d now sets
+        display_manager True and the DM stage must be scheduled -- after xorg
+        and before the lg3d session stage -- while Wayland and the conventional
+        desktop stages stay excluded for this desktop:none profile.
         """
         from builder import ProfileManager
         builder.profile = 'lg3d'
@@ -346,11 +351,13 @@ class TestLFSBuilder:
         assert 'blfs-libs' in stage_names
         assert 'xorg' in stage_names
         assert 'wayland' not in stage_names
-        assert 'display-manager' not in stage_names
+        assert 'display-manager' in stage_names
+        assert ('display-manager', 'blfs/08d-build-display-manager.sh') in stages
         assert 'desktop' not in stage_names
         assert 'java-dev' in stage_names
         assert 'lg3d' in stage_names
         assert stage_names.index('java-dev') < stage_names.index('lg3d')
+        assert stage_names.index('xorg') < stage_names.index('display-manager')
 
     def test_get_profile_lg3d_includes_privacy(self, builder):
         """The lg3d profile must ship privacy tooling.
@@ -400,7 +407,10 @@ class TestLFSBuilder:
 
         blfs/30-install-lg3d.sh maps LFS_PROFILE_LG3D_MODE onto the
         run-lg3d.sh launch flag, so the flattened value and the boolean
-        session gate both have to be exported.
+        session gate both have to be exported.  blfs/08d in turn reads the
+        flattened xorg_only + display_manager hints to decide it must build a
+        bare-X lg3d greeter (no autologin) instead of skipping the stage on
+        desktop=none, so those two must be exported as well.
         """
         from builder import ProfileManager
         builder.profile = 'lg3d'
@@ -408,6 +418,8 @@ class TestLFSBuilder:
         env = builder._get_env()
         assert env['LFS_PROFILE_LG3D_MODE'] == 'iso'
         assert env['LFS_PROFILE_LG3D_SESSION'] == 'true'
+        assert env['LFS_PROFILE_XORG_ONLY'] == 'true'
+        assert env['LFS_PROFILE_DISPLAY_MANAGER'] == 'true'
 
     def test_get_build_stages_with_security(self, builder):
         """Test build stages with security hardening"""

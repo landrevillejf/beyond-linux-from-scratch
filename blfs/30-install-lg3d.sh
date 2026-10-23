@@ -117,10 +117,25 @@ fi
 # the init flavour that starts it.
 INIT="${INIT_SYSTEM:-systemd}"
 
+# --- Display manager ownership of :0 ----------------------------------------
+# When the profile enables a display manager (lg3d now does), LightDM owns Xorg
+# :0, shows the login greeter and launches lg3d through the
+# /usr/share/xsessions/lg3d-*.desktop entries written below.  In that case the
+# standalone session unit (systemd) and the inittab respawn (sysvinit) must NOT
+# also claim :0, or two sessions fight for the display.  The unit/launcher files
+# are still written so a DM-less boot keeps working; only their boot-graph enable
+# is gated.  lfs-x11-contract.md 74-75 allows a DM precisely because it hands off
+# to a bare Xorg session whose sole WM is lg3d.
+DM_OWNS_DISPLAY=false
+if [ "${LFS_PROFILE_DISPLAY_MANAGER:-false}" = "true" ]; then
+    DM_OWNS_DISPLAY=true
+fi
+
 log_info "========================================="
 log_info "Project Looking Glass (lg3d) session"
 log_info "  mode : ${LG3D_MODE} (${LG3D_DESC})"
 log_info "  init : ${INIT}"
+log_info "  dm   : ${DM_OWNS_DISPLAY} (display manager owns :0)"
 if [ "$INIT" = "systemd" ]; then
     log_info "  unit : ${UNIT_NAME}"
 fi
@@ -182,6 +197,15 @@ INITD
     # Docker scaffolding never aborts on a missing file.
     if [ ! -f "$LFS/etc/inittab" ]; then
         log_warning "$LFS/etc/inittab missing; lg3d session not wired into boot"
+        return 0
+    fi
+    # Still boot into runlevel 5 so a session starts, but when a display manager
+    # owns :0 it is LightDM that blfs/08d respawns from rc5; adding an lg3d
+    # respawn here would put a second client on :0, so skip it.
+    if [ "$DM_OWNS_DISPLAY" = "true" ]; then
+        run_privileged sed -i 's/^id:[0-9]*:initdefault:/id:5:initdefault:/' \
+            "$LFS/etc/inittab"
+        log_info "Default runlevel set to 5 (display manager owns the session)"
         return 0
     fi
     if ! grep -q '^lg3d:5:respawn:' "$LFS/etc/inittab"; then
@@ -249,8 +273,11 @@ fi
 write_session
 
 # --- XSession entries for Display Manager selection ---
-# We provide .desktop entries in /usr/share/xsessions so that if a Display Manager
-# (like LightDM) is installed, the user can choose the LG3D mode at login.
+# .desktop entries in /usr/share/xsessions let the display manager's greeter
+# offer every LG3D mode at the login screen.  The lg3d profile now enables
+# LightDM (blfs/08d), which owns :0 and runs the chosen entry's Exec as the
+# sole WM/compositor, so all five modes below are selectable at login.  They
+# also stay usable by any other DM a user installs later.
 run_privileged mkdir -p "$LFS/usr/share/xsessions"
 
 # --iso composited desktop (process-isolated MDI apps) - the contract default
@@ -286,6 +313,15 @@ run_privileged tee "$LFS/usr/share/xsessions/lg3d-swing.desktop" >/dev/null <<EO
 Name=Project Looking Glass (Swing)
 Comment=LG3D Swing desktop (Metal Look & Feel)
 Exec=/opt/lg3d/run-lg3d.sh -w
+Type=Application
+EOF
+
+# 3D desktop in an ordinary window (development mode; run-lg3d.sh takes no flag)
+run_privileged tee "$LFS/usr/share/xsessions/lg3d-dev.desktop" >/dev/null <<EOF
+[Desktop Entry]
+Name=Project Looking Glass (Dev)
+Comment=LG3D 3D desktop in an ordinary window (development mode)
+Exec=/opt/lg3d/run-lg3d.sh
 Type=Application
 EOF
 
@@ -352,18 +388,21 @@ if [ -t 0 ]; then
     echo "2) 3D Desktop (Compositor/WM)"
     echo "3) 2D Desktop (Swing)"
     echo "4) Swing Desktop (Metal)"
-    read -t 10 -p "Choice [1-4] (default in 10s): " choice || choice=""
+    echo "5) Dev Desktop (3D desktop in an ordinary window)"
+    read -t 10 -p "Choice [1-5] (default in 10s): " choice || choice=""
     case $choice in
         1) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
         2) exec /opt/lg3d/run-lg3d.sh -x ;;
         3) exec /opt/lg3d/run-lg3d.sh -2 ;;
         4) exec /opt/lg3d/run-lg3d.sh -w ;;
+        5) exec /opt/lg3d/run-lg3d.sh ;;
         *) # Fallback to exported mode or iso
            MODE="${LFS_PROFILE_LG3D_MODE:-iso}"
            case "$MODE" in
                compositor) exec /opt/lg3d/run-lg3d.sh -x ;;
                2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
                swing) exec /opt/lg3d/run-lg3d.sh -w ;;
+               dev) exec /opt/lg3d/run-lg3d.sh ;;
                *) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
            esac
            ;;
@@ -375,6 +414,7 @@ else
         compositor) exec /opt/lg3d/run-lg3d.sh -x ;;
         2d) exec /opt/lg3d/run-lg3d.sh -2 ;;
         swing) exec /opt/lg3d/run-lg3d.sh -w ;;
+        dev) exec /opt/lg3d/run-lg3d.sh ;;
         *) exec /opt/lg3d/run-lg3d.sh --iso -x ;;
     esac
 fi
@@ -409,12 +449,20 @@ run_privileged chroot "$LFS" /bin/bash /install-lg3d.sh
 # run; systemctl enable/set-default are then attempted best-effort.  The
 # sysvinit path needs nothing here: write_sysv_session already wrote the init.d
 # launcher, the inittab respawn entry and the runlevel-5 default host-side.
+# When a display manager owns :0, the standalone lg3d unit is left installed but
+# NOT enabled, so LightDM (blfs/08d) is the only client on :0 and launches lg3d
+# through the xsessions entries; the default target stays graphical so the DM
+# starts.
 if [ "$INIT" = "systemd" ]; then
-    run_privileged mkdir -p "$LFS/etc/systemd/system/graphical.target.wants"
-    run_privileged ln -sf "/etc/systemd/system/${UNIT_NAME}" \
-        "$LFS/etc/systemd/system/graphical.target.wants/${UNIT_NAME}"
-    run_privileged chroot "$LFS" systemctl enable "$UNIT_NAME" 2>/dev/null ||
-        log_warning "Could not enable ${UNIT_NAME} via systemctl (offline chroot)"
+    if [ "$DM_OWNS_DISPLAY" = "true" ]; then
+        log_info "Display manager owns :0; ${UNIT_NAME} installed but not enabled"
+    else
+        run_privileged mkdir -p "$LFS/etc/systemd/system/graphical.target.wants"
+        run_privileged ln -sf "/etc/systemd/system/${UNIT_NAME}" \
+            "$LFS/etc/systemd/system/graphical.target.wants/${UNIT_NAME}"
+        run_privileged chroot "$LFS" systemctl enable "$UNIT_NAME" 2>/dev/null ||
+            log_warning "Could not enable ${UNIT_NAME} via systemctl (offline chroot)"
+    fi
 
     if run_privileged chroot "$LFS" systemctl set-default graphical.target 2>/dev/null; then
         log_info "Default boot target set to graphical.target"
@@ -429,7 +477,11 @@ if [ "$INIT" = "systemd" ]; then
         done
     fi
 else
-    log_info "sysvinit session wired via inittab respawn (runlevel 5)"
+    if [ "$DM_OWNS_DISPLAY" = "true" ]; then
+        log_info "Display manager owns :0; sysvinit lg3d respawn skipped (LightDM starts from rc5)"
+    else
+        log_info "sysvinit session wired via inittab respawn (runlevel 5)"
+    fi
 fi
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true

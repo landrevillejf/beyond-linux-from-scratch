@@ -35,11 +35,27 @@ run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
 DESKTOP_TYPE="${LFS_CONFIG_DESKTOP_TYPE:-xfce}"
 INIT_SYSTEM="${INIT_SYSTEM:-sysvinit}"
-export DESKTOP_TYPE INIT_SYSTEM
+# lg3d (xorg_only) has no conventional desktop, yet lfs-x11-contract.md 74-75
+# permits a display manager as long as it launches a bare Xorg session with no
+# WM.  When the profile is xorg_only AND asks for a display manager, LightDM
+# must still be built and configured -- as a greeter that owns :0 and hands off
+# to the chosen /usr/share/xsessions/lg3d-*.desktop entry -- even though
+# DESKTOP_TYPE is "none".  Every other desktop=none profile (no DM requested)
+# keeps skipping this stage exactly as before.
+XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"
+DISPLAY_MANAGER="${LFS_PROFILE_DISPLAY_MANAGER:-false}"
+LG3D_GREETER=false
+if [ "$DESKTOP_TYPE" = "none" ] &&
+    [ "$XORG_ONLY" = "true" ] &&
+    [ "$DISPLAY_MANAGER" = "true" ]; then
+    LG3D_GREETER=true
+fi
+export DESKTOP_TYPE INIT_SYSTEM LG3D_GREETER
 
 log_info "========================================="
 log_info "Building display manager (LightDM)"
 log_info "Desktop type: $DESKTOP_TYPE"
+log_info "lg3d greeter: $LG3D_GREETER"
 log_info "========================================="
 
 if [ "$IN_DOCKER" = true ]; then
@@ -47,10 +63,10 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ "$DESKTOP_TYPE" = "none" ] && {
+if [ "$DESKTOP_TYPE" = "none" ] && [ "$LG3D_GREETER" != "true" ]; then
     log_info "No desktop requested; skipping display manager"
     exit 0
-}
+fi
 
 [ -x "$LFS/bin/bash" ] || {
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"
@@ -742,7 +758,23 @@ run_build required lightdm-gtk-greeter
 log_info "Configuring LightDM"
 mkdir -p /etc/lightdm
 
-cat > /etc/lightdm/lightdm.conf <<'LDMCONF'
+if [ "${LG3D_GREETER:-false}" = "true" ]; then
+    # lg3d greeter: there is no conventional desktop, so LightDM only shows the
+    # login screen and hands off to the chosen /usr/share/xsessions/lg3d-*.desktop
+    # entry (run-lg3d.sh), which becomes the sole WM/compositor on the bare X
+    # LightDM already owns.  Deliberately NO session-wrapper (there is no
+    # startxfce4 here) and NO autologin-* keys: the user picks a mode at login.
+    # The default selected session is lg3d-iso (lfs-iso-contract.md --iso -x).
+    cat > /etc/lightdm/lightdm.conf <<'LDMCONF'
+[LightDM]
+run-directory=/run/lightdm
+
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=lg3d-iso
+LDMCONF
+else
+    cat > /etc/lightdm/lightdm.conf <<'LDMCONF'
 [LightDM]
 run-directory=/run/lightdm
 
@@ -754,6 +786,7 @@ autologin-user=lfsuser
 autologin-user-timeout=0
 autologin-session=xfce
 LDMCONF
+fi
 
 # Create lightdm group and user if not present; failures are tolerated
 # because some hosts run without useradd in the early build stages.
@@ -821,6 +854,7 @@ run_privileged chmod +x "$LFS/build-display-manager.sh"
 run_privileged chroot "$LFS" /usr/bin/env -i \
     HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
     INIT_SYSTEM="$INIT_SYSTEM" LFS_CONFIG_DESKTOP_TYPE="$DESKTOP_TYPE" \
+    LG3D_GREETER="$LG3D_GREETER" \
     /bin/bash /build-display-manager.sh
 
 log_success "Display manager built successfully"
