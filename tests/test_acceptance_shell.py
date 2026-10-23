@@ -3211,6 +3211,92 @@ class TestProfilePromiseGuardrails:
         assert 'session-wrapper=/usr/bin/startxfce4' in content
         assert 'autologin-session=xfce' in content
 
+    def test_lg3d_stage_creates_live_user_only_for_a_live_build(self):
+        """blfs/30 must create a passwordless live user, gated on live_system.
+
+        The lg3d live ISO boots to the blfs/08d greeter with autologin off, so
+        it needs a credential-less account to be usable off the media.  The
+        account must be created only when LFS_PROFILE_LIVE_SYSTEM is true (an
+        installed, non-live lg3d build must not carry it), must join wheel
+        (blfs/22's passwordless-Calamares polkit rule) and autologin, and must
+        be passwordless.  It is created while the chroot mounts are still up.
+        """
+        content = Path('blfs/30-install-lg3d.sh').read_text()
+        assert 'LIVE_SYSTEM=false' in content
+        assert 'if [ "${LFS_PROFILE_LIVE_SYSTEM:-false}" = "true" ]; then' \
+            in content, "blfs/30 must read the profile's live_system flag"
+        assert 'LIVE_SYSTEM=true' in content
+        assert 'create_live_user() {' in content
+        # The creation is gated so a non-live build never adds the account.
+        gate = content.index('create_live_user() {')
+        body = content[gate:content.index('\n}', gate)]
+        assert 'if [ "$LIVE_SYSTEM" != "true" ]; then' in body
+        assert 'return 0' in body
+        assert 'groupadd -f wheel' in body
+        assert 'groupadd -f autologin' in body
+        assert 'useradd -m -G wheel,autologin -s /bin/bash live' in body
+        assert 'passwd -d live' in body, "the live user must be passwordless"
+        # The function is actually invoked in native mode (def + one call).
+        assert content.count('create_live_user') == 2, \
+            "create_live_user must be defined once and called once"
+
+    def test_calamares_stage_injects_lg3d_install_wblfs_menu_entry(self):
+        """blfs/22 must inject an idempotent 'Install WBLFS' LG3D menu item.
+
+        lg3d boots into Project Looking Glass, whose start menu is data-driven
+        from startmenu.lgcfg (extracted to /opt/lg3d by blfs/30, which runs
+        first).  The installer launcher lives in that menu, not in an XDG
+        autostart.  The injection must target the System group, launch
+        `pkexec calamares` (matching blfs/22's passwordless wheel polkit rule),
+        insert before the closing </java>, and be idempotent so an archive that
+        already ships the entry is not duplicated.
+        """
+        content = Path('blfs/22-calamares-installer.sh').read_text()
+        assert 'LG_STARTMENU="$LFS/opt/lg3d/lg3d-core/src/etc/lg3d/' \
+            'startmenu.lgcfg"' in content
+        # Idempotent guard: skip when the entry is already present.
+        assert "! grep -q 'Install WBLFS (LG3D)' \"$LG_STARTMENU\"" in content
+        # The item launches calamares via pkexec and lands in the System group.
+        assert '<string>pkexec calamares</string>' in content
+        assert '<string>Install WBLFS (LG3D)</string>' in content
+        menu_start = content.index('cat >"$LG_ITEM"')
+        menu_item = content[menu_start:content.index('LGITEM', menu_start + 20)]
+        assert '<void property="menuGroup">' in menu_item
+        assert '<string>System</string>' in menu_item
+        # Inserted immediately before the closing </java> tag.
+        assert '/<\\/java>/ && !inserted {' in content
+        # The write goes back through run_privileged (root-owned $LFS file).
+        assert 'run_privileged tee "$LG_STARTMENU" >/dev/null <"$LG_OUT"' \
+            in content
+
+    def test_calamares_stage_removes_live_user_on_install(self):
+        """blfs/22 must strip the live account from the installed system.
+
+        The live ISO's passwordless wheel+autologin `live` account is unpacked
+        onto the target with the squashfs, so it must not survive the install.
+        The lfs-cleanup helper only removed /home/live and was never wired into
+        the settings.conf sequence, so the account persisted.  A shellprocess
+        step – added to the exec sequence before umount – must `userdel -r live`
+        and drop the live-session launchers in the target root.
+        """
+        content = Path('blfs/22-calamares-installer.sh').read_text()
+        # shellprocess is wired into the installer exec sequence.
+        assert '- shellprocess  # Remove live-ISO-only artifacts from the target' \
+            in content
+        seq_pos = content.index('- shellprocess')
+        assert content.index('- umount') > seq_pos, \
+            "shellprocess must run before umount while the target is mounted"
+        # Its config removes the live account (non-fatal) and the launchers.
+        assert 'write_file /etc/calamares/modules/shellprocess.conf 0644' \
+            in content
+        sp_start = content.index("<<'SHELLPROC'")
+        sp_conf = content[sp_start:content.index('SHELLPROC', sp_start + 15)]
+        assert '- -userdel -r live' in sp_conf, \
+            "the live account must be removed (leading '-' = non-fatal)"
+        assert 'dontChroot: false' in sp_conf
+        # The lfs-cleanup helper matches: it drops the account, not just home.
+        assert 'chroot "$ROOT" /usr/sbin/userdel -r live' in content
+
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.
 

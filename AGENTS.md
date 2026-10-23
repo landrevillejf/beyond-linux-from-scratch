@@ -96,8 +96,9 @@ relative order matters:
 
 `installer.type` is part of the core configuration schema but is not taken
 from `config/build.conf` as authored: `_apply_profile_settings()` resolves
-it from the profile's `graphical_installer` flag (currently `False` on all
-18 profiles), and `--installer {none,calamares}` overrides it in `main()`
+it from the profile's `graphical_installer` flag (`True` only on `lg3d`,
+`False` on the other 17 profiles), and `--installer {none,calamares}`
+overrides it in `main()`
 and refreshes the `ScriptExecutor` so the new stage list reaches the
 scripts. Both `LFS_CONFIG_INSTALLER_TYPE` and
 `LFS_PROFILE_GRAPHICAL_INSTALLER` are exported through the usual
@@ -181,6 +182,30 @@ The `lg3d` profile also sets `privacy_tools: True` (alongside
 tor/wireguard-tools/dnscrypt-proxy/mat2 only when their archives are present;
 each install is guarded by `if ls <pkg>-*`, so it is a no-op-safe addition to
 this `desktop: none` / `xorg_only` profile.
+
+The `lg3d` profile also sets `live_system: True` and `graphical_installer:
+True`, so it ships a live ISO (`final/15-create-live-system.sh`) whose LG3D
+start menu offers a graphical Calamares installer. With `installer.type`
+resolved to `calamares`, `get_build_stages()` schedules the opt-in
+`calamares-build` (`blfs/29`) plus the `calamares` config stage (`blfs/22`).
+lg3d is `desktop: none`, so the historical Calamares gate (`_desktop and
+_desktop != 'none'`) would block it; a second arm -- `xorg_only and
+get_installer_type() == 'calamares'` -- admits the lg3d live profile while
+keeping a future xorg_only profile without a graphical installer out. The
+installer launcher is not an XDG autostart (a bare lg3d session has no autostart
+runner): `blfs/22` injects an idempotent "Install WBLFS (LG3D)"
+`StartMenuItemConfig` (`command = pkexec calamares`, `menuGroup = System`) into
+`/opt/lg3d/lg3d-core/src/etc/lg3d/startmenu.lgcfg` before `</java>`. LG3D's
+`Desktop2DAppRegistry` runs the command's first token through a `which` lookup,
+so the item self-hides once `pkexec`/`calamares` are absent and shows only on
+the live ISO. `blfs/30` creates a passwordless `live` user (groups
+`wheel`+`autologin`) gated on `LFS_PROFILE_LIVE_SYSTEM` so the greeter is usable
+without credentials off the media (`wheel` matches blfs/22's passwordless-
+Calamares polkit rule); because that account rides into the target inside the
+squashfs, `blfs/22` wires a Calamares `shellprocess` step (before `umount`)
+that runs `userdel -r live` and drops the live-session launchers. The installed
+system inherits blfs/08d's greeter `lightdm.conf` (no autologin, `lg3d-iso`)
+from the squashfs, so it boots to the same login screen.
 
 `docs/lfs-x11-contract.md` 3.3 also wants a GLX+DRI3 hardware GL path, so
 `blfs/08b-build-xorg.sh` reads a new `graphics` config section
