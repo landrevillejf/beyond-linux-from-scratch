@@ -264,12 +264,39 @@ class LFSConfig:
             },
 
             "security": {
-                "kernel_hardening": True,
+                # kernel_hardening is a container of knobs (flattened to
+                # LFS_CONFIG_SECURITY_KERNEL_HARDENING_*); `enabled` is the
+                # master toggle the profile layer flips, the rest are the
+                # granular kernel build options consumed by lfs/08-build-kernel.sh.
+                "kernel_hardening": {
+                    "enabled": True,
+                    "lockdown": "integrity",
+                    "module_sig_force": True,
+                    "ima": True,
+                    "hardened_usercopy": True,
+                    "init_on_alloc_free": True
+                },
                 "firewall": {"enabled": True, "backend": "nftables", "allow_ssh": True, "allow_http": False},
                 "privacy": {"disable_telemetry": True, "clear_tmp_on_boot": True, "disable_core_dumps": True},
                 "audit": {"enabled": True, "monitor_files": ["/etc/passwd", "/etc/shadow", "/etc/sudoers"]},
                 "user_hardening": {"password_min_length": 12, "disable_root_login": True, "max_login_attempts": 5},
-                "encryption": {"encrypted_swap": True, "swap_size_mb": 2048}
+                "encryption": {"encrypted_swap": True, "swap_size_mb": 2048},
+                # Mandatory access control: SELinux is the selected LSM.
+                # mode gates whether the selinux stage is scheduled (Phase 2).
+                "selinux": {"mode": "enforcing", "type": "targeted"},
+                # FIPS-mode crypto (OpenSSL 3 FIPS provider + kernel); opt-in.
+                "fips": {"enabled": False},
+                # Boot integrity: Secure Boot is optional/stretch, measured
+                # boot (IMA/EVM) opt-in until the stage lands.
+                "boot_integrity": {"secure_boot": False, "measured_boot": False},
+                # USBGuard is opt-in so USB-dependent ARM profiles stay usable.
+                "usbguard": {"enabled": False},
+                # Supply-chain integrity knobs consumed by SourceDownloader (Phase 6).
+                "supply_chain": {"verify_signatures": True, "provenance": False, "require_lockfile": False},
+                # Compliance evidence (OpenSCAP profiles) + gate strictness (Phase 7).
+                "compliance": {"profiles": [], "fail_on_gap": False},
+                # When true, schedule the hardened baseline for every profile (Phase 8).
+                "baseline_all_profiles": False
             },
 
             "bootloader": {
@@ -1664,7 +1691,7 @@ class LFSBuilder:
         )
 
         if self.profile_config.get('security_hardening', False):
-            self.config.set('security.kernel_hardening', True)
+            self.config.set('security.kernel_hardening.enabled', True)
             self.config.set('security.firewall.enabled', True)
             self.config.set('security.fail2ban.enabled', True)
             self.config.set('security.audit.enabled', True)

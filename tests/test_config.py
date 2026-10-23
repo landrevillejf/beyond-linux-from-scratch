@@ -131,6 +131,50 @@ class TestLFSConfig:
             assert data['graphics']['mesa_llvm'] == 'disabled', \
                 f"{name} disagrees with the code default on mesa_llvm"
 
+    def test_security_hardening_defaults_agree_across_config_sources(self, temp_dir):
+        """The hardening-program security knobs must match across every source.
+
+        Phase 0 of the hardening program added nested
+        security.{selinux, kernel_hardening, fips, boot_integrity, usbguard,
+        supply_chain, compliance, baseline_all_profiles} keys.  They flatten to
+        LFS_CONFIG_SECURITY_* and drive later phases (kernel config, SELinux
+        enforce, FIPS-mode crypto, supply-chain verification, compliance gate).
+        They must default identically in get_default_config() and in each
+        checked-in preset, or a --config build would silently pick a different
+        security posture than the code default.  kernel_hardening used to be a
+        bare bool and is now a container of knobs, so its shape is pinned here
+        too.
+        """
+        expected = {
+            'selinux': {'mode': 'enforcing', 'type': 'targeted'},
+            'kernel_hardening': {
+                'enabled': True, 'lockdown': 'integrity',
+                'module_sig_force': True, 'ima': True,
+                'hardened_usercopy': True, 'init_on_alloc_free': True
+            },
+            'fips': {'enabled': False},
+            'boot_integrity': {'secure_boot': False, 'measured_boot': False},
+            'usbguard': {'enabled': False},
+            'supply_chain': {
+                'verify_signatures': True, 'provenance': False,
+                'require_lockfile': False
+            },
+            'compliance': {'profiles': [], 'fail_on_gap': False},
+            'baseline_all_profiles': False
+        }
+
+        generated = LFSConfig(temp_dir / "fresh.conf")
+        sources = [('get_default_config()', generated.data)]
+        for name in ('config/build.conf', 'config/build.conf.json',
+                     'config/default.json'):
+            sources.append((name, json.loads(Path(name).read_text())))
+
+        for source_name, data in sources:
+            security = data['security']
+            for key, value in expected.items():
+                assert security[key] == value, \
+                    f"{source_name} disagrees with the code default on security.{key}"
+
     def test_init_system_choices(self, lfs_config):
         """Test init system configuration"""
         init_system = lfs_config.get('init_system')
