@@ -2,7 +2,36 @@
 
 ## Unreleased
 
+### Added
+
+- **privacy tools ship with the `lg3d` profile** (`builder.py`,
+  `tests/test_builder.py`, `README.md`, `AGENTS.md`)
+  - The `lg3d` profile now sets `privacy_tools: True`, so
+    `blfs/16-privacy-tools.sh` is scheduled (after `security`, before
+    `branding`) and the `security.privacy.disable_telemetry` hardening is
+    applied, alongside the existing `PRIVACY_TOOLS=true` export.  The stage
+    only installs tor/wireguard-tools/dnscrypt-proxy/mat2 when their source
+    archives are present -- every install is guarded by `if ls <pkg>-*` --
+    so it is a no-op-safe addition to this `desktop: none` / `xorg_only`
+    profile and cannot abort the X11-only chain.  `tests/test_builder.py`
+    gains `test_get_profile_lg3d_includes_privacy`.
+
 ### Fixed
+
+- **`lg3d` nightly aborted at `basic-networking`: invalid NetworkManager
+  meson option** (`blfs/23-basic-networking.sh`)
+  - Both `lg3d` legs (systemd and sysvinit) of nightly run `39964198359`
+    died in the `basic-networking` stage with `ERROR: Value "none" ... for
+    option "session_tracking" is not one of the choices. Possible choices
+    are: "systemd", "elogind", "no"`.  `build_commands_networkmanager`
+    defaulted to the pre-meson spelling `session_tracking=none`; the meson
+    option only accepts `systemd`, `elogind` or `no`.  The default is now
+    `no` (still upgraded to `elogind` when `libelogind.pc` is present).  The
+    bug was latent until the `xorg_only` fix (PR #139) made the `lg3d`
+    profile build `blfs-libs`/`xorg`: NetworkManager is a *required* package
+    only when `glib-2.0` is present (otherwise optional, failure tolerated),
+    so glib becoming available promoted it to required and turned the invalid
+    option into a fatal stage abort.  Shipped as PR #142.
 
 - **`lg3d` profile never produced an ISO: `.xinitrc` abort and skipped Xorg**
   (`blfs/30-install-lg3d.sh`, `blfs/08b-build-xorg.sh`,

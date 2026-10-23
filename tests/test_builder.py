@@ -352,6 +352,27 @@ class TestLFSBuilder:
         assert 'lg3d' in stage_names
         assert stage_names.index('java-dev') < stage_names.index('lg3d')
 
+    def test_get_profile_lg3d_includes_privacy(self, builder):
+        """The lg3d profile must ship privacy tooling.
+
+        Privacy is meant to travel with the LG3D build, so privacy_tools is
+        enabled on the profile and get_build_stages must schedule the
+        privacy stage -- after security hardening and before branding, the
+        same slot every other privacy-enabled profile uses.
+        """
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        assert builder.profile_config['privacy_tools'] is True
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'privacy' in stage_names
+        assert ('privacy', 'blfs/16-privacy-tools.sh') in builder.get_build_stages()
+        assert stage_names.index('security') < stage_names.index('privacy')
+        assert stage_names.index('privacy') < stage_names.index('branding')
+        # privacy_tools=True also turns on the telemetry-blocking config.
+        builder._apply_profile_settings()
+        assert builder.config.get('security.privacy.disable_telemetry') is True
+
     def test_get_build_stages_with_java_dev(self, builder):
         """Test build stages with Java development enabled"""
         builder.profile_config['java_dev'] = True

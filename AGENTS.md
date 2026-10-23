@@ -140,6 +140,14 @@ profile pins `init_system: systemd`, but `.github/workflows/lg3d.yml` builds it
 on both `systemd` and `sysvinit` via `--init` (which overrides the pinned
 value), so both session-wiring paths are exercised nightly.
 
+The `lg3d` profile also sets `privacy_tools: True` (alongside
+`security_hardening: True`), so the `privacy` stage
+(`blfs/16-privacy-tools.sh`) runs after `security` and before `branding`, and
+`security.privacy.disable_telemetry` is applied. That stage installs
+tor/wireguard-tools/dnscrypt-proxy/mat2 only when their archives are present;
+each install is guarded by `if ls <pkg>-*`, so it is a no-op-safe addition to
+this `desktop: none` / `xorg_only` profile.
+
 `docs/lfs-x11-contract.md` 3.3 also wants a GLX+DRI3 hardware GL path, so
 `blfs/08b-build-xorg.sh` reads a new `graphics` config section
 (`mesa_gallium_drivers`, `mesa_llvm`, flattened to `LFS_CONFIG_GRAPHICS_*`).
