@@ -85,7 +85,8 @@ def mock_config_file(temp_dir):
         "security": {
             "kernel_hardening": {"enabled": True},
             "firewall": {"enabled": True},
-            "privacy": {"disable_telemetry": True}
+            "privacy": {"disable_telemetry": True},
+            "selinux": {"mode": "enforcing", "type": "targeted"}
         },
         "bootloader": {
             "type": "grub",

@@ -1316,6 +1316,79 @@ class TestLFSComplianceGuardrails:
         # appears in both the cross-compile call and the generated script).
         assert content.count('$HARDEN_CMDS') >= 2
 
+    def test_selinux_stage_builds_userspace_and_targeted_policy(self):
+        """blfs/31 must build the userspace stack in dependency order,
+        install the refpolicy targeted policy WITHOUT loading it into the
+        build (host) kernel, write /etc/selinux/config from the resolved
+        mode, drop /.autorelabel for the first-boot relabel, wire an
+        early-boot policy load for both init systems, and integrate
+        pam_selinux.  A resolved mode of 'disabled' must skip the stage.
+        """
+        content = Path('blfs/31-build-selinux.sh').read_text()
+        # Component build order (dependency-first).
+        order = ('libsepol', 'libselinux', 'audit', 'checkpolicy', 'secilc',
+                 'libsemanage', 'policycoreutils', 'refpolicy')
+        positions = []
+        for pkg in order:
+            marker = f'run_build required {pkg} '
+            assert marker in content, f"31 must build {pkg} as required"
+            positions.append(content.index(marker))
+        assert positions == sorted(positions), \
+            "SELinux components must build in dependency order"
+        # The policy is installed, never loaded from the build chroot.
+        assert 'make targeted-conf' in content
+        assert 'make load' not in content, \
+            "the stage must not load the policy into the host kernel"
+        # Config, first-boot relabel and PAM integration.
+        assert 'LFS_CONFIG_SECURITY_SELINUX_MODE' in content
+        assert 'SELINUX=${SELINUX_MODE}' in content
+        assert ': >/.autorelabel' in content
+        assert 'pam_selinux.so' in content
+        # Early-boot wiring exists for both init systems.
+        assert 'selinux-firstboot.service' in content
+        assert '/etc/rc.d/init.d/selinux' in content
+        assert 'load_policy' in content  # in the first-boot helper only
+        # Capability-gated skip.
+        assert 'SELINUX_MODE = "disabled"' not in content
+        assert 'mode is disabled' in content
+
+    def test_security_hardening_selinux_block_reads_config_mode(self):
+        """blfs/15 must re-assert the resolved mode, not hardcode permissive.
+
+        The old block wrote SELINUX=permissive unconditionally, which ran
+        AFTER blfs/31 and silently downgraded an enforcing build; it also
+        shipped a broken default_contexts (system_r: user prefixes) and
+        enabled allow_execstack/allow_execmod, weakening the posture.
+        """
+        content = Path('blfs/15-security-hardening.sh').read_text()
+        assert 'SELINUX=permissive' not in content, \
+            "the SELinux mode must come from config, not a hardcoded value"
+        assert 'LFS_CONFIG_SECURITY_SELINUX_MODE' in content
+        assert 'SELINUX=$SELINUX_MODE' in content
+        assert 'SELINUXTYPE=$SELINUX_TYPE' in content
+        assert 'allow_execstack' not in content
+        assert 'system_r:unconfined_t' not in content
+
+    def test_custom_sources_pin_selinux_stack(self):
+        """packages/custom-sources.list must pin the upstream SELinux stack.
+
+        BLFS ships no SELinux pages, so the pinned SELinuxProject 3.11
+        components, refpolicy and audit-userspace are the stage's only
+        source of truth (documented deviation from AGENTS.md rule 9).
+        """
+        content = Path('packages/custom-sources.list').read_text()
+        for url_fragment in (
+            'selinux/releases/download/3.11/libsepol-3.11.tar.gz',
+            'selinux/releases/download/3.11/libselinux-3.11.tar.gz',
+            'selinux/releases/download/3.11/libsemanage-3.11.tar.gz',
+            'selinux/releases/download/3.11/checkpolicy-3.11.tar.gz',
+            'selinux/releases/download/3.11/secilc-3.11.tar.gz',
+            'selinux/releases/download/3.11/policycoreutils-3.11.tar.gz',
+            'refpolicy/releases/download/RELEASE_2_20260922/',
+            'audit-userspace/archive/refs/tags/v4.2.1.tar.gz',
+        ):
+            assert url_fragment in content, f"missing pin: {url_fragment}"
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.

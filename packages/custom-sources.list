@@ -792,3 +792,34 @@ https://download.kde.org/stable/release-service/25.08.0/src/kpmcore-25.08.0.tar.
 # >= 5.240, KF6CoreAddons and PolkitQt6-1.  The stage builds it with
 # WITH_QML=OFF, which is what keeps qtdeclarative out of the Qt6 build.
 https://github.com/calamares/calamares/releases/download/v3.3.14/calamares-3.3.14.tar.gz
+
+# ============================================================================
+# SELinux userspace + refpolicy (selinux stage, blfs/31-build-selinux.sh).
+# BLFS 13.0 ships NO SELinux book pages (verified against the stable book
+# index), so per the documented deviation from AGENTS.md rule 9 every
+# component is pinned to its upstream SELinuxProject release.  The whole
+# userspace is cut from the single 3.11 monorepo release, whose per-
+# component tarballs upstream publishes as individual assets; refpolicy is
+# its own release train and audit-userspace publishes no release asset, so
+# its GitHub refs/tags archive is used (builder.py names it after the repo).
+# Build order is enforced by the stage: libsepol -> libselinux -> audit ->
+# checkpolicy -> secilc -> libsemanage -> policycoreutils -> refpolicy.
+# ============================================================================
+https://github.com/SELinuxProject/selinux/releases/download/3.11/libsepol-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/libselinux-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/checkpolicy-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/secilc-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/libsemanage-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/policycoreutils-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/selinux-python-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/mcstrans-3.11.tar.gz
+https://github.com/SELinuxProject/selinux/releases/download/3.11/restorecond-3.11.tar.gz
+# refpolicy -- the targeted policy source; sha256
+# 9dc3a67226219299cd036b3fe3a5148d08af0fc8af784c7f3e490957264b26b6.
+https://github.com/SELinuxProject/refpolicy/releases/download/RELEASE_2_20260922/refpolicy-2.20260922.tar.bz2
+# audit-userspace -- libsemanage links libaudit, so it is built before it.
+# No release asset is published for v4.2.1; the refs/tags archive is
+# authoritative and builder.py stores it as audit-userspace-v4.2.1.tar.gz.
+# It is the stack's only autotools component and its git tree ships no
+# generated configure, so blfs/31 bootstraps it (autogen.sh/autoreconf).
+https://github.com/linux-audit/audit-userspace/archive/refs/tags/v4.2.1.tar.gz

@@ -177,19 +177,20 @@ cross-compiled architectures). The master ordered list is:
 28. `knowledge` (when enabled)
 29. `package-manager`
 30. `base-packages`
-31. `security`
-32. `privacy`
-33. `branding`
-34. `calamares-build` (when `installer.type` is `calamares`)
-35. `calamares`
-36. `first-boot`
-37. `system-updater`
-38. `luks-encryption`
-39. `initramfs`
-40. `bootloader`
-41. `installer` (every profile and architecture)
-42. `live-system` (when enabled, x86_64 only)
-43. `validate`
+31. `selinux` (SELinux userspace + targeted policy; when `security_hardening` and the resolved `security.selinux.mode` is not `disabled`)
+32. `security`
+33. `privacy`
+34. `branding`
+35. `calamares-build` (when `installer.type` is `calamares`)
+36. `calamares`
+37. `first-boot`
+38. `system-updater`
+39. `luks-encryption`
+40. `initramfs`
+41. `bootloader`
+42. `installer` (every profile and architecture)
+43. `live-system` (when enabled, x86_64 only)
+44. `validate`
 
 ## Repository structure
 
