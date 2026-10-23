@@ -663,7 +663,13 @@ class ProfileManager:
             'java_dev': True,
             'package_manager': True,
             'security_hardening': True,
-            'privacy_tools': False,
+            # Privacy travels with the LG3D build: blfs/16-privacy-tools.sh
+            # only installs tor/wireguard/dnscrypt/mat2 when their archives
+            # are present (every install is guarded by `if ls <pkg>-*`), so
+            # it is a no-op-safe addition to this desktop:none/xorg_only
+            # profile, and privacy_tools=True also flips the config's
+            # security.privacy.disable_telemetry hardening on.
+            'privacy_tools': True,
             'live_system': False,
             'system_updater': True,
             'graphical_installer': False,
