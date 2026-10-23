@@ -655,6 +655,8 @@ jobs:
     if: always() && needs.build-profiles.result != 'cancelled'
     permissions:
       contents: write
+      # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.
+      id-token: write
     steps:
       - name: Compute nightly date
         id: date
@@ -698,6 +700,33 @@ jobs:
           # keeps serving the stable repository manifest.
           prerelease: true
           make_latest: false
+
+      - name: Install cosign
+        if: steps.artifacts.outputs.found == 'true'
+        uses: sigstore/cosign-installer@v3
+        continue-on-error: true
+
+      - name: Sign nightly manifests (cosign keyless)
+        if: steps.artifacts.outputs.found == 'true'
+        continue-on-error: true
+        env:
+          COSIGN_YES: "true"
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Sign the integrity manifests each leg produced; bundles are
+          # attached to the dated nightly release.  continue-on-error keeps
+          # the published artifacts intact if signing is unavailable.
+          mapfile -t manifests < <(find artifacts -type f -name 'SHA256SUMS-*')
+          [ ${#manifests[@]} -gt 0 ] || exit 0
+          bundles=()
+          for f in "${manifests[@]}"; do
+            cosign sign-blob --yes --bundle "${f}.cosign.bundle" "$f" \
+              && bundles+=("${f}.cosign.bundle")
+          done
+          if [ ${#bundles[@]} -gt 0 ]; then
+            gh release upload "nightly-${{ steps.date.outputs.date }}" \
+              "${bundles[@]}" --clobber
+          fi
 
       - name: Prune nightly releases older than 30 days
         env:

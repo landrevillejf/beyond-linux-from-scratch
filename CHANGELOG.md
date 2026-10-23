@@ -4,6 +4,33 @@
 
 ### Added
 
+- **Supply-chain provenance: sigstore/cosign keyless signing, SLSA3
+  attestation, GPG-signed release tags and a pinned build image (Phase 6b of
+  the hardening program)**
+  (`.github/workflows/release.yml`, `.github/workflows/nightly.yml`,
+  `.github/workflows/lg3d.yml`, `make-release.sh`, `Dockerfile`)
+  - `release.yml` now signs the published ISO, `SHA256SUMS` and a generated
+    SPDX SBOM with `cosign sign-blob` in keyless (OIDC) mode and attaches the
+    `.cosign.bundle` files to the release, and emits a separate `provenance`
+    job that calls `slsa-github-generator`'s generic SLSA3 reusable workflow
+    over the ISO/manifest subjects.  Every signing step is `continue-on-error`
+    and the provenance job runs after `release`, so a signing or attestation
+    failure can never block the artifacts already published.
+  - `nightly.yml` and `lg3d.yml` sign each per-profile `SHA256SUMS-*`
+    integrity manifest with cosign keyless and attach the bundles to the dated
+    nightly release (also `continue-on-error`, also granted `id-token: write`).
+  - `make-release.sh` gains `--sign-tag`/`--no-sign-tag`: it defaults to a
+    GPG-signed tag (`git tag -s`) only when `user.signingkey` is configured,
+    falls back to an annotated tag if signing fails in `auto` mode, and aborts
+    if `--sign-tag` was requested explicitly and signing failed.
+  - `Dockerfile` pins `ubuntu:22.04` by manifest-list digest and installs with
+    `--no-install-recommends` for a hermetic, reproducible host toolchain.
+  - CI-only and release-tooling change: no `builder.py` behaviour, no stage
+    order and no `config/build.conf` schema touched, so the builder coverage
+    stays at 100%.  These workflows fire only on tag push / schedule, so the
+    signing paths are exercised by the release pipelines themselves, not by PR
+    CI.
+
 - **Supply-chain integrity: sha256 source lock file + GPG signature
   verification, fail-closed on the strict knobs (Phase 6 of the hardening
   program)**

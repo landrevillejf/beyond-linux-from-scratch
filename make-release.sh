@@ -11,21 +11,16 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# ---------- Detect OS for sed compatibility ----------
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    SED_INLINE="sed -i ''"
-else
-    SED_INLINE="sed -i"
-fi
-
 # ---------- Functions ----------
 show_help() {
-    cat << EOF
+    cat <<EOF
 Usage: $0 [OPTIONS]
 
 Options:
   --no-tag       Do not create the Git tag (only the tarball)
   --no-tar       Do not create the tarball (only the tag)
+  --sign-tag     Create a GPG-signed tag (git tag -s); aborts if signing fails
+  --no-sign-tag  Force an annotated (unsigned) tag
   --skip-tests   Skip running tests before release
   --skip-clean   Skip cleaning build artifacts before release
   --bump VERSION   Update the version in VERSION file to VERSION (e.g. --bump 0.52.8)
@@ -55,7 +50,7 @@ bump_version() {
         exit 1
     fi
     # Update VERSION file
-    echo "$new_version" > VERSION
+    echo "$new_version" >VERSION
     echo -e "${GREEN}Version set to $new_version in VERSION file${NC}"
     # Update version shown in documentation
     if [ -f docs/index.md ]; then
@@ -70,16 +65,26 @@ CREATE_TAR=true
 RUN_TESTS=true
 RUN_CLEAN=true
 BUMP_VERSION=""
+# Tag signing posture: auto (sign only when user.signingkey is set), yes, no.
+SIGN_TAG=auto
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --no-tag)      CREATE_TAG=false ;;
-        --no-tar)      CREATE_TAR=false ;;
-        --skip-tests)  RUN_TESTS=false ;;
-        --skip-clean)  RUN_CLEAN=false ;;
-        --bump)        BUMP_VERSION="$2"; shift ;;
-        --help)        show_help ;;
-        *)             echo -e "${RED}Unknown option: $1${NC}"; show_help ;;
+    --no-tag) CREATE_TAG=false ;;
+    --no-tar) CREATE_TAR=false ;;
+    --sign-tag) SIGN_TAG=yes ;;
+    --no-sign-tag) SIGN_TAG=no ;;
+    --skip-tests) RUN_TESTS=false ;;
+    --skip-clean) RUN_CLEAN=false ;;
+    --bump)
+        BUMP_VERSION="$2"
+        shift
+        ;;
+    --help) show_help ;;
+    *)
+        echo -e "${RED}Unknown option: $1${NC}"
+        show_help
+        ;;
     esac
     shift
 done
@@ -88,7 +93,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-if ! git rev-parse --git-dir > /dev/null 2>&1; then
+if ! git rev-parse --git-dir >/dev/null 2>&1; then
     echo -e "${RED}Error: this directory is not a Git repository.${NC}"
     exit 1
 fi
@@ -216,8 +221,8 @@ fi
 # ---------- Split tarball if it exceeds 2GB (GitHub's file size limit) ----------
 if [ "$CREATE_TAR" = true ]; then
     TAR_SIZE=$(stat -f%z "$TAR_NAME" 2>/dev/null || stat -c%s "$TAR_NAME" 2>/dev/null)
-    SIZE_LIMIT=$((2 * 1024 * 1024 * 1024))  # 2GB in bytes
-    
+    SIZE_LIMIT=$((2 * 1024 * 1024 * 1024)) # 2GB in bytes
+
     if [ "$TAR_SIZE" -gt "$SIZE_LIMIT" ]; then
         echo -e "${YELLOW}Tarball exceeds 2GB GitHub limit ($((TAR_SIZE / 1024 / 1024 / 1024))GB). Splitting...${NC}"
         split -b 1G "$TAR_NAME" "$TAR_NAME.part"
@@ -232,9 +237,26 @@ fi
 
 # ---------- Create tag ----------
 if [ "$CREATE_TAG" = true ]; then
-    echo -e "${BLUE}Creating tag v$VERSION...${NC}"
-    git tag -a "v$VERSION" -m "Release v$VERSION"
-    echo -e "${GREEN}Tag created.${NC}"
+    # A signed tag lets downstream verifiers trust the release without a
+    # separate signature file.  Default to signing only when a signing key is
+    # configured, so an unattended release host never blocks on GPG.
+    TAG_ARGS=(-a)
+    if [ "$SIGN_TAG" = "yes" ]; then
+        TAG_ARGS=(-s)
+    elif [ "$SIGN_TAG" = "auto" ] && [ -n "$(git config --get user.signingkey 2>/dev/null)" ]; then
+        TAG_ARGS=(-s)
+    fi
+    echo -e "${BLUE}Creating tag v$VERSION (${TAG_ARGS[0]})...${NC}"
+    if git tag "${TAG_ARGS[@]}" "v$VERSION" -m "Release v$VERSION"; then
+        echo -e "${GREEN}Tag created.${NC}"
+    elif [ "$SIGN_TAG" = "auto" ]; then
+        echo -e "${YELLOW}Signed tag failed; falling back to an annotated tag.${NC}"
+        git tag -a "v$VERSION" -m "Release v$VERSION"
+        echo -e "${GREEN}Tag created.${NC}"
+    else
+        echo -e "${RED}Error: signed tag failed (--sign-tag requested).${NC}" >&2
+        exit 1
+    fi
 fi
 
 # ---------- Instructions ----------
