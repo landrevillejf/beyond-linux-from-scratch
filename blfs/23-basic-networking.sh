@@ -549,7 +549,13 @@ build_commands_libndp() {
 # tracking uses elogind only when the display-manager stage built it.
 build_networkmanager() { book_install networkmanager build_commands_networkmanager; }
 build_commands_networkmanager() {
-    local session_tracking=none
+    # NetworkManager's meson session_tracking option only accepts
+    # "systemd", "elogind" or "no" -- the pre-meson "none" spelling aborts
+    # setup with 'Value "none" ... is not one of the choices'.  This stayed
+    # latent until the xorg_only fix (PR #139) made the lg3d profile build
+    # blfs-libs/xorg, so glib-2.0 is now present and NetworkManager is a
+    # required (not optional) package that aborts the stage on failure.
+    local session_tracking=no
     # elogind installs libelogind.pc, not elogind.pc; probing the bare
     # module name always missed and left NetworkManager without session
     # tracking even on systems where the display-manager stage had built
