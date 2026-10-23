@@ -700,9 +700,21 @@ class ProfileManager:
             # profile, and privacy_tools=True also flips the config's
             # security.privacy.disable_telemetry hardening on.
             'privacy_tools': True,
-            'live_system': False,
+            # The lg3d profile ships a live ISO (final/15) whose LG3D start
+            # menu offers a graphical installer, so live_system is on.  The
+            # installed system boots to the LightDM greeter written by
+            # blfs/08d (no autologin), exactly like the live image.
+            'live_system': True,
             'system_updater': True,
-            'graphical_installer': False,
+            # graphical_installer resolves installer.type to 'calamares'
+            # (_apply_profile_settings), which schedules the opt-in
+            # calamares-build stage (blfs/29) plus the calamares config stage
+            # (blfs/22).  lg3d is desktop:none, so get_build_stages' calamares
+            # gate keys off xorg_only + installer.type instead of a desktop.
+            # The launcher lives in LG3D's own start menu ("Install WBLFS"),
+            # which Desktop2DAppRegistry auto-hides once calamares/pkexec are
+            # gone, so the entry shows only on the live ISO.
+            'graphical_installer': True,
             'xorg_only': True,
             'lg3d_session': True,
             # lfs-iso-contract.md 3: --iso runs the composited 2D desktop AND
@@ -2652,10 +2664,18 @@ class LFSBuilder:
         # Branding
         stages.append(('branding', 'blfs/20-branding.sh'))
 
-        # Calamares installer (for desktop profiles with live system)
+        # Calamares installer (for desktop profiles with live system, and
+        # for the xorg_only lg3d profile whose live ISO offers a graphical
+        # install from its own start menu).
         calamares_live = self.profile_config.get('live_system', True)
         calamares_desktop = _desktop and _desktop != 'none'
-        if calamares_desktop and calamares_live:
+        # lg3d is desktop:none + xorg_only, so the desktop test above would
+        # block it.  An xorg_only profile that resolved installer.type to
+        # 'calamares' (its graphical_installer flag) also qualifies: it ships
+        # a live ISO with a Calamares launcher.  Keyed on installer.type so a
+        # future xorg_only profile without a graphical installer stays out.
+        calamares_xorg_only = _xorg_only and self.get_installer_type() == 'calamares'
+        if calamares_live and (calamares_desktop or calamares_xorg_only):
             # calamares-build compiles the installer itself (popt, the
             # filesystem tools, Qt6, ECM, the KF6 trio, polkit-qt-1,
             # yaml-cpp, kpmcore and Calamares) and is strictly opt-in;

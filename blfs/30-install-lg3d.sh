@@ -131,11 +131,22 @@ if [ "${LFS_PROFILE_DISPLAY_MANAGER:-false}" = "true" ]; then
     DM_OWNS_DISPLAY=true
 fi
 
+# --- Live ISO login user ----------------------------------------------------
+# builder.py exports the profile's live_system key as LFS_PROFILE_LIVE_SYSTEM.
+# The lg3d live ISO (final/15) boots to the LightDM greeter blfs/08d writes with
+# autologin disabled, so it needs a credential-less account to be usable straight
+# off the media.  Only a live build creates it.
+LIVE_SYSTEM=false
+if [ "${LFS_PROFILE_LIVE_SYSTEM:-false}" = "true" ]; then
+    LIVE_SYSTEM=true
+fi
+
 log_info "========================================="
 log_info "Project Looking Glass (lg3d) session"
 log_info "  mode : ${LG3D_MODE} (${LG3D_DESC})"
 log_info "  init : ${INIT}"
 log_info "  dm   : ${DM_OWNS_DISPLAY} (display manager owns :0)"
+log_info "  live : ${LIVE_SYSTEM} (live ISO login user)"
 if [ "$INIT" = "systemd" ]; then
     log_info "  unit : ${UNIT_NAME}"
 fi
@@ -224,6 +235,31 @@ write_session() {
         write_session_unit
     else
         write_sysv_session
+    fi
+}
+
+# Create the credential-less `live` account the live ISO greeter logs into.
+# wheel matches blfs/22's passwordless-Calamares polkit rule, so the live user
+# can launch "Install WBLFS" (pkexec calamares) from the LG3D start menu with no
+# prompt; autologin is the group LightDM's greeter/PAM stack expects for such an
+# account.  Idempotent and best-effort: an offline chroot without useradd must
+# not abort the stage.  The account is unpacked onto the target with the
+# squashfs, so blfs/22's shellprocess step removes it at install time.
+create_live_user() {
+    if [ "$LIVE_SYSTEM" != "true" ]; then
+        return 0
+    fi
+    if run_privileged chroot "$LFS" /bin/bash -c '
+        groupadd -f wheel
+        groupadd -f autologin
+        if ! id live >/dev/null 2>&1; then
+            useradd -m -G wheel,autologin -s /bin/bash live
+        fi
+        passwd -d live >/dev/null 2>&1
+    ' 2>/dev/null; then
+        log_info "live user created (wheel+autologin, passwordless)"
+    else
+        log_warning "Could not create the live user (offline chroot?)"
     fi
 }
 
@@ -483,6 +519,10 @@ else
         log_info "sysvinit session wired via inittab respawn (runlevel 5)"
     fi
 fi
+
+# Create the live ISO login user while the chroot mounts are still up (useradd
+# needs /dev for entropy and a writable /etc).  No-op unless live_system is on.
+create_live_user
 
 run_privileged umount "$LFS"/dev/pts 2>/dev/null || true
 run_privileged umount "$LFS"/dev 2>/dev/null || true

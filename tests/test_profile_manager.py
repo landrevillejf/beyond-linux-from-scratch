@@ -185,7 +185,8 @@ class TestProfileManager:
         assert profile['size_gb'] == 6
         assert profile['build_time_hours'] == 5
         assert profile['security_hardening'] is True
-        assert profile['live_system'] is False
+        assert profile['live_system'] is True
+        assert profile['graphical_installer'] is True
 
     def test_list_profiles_includes_all(self):
         """Test that list_profiles includes all expected profiles"""

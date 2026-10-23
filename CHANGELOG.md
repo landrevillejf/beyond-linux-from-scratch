@@ -4,6 +4,42 @@
 
 ### Added
 
+- **LG3D live ISO + graphical installer** (`builder.py`,
+  `blfs/22-calamares-installer.sh`, `blfs/30-install-lg3d.sh`,
+  `tests/test_builder.py`, `tests/test_profile_manager.py`,
+  `tests/test_acceptance_shell.py`, `README.md`, `AGENTS.md`)
+  - The `lg3d` profile now sets `live_system: True` and
+    `graphical_installer: True`, so it ships a bootable live ISO
+    (`final/15-create-live-system.sh`) and resolves `installer.type` to
+    `calamares`, scheduling the opt-in `calamares-build` (`blfs/29`) plus the
+    `calamares` config stage (`blfs/22`). The Calamares gate -- historically
+    `_desktop and _desktop != 'none'`, which blocked `desktop: none` -- gains a
+    second arm, `xorg_only and get_installer_type() == 'calamares'`, so the
+    lg3d live profile qualifies while a future xorg_only profile without a
+    graphical installer stays out. Other profiles' stage lists are unchanged.
+  - The installer launches from LG3D's own start menu, not an XDG autostart (a
+    bare lg3d session has no autostart runner). `blfs/22` injects an idempotent
+    "Install WBLFS (LG3D)" `StartMenuItemConfig` (`command = pkexec calamares`,
+    `menuGroup = System`) into
+    `/opt/lg3d/lg3d-core/src/etc/lg3d/startmenu.lgcfg` before `</java>`; the
+    guard skips an archive that already ships the entry (the companion
+    ProjectLookingGlass change) so it is never duplicated. LG3D's
+    `Desktop2DAppRegistry` `which`-checks the command's first token, so the item
+    self-hides once `pkexec`/`calamares` are absent and shows only on the live
+    ISO.
+  - `blfs/30` creates a passwordless `live` user (groups `wheel`+`autologin`)
+    gated on `LFS_PROFILE_LIVE_SYSTEM`, so the greeter is usable without
+    credentials off the media; `wheel` matches blfs/22's passwordless-Calamares
+    polkit rule. Because that account rides into the target inside the squashfs,
+    `blfs/22` wires a Calamares `shellprocess` step into the settings.conf exec
+    sequence (before `umount`) that runs `userdel -r live` and drops the
+    live-session launchers, and the `lfs-cleanup` helper now removes the account
+    too -- so the credential-less `live` user never survives onto the installed
+    system, which boots to the same greeter `lightdm.conf` (no autologin,
+    `lg3d-iso`) it inherits from the squashfs.
+  - LG3D-only: no other profile gains a live ISO or an installer.
+    `builder.py` stays at 100% coverage.
+
 - **LG3D all-modes login greeter** (`builder.py`,
   `blfs/08d-build-display-manager.sh`, `blfs/30-install-lg3d.sh`,
   `tests/test_builder.py`, `tests/test_profile_manager.py`,

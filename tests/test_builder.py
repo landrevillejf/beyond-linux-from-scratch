@@ -874,6 +874,49 @@ class TestLFSBuilder:
             assert 'calamares-build' not in stage_names, profile
             assert 'calamares' not in stage_names, profile
 
+    def test_lg3d_profile_schedules_calamares_and_live_system(self, builder):
+        """lg3d (desktop:none + xorg_only + graphical_installer) gets the
+        full install chain.
+
+        The relaxed calamares gate keys off xorg_only + installer.type so
+        the desktop:none lg3d profile is not blocked by the desktop test.
+        _apply_profile_settings() resolves graphical_installer into
+        installer.type='calamares', exactly as the real build flow does
+        before get_build_stages() runs, so both the opt-in calamares-build
+        (blfs/29) and the calamares config stage (blfs/22) are scheduled,
+        ahead of the live-system stage (final/15) that packs the ISO.
+        """
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        builder._apply_profile_settings()
+        assert builder.get_installer_type() == 'calamares'
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'calamares-build' in stage_names
+        assert 'calamares' in stage_names
+        assert 'live-system' in stage_names
+        assert stage_names.index('calamares-build') < \
+            stage_names.index('calamares')
+
+    def test_relaxed_calamares_gate_needs_the_installer_flag(self, builder):
+        """An xorg_only profile without a graphical installer stays out.
+
+        The gate reads installer.type, not just xorg_only, so a headless
+        X-only profile that never resolved 'calamares' must not compile
+        Qt6 for a system with no installer launcher.  Clearing the flag
+        and re-resolving drops both calamares stages.
+        """
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = dict(ProfileManager.get_profile('lg3d'))
+        builder.profile_config['graphical_installer'] = False
+        builder._apply_profile_settings()
+        assert builder.get_installer_type() == 'none'
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'calamares-build' not in stage_names
+        assert 'calamares' not in stage_names
+
     def test_master_stage_list_places_calamares_build_before_calamares(self):
         """BUILD_STAGES lists calamares-build between branding and
         calamares."""
@@ -883,17 +926,23 @@ class TestLFSBuilder:
         assert names.index('calamares-build') < names.index('calamares')
 
     def test_every_profile_declares_graphical_installer(self):
-        """The flag must exist on every profile and stay off for now.
+        """The flag must exist on every profile; only lg3d turns it on.
 
-        This release lands the build chain only; a later change flips it
-        on for a single profile once a nightly run has proven the chain.
+        lg3d is the first profile to ship the graphical installer: its
+        live ISO offers "Install WBLFS" from the LG3D start menu.  Every
+        other profile keeps the flag off so the opt-in blfs/29 build chain
+        (Qt6/KF6/kpmcore/Calamares) stays out of their stage lists until a
+        nightly run has proven the chain end to end.
         """
         from builder import ProfileManager
+        enabled = []
         for name, profile in ProfileManager.PROFILES.items():
             assert 'graphical_installer' in profile, \
                 f"profile {name} does not declare graphical_installer"
-            assert profile['graphical_installer'] is False, \
-                f"profile {name} enables the installer early"
+            if profile['graphical_installer']:
+                enabled.append(name)
+        assert enabled == ['lg3d'], \
+            f"only lg3d may enable the installer, got {enabled}"
 
     def test_graphical_installer_flag_resolves_installer_type(self, builder):
         """The profile flag must resolve into installer.type.

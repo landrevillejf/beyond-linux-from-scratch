@@ -97,6 +97,7 @@ sequence:
     - plymouthcfg   # Plymouth boot splash config
     - initramfscfg  # Initramfs configuration
     - initramfs     # Generate initramfs
+    - shellprocess  # Remove live-ISO-only artifacts from the target
     - umount        # Unmount target partitions
 
   # Phase 6: Completion
@@ -241,6 +242,26 @@ mountOptions:
   ext4: "defaults,noatime"
 FSTAB
 
+# Shellprocess module – install-time cleanup of live-ISO-only artifacts.
+# The lg3d live image carries a passwordless `live` user (wheel+autologin,
+# created by blfs/30) so its greeter is usable without credentials, plus the
+# Calamares XDG-autostart and applications launchers below.  None of those
+# belong on the installed system, so this step – wired into the settings.conf
+# exec sequence just before umount – strips them from the target.  Commands run
+# inside the target root (dontChroot defaults to false); a leading '-' marks a
+# command non-fatal so a missing account or file never aborts the finish phase.
+write_file /etc/calamares/modules/shellprocess.conf 0644 <<'SHELLPROC'
+---
+dontChroot: false
+timeout: 60
+commands:
+  # Remove the passwordless live login account and its home directory.
+  - -userdel -r live
+  # Remove the live-session installer launchers.
+  - -rm -f /etc/xdg/autostart/calamares-autostart.desktop
+  - -rm -f /usr/share/applications/calamares.desktop
+SHELLPROC
+
 # --------------------------------------------------------------------------
 # 6. Desktop entry for launching Calamares
 # --------------------------------------------------------------------------
@@ -314,7 +335,12 @@ ROOT="${INSTALL_ROOT:-/mnt/lfs-target}"
 rm -f "$ROOT/etc/xdg/autostart/calamares-autostart.desktop" 2>/dev/null || true
 rm -f "$ROOT/usr/share/applications/calamares.desktop" 2>/dev/null || true
 
-# Remove live user and session files
+# Remove live user and session files.  The lg3d live ISO's `live` account is
+# passwordless and in wheel+autologin, so it must not survive onto the target;
+# drop the account (not just its home) via userdel in the target root.
+if [ -x "$ROOT/usr/sbin/userdel" ]; then
+    chroot "$ROOT" /usr/sbin/userdel -r live 2>/dev/null || true
+fi
 rm -rf "$ROOT/home/live" 2>/dev/null || true
 
 # Verify root password was set
@@ -351,6 +377,68 @@ fi
 
 echo "[LFS-CLEANUP] Installation artifacts cleaned"
 CLEANUP
+
+# --------------------------------------------------------------------------
+# 10. LG3D start menu: "Install WBLFS (LG3D)" launcher
+# --------------------------------------------------------------------------
+# The lg3d profile boots straight into Project Looking Glass, whose start menu
+# is data-driven from startmenu.lgcfg.  blfs/30 extracts that file to /opt/lg3d
+# before this stage runs.  Inject a System-group item that launches the
+# installer via pkexec (section 7's polkit rule makes it passwordless for the
+# wheel group, which the live user is in).  Desktop2DAppRegistry runs the
+# command's first token through a `which` lookup, so the item posts only where
+# pkexec/calamares exist (the live ISO) and self-hides once they are gone.
+#
+# This is the single-repo fallback for the ProjectLookingGlass startmenu.lgcfg
+# change: the guard below makes it idempotent, so an archive that already
+# carries the entry (PLG main) is left untouched and no duplicate is written.
+# A missing file (Docker scaffolding leaves /opt/lg3d empty) is a no-op.
+LG_STARTMENU="$LFS/opt/lg3d/lg3d-core/src/etc/lg3d/startmenu.lgcfg"
+if [ -f "$LG_STARTMENU" ] && ! grep -q 'Install WBLFS (LG3D)' "$LG_STARTMENU"; then
+    LG_ITEM="$(mktemp)"
+    LG_OUT="$(mktemp)"
+    cat >"$LG_ITEM" <<'LGITEM'
+ <!-- System Menu: Install WBLFS (injected by 22-calamares-installer.sh) -->
+ <object class="org.jdesktop.lg3d.scenemanager.utils.startmenu.StartMenuItemConfig">
+  <void property="command">
+   <string>pkexec calamares</string>
+  </void>
+  <void property="desc">
+   <string>Install WBLFS (LG3D)</string>
+  </void>
+  <void property="displayResourceType">
+   <string>ICON</string>
+  </void>
+  <void property="displayResourceUrlName">
+   <string>resource:///resources/images/icon/system.png</string>
+  </void>
+  <void property="menuGroup">
+   <string>System</string>
+  </void>
+  <void property="name">
+   <string>Install WBLFS (LG3D)</string>
+  </void>
+ </object>
+LGITEM
+    # Insert the item immediately before the closing </java> tag.  awk writes to
+    # a temp file (the unprivileged build user cannot redirect into root-owned
+    # $LFS), then run_privileged tee streams it back over the original.
+    awk -v ins="$LG_ITEM" '
+        /<\/java>/ && !inserted {
+            while ((getline line < ins) > 0) print line
+            close(ins)
+            inserted = 1
+        }
+        { print }
+    ' "$LG_STARTMENU" >"$LG_OUT"
+    run_privileged tee "$LG_STARTMENU" >/dev/null <"$LG_OUT"
+    rm -f "$LG_ITEM" "$LG_OUT"
+    echo "[INFO] Injected 'Install WBLFS (LG3D)' into the LG3D start menu"
+elif [ ! -f "$LG_STARTMENU" ]; then
+    echo "[INFO] LG3D start menu absent; skipping the 'Install WBLFS' entry"
+else
+    echo "[INFO] LG3D start menu already lists 'Install WBLFS (LG3D)'; skipping"
+fi
 
 echo "[SUCCESS] Calamares installer framework configured"
 echo "  - Main config:   /etc/calamares/settings.conf"
