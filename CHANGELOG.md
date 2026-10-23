@@ -4,6 +4,46 @@
 
 ### Added
 
+- **kernel hardening baseline across all six `config/kernel-config*`
+  variants + module signing (Phase 1 of the hardening program)**
+  (`config/kernel-config`, `config/kernel-config-arm64`,
+  `config/kernel-config-audio-studio`, `config/kernel-config-brax3`,
+  `config/kernel-config-gnu-free`, `config/kernel-config-pinebook`,
+  `lfs/08-build-kernel.sh`, `tests/test_acceptance_shell.py`)
+  - Every kernel-config fragment now names the hardening options explicitly
+    (they survive `make olddefconfig`, which otherwise resolves an unnamed
+    security symbol to its insecure upstream default): SELinux as the single
+    active LSM (`CONFIG_LSM="lockdown,yama,integrity,selinux"`, AppArmor
+    compiled out -- resolving the former dual-LSM `SECURITY_SELINUX=y` +
+    `SECURITY_APPARMOR=y` conflict), `SECURITY_YAMA`, lockdown-integrity
+    (`SECURITY_LOCKDOWN_LSM[_EARLY]`, `LOCKDOWN_KERNEL_FORCE_INTEGRITY`),
+    signed modules (`MODULE_SIG[_ALL]`, `MODULE_SIG_FORCE`, `MODULE_SIG_SHA512`,
+    `MODULE_SIG_KEY="certs/signing_key.pem"`), `HARDENED_USERCOPY`,
+    `INIT_ON_{ALLOC,FREE}_DEFAULT_ON`, `SLAB_FREELIST_{RANDOMIZED,HARDENED}`,
+    `STACKPROTECTOR_STRONG`, `STRICT_{KERNEL,MODULE}_RWX`, `RANDOMIZE_BASE`,
+    `IMA`/`IMA_APPRAISE`/`EVM` (compiled in; the appraisal policy is Phase 5),
+    `BPF_JIT_ALWAYS_ON`/`BPF_UNPRIV_DEFAULT_OFF`, and `/dev/mem` closed
+    (`# CONFIG_DEVMEM is not set`).  `DEBUG_CREDENTIALS`/`DEBUG_NOTIFIERS`
+    are added to the three variants that keep `DEBUG_KERNEL` (x86_64, arm64,
+    audio-studio); brax3, pinebook and gnu-free disable `DEBUG_KERNEL` for
+    production, so those two (which depend on it) are intentionally omitted
+    there.
+  - `lfs/08-build-kernel.sh` re-applies two tunables from the flattened
+    Phase 0 config keys -- `LFS_CONFIG_SECURITY_KERNEL_HARDENING_LOCKDOWN`
+    (`integrity`/`confidentiality`/`off`) and
+    `..._MODULE_SIG_FORCE` (`true`/`false`) -- with the kernel's own
+    `scripts/config` helper after copying the fragment and before
+    `olddefconfig`, on both the cross-compile (host) and native (chroot)
+    paths.  Module signing needs no extra step: with `MODULE_SIG(_ALL)=y`
+    the build signs every `.ko` against `certs/signing_key.pem`, which the
+    kernel auto-generates because OpenSSL 3.5.2 is installed by
+    `lfs/05b-build-lfs-system.sh` before the kernel stage; only the public
+    key is embedded in `vmlinuz`, the private key is never shipped.
+  - `tests/test_acceptance_shell.py` gains
+    `test_kernel_configs_carry_hardening_baseline` (greps the baseline in all
+    six fragments and the `DEBUG_*` subset in the three that keep
+    `DEBUG_KERNEL`) and `test_kernel_stage_honors_hardening_knobs`.
+
 - **security hardening config schema (Phase 0 of the hardening program)**
   (`builder.py`, `config/build.conf`, `config/build.conf.json`,
   `config/default.json`, `tests/test_config.py`, `tests/conftest.py`)

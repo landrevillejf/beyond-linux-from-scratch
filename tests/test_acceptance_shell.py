@@ -1227,6 +1227,95 @@ class TestLFSComplianceGuardrails:
                 assert 'CONFIG_ATA=y' in content, \
                     f"{name} enables SATA_AHCI without its ATA dependency"
 
+    def test_kernel_configs_carry_hardening_baseline(self):
+        """Every kernel-config fragment must carry the Phase 1 hardening
+        baseline: SELinux as the single active LSM, lockdown, signed and
+        force-verified modules, the memory/allocation knobs, IMA/EVM, eBPF
+        hardening and /dev/mem closed.
+
+        lfs/08-build-kernel.sh seeds .config from the fragment then runs
+        `make olddefconfig`, which resolves every unnamed security symbol to
+        its (insecure) upstream default -- the same trap the boot-block test
+        above documents -- so each option has to be named explicitly in all
+        six variants.  AppArmor must be compiled OUT and absent from
+        CONFIG_LSM to resolve the former dual-LSM (SELINUX + APPARMOR)
+        conflict; SELinux is the single selected MAC.
+        """
+        baseline = (
+            'CONFIG_SECURITY_SELINUX=y',
+            '# CONFIG_SECURITY_APPARMOR is not set',
+            'CONFIG_LSM="lockdown,yama,integrity,selinux"',
+            'CONFIG_SECURITY_YAMA=y',
+            'CONFIG_SECURITY_LOCKDOWN_LSM=y',
+            'CONFIG_SECURITY_LOCKDOWN_LSM_EARLY=y',
+            'CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY=y',
+            'CONFIG_MODULE_SIG=y',
+            'CONFIG_MODULE_SIG_FORCE=y',
+            'CONFIG_MODULE_SIG_SHA512=y',
+            'CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"',
+            'CONFIG_HARDENED_USERCOPY=y',
+            'CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y',
+            'CONFIG_INIT_ON_FREE_DEFAULT_ON=y',
+            'CONFIG_SLAB_FREELIST_RANDOMIZED=y',
+            'CONFIG_SLAB_FREELIST_HARDENED=y',
+            'CONFIG_STACKPROTECTOR_STRONG=y',
+            'CONFIG_STRICT_KERNEL_RWX=y',
+            'CONFIG_STRICT_MODULE_RWX=y',
+            'CONFIG_RANDOMIZE_BASE=y',
+            'CONFIG_IMA=y',
+            'CONFIG_IMA_APPRAISE=y',
+            'CONFIG_EVM=y',
+            'CONFIG_BPF_JIT_ALWAYS_ON=y',
+            'CONFIG_BPF_UNPRIV_DEFAULT_OFF=y',
+            '# CONFIG_DEVMEM is not set',
+        )
+        variants = ('kernel-config', 'kernel-config-arm64',
+                    'kernel-config-audio-studio', 'kernel-config-brax3',
+                    'kernel-config-gnu-free', 'kernel-config-pinebook')
+        for name in variants:
+            content = Path(f'config/{name}').read_text()
+            for option in baseline:
+                assert option in content, f"{name} lacks {option}"
+            # No fragment may leave AppArmor compiled into the active LSM set.
+            assert 'CONFIG_SECURITY_APPARMOR=y' not in content, \
+                f"{name} still compiles AppArmor into the active LSM set"
+
+        # DEBUG_CREDENTIALS/DEBUG_NOTIFIERS depend on DEBUG_KERNEL; the brax3,
+        # pinebook and gnu-free fragments disable DEBUG_KERNEL for production,
+        # so olddefconfig would drop the checks there.  Only the variants that
+        # keep DEBUG_KERNEL may claim them.
+        for name in ('kernel-config', 'kernel-config-arm64',
+                     'kernel-config-audio-studio'):
+            content = Path(f'config/{name}').read_text()
+            assert 'CONFIG_DEBUG_KERNEL=y' in content, \
+                f"{name} must enable DEBUG_KERNEL for the cred/notifier checks"
+            assert 'CONFIG_DEBUG_CREDENTIALS=y' in content, \
+                f"{name} lacks CONFIG_DEBUG_CREDENTIALS"
+            assert 'CONFIG_DEBUG_NOTIFIERS=y' in content, \
+                f"{name} lacks CONFIG_DEBUG_NOTIFIERS"
+
+    def test_kernel_stage_honors_hardening_knobs(self):
+        """lfs/08-build-kernel.sh must re-apply the lockdown level and
+        MODULE_SIG_FORCE from the flattened security.kernel_hardening.* config
+        keys via the kernel's scripts/config helper, after copying the
+        fragment and before `make olddefconfig`, on both the cross-compile and
+        the native chroot paths.
+        """
+        content = Path('lfs/08-build-kernel.sh').read_text()
+        assert 'LFS_CONFIG_SECURITY_KERNEL_HARDENING_LOCKDOWN' in content
+        assert 'LFS_CONFIG_SECURITY_KERNEL_HARDENING_MODULE_SIG_FORCE' in content
+        assert 'scripts/config' in content
+        assert 'LOCKDOWN_KERNEL_FORCE_INTEGRITY' in content
+        assert 'LOCKDOWN_KERNEL_FORCE_CONFIDENTIALITY' in content
+        assert 'HARDEN_CMDS="$(resolve_hardening_cmds)"' in content
+        # Cross-compile path applies the knobs before olddefconfig.
+        assert 'eval "$HARDEN_CMDS"' in content
+        assert content.index('eval "$HARDEN_CMDS"') < \
+            content.index('$MAKE_CMD olddefconfig')
+        # Native chroot heredoc bakes the resolved commands in ($HARDEN_CMDS
+        # appears in both the cross-compile call and the generated script).
+        assert content.count('$HARDEN_CMDS') >= 2
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.
