@@ -43,7 +43,14 @@ run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 
 INIT_SYSTEM="${INIT_SYSTEM:-sysvinit}"
 DESKTOP_TYPE="${LFS_CONFIG_DESKTOP_TYPE:-xfce}"
-export INIT_SYSTEM DESKTOP_TYPE
+# The lg3d profile is desktop:none but xorg_only:true: it still needs the BLFS
+# core libraries (glib2, cairo, pango, freetype2, fontconfig, gdk-pixbuf)
+# because the xorg stage (08b) builds the X server and GTK on top of them and
+# fail-fasts when they are missing (lfs-x11-contract.md wants a bare Xorg :0).
+# builder.py exports the profile's xorg_only flag as LFS_PROFILE_XORG_ONLY
+# (bool -> "true"/"false").
+XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"
+export INIT_SYSTEM DESKTOP_TYPE XORG_ONLY
 
 log_info "========================================="
 log_info "Building BLFS core libraries"
@@ -59,10 +66,13 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ "$DESKTOP_TYPE" = "none" ] && {
+# Skip only when nothing needs these libraries: a desktop profile always builds
+# them, and an xorg_only profile (lg3d) needs them for the Xorg/GTK stack that
+# 08b builds next.
+if [ "$DESKTOP_TYPE" = "none" ] && [ "$XORG_ONLY" != "true" ]; then
     log_info "No desktop requested; skipping BLFS core libraries"
     exit 0
-}
+fi
 
 [ -x "$LFS/bin/bash" ] || {
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"

@@ -5,7 +5,8 @@
 ### Fixed
 
 - **`lg3d` profile never produced an ISO: `.xinitrc` abort and skipped Xorg**
-  (`blfs/30-install-lg3d.sh`, `blfs/08b-build-xorg.sh`)
+  (`blfs/30-install-lg3d.sh`, `blfs/08b-build-xorg.sh`,
+  `blfs/08a-build-blfs-libs.sh`)
   - The `lg3d` nightly legs have been red since the session-selection feature
     landed (PR #135); the breakage stayed hidden because no code merged for
     three weeks, so `check_changes` turned every run into a ~20s no-op that
@@ -28,6 +29,14 @@
     a bare Xorg `:0` with the video driver stack.  The skip is now gated on
     the exported `LFS_PROFILE_XORG_ONLY`, so an X11-only profile builds Xorg
     while a genuine headless profile still skips it.
+  - `blfs/08a-build-blfs-libs.sh` carried the identical `desktop=none` skip.
+    builder.py schedules BOTH `blfs-libs` (08a) and `xorg` (08b) for an
+    `xorg_only` profile, and 08b fail-fasts when glib-2.0/cairo/pango/
+    freetype2/fontconfig/gdk-pixbuf-2.0 are absent.  Once the 08b skip was
+    gated, the xorg stage died with `Missing BLFS library prerequisites`
+    because 08a was still skipping (nightly run 39944433235).  The 08a skip is
+    now gated on `LFS_PROFILE_XORG_ONLY` too, so the whole X11-only chain
+    (08a libs -> 08b Xorg/GTK -> lg3d session) actually builds.
 
 - **`lg3d` stage "Permission denied" writing the session artifact**
   (`blfs/30-install-lg3d.sh`)
