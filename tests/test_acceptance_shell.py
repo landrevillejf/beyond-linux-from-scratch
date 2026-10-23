@@ -2593,6 +2593,31 @@ class TestProfilePromiseGuardrails:
         assert 'MESA_LLVM="${LFS_CONFIG_GRAPHICS_MESA_LLVM:-disabled}"' \
             in content, "the default llvm toggle must stay disabled (#210)"
 
+    def test_xorg_stage_builds_for_xorg_only_desktop_none_profile(self):
+        """The xorg stage must build Xorg for an xorg_only, desktop:none profile.
+
+        The lg3d profile is desktop:none + xorg_only:true; builder.py schedules
+        the xorg stage for it (get_build_stages' `elif _xorg_only` branch) and
+        lfs-x11-contract.md requires a bare Xorg :0 with the video driver stack.
+        The stage used to bail on `[ "$DESKTOP_TYPE" = "none" ]`, so lg3d shipped
+        with no X server and no xinit -- the lg3d-compositor.service unit's
+        `xinit ... Xorg :0` could never start (nightly lg3d-20261023 logged the
+        "No desktop requested; skipping Xorg" line then a missing /usr/bin/xinit
+        warning).  The skip must be gated on the exported LFS_PROFILE_XORG_ONLY
+        flag so an X11-only profile still builds Xorg while a genuine headless
+        profile keeps skipping it.
+        """
+        content = Path('blfs/08b-build-xorg.sh').read_text()
+        assert 'XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"' in content, \
+            "the xorg stage must read the profile's xorg_only flag"
+        assert '[ "$DESKTOP_TYPE" = "none" ] && [ "$XORG_ONLY" != "true" ]' \
+            in content, \
+            "the desktop=none skip must be gated on xorg_only so lg3d builds " \
+            "a bare Xorg (lfs-x11-contract.md)"
+        # The old unconditional bail must be gone.
+        assert '[ "$DESKTOP_TYPE" = "none" ] && {' not in content, \
+            "the unconditional desktop=none Xorg skip must be replaced"
+
     def test_lg3d_stage_wires_iso_contract_mode(self):
         """The lg3d stage must default to the --iso composited-desktop mode.
 
@@ -2614,6 +2639,31 @@ class TestProfilePromiseGuardrails:
         # iso keeps the contract's canonical lg3d-compositor.service unit name.
         assert 'UNIT_NAME="lg3d-${UNIT_BASE}.service"' in content
         assert 'UNIT_BASE="compositor"' in content
+
+    def test_lg3d_xinitrc_write_is_guarded_against_missing_home(self):
+        """The convenience .xinitrc write must not abort the lg3d stage.
+
+        The inner chroot script wrote `cat > /home/lfs/.xinitrc` unguarded; the
+        base-cache resume tree never creates /home/lfs, so the redirect died
+        with "No such file or directory" and, under `set -euo pipefail`, took
+        the whole lg3d stage down with exit 1 (nightly lg3d-20260930 line 89 and
+        lg3d-20261023 line 93 -- the lg3d ISO was never produced, only the
+        minimal canary).  The .xinitrc is just a `startx` convenience; the boot
+        session is the systemd lg3d-compositor.service unit / sysvinit inittab
+        respawn, so the write must be guarded by a directory check and degrade
+        to a warning instead of failing the stage.
+        """
+        content = Path('blfs/30-install-lg3d.sh').read_text()
+        assert 'if [ -d /home/lfs ]; then' in content, \
+            "the .xinitrc write must be guarded by a /home/lfs existence check"
+        # Match the real heredoc write, not the comment that quotes it.
+        assert "cat > /home/lfs/.xinitrc <<'EOF'" in content
+        guard_pos = content.index('if [ -d /home/lfs ]; then')
+        write_pos = content.index("cat > /home/lfs/.xinitrc <<'EOF'")
+        assert guard_pos < write_pos, \
+            "the .xinitrc write must sit inside the /home/lfs guard"
+        assert 'skipping the convenience .xinitrc' in content, \
+            "a missing /home/lfs must warn, not abort the stage"
 
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.

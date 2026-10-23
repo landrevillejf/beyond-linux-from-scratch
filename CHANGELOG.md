@@ -4,6 +4,31 @@
 
 ### Fixed
 
+- **`lg3d` profile never produced an ISO: `.xinitrc` abort and skipped Xorg**
+  (`blfs/30-install-lg3d.sh`, `blfs/08b-build-xorg.sh`)
+  - The `lg3d` nightly legs have been red since the session-selection feature
+    landed (PR #135); the breakage stayed hidden because no code merged for
+    three weeks, so `check_changes` turned every run into a ~20s no-op that
+    reported success while `create-release` kept publishing only the `minimal`
+    canary ISO under the `lg3d-nightly-*` tag.  Nightly `lg3d-20260930` (line
+    89) and `lg3d-20261023` (line 93) both died at the same place: the inner
+    chroot script ran an unguarded `cat > /home/lfs/.xinitrc`, and the
+    base-cache resume tree never creates `/home/lfs`, so the redirect failed
+    with `No such file or directory` and `set -euo pipefail` aborted the whole
+    `lg3d` stage.  The `.xinitrc` is only a `startx` convenience -- the boot
+    session is the systemd `lg3d-compositor.service` unit / the sysvinit
+    inittab respawn -- so the write is now guarded by `[ -d /home/lfs ]` and
+    degrades to a warning instead of failing the stage.
+  - `blfs/08b-build-xorg.sh` also bailed with `No desktop requested; skipping
+    Xorg` for the `lg3d` profile, because it keyed the skip solely on
+    `DESKTOP_TYPE=none` and ignored the profile's `xorg_only` flag.  That left
+    the built system with no X server and no `xinit`, so even a successful
+    `lg3d` stage would have shipped an ISO whose `xinit ... Xorg :0` session
+    could never start -- contrary to `docs/lfs-x11-contract.md`, which requires
+    a bare Xorg `:0` with the video driver stack.  The skip is now gated on
+    the exported `LFS_PROFILE_XORG_ONLY`, so an X11-only profile builds Xorg
+    while a genuine headless profile still skips it.
+
 - **`lg3d` stage "Permission denied" writing the session artifact**
   (`blfs/30-install-lg3d.sh`)
   - Nightly #252 (`lg3d`, x86_64, systemd) died at the `lg3d` stage with
