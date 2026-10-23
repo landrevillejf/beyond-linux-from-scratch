@@ -425,6 +425,46 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'privacy' in stage_names
 
+    def test_compliance_evidence_skipped_by_default(self, builder):
+        """Phase 7: the evidence stage is opt-in on compliance.profiles.
+
+        The default ships an empty list, so an ordinary build never
+        schedules the best-effort scanner stage.
+        """
+        assert not builder.config.get('security.compliance.profiles')
+        assert 'compliance-evidence' not in \
+            [s[0] for s in builder.get_build_stages()]
+
+    def test_compliance_evidence_scheduled_before_validate(self, builder):
+        """A non-empty profiles list schedules the stage, and it runs
+        before the always-last validate gate so validate stays
+        authoritative.
+        """
+        builder.config.set('security.compliance.profiles',
+                           ['xccdf_org.ssgproject.content_profile_pci-dss'])
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert ('compliance-evidence',
+                'final/17-compliance-evidence.sh') in stages
+        assert stage_names.index('compliance-evidence') < \
+            stage_names.index('validate')
+        assert stage_names[-1] == 'validate'
+
+    def test_master_stage_list_contains_compliance_evidence(self):
+        """BUILD_STAGES documents the compliance-evidence stage."""
+        from builder import BUILD_STAGES
+        names = [name for name, _ in BUILD_STAGES]
+        assert 'compliance-evidence' in names
+
+    def test_compliance_config_exported_to_env(self, builder):
+        """final/16 and final/17 read the compliance keys via the flat
+        env: the list is comma-joined and the bool is lowercased."""
+        builder.config.set('security.compliance.profiles', ['a', 'b'])
+        builder.config.set('security.compliance.fail_on_gap', True)
+        env = builder._get_env()
+        assert env['LFS_CONFIG_SECURITY_COMPLIANCE_PROFILES'] == 'a,b'
+        assert env['LFS_CONFIG_SECURITY_COMPLIANCE_FAIL_ON_GAP'] == 'true'
+
     def test_selinux_stage_scheduled_before_security(self, builder):
         """Phase 2: the SELinux stage must build just before hardening.
 

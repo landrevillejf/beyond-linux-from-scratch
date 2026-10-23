@@ -4,6 +4,39 @@
 
 ### Added
 
+- **Compliance evidence + hardening gate: OpenSCAP/lynis evidence stage and a
+  fail_on_gap compliance check in validate (Phase 7 of the hardening program)**
+  (`final/16-validate-build.sh`, new `final/17-compliance-evidence.sh`,
+  `builder.py`, new `docs/security-hardening.md`, `SECURITY.md`, `README.md`,
+  `tests/test_builder.py`, `tests/test_acceptance_shell.py`)
+  - `final/16-validate-build.sh` gains a section 13 that statically re-checks
+    the hardening controls on the finished rootfs: kernel lockdown
+    (`CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY`) and mandatory module signing
+    (`CONFIG_MODULE_SIG_FORCE`) in the installed `/boot/config-*`, the audit
+    rule set locked immutable (`-e 2`), the nftables default-deny policy
+    (`policy drop`), the usb-storage blacklist, and -- conditionally on their
+    resolved knobs -- SELinux enforcing and the `/etc/system-fips` marker.  The
+    whole section runs only when `SECURITY_HARDENING=true`, so `minimal`/`server`
+    and the audio profiles are untouched.  A missing control is a WARN by
+    default and becomes a hard FAIL only when
+    `security.compliance.fail_on_gap` is true, so the default build never newly
+    fails on an optional control while a compliance-scoped build can enforce it.
+  - New best-effort stage `final/17-compliance-evidence.sh` runs the scanners
+    actually present in the rootfs -- lynis (built by blfs/32) and, when an
+    operator built it, OpenSCAP against scap-security-guide content -- through a
+    chroot (only as root), and records what ran into a JSON manifest at
+    `/var/log/compliance/compliance-evidence.json` that ships with the image.  It
+    NEVER fails the build; the authoritative gate stays `final/16`.  It is
+    strictly opt-in: scheduled only when `security.compliance.profiles` is a
+    non-empty list, and it runs just before the always-last `validate` stage.
+  - `docs/security-hardening.md` maps every control onto CIS / DISA STIG /
+    PCI-DSS / FIPS 140-3 and documents the configuration keys and the evidence
+    manifest; `SECURITY.md` and the README stage order point at it.
+  - Both compliance keys already flatten to `LFS_CONFIG_SECURITY_COMPLIANCE_*`
+    via `_flatten_config()` (the list is comma-joined, the bool lowercased), so
+    no new env-export code was needed.  The one new `get_build_stages()` branch
+    is covered by a scheduling test, keeping `builder.py` at 100% coverage.
+
 - **Supply-chain provenance: sigstore/cosign keyless signing, SLSA3
   attestation, GPG-signed release tags and a pinned build image (Phase 6b of
   the hardening program)**

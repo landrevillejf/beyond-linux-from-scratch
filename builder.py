@@ -106,6 +106,7 @@ BUILD_STAGES = [
     ('installer', 'final/14-create-installer.sh'),
     ('live-system', 'final/15-create-live-system.sh'),
     ('validate', 'final/16-validate-build.sh'),
+    ('compliance-evidence', 'final/17-compliance-evidence.sh'),
 ]
 
 # ============================================================================
@@ -2681,6 +2682,14 @@ class LFSBuilder:
                     f"{self.get_target_architecture()}. The UEFI installer ISO "
                     "from final/14 is this target's bootable medium."
                 )
+
+        # Compliance evidence (Phase 7).  Strictly opt-in: scheduled only when
+        # security.compliance.profiles is a non-empty list, so the default
+        # build never runs it.  It runs BEFORE validate so the always-last
+        # validate stage stays the authoritative gate, and final/17 itself is
+        # best-effort (it never fails the build -- the hard gate is final/16).
+        if self.config.get('security.compliance.profiles'):
+            stages.append(('compliance-evidence', 'final/17-compliance-evidence.sh'))
 
         # Post-build validation (always runs last)
         stages.append(('validate', 'final/16-validate-build.sh'))

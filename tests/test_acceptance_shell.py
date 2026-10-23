@@ -1586,6 +1586,55 @@ class TestLFSComplianceGuardrails:
         assert 'fix mode' in content
         assert '/sys/kernel/security/ima/policy' in content
 
+    def test_validate_gates_hardening_compliance_when_enabled(self):
+        """Phase 7: final/16 section 13 re-checks the hardening controls
+        on the finished rootfs, but only when the build enabled security
+        hardening, and a missing control degrades to a warning unless
+        security.compliance.fail_on_gap is true.
+        """
+        content = Path('final/16-validate-build.sh').read_text()
+        # gated on SECURITY_HARDENING so minimal/server stay green
+        assert 'HARDENING="${SECURITY_HARDENING:-false}"' in content
+        assert 'if [ "$HARDENING" = "true" ]; then' in content
+        # the fail_on_gap switch drives log_fail vs log_warn
+        assert 'FAIL_ON_GAP="${LFS_CONFIG_SECURITY_COMPLIANCE_FAIL_ON_GAP:-false}"' in content
+        assert 'compliance_gap()' in content
+        assert 'log_fail "$1 (compliance.fail_on_gap=true)"' in content
+        assert 'log_warn "$1 (compliance.fail_on_gap=false)"' in content
+        # every asserted control appears
+        assert 'CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY=y' in content
+        assert 'CONFIG_MODULE_SIG_FORCE=y' in content
+        assert "grep -q '^-e 2' \"$LFS/etc/audit/rules.d/hardening.rules\"" in content
+        assert "grep -q 'policy drop' \"$LFS/etc/nftables.conf\"" in content
+        assert 'install usb-storage /bin/false' in content
+        # SELinux and FIPS assertions are conditional on their resolved knobs
+        assert 'LFS_CONFIG_SECURITY_SELINUX_MODE' in content
+        assert '^SELINUX=enforcing' in content
+        assert 'LFS_CONFIG_SECURITY_FIPS_ENABLED' in content
+        assert '$LFS/etc/system-fips' in content
+
+    def test_compliance_evidence_stage_is_best_effort_and_opt_in(self):
+        """Phase 7: final/17 runs lynis/openscap only when present, records
+        a JSON evidence manifest, and NEVER fails the build (the hard gate
+        is final/16).  It audits through a chroot only as root.
+        """
+        content = Path('final/17-compliance-evidence.sh').read_text()
+        assert content.startswith('#!/bin/bash')
+        assert 'set -euo pipefail' in content
+        # reads the requested profiles from the flattened config var
+        assert 'LFS_CONFIG_SECURITY_COMPLIANCE_PROFILES' in content
+        # writes a manifest and records each run
+        assert 'compliance-evidence.json' in content
+        assert 'record_run()' in content
+        # both scanners, build-if-present
+        assert '/usr/local/bin/lynis' in content
+        assert '/usr/bin/oscap' in content
+        assert 'xccdf eval' in content
+        # chroot only as root; never aborts the build
+        assert 'id -u' in content
+        assert 'chroot "$LFS"' in content
+        assert content.rstrip().endswith('exit 0')
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.

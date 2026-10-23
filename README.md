@@ -191,7 +191,8 @@ cross-compiled architectures). The master ordered list is:
 42. `bootloader`
 43. `installer` (every profile and architecture)
 44. `live-system` (when enabled, x86_64 only)
-45. `validate`
+45. `compliance-evidence` (best-effort lynis/OpenSCAP evidence; only when `security.compliance.profiles` is non-empty)
+46. `validate`
 
 ## Repository structure
 
@@ -633,6 +634,7 @@ python3 builder.py --generate-sources-list
 ## Security and support
 
 - Security policy: [SECURITY.md](SECURITY.md)
+- Hardening and compliance control matrix: [docs/security-hardening.md](docs/security-hardening.md)
 - Changelog: [CHANGELOG.md](CHANGELOG.md)
 - Advanced notes: [ADVANCED.md](ADVANCED.md)
 
