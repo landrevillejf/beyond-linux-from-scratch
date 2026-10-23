@@ -135,18 +135,34 @@ Available profiles: `minimal`, `gnu-free`, `gnu-free-full`, `xfce`, `gnome`, `kd
 
 The `lg3d` profile is X11-only: it sets `desktop: none` plus an `xorg_only`
 flag, so `get_build_stages()` schedules `blfs-libs` + `xorg` but never the
-`wayland` or `display-manager` stages. This satisfies `lfs-x11-contract.md`,
-which requires a bare Xorg `:0` with no display manager and no competing
-WM/compositor so Project Looking Glass can own the display.
+`wayland` stage. It also sets `display_manager: True`, which pulls in the
+`display-manager` stage (`blfs/08d`) as a *greeter only*: `lfs-x11-contract.md`
+3.1 permits a display manager as long as it launches a bare Xorg `:0` with no
+WM, and LightDM does exactly that -- it owns `:0`, shows the login screen, then
+runs the chosen `/usr/share/xsessions/lg3d-*.desktop` entry
+(`run-lg3d.sh <flag>`), which attaches to the existing `DISPLAY` as the sole
+WM/compositor. So the user picks a mode at a real login screen and lg3d still
+owns the display with no competing WM. `blfs/08d` detects this case from the
+exported `LFS_PROFILE_XORG_ONLY` + `LFS_PROFILE_DISPLAY_MANAGER` flags (a
+`desktop: none` profile that asked for a DM) and writes an lg3d-specific
+`/etc/lightdm/lightdm.conf` -- `user-session=lg3d-iso`, no `session-wrapper`,
+no `autologin-*` keys -- leaving the xfce autologin path byte-identical for
+real desktops; every other `desktop: none` profile still skips the stage.
 
 A third flag, `lg3d_session`, schedules the conditional `lg3d` stage
 (`blfs/30-install-lg3d.sh`) right after `java-dev`. It installs the upstream
 lg3d tree (pinned as the `ProjectLookingGlass` GitHub archive in
-`packages/custom-sources.list`) into `/opt/lg3d` and wires the contract's
-`xinit` -> `run-lg3d.sh` session for whichever init the build selected: on
-`systemd` a unit enabled into `graphical.target`, on `sysvinit` a BLFS-style
+`packages/custom-sources.list`) into `/opt/lg3d`, writes all five
+`/usr/share/xsessions/lg3d-*.desktop` entries (iso/compositor/2d/swing/dev) so
+the greeter lists every mode, and wires the contract's `xinit` ->
+`run-lg3d.sh` session for whichever init the build selected: on `systemd` a
+unit enabled into `graphical.target`, on `sysvinit` a BLFS-style
 `/etc/rc.d/init.d/lg3d` launcher respawned from `inittab` on runlevel 5 (the
-stage branches on the exported `INIT_SYSTEM`). The `lg3d_mode` key
+stage branches on the exported `INIT_SYSTEM`). Because the profile now enables
+a display manager, that boot-graph enable is gated on `DM_OWNS_DISPLAY` (read
+from `LFS_PROFILE_DISPLAY_MANAGER`): when LightDM owns `:0` the standalone unit
+is left installed but NOT enabled and the `inittab` respawn is skipped, so the
+two never fight for `:0` while a DM-less boot still works. The `lg3d_mode` key
 (`iso` by default, also `compositor`/`2d`/`swing`/`dev`) selects the
 `run-lg3d.sh` launch flag and is exported as `LFS_PROFILE_LG3D_MODE`. The
 `iso` default maps to `run-lg3d.sh --iso -x`, which `docs/lfs-iso-contract.md`

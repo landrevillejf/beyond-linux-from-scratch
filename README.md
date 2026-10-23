@@ -381,7 +381,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |
-| `lg3d` | Project Looking Glass: bare X11 with Java, lg3d as WM/compositor (iso mode, no display manager), hardened with privacy tools | none | No | 6 | 5 |
+| `lg3d` | Project Looking Glass: bare X11 with Java, lg3d as WM/compositor; a LightDM greeter lists all five lg3d modes at login (iso/3D/2D/swing/dev, iso default), hardened with privacy tools | none | No | 6 | 5 |
 | `custom` | User-defined profile template | none | No | 5 | 5 |
 
 ---

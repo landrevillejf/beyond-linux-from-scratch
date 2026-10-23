@@ -758,6 +758,11 @@ class TestLFSComplianceGuardrails:
         the runlevel-5 inittab respawn entry so the session actually starts at
         boot.  Without the sysvinit branch that leg installed /opt/lg3d but
         booted to a getty with no lg3d session.
+
+        The lg3d profile now also enables a display manager, so both boot-graph
+        legs are gated on DM_OWNS_DISPLAY: when LightDM owns :0 the standalone
+        unit is left installed but NOT enabled and the inittab respawn is
+        skipped, so the two never fight for :0.
         """
         content = Path('blfs/30-install-lg3d.sh').read_text()
 
@@ -797,6 +802,19 @@ class TestLFSComplianceGuardrails:
         assert content.count('run_privileged tee "$LFS/') >= 3, \
             "systemd unit, sysvinit launcher and install-lg3d.sh must all " \
             "be written via run_privileged tee"
+
+        # DM-aware boot graph: the stage reads the profile's display_manager
+        # flag and gates BOTH the systemd graphical.target enable and the
+        # sysvinit inittab respawn on it, so LightDM is the only :0 client.
+        assert 'DM_OWNS_DISPLAY=false' in content
+        assert 'if [ "${LFS_PROFILE_DISPLAY_MANAGER:-false}" = "true" ]; then' \
+            in content, \
+            "lg3d stage must read the profile's display_manager flag"
+        # The systemd enable sits in the DM-absent else branch.
+        assert 'if [ "$DM_OWNS_DISPLAY" = "true" ]; then' in content
+        assert 'installed but not enabled' in content
+        # The inittab respawn is skipped (runlevel 5 still set) under a DM.
+        assert 'display manager owns the session' in content
 
     def test_inkscape_overridden_via_conglomeration_mirror(self):
         """The dead inkscape.org gallery URL must be overridden.
@@ -3103,6 +3121,95 @@ class TestProfilePromiseGuardrails:
             "the .xinitrc write must sit inside the /home/lfs guard"
         assert 'skipping the convenience .xinitrc' in content, \
             "a missing /home/lfs must warn, not abort the stage"
+
+    def test_lg3d_stage_offers_all_five_modes_at_login(self):
+        """The lg3d greeter must list all five modes, dev included.
+
+        LightDM's greeter offers every /usr/share/xsessions/lg3d-*.desktop
+        entry, so the user picks a mode at the login screen.  The stage used to
+        write only four (iso/compositor/2d/swing); the `dev` mode -- run-lg3d.sh
+        with no flag, the 3D desktop in an ordinary window -- was missing from
+        both the xsessions directory and the lg3d-session-select menu.  All five
+        .desktop entries must be written and the selector must offer dev both
+        interactively (choice 5) and in its non-interactive fallbacks.
+        """
+        content = Path('blfs/30-install-lg3d.sh').read_text()
+        # All five xsessions entries, dev included.
+        for mode in ('iso', 'compositor', '2d', 'swing', 'dev'):
+            assert f'/usr/share/xsessions/lg3d-{mode}.desktop' in content, \
+                f"lg3d-{mode}.desktop xsessions entry must be written"
+        # The dev entry launches run-lg3d.sh with no flag.
+        assert 'Name=Project Looking Glass (Dev)' in content
+        dev_entry = content.index('lg3d-dev.desktop')
+        assert 'Exec=/opt/lg3d/run-lg3d.sh\n' in content[dev_entry:dev_entry + 220], \
+            "the dev xsessions entry must exec run-lg3d.sh with no mode flag"
+        # Interactive selector offers choice 5 (dev) and a [1-5] prompt.
+        assert '5) Dev Desktop (3D desktop in an ordinary window)' in content
+        assert 'Choice [1-5]' in content
+        assert '5) exec /opt/lg3d/run-lg3d.sh ;;' in content
+        # Both fallback case arms map dev -> run-lg3d.sh (no flag).
+        assert content.count('dev) exec /opt/lg3d/run-lg3d.sh ;;') == 2, \
+            "the dev mode must appear in both selector fallback case arms"
+
+    def test_display_manager_stage_builds_greeter_for_xorg_only_lg3d(self):
+        """08d must build LightDM for an xorg_only, desktop:none lg3d profile.
+
+        The lg3d profile is desktop:none + xorg_only:true but now enables a
+        display manager.  08d used to bail unconditionally on
+        `[ "$DESKTOP_TYPE" = "none" ]`, so lg3d got no greeter.  The skip must
+        now be gated: it stays for a genuine headless desktop=none profile, but
+        an xorg_only profile that requested a DM proceeds and configures a
+        bare-X lg3d greeter.  The inner chroot script runs under `env -i`, so
+        the LG3D_GREETER decision has to be passed into it explicitly.
+        """
+        content = Path('blfs/08d-build-display-manager.sh').read_text()
+        assert 'XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"' in content, \
+            "08d must read the profile's xorg_only flag"
+        assert 'DISPLAY_MANAGER="${LFS_PROFILE_DISPLAY_MANAGER:-false}"' in content, \
+            "08d must read the profile's display_manager flag"
+        assert 'LG3D_GREETER=false' in content
+        assert 'LG3D_GREETER=true' in content
+        # The unconditional bail must be gone, replaced by a DM-aware skip.
+        assert '[ "$DESKTOP_TYPE" = "none" ] && {' not in content, \
+            "the unconditional desktop=none DM skip must be replaced"
+        assert 'if [ "$DESKTOP_TYPE" = "none" ] && [ "$LG3D_GREETER" != "true" ]; then' \
+            in content, \
+            "the desktop=none skip must be gated on the lg3d greeter case"
+        # The greeter flag crosses the `env -i` chroot boundary explicitly.
+        assert 'LG3D_GREETER="$LG3D_GREETER" \\' in content, \
+            "LG3D_GREETER must be passed into the inner chroot script"
+
+    def test_display_manager_lg3d_greeter_conf_has_no_autologin(self):
+        """The lg3d greeter lightdm.conf must not autologin or wrap startxfce4.
+
+        lg3d has no conventional desktop, so the hardcoded xfce config
+        (session-wrapper=/usr/bin/startxfce4 + autologin-*) would break it:
+        there is no startxfce4 and autologin would skip the mode picker.  The
+        lg3d branch must write a bare greeter that defaults to the lg3d-iso
+        session with NO session-wrapper and NO autologin-* keys, while the
+        xfce/autologin path stays byte-identical for real desktops.
+        """
+        content = Path('blfs/08d-build-display-manager.sh').read_text()
+        assert 'if [ "${LG3D_GREETER:-false}" = "true" ]; then' in content
+        # Isolate the lg3d branch's lightdm.conf heredoc body (not the comment
+        # above it, which legitimately mentions the keys it omits).
+        guard = content.index('if [ "${LG3D_GREETER:-false}" = "true" ]; then')
+        else_pos = content.index('\nelse\n', guard)
+        branch = content[guard:else_pos]
+        conf_start = branch.index("<<'LDMCONF'") + len("<<'LDMCONF'")
+        conf_end = branch.index('LDMCONF', conf_start)
+        lg3d_conf = branch[conf_start:conf_end]
+        assert 'user-session=lg3d-iso' in lg3d_conf, \
+            "the lg3d greeter must default to the lg3d-iso session"
+        assert 'greeter-session=lightdm-gtk-greeter' in lg3d_conf
+        assert 'session-wrapper' not in lg3d_conf, \
+            "the lg3d greeter must not set a session-wrapper (no startxfce4)"
+        assert 'autologin' not in lg3d_conf, \
+            "the lg3d greeter must not autologin; the user picks a mode"
+        # The real-desktop path keeps the xfce autologin config verbatim.
+        assert 'user-session=xfce' in content
+        assert 'session-wrapper=/usr/bin/startxfce4' in content
+        assert 'autologin-session=xfce' in content
 
     def test_server_stage_builds_liburcu_libuv_before_bind(self):
         """liburcu and libuv must precede bind in stage 25.
