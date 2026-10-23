@@ -83,7 +83,7 @@ def mock_config_file(temp_dir):
             "mesa_llvm": "disabled"
         },
         "security": {
-            "kernel_hardening": True,
+            "kernel_hardening": {"enabled": True},
             "firewall": {"enabled": True},
             "privacy": {"disable_telemetry": True}
         },

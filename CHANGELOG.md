@@ -4,6 +4,31 @@
 
 ### Added
 
+- **security hardening config schema (Phase 0 of the hardening program)**
+  (`builder.py`, `config/build.conf`, `config/build.conf.json`,
+  `config/default.json`, `tests/test_config.py`, `tests/conftest.py`)
+  - The `security` config section gains the nested knobs the NSA/CIA/banking-
+    grade hardening program will consume: `selinux.{mode,type}`,
+    `fips.enabled`, `boot_integrity.{secure_boot,measured_boot}`,
+    `usbguard.enabled`, `supply_chain.{verify_signatures,provenance,
+    require_lockfile}`, `compliance.{profiles,fail_on_gap}` and
+    `baseline_all_profiles`.  `security.kernel_hardening` is promoted from a
+    bare bool to a container `{enabled,lockdown,module_sig_force,ima,
+    hardened_usercopy,init_on_alloc_free}` so the granular kernel build
+    options have a home; `_apply_profile_settings()` now flips
+    `security.kernel_hardening.enabled` (was the whole key) and the conftest
+    mock fixture matches the new shape.  Every key defaults identically in
+    `get_default_config()` and all three checked-in presets and flattens to
+    `LFS_CONFIG_SECURITY_*` via the existing `_flatten_config` contract -- no
+    new export code.  Defaults lean hardened (SELinux `enforcing`,
+    `targeted`; lockdown `integrity`; module-sig-force/IMA/hardened-usercopy/
+    init-on-alloc-free on) while the heavy or risky items stay opt-in
+    (`fips`, `boot_integrity`, `usbguard`, `supply_chain.provenance`/
+    `require_lockfile`, `compliance`, `baseline_all_profiles`) until their
+    phases land.  This phase is schema-only: nothing consumes the new keys
+    yet.  `tests/test_config.py` gains
+    `test_security_hardening_defaults_agree_across_config_sources`.
+
 - **privacy tools ship with the `lg3d` profile** (`builder.py`,
   `tests/test_builder.py`, `README.md`, `AGENTS.md`)
   - The `lg3d` profile now sets `privacy_tools: True`, so
