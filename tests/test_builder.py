@@ -494,6 +494,85 @@ class TestLFSBuilder:
         assert 'selinux' in names
         assert names.index('selinux') < names.index('security')
 
+    def test_security_baseline_follows_profile_flag_by_default(self, builder):
+        """Phase 8: with baseline_all_profiles off (the default) the resolved
+        baseline is exactly the per-profile security_hardening flag."""
+        from builder import ProfileManager
+        assert not builder.config.get('security.baseline_all_profiles')
+        # xfce sets security_hardening -> baseline on
+        assert builder.get_security_baseline() is True
+        # minimal does not -> baseline off
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        assert builder.get_security_baseline() is False
+
+    def test_security_baseline_knob_rolls_to_a_lean_profile(self, builder):
+        """baseline_all_profiles rolls the hardened baseline onto a profile
+        that never set security_hardening, scheduling security +
+        runtime-hardening, with selinux still before security."""
+        from builder import ProfileManager
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        builder.config.set('security.baseline_all_profiles', True)
+        assert builder.get_security_baseline() is True
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert 'security' in stage_names
+        assert 'runtime-hardening' in stage_names
+        assert 'selinux' in stage_names
+        assert stage_names.index('selinux') < stage_names.index('security')
+
+    def test_security_baseline_accepts_string_value(self, builder):
+        """A stringified knob (env/CLI) is parsed, not truthy-by-accident:
+        any non-empty string -- including 'false' -- is truthy in Python."""
+        from builder import ProfileManager
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        builder.config.set('security.baseline_all_profiles', 'true')
+        assert builder.get_security_baseline() is True
+        builder.config.set('security.baseline_all_profiles', 'false')
+        assert builder.get_security_baseline() is False
+
+    def test_security_baseline_skips_selinux_on_gnu_hurd(self, builder):
+        """A baseline roll still respects get_selinux_mode(): GNU/Hurd has no
+        LSM, so security is scheduled but selinux is not."""
+        from builder import ProfileManager
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        builder.config.set('security.baseline_all_profiles', True)
+        builder.config.set('kernel.type', 'gnu-hurd')
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'security' in stage_names
+        assert 'selinux' not in stage_names
+
+    def test_security_baseline_keeps_luks_and_privacy_opt_in(self, builder):
+        """Heavier items stay opt-in: a baseline roll onto minimal must not
+        pull in luks-encryption or the privacy/Tor stack."""
+        from builder import ProfileManager
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        builder.config.set('security.baseline_all_profiles', True)
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'luks-encryption' not in stage_names
+        assert 'privacy' not in stage_names
+
+    def test_security_hardening_env_reflects_resolved_baseline(self, builder):
+        """The SECURITY_HARDENING env final/16's compliance gate reads carries
+        the RESOLVED baseline, not the raw profile flag, so the gate fires
+        whenever the security stage actually ran."""
+        from builder import ProfileManager
+        builder.profile = 'minimal'
+        builder.profile_config = ProfileManager.get_profile('minimal')
+        assert builder._get_env()['SECURITY_HARDENING'] == 'false'
+        builder.config.set('security.baseline_all_profiles', True)
+        assert builder._get_env()['SECURITY_HARDENING'] == 'true'
+
+    def test_baseline_all_profiles_exported_to_env(self, builder):
+        """The knob flattens to LFS_CONFIG_SECURITY_BASELINE_ALL_PROFILES."""
+        builder.config.set('security.baseline_all_profiles', True)
+        env = builder._get_env()
+        assert env['LFS_CONFIG_SECURITY_BASELINE_ALL_PROFILES'] == 'true'
+
     def test_selinux_mode_cross_compile_resolves_permissive(self, builder):
         """Cross-built arm64 loads the policy but boots permissive.
 

@@ -1970,6 +1970,31 @@ class LFSBuilder:
 
         return True
 
+    def get_security_baseline(self) -> bool:
+        """Resolve whether the hardened baseline applies to this build.
+
+        Read-only like get_selinux_mode()/get_fips_enabled(): it never
+        mutates the on-disk config, so merely planning a build cannot
+        rewrite config/build.conf.
+
+        Phase 8 rolls the hardened baseline (the security stage plus its
+        selinux/runtime-hardening companions) out to every profile when
+        ``security.baseline_all_profiles`` is on, instead of only the
+        profiles that set the per-profile ``security_hardening`` flag.  The
+        effective decision is therefore ``profile flag OR baseline knob``.
+        Heavier, more intrusive items stay opt-in regardless: LUKS
+        encryption, the privacy/Tor stack, FIPS-mode and compliance evidence
+        keep their own gates so a baseline roll cannot pull them into a lean
+        ``minimal``/``server`` build.  The knob may arrive as a real bool
+        (JSON config) or a string (env/CLI override), and any non-empty
+        string is truthy in Python, so it is normalised explicitly --
+        otherwise 'false' would silently enable the baseline.
+        """
+        baseline = self.config.get('security.baseline_all_profiles', False)
+        if isinstance(baseline, str):
+            baseline = baseline.strip().lower() == 'true'
+        return bool(self.profile_config.get('security_hardening', False)) or bool(baseline)
+
     def get_supply_chain_settings(self) -> Dict[str, bool]:
         """Resolve the supply-chain integrity knobs for the active build.
 
@@ -2059,7 +2084,7 @@ class LFSBuilder:
             'AUTO_RESTART': str(self.config.get('init_system.auto_restart', True)).lower(),
             'JAVA_DEV': str(self.profile_config.get('java_dev', False)).lower(),
             'LPM_ENABLED': str(self.profile_config.get('package_manager', True)).lower(),
-            'SECURITY_HARDENING': str(self.profile_config.get('security_hardening', False)).lower(),
+            'SECURITY_HARDENING': 'true' if self.get_security_baseline() else 'false',
             'PRIVACY_TOOLS': str(self.profile_config.get('privacy_tools', False)).lower(),
             'LIVE_SYSTEM': str(self.profile_config.get('live_system', True)).lower(),
             'KERNEL_TYPE': str(self.config.get('kernel.type', 'linux')).lower(),
@@ -2588,24 +2613,31 @@ class LFSBuilder:
 
         # SELinux userspace + targeted policy (Phase 2).  Built right before
         # the security-hardening stage so blfs/15's SELinux block finds the
-        # userspace present and activates the configured mode.  Rides with
-        # security_hardening (Phase 8's baseline_all_profiles is what later
-        # extends the pair to every profile) and is skipped entirely when the
-        # resolved mode is 'disabled' -- get_selinux_mode() forces that on
-        # GNU/Hurd and reduces cross-built arm64 to permissive.
+        # userspace present and activates the configured mode.  Rides with the
+        # resolved hardened baseline -- the per-profile security_hardening flag
+        # OR security.baseline_all_profiles (Phase 8), so the pair can be
+        # rolled out to every profile without editing each one -- and is
+        # skipped entirely when the resolved mode is 'disabled':
+        # get_selinux_mode() forces that on GNU/Hurd and reduces cross-built
+        # arm64 to permissive.
+        _hardened = self.get_security_baseline()
         selinux_mode = self.get_selinux_mode()
-        if self.profile_config.get('security_hardening', False) and selinux_mode != 'disabled':
+        if _hardened and selinux_mode != 'disabled':
             stages.append(('selinux', 'blfs/31-build-selinux.sh'))
 
-        # Security hardening
-        if self.profile_config.get('security_hardening', False):
+        # Security hardening.  Gated on the same resolved baseline so
+        # baseline_all_profiles rolls the hardened config out to profiles that
+        # never set security_hardening.  Heavier items (LUKS below, the
+        # privacy/Tor stack, FIPS-mode, compliance evidence) keep their own
+        # gates and stay opt-in.
+        if _hardened:
             stages.append(('security', 'blfs/15-security-hardening.sh'))
             # Runtime-hardening toolset (Phase 4): builds fail2ban/rkhunter/
             # lynis and wires aide/usbguard so the config blfs/15 writes is
-            # not dead.  Rides with security_hardening and runs right after
-            # the security stage; each tool is built only when its pinned
-            # tarball is present, so a profile that skipped a download simply
-            # omits that tool.
+            # not dead.  Rides with the baseline and runs right after the
+            # security stage; each tool is built only when its pinned tarball
+            # is present, so a profile that skipped a download simply omits
+            # that tool.
             stages.append(('runtime-hardening', 'blfs/32-runtime-hardening.sh'))
 
         # Privacy tools
@@ -2638,7 +2670,12 @@ class LFSBuilder:
             stages.append(('system-updater', 'blfs/18-system-updater.sh'))
 
         # FINAL STAGES (un seul initramfs ici)
-        # LUKS encryption support must run BEFORE initramfs (initramfs needs dm-crypt modules)
+        # LUKS encryption support must run BEFORE initramfs (initramfs needs dm-crypt modules).
+        # Deliberately keyed on the per-profile security_hardening flag (not
+        # the resolved baseline): encrypted swap is a heavier, more intrusive
+        # item that a baseline_all_profiles roll must not force onto a lean
+        # minimal/server build, so it stays opt-in via the profile flag or an
+        # explicit security.encryption.enabled.
         encryption_enabled = self.config.get('security.encryption.enabled', False)
         if self.profile_config.get('security_hardening', False) or encryption_enabled:
             stages.append(('luks-encryption', 'blfs/21-luks-encryption.sh'))

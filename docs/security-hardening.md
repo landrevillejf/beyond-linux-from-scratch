@@ -35,6 +35,7 @@ Under the `security` section of `config/build.conf`:
 | `fips.enabled` | bool | `false` | Resolved FIPS state; `true` adds the `/etc/system-fips` marker assertion. See `get_fips_enabled()`. |
 | `boot_integrity.measured_boot` | bool | `false` | Opt-in IMA/EVM measured boot wiring (Phase 5). |
 | `boot_integrity.secure_boot` | bool | `false` | Optional UEFI Secure Boot signing (Phase 5). |
+| `baseline_all_profiles` | bool | `false` | When true, `get_build_stages()` schedules the hardened baseline (`security` + its `selinux`/`runtime-hardening` companions) for **every** profile regardless of the per-profile `security_hardening` flag (Phase 8). Heavier items -- LUKS encryption, the privacy/Tor stack, FIPS-mode and compliance evidence -- keep their own gates and stay opt-in, so a baseline roll cannot pull them into a lean `minimal`/`server` build. Resolved read-only by `get_security_baseline()`, which also overrides the `SECURITY_HARDENING` env so this gate fires whenever the security stage ran. |
 
 ## Control matrix
 

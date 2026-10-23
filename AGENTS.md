@@ -103,6 +103,24 @@ scripts. Both `LFS_CONFIG_INSTALLER_TYPE` and
 `LFS_PROFILE_GRAPHICAL_INSTALLER` are exported through the usual
 `_flatten_config()` path, so no extra export code exists for them.
 
+The hardening program (Phases 1-8) adds two conditional final stages and a
+resolved-baseline gate. `security`/`selinux`/`runtime-hardening` are scheduled
+on `get_security_baseline()` -- the per-profile `security_hardening` flag OR
+`security.baseline_all_profiles` -- so the baseline can be rolled out to every
+profile without editing each one, while heavier items (LUKS, the privacy/Tor
+stack, FIPS-mode, compliance evidence) keep their own opt-in gates.
+`get_security_baseline()` also overrides the exported `SECURITY_HARDENING` env
+(the same resolved-value pattern as `LFS_CONFIG_SECURITY_SELINUX_MODE` and
+`LFS_CONFIG_SECURITY_FIPS_ENABLED`) so `final/16`'s compliance gate fires
+whenever the security stage ran. `compliance-evidence`
+(`final/17-compliance-evidence.sh`) is a best-effort lynis/OpenSCAP scanner run
+scheduled only when `security.compliance.profiles` is non-empty; it runs just
+before the always-last `validate` stage and never fails the build. The
+authoritative compliance gate is `final/16-validate-build.sh` section 13, which
+re-checks the hardening controls on the finished rootfs and turns a missing
+control into a FAIL only when `security.compliance.fail_on_gap` is true (WARN by
+default). See `docs/security-hardening.md` for the control matrix.
+
 ### `branding/`
 
 Contains branding presets (subdirectories) and a `branding.toml` central config. Branding is applied during the `branding` stage. Configuration is driven from `config/build.conf` under the `branding` key.

@@ -4,6 +4,36 @@
 
 ### Added
 
+- **Hardened baseline rollout to every profile (Phase 8 of the hardening
+  program)**
+  (`builder.py`, `tests/test_builder.py`, `README.md`, `AGENTS.md`,
+  `docs/security-hardening.md`)
+  - New read-only resolver `get_security_baseline()` (mirroring
+    `get_selinux_mode()`/`get_fips_enabled()`/`get_supply_chain_settings()`):
+    it returns the per-profile `security_hardening` flag OR the
+    `security.baseline_all_profiles` knob, normalising a stringified knob so
+    `'false'` cannot silently enable the baseline, and never mutates the
+    on-disk config.  Setting `baseline_all_profiles: true` rolls the hardened
+    baseline -- the `security` stage plus its `selinux` and `runtime-hardening`
+    companions -- out to every profile without editing each one.
+  - `get_build_stages()` now gates `selinux`/`security`/`runtime-hardening` on
+    the resolved baseline instead of the raw profile flag.  Heavier, more
+    intrusive items stay opt-in regardless: LUKS encryption keeps its
+    per-profile/`security.encryption.enabled` gate, and the privacy/Tor stack,
+    FIPS-mode and compliance evidence keep theirs, so a baseline roll cannot
+    pull them into a lean `minimal`/`server` build.  SELinux still respects
+    `get_selinux_mode()`, so a baseline roll skips it on GNU/Hurd and reduces
+    cross-built arm64 to permissive.
+  - `_get_env()` now exports `SECURITY_HARDENING` from the resolved baseline
+    (the same override pattern as `LFS_CONFIG_SECURITY_SELINUX_MODE` and
+    `LFS_CONFIG_SECURITY_FIPS_ENABLED`), so `final/16`'s section-13 compliance
+    gate fires whenever the security stage actually ran -- including on a
+    profile whose own `security_hardening` flag is false but which the baseline
+    knob swept in.
+  - Default behaviour is unchanged: `baseline_all_profiles` ships false, so the
+    resolved baseline is exactly the per-profile flag and no existing profile
+    gains or loses a stage.  `builder.py` stays at 100% coverage.
+
 - **Compliance evidence + hardening gate: OpenSCAP/lynis evidence stage and a
   fail_on_gap compliance check in validate (Phase 7 of the hardening program)**
   (`final/16-validate-build.sh`, new `final/17-compliance-evidence.sh`,
