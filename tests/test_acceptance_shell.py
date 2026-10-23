@@ -1537,6 +1537,55 @@ class TestLFSComplianceGuardrails:
         # the non-matching bare form must NOT be pinned
         assert 'fail2ban/archive/1.1.0.tar.gz' not in content
 
+    def test_bootloader_arms_ima_evm_in_fix_mode_for_measured_boot(self):
+        """Phase 5: final/13 adds the IMA/EVM cmdline only when
+        boot_integrity.measured_boot is on, and arms appraisal in FIX mode
+        (label, never deny) so a first boot cannot brick the system.
+        """
+        content = Path('final/13-create-bootloader.sh').read_text()
+        gate = 'if [ "${LFS_CONFIG_SECURITY_BOOT_INTEGRITY_MEASURED_BOOT:-false}" = "true" ]'
+        assert gate in content
+        assert 'ima_policy=appraise ima_appraise=fix evm=fix' in content
+        # fix (provisioning) mode, not enforce -- must never brick
+        assert 'ima_appraise=enforce' not in content
+        # the gate defaults to false so the stock cmdline is unchanged
+        assert 'MEASURED_BOOT:-false' in content
+
+    def test_bootloader_secure_boot_signing_is_gated_and_conservative(self):
+        """Phase 5: Secure Boot signing is opt-in (secure_boot, default off),
+        signs with a MOK via sbsign, and only emits the mokutil enrollment
+        step (never writes the firmware key DB).  Missing tools warn, not fail.
+        """
+        content = Path('final/13-create-bootloader.sh').read_text()
+        gate = 'if [ "${LFS_CONFIG_SECURITY_BOOT_INTEGRITY_SECURE_BOOT:-false}" = "true" ]'
+        assert gate in content
+        assert 'sbsign' in content
+        assert 'MOK' in content
+        assert 'mokutil --import' in content
+        # conservative: absent tools are a warning, not a hard failure
+        assert 'sbsign absent in target' in content
+        assert 'leaving kernel unsigned' in content
+        # must not attempt firmware key enrollment itself
+        assert 'efi-updatevar' not in content
+
+    def test_security_hardening_provisions_ima_evm_when_measured_boot(self):
+        """Phase 5: blfs/15 supplies the userspace half of measured boot,
+        gated on the same knob: an IMA policy, an EVM HMAC key, and a
+        boot-time loader wired for BOTH systemd and sysvinit.
+        """
+        content = Path('blfs/15-security-hardening.sh').read_text()
+        gate = 'if [ "${LFS_CONFIG_SECURITY_BOOT_INTEGRITY_MEASURED_BOOT:-false}" = "true" ]'
+        assert gate in content
+        assert '/etc/ima/ima-policy' in content
+        assert 'evm-key.pem' in content
+        assert '/usr/sbin/ima-evm-load.sh' in content
+        # both init systems wired
+        assert '/etc/systemd/system/ima-evm-load.service' in content
+        assert '/etc/rc.d/init.d/ima-evm-load' in content
+        # fix-mode framing + the loader writes the kernel IMA policy
+        assert 'fix mode' in content
+        assert '/sys/kernel/security/ima/policy' in content
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.
