@@ -60,6 +60,13 @@ jobs:
     timeout-minutes: 480
     permissions:
       contents: write
+      # Keyless (OIDC) cosign signing of the ISO, SHA256SUMS and SBOM below.
+      id-token: write
+    outputs:
+      # base64-encoded "<sha256>  <name>" subjects consumed by the SLSA
+      # provenance job, which is a reusable-workflow call and cannot run
+      # its own steps.
+      base64_subjects: ${{ steps.subjects.outputs.hashes }}
     steps:
       - uses: actions/checkout@v4
 
@@ -192,6 +199,15 @@ jobs:
           sha256sum /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }} > /tmp/lfs-build/build-release/SHA256SUMS
           sha256sum /tmp/lfs-build/build-release/image/boot/vmlinuz* >> /tmp/lfs-build/build-release/SHA256SUMS
 
+      - name: Generate provenance subjects
+        id: subjects
+        run: |
+          set -euo pipefail
+          cd /tmp/lfs-build/build-release
+          # Bind the SLSA provenance to the published ISO and its manifest.
+          files="${{ steps.iso_name.outputs.iso_name }} SHA256SUMS"
+          echo "hashes=$(sha256sum $files | base64 -w0)" >> "$GITHUB_OUTPUT"
+
       - name: Create compat ISO pointer
         run: |
           cd /tmp/lfs-build/build-release || exit 1
@@ -241,9 +257,74 @@ jobs:
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
           generate_release_notes: true
 
+      - name: Install cosign
+        if: success()
+        uses: sigstore/cosign-installer@v3
+        continue-on-error: true
+
+      - name: Generate SBOM
+        if: success()
+        continue-on-error: true
+        run: |
+          cd /tmp/lfs-build/build-release
+          # Minimal SPDX document built from the LPM package manifest the
+          # build already emits; the fallback keeps signing bound to a real
+          # artifact when the manifest is absent.
+          {
+            echo "spdxVersion: SPDX-2.3"
+            echo "dataLicense: CC0-1.0"
+            echo "SPDXID: SPDXRef-DOCUMENT"
+            echo "name: lfs-builder-${GITHUB_REF_NAME}"
+            echo "packages:"
+            if [ -f lpm-repo/packages.list ]; then
+              sed 's/^/  - /' lpm-repo/packages.list
+            else
+              echo "  - lfs-builder"
+            fi
+          } > sbom.spdx
+
+      - name: Sign release artifacts (cosign keyless)
+        if: success()
+        continue-on-error: true
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cd /tmp/lfs-build/build-release
+          ISO="${{ steps.iso_name.outputs.iso_name }}"
+          for f in "$ISO" SHA256SUMS sbom.spdx; do
+            [ -e "$f" ] || continue
+            cosign sign-blob --yes --bundle "${f}.cosign.bundle" "$f"
+          done
+
+      - name: Publish signatures to release
+        if: success()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd /tmp/lfs-build/build-release
+          shopt -s nullglob
+          bundles=( *.cosign.bundle )
+          [ ${#bundles[@]} -gt 0 ] || exit 0
+          gh release upload "${GITHUB_REF_NAME}" "${bundles[@]}" --clobber
+
       - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: release-logs
           path: /tmp/lfs-build/build-release/logs/
+
+  provenance:
+    # SLSA3 provenance for the published ISO/manifest.  Runs as a separate
+    # reusable-workflow job so a signing/attestation failure can never block
+    # the release artifacts already published by the `release` job.
+    needs: release
+    permissions:
+      actions: read     # to read the workflow path
+      id-token: write   # to sign the provenance
+      contents: write   # to attach the attestation to the release
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.0.0
+    with:
+      base64-subjects: "${{ needs.release.outputs.base64_subjects }}"
+      upload-assets: true

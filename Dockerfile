@@ -1,7 +1,11 @@
-FROM ubuntu:22.04
+# Pinned by manifest-list digest for hermetic, reproducible host toolchains:
+# a bare `22.04` tag mutates under you, so a build months apart would resolve
+# different base layers. Bump the digest deliberately, not implicitly.
+# Resolve a newer one with: docker manifest inspect ubuntu:22.04
+FROM ubuntu:22.04@sha256:0a9887931b0e38af2e3487ed39e29436b0535c4f3f52e57745baaf79d1898956
 
 # Installer les dépendances
-RUN apt update && apt install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential bison flex gawk texinfo \
     wget curl git python3 python3-pip \
     grub-pc-bin \
