@@ -4,6 +4,49 @@
 
 ### Added
 
+- **Runtime hardening deepening: expanded sysctls, fstab/core-dump
+  hardening, and a fail2ban/rkhunter/lynis build stage (Phase 4 of the
+  hardening program)**
+  (`blfs/15-security-hardening.sh`, new `blfs/32-runtime-hardening.sh`,
+  `packages/custom-sources.list`, `builder.py`,
+  `tests/test_acceptance_shell.py`, `tests/test_final_coverage.py`)
+  - `blfs/15-security-hardening.sh` deepens the sysctl baseline toward
+    KSPP/CIS L1-L2: BPF-JIT restriction (`net.core.bpf_jit_enable=0`,
+    `bpf_jit_harden=2`), a non-zero `vm.mmap_min_addr` (NULL-deref
+    hardening) and IPv6 router-advertisement rejection.  The
+    unprivileged-user-namespace knobs are documented in-file but left
+    commented, because forcing them off breaks sandboxed browsers, Flatpak
+    and rootless containers.
+  - Core-dump capture is now turned off at the systemd-coredump backend
+    (`/etc/systemd/coredump.conf` `Storage=none`), gated on
+    `security.privacy.disable_core_dumps`: `RLIMIT_CORE=0` alone does not
+    stop systemd-coredump from spooling dumps of setuid/privileged
+    processes.
+  - `/etc/fstab` is hardened by an idempotent awk pass that appends only
+    missing options: `nodev,nosuid,noexec` on `/tmp`, `/var/tmp` and
+    `/dev/shm`, `nodev,nosuid` on `/home`, and `hidepid=2` on `/proc`.  It
+    rewrites whatever layout the installer produced rather than assuming a
+    fixed fstab.
+  - New stage `blfs/32-runtime-hardening.sh` (scheduled right after
+    `security`, only when `security_hardening`) builds the tools the config
+    already referenced but nothing installed -- fail2ban, rkhunter and lynis
+    -- using the same build-if-source-present idiom as
+    `blfs/16-privacy-tools.sh`, each gated on its `LFS_CONFIG_SECURITY_*`
+    knob (`fail2ban.enabled`, `hids.enabled`).  aide and usbguard are
+    config-wired only when their binary is present; they are not downloaded,
+    because aide's crypto-lib chain and usbguard's libqb/protobuf/catch2
+    stack are too heavy to pin blind.
+  - `packages/custom-sources.list` pins fail2ban 1.1.0, lynis 3.1.1 and
+    rkhunter 1.4.8.  fail2ban/lynis use the `/archive/refs/tags/` GitHub URL
+    form deliberately: `_archive_filename()` only derives a repo-prefixed
+    on-disk name for that layout, so the bare `/archive/<tag>.tar.gz` form
+    would land as `1.1.0.tar.gz` and never match the stage's `<pkg>-*.tar.gz`
+    glob.
+  - All Phase 4 hardening rides with the `security_hardening` profile flag, so
+    `minimal`/`server` are unaffected and stay bootable.  No `build.conf`
+    schema change was needed; everything keys off existing Phase 0 knobs.
+    The nightly is the first true end-to-end check of the built toolset.
+
 - **FIPS-mode crypto: OpenSSL 3 FIPS provider + kernel + boot cmdline
   (Phase 3 of the hardening program)**
   (`blfs/08-build-blfs-base.sh`, all six `config/kernel-config*`,

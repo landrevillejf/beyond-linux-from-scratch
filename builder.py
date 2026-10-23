@@ -93,6 +93,7 @@ BUILD_STAGES = [
     ('base-packages', 'blfs/14-create-base-packages.sh'),
     ('selinux', 'blfs/31-build-selinux.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
+    ('runtime-hardening', 'blfs/32-runtime-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
     ('branding', 'blfs/20-branding.sh'),
     ('calamares-build', 'blfs/29-build-calamares.sh'),
@@ -2409,6 +2410,13 @@ class LFSBuilder:
         # Security hardening
         if self.profile_config.get('security_hardening', False):
             stages.append(('security', 'blfs/15-security-hardening.sh'))
+            # Runtime-hardening toolset (Phase 4): builds fail2ban/rkhunter/
+            # lynis and wires aide/usbguard so the config blfs/15 writes is
+            # not dead.  Rides with security_hardening and runs right after
+            # the security stage; each tool is built only when its pinned
+            # tarball is present, so a profile that skipped a download simply
+            # omits that tool.
+            stages.append(('runtime-hardening', 'blfs/32-runtime-hardening.sh'))
 
         # Privacy tools
         if self.profile_config.get('privacy_tools', False):

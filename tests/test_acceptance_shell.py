@@ -1452,6 +1452,91 @@ class TestLFSComplianceGuardrails:
         assert '$LFS/etc/system-fips' in content
         assert 'power-on self-test' in content
 
+    def test_blfs15_sysctl_set_is_expanded(self):
+        """Phase 4 must deepen the sysctl baseline toward KSPP/CIS L1-L2.
+
+        Adds BPF-JIT restriction, a non-zero mmap_min_addr (NULL-deref
+        hardening) and IPv6 RA rejection.  The unprivileged-userns knobs are
+        documented but left commented because forcing them off breaks
+        sandboxed browsers, Flatpak and rootless containers.
+        """
+        content = Path('blfs/15-security-hardening.sh').read_text()
+        assert 'net.core.bpf_jit_enable = 0' in content
+        assert 'net.core.bpf_jit_harden = 2' in content
+        assert 'vm.mmap_min_addr = 65536' in content
+        assert 'net.ipv6.conf.all.accept_ra = 0' in content
+        # userns controls documented but not forced (would break containers)
+        assert 'kernel.unprivileged_userns_clone = 0' in content
+        assert 'user.max_user_namespaces = 0' in content
+        # both must be commented out, not live
+        assert '\n# kernel.unprivileged_userns_clone = 0' in content
+        assert '\n# user.max_user_namespaces = 0' in content
+
+    def test_blfs15_disables_core_dumps_and_hardens_fstab(self):
+        """Phase 4 adds a systemd-coredump off-switch (gated on the
+        disable_core_dumps knob) and an idempotent fstab mount-option
+        hardener: nodev/nosuid/noexec on /tmp,/var/tmp,/dev/shm,
+        nodev/nosuid on /home, hidepid=2 on /proc.
+        """
+        content = Path('blfs/15-security-hardening.sh').read_text()
+        # core-dump restriction, gated on the privacy knob
+        assert 'LFS_CONFIG_SECURITY_PRIVACY_DISABLE_CORE_DUMPS' in content
+        assert '/etc/systemd/coredump.conf' in content
+        assert 'Storage=none' in content
+        # fstab hardening via awk, hitting the CIS mount points
+        assert 'Hardening /etc/fstab mount options' in content
+        assert 'hidepid=2' in content
+        assert 'ensure("nodev")' in content
+        assert 'ensure("nosuid")' in content
+        assert 'ensure("noexec")' in content
+        for mp in ('/tmp', '/var/tmp', '/dev/shm', '/home', '/proc'):
+            assert f'$2 == "{mp}"' in content, f"fstab hardener ignores {mp}"
+
+    def test_runtime_hardening_stage_builds_tools_if_present(self):
+        """blfs/32 must follow the blfs/16 build-if-source-present idiom,
+        gate each tool on its LFS_CONFIG_SECURITY_* knob, plumb those knobs
+        through the chroot env (the inner script is a quoted heredoc), and
+        wire aide/usbguard config only when the binary exists.
+        """
+        content = Path('blfs/32-runtime-hardening.sh').read_text()
+        assert content.startswith('#!/bin/bash')
+        assert 'set -euo pipefail' in content
+        # build-if-present globs matching _archive_filename() output
+        assert 'fail2ban-*.tar.gz' in content
+        assert 'rkhunter-*.tar.gz' in content
+        assert 'lynis-*.tar.gz' in content
+        # per-tool knobs
+        assert 'LFS_CONFIG_SECURITY_FAIL2BAN_ENABLED' in content
+        assert 'LFS_CONFIG_SECURITY_HIDS_ENABLED' in content
+        assert 'LFS_CONFIG_SECURITY_USBGUARD_ENABLED' in content
+        # knobs plumbed into the chroot via env -i
+        assert '/usr/bin/env -i' in content
+        assert 'LFS_CONFIG_SECURITY_HIDS_ENABLED="${LFS_CONFIG_SECURITY_HIDS_ENABLED:-true}"' in content
+        # aide/usbguard wired only when present, never built here
+        assert 'command -v aide' in content
+        assert 'command -v usbguard' in content
+        assert 'usbguard generate-policy' in content
+        # fail2ban jail + rkhunter baseline + lynis symlink
+        assert '/etc/fail2ban/jail.local' in content
+        assert 'rkhunter --propupd' in content
+        assert '/usr/local/bin/lynis' in content
+
+    def test_custom_sources_pin_runtime_hardening_stack(self):
+        """fail2ban/lynis must use the /archive/refs/tags/ URL form so
+        _archive_filename() derives a repo-prefixed on-disk name that the
+        stage's <pkg>-*.tar.gz glob can match; the bare /archive/<tag> form
+        would land as "1.1.0.tar.gz" and never match.
+        """
+        content = Path('packages/custom-sources.list').read_text()
+        for url_fragment in (
+            'fail2ban/fail2ban/archive/refs/tags/1.1.0.tar.gz',
+            'CISOfy/lynis/archive/refs/tags/3.1.1.tar.gz',
+            'rkhunter/rkhunter/1.4.8/rkhunter-1.4.8.tar.gz',
+        ):
+            assert url_fragment in content, f"missing pin: {url_fragment}"
+        # the non-matching bare form must NOT be pinned
+        assert 'fail2ban/archive/1.1.0.tar.gz' not in content
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.
