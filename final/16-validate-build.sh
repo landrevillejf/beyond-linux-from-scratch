@@ -401,6 +401,91 @@ echo ""
 echo "  Installed packages: $(wc -l <"$LFS/var/lib/lpm/installed.list" 2>/dev/null || echo 'unknown')"
 
 # --------------------------------------------------------------------------
+# 13. Hardening compliance evidence (static assertions)
+# --------------------------------------------------------------------------
+# Runs only when the build actually enabled security hardening, so minimal /
+# server / audio profiles that never scheduled blfs/15 are unaffected and stay
+# green.  Each assertion proves a control blfs/15, blfs/08 or the kernel stage
+# promised really landed in the finished rootfs.  Whether a missing control is
+# a hard failure or a warning is governed by security.compliance.fail_on_gap
+# (default false -> warnings only), so the default build never newly fails on
+# an optional control while a hardened, compliance-scoped build can enforce it.
+HARDENING="${SECURITY_HARDENING:-false}"
+if [ "$HARDENING" = "true" ]; then
+    FAIL_ON_GAP="${LFS_CONFIG_SECURITY_COMPLIANCE_FAIL_ON_GAP:-false}"
+    compliance_gap() {
+        # $1 = human description of the missing control
+        if [ "$FAIL_ON_GAP" = "true" ]; then
+            log_fail "$1 (compliance.fail_on_gap=true)"
+        else
+            log_warn "$1 (compliance.fail_on_gap=false)"
+        fi
+    }
+
+    echo ""
+    echo "--- Hardening compliance (fail_on_gap=$FAIL_ON_GAP) ---"
+
+    # Kernel boot-integrity knobs (curated config + build-kernel stage).
+    log_check "CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY=y in installed kernel"
+    if [ -n "$boot_cfg" ] && grep -q '^CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY=y' "$boot_cfg" 2>/dev/null; then
+        log_pass
+    else
+        compliance_gap "kernel lockdown integrity mode not set"
+    fi
+
+    log_check "CONFIG_MODULE_SIG_FORCE=y in installed kernel"
+    if [ -n "$boot_cfg" ] && grep -q '^CONFIG_MODULE_SIG_FORCE=y' "$boot_cfg" 2>/dev/null; then
+        log_pass
+    else
+        compliance_gap "mandatory module signing not enforced"
+    fi
+
+    # Audit subsystem locked (blfs/15 hardening.rules ends with -e 2).
+    log_check "audit rules locked (-e 2)"
+    if grep -q '^-e 2' "$LFS/etc/audit/rules.d/hardening.rules" 2>/dev/null; then
+        log_pass
+    else
+        compliance_gap "audit rule set not locked immutable (-e 2)"
+    fi
+
+    # Default-deny firewall (blfs/15 nftables.conf).
+    log_check "nftables default policy is drop"
+    if grep -q 'policy drop' "$LFS/etc/nftables.conf" 2>/dev/null; then
+        log_pass
+    else
+        compliance_gap "nftables is not default-deny (policy drop)"
+    fi
+
+    # USB mass-storage disabled (blfs/15 modprobe blacklist).
+    log_check "usb-storage module blacklisted"
+    if grep -q '^install usb-storage /bin/false' "$LFS/etc/modprobe.d/hardening-blacklist.conf" 2>/dev/null; then
+        log_pass
+    else
+        compliance_gap "usb-storage not blacklisted"
+    fi
+
+    # SELinux enforcing (only asserted when the resolved mode asks for it).
+    if [ "${LFS_CONFIG_SECURITY_SELINUX_MODE:-}" = "enforcing" ]; then
+        log_check "SELinux mode is enforcing"
+        if grep -q '^SELINUX=enforcing' "$LFS/etc/selinux/config" 2>/dev/null; then
+            log_pass
+        else
+            compliance_gap "SELinux not configured enforcing"
+        fi
+    fi
+
+    # FIPS marker (only asserted when FIPS was resolved on for this build).
+    if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]; then
+        log_check "FIPS mode marker /etc/system-fips present"
+        if [ -e "$LFS/etc/system-fips" ]; then
+            log_pass
+        else
+            compliance_gap "FIPS marker /etc/system-fips missing"
+        fi
+    fi
+fi
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""
