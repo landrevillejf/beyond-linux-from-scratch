@@ -225,8 +225,9 @@ class TestRemainingCoverageLines:
 
             with patch.object(builder.downloader, 'download_from_list', return_value=True):
                 with patch.object(builder.downloader, 'verify_checksums', return_value=True) as mock_verify:
-                    result = builder.download_sources()
-                    assert result is True
+                    with patch.object(builder, '_verify_supply_chain', return_value=True):
+                        result = builder.download_sources()
+                        assert result is True
 
     def test_setup_logging_level(self, tmp_path):
         """Test setup_logging creates logger with correct level"""

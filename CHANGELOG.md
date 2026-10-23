@@ -4,6 +4,41 @@
 
 ### Added
 
+- **Supply-chain integrity: sha256 source lock file + GPG signature
+  verification, fail-closed on the strict knobs (Phase 6 of the hardening
+  program)**
+  (`builder.py`, `tests/test_builder.py`, `tests/test_final_coverage.py`,
+  `README.md`)
+  - `SourceDownloader.write_lockfile()` snapshots every downloaded archive
+    into `packages/sources.lock` as `<sha256>  <filename>` pins (detached
+    `.sig`/`.asc` are skipped).  A new `builder.py --write-lockfile` flag
+    generates it from a trusted download and exits, mirroring
+    `--generate-sources-list`; the lock is reviewed and committed by a
+    maintainer rather than hand-written.
+  - `SourceDownloader.verify_lockfile()` checks each pinned archive's
+    sha256.  A pin mismatch ALWAYS fails (tampering/corruption).  Under
+    `security.supply_chain.require_lockfile` a missing lock file or an
+    unpinned archive also fails; with the knob off (the default) those
+    conditions only warn, so a build that ships no lock is unaffected.
+  - `SourceDownloader.verify_signatures()` GPG-verifies any archive that
+    carries an adjacent detached signature.  A `BAD signature` fails closed;
+    an unverifiable one (no signature, no `gpg`, or no public key) only
+    warns, because the repository ships no upstream keyring and failing on
+    "cannot verify" would break every build.  A pinned `packages/keyring.gpg`
+    is used when present.
+  - `LFSBuilder._verify_supply_chain()` orchestrates the two checks and is
+    wired into `download_sources()`, which now returns `False` (aborting the
+    source stage) on a real integrity violation instead of only warning.  The
+    posture is chosen by a new read-only resolver
+    `get_supply_chain_settings()` that normalises the three
+    `security.supply_chain` flags without mutating `config/build.conf` (the
+    same leak-safe pattern as `get_selinux_mode()`/`get_fips_enabled()`).
+  - Default behaviour is unchanged: `verify_signatures` is on but finds no
+    signatures or keyring to check, and `require_lockfile`/`provenance` are
+    off, so the gate is a no-op that returns `True`.  `provenance` is a CI
+    concern (sigstore/SLSA) surfaced through the flattened env, not acted on
+    in the downloader.  `builder.py` stays at 100% coverage.
+
 - **Boot integrity: IMA/EVM measured-boot scaffolding and optional UEFI
   Secure Boot signing (Phase 5 of the hardening program)**
   (`final/13-create-bootloader.sh`, `blfs/15-security-hardening.sh`,
