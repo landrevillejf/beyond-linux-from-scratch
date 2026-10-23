@@ -44,6 +44,20 @@ KERNEL_VERSION="${KERNEL_VERSION:-$(uname -r)}"
 ROOT_UUID="${LFS_CONFIG_ROOT_UUID:-}"
 ROOT_DEVICE="${LFS_CONFIG_ROOT_DEVICE:-/dev/sda2}"
 
+# Assemble the kernel command line. FIPS-mode (security.fips.enabled,
+# resolved by builder.py -> LFS_CONFIG_SECURITY_FIPS_ENABLED) appends
+# fips=1 so the kernel crypto API enters FIPS mode at boot and
+# /proc/sys/crypto/fips_enabled reads 1. Requires CONFIG_CRYPTO_FIPS=y,
+# which Phase 3 adds to every kernel-config variant; without fips=1 that
+# option is inert, so the default cmdline is unchanged. This is the GRUB
+# (native x86_64) path -- U-Boot targets are cross-built, where builder.py
+# resolves FIPS off, and LILO does not carry a cmdline here.
+KERNEL_CMDLINE="${LFS_CONFIG_KERNEL_CMDLINE:-quiet splash}"
+if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]; then
+    KERNEL_CMDLINE="$KERNEL_CMDLINE fips=1"
+    echo "[INFO] FIPS-mode enabled: appending fips=1 to kernel cmdline"
+fi
+
 # Monter les systèmes de fichiers virtuels si nécessaire
 mount --bind /dev "$LFS/dev" 2>/dev/null || true
 mount --bind /proc "$LFS/proc" 2>/dev/null || true
@@ -73,8 +87,8 @@ grub)
                 -e "s|\${LFS_ROOT_DEVICE}|$ROOT_DEVICE|g" \
                 -e "s|\${LFS_ROOT_UUID}|$ROOT_UUID|g" \
                 -e "s|\${LFS_KERNEL_VERSION}|$KERNEL_VERSION|g" \
-                -e "s|\${LFS_KERNEL_CMDLINE}|${LFS_CONFIG_KERNEL_CMDLINE:-quiet splash}|g" \
-                "$GRUB_TEMPLATE" > "$LFS/boot/grub/grub.cfg"
+                -e "s|\${LFS_KERNEL_CMDLINE}|${KERNEL_CMDLINE}|g" \
+                "$GRUB_TEMPLATE" >"$LFS/boot/grub/grub.cfg"
             echo "[INFO] GRUB config written to /boot/grub/grub.cfg"
         else
             echo "[INFO] No GRUB template found – generating config with grub-mkconfig"

@@ -287,6 +287,23 @@ EOF
 chmod 755 "$INITRAMFS_DIR/init"
 
 # --------------------------------------------------------------------------
+# FIPS-mode marker (Phase 3, gated on security.fips.enabled)
+# --------------------------------------------------------------------------
+# The kernel performs its own FIPS power-on self-test at boot because
+# CONFIG_CRYPTO_FIPS=y and the crypto API is built in, so the POST runs
+# before this initramfs is even unpacked: there is no initramfs crypto
+# module to load and no per-module HMAC to carry, and the fips=1 cmdline
+# (final/13) is what arms it. All the early environment needs is the
+# /etc/system-fips marker blfs/08 wrote into the rootfs, mirrored here so
+# anything inspecting FIPS state before switch_root sees a consistent
+# answer. No-op unless FIPS resolved on.
+if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]; then
+    echo "[INFO] FIPS-mode enabled: mirroring /etc/system-fips into initramfs"
+    : >"$INITRAMFS_DIR/etc/system-fips"
+    [ -e "$LFS/etc/system-fips" ] || : >"$LFS/etc/system-fips"
+fi
+
+# --------------------------------------------------------------------------
 # Create compressed cpio archive (prefer zstd, fallback to gzip)
 # --------------------------------------------------------------------------
 cd "$INITRAMFS_DIR"
