@@ -91,6 +91,7 @@ BUILD_STAGES = [
     ('knowledge', 'blfs/28-knowledge.sh'),
     ('package-manager', 'blfs/19-lpm.sh'),
     ('base-packages', 'blfs/14-create-base-packages.sh'),
+    ('selinux', 'blfs/31-build-selinux.sh'),
     ('security', 'blfs/15-security-hardening.sh'),
     ('privacy', 'blfs/16-privacy-tools.sh'),
     ('branding', 'blfs/20-branding.sh'),
@@ -1761,6 +1762,55 @@ class LFSBuilder:
 
         return installer
 
+    def get_selinux_mode(self) -> str:
+        """Resolve the effective SELinux mode for the active build.
+
+        Mirrors get_init_system()/get_installer_type(): a computed value
+        that never mutates the on-disk config, so merely planning a build
+        cannot rewrite config/build.conf.  That matters here because the
+        checked-in build.conf ships cross_compile=true/aarch64 (see
+        test_release_workflow's rootfs-cache guard), so persisting the
+        resolved mode would leak 'permissive' over the committed
+        'enforcing' default whenever a builder is constructed against the
+        real file -- which is exactly what the main() entry-point tests do.
+
+        Enforcing needs the Linux SELinux LSM the kernel actually runs plus
+        a first-boot autorelabel that has been exercised on the target:
+          * GNU/Hurd has no Linux Security Module at all -> disabled;
+          * a cross-compiled arm64 build compiles the userspace on a
+            foreign host and its first-boot relabel is unvalidated ->
+            permissive (load the targeted policy, do not enforce);
+          * everything else -- including the linux-libre gnu-free profiles,
+            whose kernel keeps CONFIG_SECURITY_SELINUX=y -- keeps the
+            configured mode.
+        """
+        selinux_choices = ['enforcing', 'permissive', 'disabled']
+        mode = str(self.config.get('security.selinux.mode', 'enforcing')).lower()
+
+        if mode not in selinux_choices:
+            self.logger.warning(f"Unknown SELinux mode: {mode}, using enforcing")
+            mode = 'enforcing'
+
+        if mode == 'disabled':
+            return 'disabled'
+
+        kernel_type = str(self.config.get('kernel.type', 'linux')).lower()
+        if kernel_type == 'gnu-hurd':
+            self.logger.info(
+                "SELinux disabled: GNU/Hurd has no Linux Security Module"
+            )
+            return 'disabled'
+
+        if self.is_cross_compile():
+            arch = self.get_target_architecture()
+            self.logger.info(
+                f"SELinux reduced to permissive on cross-compiled {arch}: the "
+                f"first-boot autorelabel is unvalidated for this target"
+            )
+            return 'permissive'
+
+        return mode
+
     def get_iso_name(self, dated: Optional[bool] = None) -> str:
         """Generate the versioned ISO filename.
 
@@ -1838,6 +1888,13 @@ class LFSBuilder:
         # Add all configuration parameters as environment variables for scripts
         config_flat = self._flatten_config(self.config.data, 'LFS_CONFIG')
         env.update(config_flat)
+
+        # SELinux mode is a resolved capability decision (get_selinux_mode),
+        # not a stored value: enforcing is reduced to permissive on
+        # cross-compiled targets and disabled on GNU/Hurd.  Override the
+        # flattened raw config value so blfs/31 and blfs/15 receive the
+        # effective mode, without the resolver ever rewriting build.conf.
+        env['LFS_CONFIG_SECURITY_SELINUX_MODE'] = self.get_selinux_mode()
         
         # Add all profile configuration parameters
         profile_flat = self._flatten_config(self.profile_config, 'LFS_PROFILE')
@@ -2297,6 +2354,17 @@ class LFSBuilder:
         if self.profile_config.get('package_manager', True):
             stages.append(('package-manager', 'blfs/19-lpm.sh'))
             stages.append(('base-packages', 'blfs/14-create-base-packages.sh'))
+
+        # SELinux userspace + targeted policy (Phase 2).  Built right before
+        # the security-hardening stage so blfs/15's SELinux block finds the
+        # userspace present and activates the configured mode.  Rides with
+        # security_hardening (Phase 8's baseline_all_profiles is what later
+        # extends the pair to every profile) and is skipped entirely when the
+        # resolved mode is 'disabled' -- get_selinux_mode() forces that on
+        # GNU/Hurd and reduces cross-built arm64 to permissive.
+        selinux_mode = self.get_selinux_mode()
+        if self.profile_config.get('security_hardening', False) and selinux_mode != 'disabled':
+            stages.append(('selinux', 'blfs/31-build-selinux.sh'))
 
         # Security hardening
         if self.profile_config.get('security_hardening', False):

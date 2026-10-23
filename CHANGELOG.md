@@ -4,6 +4,44 @@
 
 ### Added
 
+- **SELinux userspace + targeted policy stage (`blfs/31-build-selinux.sh`),
+  enforcing on native x86_64 (Phase 2 of the hardening program)**
+  (`blfs/31-build-selinux.sh`, `blfs/15-security-hardening.sh`, `builder.py`,
+  `packages/custom-sources.list`, `README.md`, `tests/test_builder.py`,
+  `tests/test_acceptance_shell.py`, `tests/conftest.py`)
+  - New `selinux` stage builds the full SELinux userspace stack from pinned
+    upstream SELinuxProject releases -- libsepol, libselinux, audit (v4.2.1),
+    checkpolicy, secilc, libsemanage, policycoreutils, plus the optional
+    selinux-python/mcstrans/restorecond -- and compiles the refpolicy
+    `targeted` policy (2.20260922).  BLFS 13.0 ships no SELinux book pages, so
+    this is a documented deviation from AGENTS.md rule 9; the pins and the
+    rationale live in `packages/custom-sources.list`.
+  - The stage never loads the policy or enables enforcing inside the build
+    chroot (`load_policy` would push into the host kernel).  It writes
+    `/etc/selinux/config`, drops `/.autorelabel`, installs a shared
+    `/usr/sbin/selinux-firstboot` helper (mounts selinuxfs, honours the
+    autorelabel, then `load_policy -i`), wires it into systemd
+    (`selinux-firstboot.service` in `sysinit.target`) or sysvinit
+    (`/etc/rc.d/init.d/selinux` -> `rcS.d/S02selinux`) per `INIT_SYSTEM`, and
+    appends `pam_selinux` session lines to the login stacks.
+  - `builder.py` schedules `selinux` right before `security` when the profile
+    sets `security_hardening` and the resolved mode is not `disabled`.  A new
+    read-only resolver `get_selinux_mode()` (mirroring `get_installer_type()`)
+    computes the effective mode without mutating the on-disk config: GNU/Hurd
+    resolves to `disabled` (no Linux Security Module) and cross-compiled
+    arm64/pinebook/brax3 resolve to `permissive` (unvalidated first-boot
+    autorelabel); native x86_64 -- including the linux-libre `gnu-free`
+    profiles -- keep `enforcing`.  The resolved mode is exported as
+    `LFS_CONFIG_SECURITY_SELINUX_MODE`, overriding the flattened raw value so
+    the stage scripts receive it.  Keeping the resolver read-only matters
+    because the checked-in `config/build.conf` ships `cross_compile=true`, so a
+    persisting gate leaked `permissive` over the committed `enforcing` default
+    whenever a builder was constructed against the real file.
+  - `blfs/15-security-hardening.sh`'s previously-dead SELinux block now reads
+    the resolved mode/type instead of hardcoding `permissive`, and the broken
+    `default_contexts` and insecure executable-stack/executable-mod booleans
+    are removed (refpolicy owns the contexts and booleans).
+
 - **kernel hardening baseline across all six `config/kernel-config*`
   variants + module signing (Phase 1 of the hardening program)**
   (`config/kernel-config`, `config/kernel-config-arm64`,

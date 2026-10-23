@@ -383,22 +383,21 @@ run_privileged mkdir -p "$LFS/etc/nftables/conf.d"
 # 12. SELinux targeted policy (if SELinux userspace is installed)
 # ---------------------------------------------------------------------------
 if [ -x "$LFS/usr/sbin/selinuxenabled" ] || [ -x "$LFS/usr/sbin/getenforce" ]; then
-    log_info "SELinux userspace detected – configuring targeted policy"
+    # blfs/31-build-selinux.sh already wrote /etc/selinux/config and this
+    # stage runs after it, so re-assert the resolved mode here (idempotent)
+    # instead of the old hardcoded permissive, which silently downgraded an
+    # enforcing build.  The mode/type come from the flattened Phase 0 config
+    # keys and were capability-gated in builder.py (GNU/Hurd -> disabled,
+    # cross-built arm64 -> permissive).
+    SELINUX_MODE="${LFS_CONFIG_SECURITY_SELINUX_MODE:-enforcing}"
+    SELINUX_TYPE="${LFS_CONFIG_SECURITY_SELINUX_TYPE:-targeted}"
+    log_info "SELinux userspace detected – configuring $SELINUX_TYPE policy (mode=$SELINUX_MODE)"
 
-    write_file /etc/selinux/config 0644 <<'SELINUX'
+    write_file /etc/selinux/config 0644 <<SELINUX
 # SELinux configuration – targeted policy
-# Managed by 15-security-hardening.sh
-SELINUX=permissive
-SELINUXTYPE=targeted
-SELINUX_CONFIG_DIR=/etc/selinux/targeted
-SELINUX_CONFIG_DIR.active=/etc/selinux/targeted/active
-SELINUX_CONFIG_DIR.modules=/var/lib/selinux/targeted/active
-SELINUX_CONFIG_DIR.log=/var/log/audit
-SELINUX_CONFIG_DIR.booleans=/etc/selinux/targeted/booleans
-SELINUX_CONFIG_DIR.seusers=/etc/selinux/targeted/seusers
-SELINUX_CONFIG_DIR.contexts=/etc/selinux/targeted/contexts
-SELINUX_CONFIG_DIR.modules=/var/lib/selinux/targeted/active/modules
-SELINUX_CONFIG_DIR.disable=false
+# Managed by 15-security-hardening.sh (mode/type from LFS_CONFIG_SECURITY_SELINUX_*)
+SELINUX=$SELINUX_MODE
+SELINUXTYPE=$SELINUX_TYPE
 SELINUX
 
     # Create SELinux directory structure
@@ -410,27 +409,15 @@ SELINUX
         "$LFS/var/lib/selinux/targeted/active/modules" \
         "$LFS/var/log/audit"
 
-    # Targeted policy: only specific daemons are confined
-    write_file /etc/selinux/targeted/contexts/default_contexts 0644 <<'CONTEXTS'
-# Default security contexts for targeted policy
-system_r:unconfined_t:s0    system_r:unconfined_t:s0
-system_r:init_t:s0          system_r:unconfined_t:s0
-system_r:local_login_t:s0   system_r:unconfined_t:s0 system_r:sysadm_t:s0
-system_r:remote_login_t:s0  system_r:unconfined_t:s0 system_r:sysadm_t:s0
-system_r:sshd_t:s0          system_r:unconfined_t:s0 system_r:sysadm_t:s0
-system_r:crond_t:s0         system_r:unconfined_t:s0 system_r:sysadm_t:s0
-system_r:xdm_t:s0           system_r:unconfined_t:s0 system_r:sysadm_t:s0
-CONTEXTS
+    # The refpolicy targeted policy installed by blfs/31-build-selinux.sh
+    # owns contexts/, the boolean store and seusers; this stage must not
+    # overwrite them.  The previous hand-rolled default_contexts used
+    # invalid system_r: user prefixes (breaking every login under enforcing)
+    # and the old booleans file turned on the executable-stack and
+    # executable-mod booleans, which directly weakens the hardened posture.
+    # Both are intentionally gone.
 
-    # Set booleans for common desktop use
-    write_file /etc/selinux/targeted/booleans/locals 0644 <<'BOOLEANS'
-# Local SELinux boolean overrides
-allow_execstack=on
-allow_execmod=on
-httpd_can_network_connect=on
-BOOLEANS
-
-    log_success "SELinux targeted policy configured (/etc/selinux/config)"
+    log_success "SELinux $SELINUX_TYPE policy configured (/etc/selinux/config, mode=$SELINUX_MODE)"
 else
     log_info "SELinux userspace not found – skipping SELinux configuration"
     log_info "  Install selinux-policy and selinux-tools to enable MAC"

@@ -425,6 +425,96 @@ class TestLFSBuilder:
         stage_names = [s[0] for s in stages]
         assert 'privacy' in stage_names
 
+    def test_selinux_stage_scheduled_before_security(self, builder):
+        """Phase 2: the SELinux stage must build just before hardening.
+
+        blfs/31 installs the userspace + refpolicy so blfs/15's SELinux
+        block finds it present and activates the configured mode; the
+        default xfce fixture is security_hardening with mode 'enforcing'.
+        """
+        stages = builder.get_build_stages()
+        stage_names = [s[0] for s in stages]
+        assert ('selinux', 'blfs/31-build-selinux.sh') in stages
+        assert stage_names.index('selinux') < stage_names.index('security')
+
+    def test_selinux_stage_skipped_when_mode_disabled(self, builder):
+        """A resolved mode of 'disabled' must not schedule the stage."""
+        builder.config.set('security.selinux.mode', 'disabled')
+        assert 'selinux' not in [s[0] for s in builder.get_build_stages()]
+
+    def test_selinux_stage_skipped_without_security_hardening(self, builder):
+        """The stage rides with security_hardening (Phase 8 rolls it wider)."""
+        builder.profile_config['security_hardening'] = False
+        assert 'selinux' not in [s[0] for s in builder.get_build_stages()]
+
+    def test_master_stage_list_contains_selinux(self):
+        """BUILD_STAGES documents the selinux stage before security."""
+        from builder import BUILD_STAGES
+        names = [name for name, _ in BUILD_STAGES]
+        assert 'selinux' in names
+        assert names.index('selinux') < names.index('security')
+
+    def test_selinux_mode_cross_compile_resolves_permissive(self, builder):
+        """Cross-built arm64 loads the policy but boots permissive.
+
+        The first-boot autorelabel is unvalidated on a foreign-compiled
+        userspace, so get_selinux_mode() reduces enforcing to permissive
+        rather than risk an unbootable mislabeled rootfs.  The resolver
+        computes the value; it must NOT persist it, or constructing a
+        builder against the real config/build.conf (which ships
+        cross_compile=true) would leak 'permissive' over the committed
+        'enforcing' default and break test_config's cross-source check.
+        """
+        from builder import ProfileManager
+        builder.profile = 'arm64'
+        builder.profile_config = ProfileManager.get_profile('arm64')
+        builder._apply_profile_settings()
+        assert builder.get_selinux_mode() == 'permissive'
+        # Read-only resolver: the authored config value is untouched.
+        assert builder.config.get('security.selinux.mode') == 'enforcing'
+
+    def test_selinux_mode_gnu_hurd_resolves_disabled(self, builder):
+        """GNU/Hurd has no Linux Security Module, so SELinux is disabled."""
+        builder.config.set('kernel.type', 'gnu-hurd')
+        assert builder.get_selinux_mode() == 'disabled'
+
+    def test_selinux_mode_respects_explicit_disabled(self, builder):
+        """An explicit 'disabled' is returned verbatim, never re-raised."""
+        builder.config.set('security.selinux.mode', 'disabled')
+        builder.config.set('cross_compile', True)
+        assert builder.get_selinux_mode() == 'disabled'
+
+    def test_selinux_mode_unknown_value_falls_back_to_enforcing(self, builder):
+        """A typo warns and falls back to enforcing, mirroring
+        get_installer_type()'s closed-choice guard so an unknown mode can
+        never silently schedule a stage the config did not ask for."""
+        builder.config.set('security.selinux.mode', 'strict')
+        with patch.object(builder.logger, 'warning') as warn:
+            assert builder.get_selinux_mode() == 'enforcing'
+        warn.assert_called_once()
+        assert 'strict' in warn.call_args[0][0]
+
+    def test_selinux_mode_exported_to_env(self, builder):
+        """The resolved mode/type reach stage scripts via the flat env."""
+        env = builder._get_env()
+        assert env['LFS_CONFIG_SECURITY_SELINUX_MODE'] == 'enforcing'
+        assert env['LFS_CONFIG_SECURITY_SELINUX_TYPE'] == 'targeted'
+
+    def test_selinux_env_export_reflects_resolved_mode(self, builder):
+        """The env override carries the RESOLVED mode, not the raw config.
+
+        A cross-compiled target authors 'enforcing' in build.conf but the
+        stage scripts must see 'permissive', so _get_env overrides the
+        flattened value with get_selinux_mode() rather than exporting the
+        stored key verbatim.
+        """
+        from builder import ProfileManager
+        builder.profile = 'arm64'
+        builder.profile_config = ProfileManager.get_profile('arm64')
+        builder._apply_profile_settings()
+        env = builder._get_env()
+        assert env['LFS_CONFIG_SECURITY_SELINUX_MODE'] == 'permissive'
+
     def test_get_build_stages_installer_iso_every_architecture(self, builder):
         """Every profile and architecture gets a bootable installer ISO.
 
