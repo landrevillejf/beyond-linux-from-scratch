@@ -59,6 +59,45 @@ fi
 log_info "Using kernel configuration: $KERNEL_CONFIG_SRC"
 
 # ---------------------------------------------------------------------------
+# Security knobs (Phase 1 kernel hardening).  The curated fragments already
+# carry the hardened baseline, but two settings are tunable at build time from
+# the flattened security.kernel_hardening.* config keys so they can be changed
+# without editing all six variants:
+#   LFS_CONFIG_SECURITY_KERNEL_HARDENING_LOCKDOWN         integrity|confidentiality|off
+#   LFS_CONFIG_SECURITY_KERNEL_HARDENING_MODULE_SIG_FORCE true|false
+# They are re-applied with the kernel's own scripts/config helper AFTER the
+# fragment is copied to .config and BEFORE `make olddefconfig`, so the choice
+# symbols resolve cleanly.  Module signing itself needs no extra step: with
+# CONFIG_MODULE_SIG(_ALL)=y `make` signs every .ko using certs/signing_key.pem,
+# which the build auto-generates (openssl is installed by 05b before this
+# stage); only the public key is embedded in vmlinuz, the private key is not
+# shipped.
+# ---------------------------------------------------------------------------
+LOCKDOWN_MODE="${LFS_CONFIG_SECURITY_KERNEL_HARDENING_LOCKDOWN:-integrity}"
+MODULE_SIG_FORCE="${LFS_CONFIG_SECURITY_KERNEL_HARDENING_MODULE_SIG_FORCE:-true}"
+
+resolve_hardening_cmds() {
+    case "$LOCKDOWN_MODE" in
+    confidentiality)
+        printf '%s\n' './scripts/config --enable SECURITY_LOCKDOWN_LSM --enable LOCKDOWN_KERNEL_FORCE_CONFIDENTIALITY'
+        ;;
+    off | none | disabled)
+        printf '%s\n' './scripts/config --enable SECURITY_LOCKDOWN_LSM --disable LOCKDOWN_KERNEL_FORCE_INTEGRITY --disable LOCKDOWN_KERNEL_FORCE_CONFIDENTIALITY'
+        ;;
+    *)
+        printf '%s\n' './scripts/config --enable SECURITY_LOCKDOWN_LSM --enable LOCKDOWN_KERNEL_FORCE_INTEGRITY'
+        ;;
+    esac
+    if [ "$MODULE_SIG_FORCE" = "true" ]; then
+        printf '%s\n' './scripts/config --enable MODULE_SIG --enable MODULE_SIG_FORCE'
+    else
+        printf '%s\n' './scripts/config --disable MODULE_SIG_FORCE'
+    fi
+}
+HARDEN_CMDS="$(resolve_hardening_cmds)"
+log_info "Kernel hardening knobs: lockdown=$LOCKDOWN_MODE module_sig_force=$MODULE_SIG_FORCE"
+
+# ---------------------------------------------------------------------------
 # Locate the kernel sources.  The chroot mirror ($LFS/sources) is the
 # canonical copy: lfs-basic populates it for every profile, whatever
 # the builder's host output layout (nightly #185 died on the old
@@ -108,6 +147,8 @@ if [ -n "$CROSS_COMPILE" ]; then
     $MAKE_CMD mrproper
     log_info "Configuring kernel from $KERNEL_CONFIG_SRC"
     cp "$KERNEL_CONFIG_SRC" .config
+    log_info "Applying security hardening knobs (scripts/config)"
+    eval "$HARDEN_CMDS"
     $MAKE_CMD olddefconfig
     log_info "Compiling kernel (using -j$(nproc))"
     $MAKE_CMD -j"$(nproc)"
@@ -116,7 +157,7 @@ if [ -n "$CROSS_COMPILE" ]; then
 
     KERNEL_IMAGE=""
     for candidate in "arch/$MAKE_ARCH/boot/bzImage" "arch/$MAKE_ARCH/boot/Image" \
-                     "arch/$MAKE_ARCH/boot/zImage" "vmlinuz"; do
+        "arch/$MAKE_ARCH/boot/zImage" "vmlinuz"; do
         if [ -f "$candidate" ]; then
             KERNEL_IMAGE="$candidate"
             break
@@ -176,6 +217,10 @@ make mrproper
 
 echo "=== Installing curated .config ==="
 cp /sources/.kernel-config .config
+
+echo "=== Applying security hardening knobs (lockdown=$LOCKDOWN_MODE module_sig_force=$MODULE_SIG_FORCE) ==="
+$HARDEN_CMDS
+
 make olddefconfig
 
 echo "=== Compiling kernel ==="

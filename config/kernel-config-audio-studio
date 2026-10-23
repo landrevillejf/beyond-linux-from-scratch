@@ -142,10 +142,63 @@ CONFIG_BRIDGE=y
 CONFIG_VLAN_8021Q=y
 
 # ============================================================================
-# SECURITY
+# SECURITY / KERNEL HARDENING  (NSA/CIA/banking-grade baseline)
+# ----------------------------------------------------------------------------
+# Every symbol is named explicitly: lfs/08-build-kernel.sh seeds .config from
+# this fragment then runs `make olddefconfig`, which resolves any symbol absent
+# here to its (often insecure) default.  The security.kernel_hardening.* config
+# knobs flatten to LFS_CONFIG_SECURITY_KERNEL_HARDENING_*; 08-build-kernel.sh
+# re-applies the lockdown level and MODULE_SIG_FORCE from those env vars after
+# copying this fragment, so they can be tuned without editing every variant.
 # ============================================================================
+# --- Mandatory access control ---------------------------------------------
+# SELinux is the single active LSM.  AppArmor is compiled out and dropped from
+# CONFIG_LSM to resolve the former dual-LSM (SELINUX + APPARMOR) conflict; the
+# SELinux userspace/policy lands in Phase 2 -- until then the kernel LSM is
+# built in and runs with no policy loaded (harmless; the system still boots).
+CONFIG_SECURITY=y
 CONFIG_SECURITY_SELINUX=y
-CONFIG_SECURITY_APPARMOR=y
+# CONFIG_SECURITY_APPARMOR is not set
+CONFIG_LSM="lockdown,yama,integrity,selinux"
+CONFIG_SECURITY_YAMA=y
+# --- Kernel lockdown (integrity by default; confidentiality/off via knob) ---
+CONFIG_SECURITY_LOCKDOWN_LSM=y
+CONFIG_SECURITY_LOCKDOWN_LSM_EARLY=y
+CONFIG_LOCKDOWN_KERNEL_FORCE_INTEGRITY=y
+# --- Signed kernel modules (SHA-512); FORCE re-applied from the env knob ----
+# The build auto-generates certs/signing_key.pem (openssl is installed by
+# lfs/05b-build-lfs-system.sh before the kernel stage); the private key is
+# never shipped -- only its public half is embedded in vmlinuz.
+CONFIG_MODULE_SIG=y
+CONFIG_MODULE_SIG_ALL=y
+CONFIG_MODULE_SIG_FORCE=y
+CONFIG_MODULE_SIG_SHA512=y
+CONFIG_MODULE_SIG_KEY="certs/signing_key.pem"
+# --- Memory / allocation hardening ---------------------------------------
+CONFIG_HARDENED_USERCOPY=y
+CONFIG_INIT_ON_ALLOC_DEFAULT_ON=y
+CONFIG_INIT_ON_FREE_DEFAULT_ON=y
+CONFIG_SLAB_FREELIST_RANDOMIZED=y
+CONFIG_SLAB_FREELIST_HARDENED=y
+CONFIG_STACKPROTECTOR_STRONG=y
+CONFIG_STRICT_KERNEL_RWX=y
+CONFIG_STRICT_MODULE_RWX=y
+CONFIG_RANDOMIZE_BASE=y
+# --- Integrity measurement (compiled in; appraisal policy lands in Phase 5) -
+CONFIG_IMA=y
+CONFIG_IMA_APPRAISE=y
+CONFIG_EVM=y
+# --- eBPF hardening -------------------------------------------------------
+CONFIG_BPF_JIT_ALWAYS_ON=y
+CONFIG_BPF_UNPRIV_DEFAULT_OFF=y
+# --- Close the legacy kernel-memory window --------------------------------
+# /dev/mem is removed outright.  (CONFIG_DEVKMEM was deleted from the kernel
+# years ago, so there is nothing left to disable.)
+# CONFIG_DEVMEM is not set
+# --- Credential / notifier sanity checks (require DEBUG_KERNEL) -----------
+CONFIG_DEBUG_KERNEL=y
+CONFIG_DEBUG_CREDENTIALS=y
+CONFIG_DEBUG_NOTIFIERS=y
 CONFIG_CRYPTO=y
 
 # ============================================================================
