@@ -223,3 +223,7 @@ CONFIG_BPF_UNPRIV_DEFAULT_OFF=y
 # years ago, so there is nothing left to disable.)
 # CONFIG_DEVMEM is not set
 CONFIG_CRYPTO=y
+# FIPS 140 mode: enables the fips=1 kernel boot param and the crypto API's
+# power-on self-tests (Phase 3). Built-in (=y) so the POST runs before any
+# initramfs; inert unless fips=1 is present on the kernel command line.
+CONFIG_CRYPTO_FIPS=y

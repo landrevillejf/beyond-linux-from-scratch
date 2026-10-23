@@ -1389,6 +1389,69 @@ class TestLFSComplianceGuardrails:
         ):
             assert url_fragment in content, f"missing pin: {url_fragment}"
 
+    def test_blfs08_openssl_fips_build_is_gated(self):
+        """blfs/08 must rebuild OpenSSL with the FIPS provider only when the
+        resolved flag is on, run fipsinstall, drop the /etc/system-fips
+        marker, and pass the flag through the chroot env (the inner script is
+        a quoted heredoc, so the value must arrive via `env -i`).
+        """
+        content = Path('blfs/08-build-blfs-base.sh').read_text()
+        assert 'enable-fips' in content
+        assert 'openssl fipsinstall -out /etc/ssl/fipsmodule.cnf' in content
+        assert '/usr/lib/ossl-modules/fips.so' in content
+        assert ': >/etc/system-fips' in content
+        # Gated on the resolved flag, and the flag is plumbed into the chroot.
+        gate = 'if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]'
+        assert gate in content
+        assert content.count('LFS_CONFIG_SECURITY_FIPS_ENABLED') >= 3
+        assert 'LFS_CONFIG_SECURITY_FIPS_ENABLED="${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}"' in content
+        # FIPS-mode, not a CMVP validation -- the stage must not overclaim.
+        assert 'NOT a CMVP-certified validation' in content
+
+    def test_kernel_configs_enable_crypto_fips(self):
+        """Every kernel-config fragment must carry CONFIG_CRYPTO_FIPS=y.
+
+        lfs/08 seeds .config from the fragment then runs `make olddefconfig`,
+        which drops any unnamed symbol, so the option has to be explicit in
+        all six variants.  Built-in (=y) so the kernel's FIPS power-on
+        self-test runs before the initramfs when fips=1 is on the cmdline.
+        """
+        variants = ('kernel-config', 'kernel-config-arm64',
+                    'kernel-config-audio-studio', 'kernel-config-brax3',
+                    'kernel-config-gnu-free', 'kernel-config-pinebook')
+        for name in variants:
+            content = Path(f'config/{name}').read_text()
+            assert 'CONFIG_CRYPTO_FIPS=y' in content, \
+                f"{name} lacks CONFIG_CRYPTO_FIPS=y"
+
+    def test_bootloader_appends_fips_to_kernel_cmdline(self):
+        """final/13 must append fips=1 to the kernel cmdline when FIPS is on,
+        and config/grub.cfg must use the clean ${LFS_KERNEL_CMDLINE}
+        placeholder that final/13's sed actually substitutes -- the old
+        ${LFS_KERNEL_CMDLINE:-quiet splash} form never matched, so the
+        cmdline (and thus fips=1) silently never reached GRUB.
+        """
+        content = Path('final/13-create-bootloader.sh').read_text()
+        assert 'KERNEL_CMDLINE="${LFS_CONFIG_KERNEL_CMDLINE:-quiet splash}"' in content
+        assert 'if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]' in content
+        assert 'KERNEL_CMDLINE="$KERNEL_CMDLINE fips=1"' in content
+        assert '|${KERNEL_CMDLINE}|g' in content
+        grub = Path('config/grub.cfg').read_text()
+        assert '${LFS_KERNEL_CMDLINE}' in grub
+        assert '${LFS_KERNEL_CMDLINE:-' not in grub, \
+            "grub.cfg must use the plain placeholder final/13 substitutes"
+
+    def test_initramfs_mirrors_fips_marker(self):
+        """final/12 must mirror /etc/system-fips into the initramfs when FIPS
+        resolved on, and document that the kernel POST runs pre-initramfs
+        (built-in crypto), so there is no module HMAC to carry.
+        """
+        content = Path('final/12-create-initramfs.sh').read_text()
+        assert 'if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]' in content
+        assert '$INITRAMFS_DIR/etc/system-fips' in content
+        assert '$LFS/etc/system-fips' in content
+        assert 'power-on self-test' in content
+
     def test_qemu_boot_smoke_roots_disk_image_on_real_partition(self):
         """The disk-image boot must target the real root partition and
         tolerate the empty-disk switch_root panic.
@@ -2170,7 +2233,9 @@ class TestNightly215StageGuardrails:
         which is always true in CI, so nothing else creates /boot/grub."""
         content = self.BOOTLOADER.read_text()
         mkdir = content.index('mkdir -p "$LFS/boot/grub"')
-        write = content.index('> "$LFS/boot/grub/grub.cfg"')
+        # Match the redirect target, not the operator: shfmt -s rewrites the
+        # continuation-line redirect as >"$LFS/..." with no intervening space.
+        write = content.index('"$LFS/boot/grub/grub.cfg"')
         assert mkdir < write, (
             'the grub.cfg redirect needs its parent directory to exist')
 

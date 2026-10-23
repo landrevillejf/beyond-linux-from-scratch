@@ -216,15 +216,61 @@ extract() {
 }
 
 # ---- OpenSSL (BLFS postlfs) ----
+# FIPS-mode (security.fips.enabled, resolved by builder.py and exported as
+# LFS_CONFIG_SECURITY_FIPS_ENABLED) rebuilds OpenSSL 3 with its FIPS
+# provider.  This is FIPS *mode*, NOT a CMVP-certified validation: a
+# from-source build carries no CMVP certificate and the docs say so.  The
+# provider is only built when the flag is set, so the default build stays
+# byte-for-byte the book's OpenSSL.
 extract "$(find_archive openssl)"
-./config --prefix=/usr \
-    --openssldir=/etc/ssl \
-    --libdir=lib \
-    shared \
-    zlib-dynamic
+if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]; then
+    ./config --prefix=/usr \
+        --openssldir=/etc/ssl \
+        --libdir=lib \
+        shared \
+        zlib-dynamic \
+        enable-fips
+else
+    ./config --prefix=/usr \
+        --openssldir=/etc/ssl \
+        --libdir=lib \
+        shared \
+        zlib-dynamic
+fi
 make -j"$(nproc)"
 make install
 rm -rvf /usr/bin/c_rehash
+if [ "${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" = "true" ]; then
+    # fipsinstall runs the module power-on self-test and HMACs fips.so into
+    # /etc/ssl/fipsmodule.cnf; openssl.cnf then loads the provider and pins
+    # fips=yes as the default property so every EVP call uses approved
+    # algorithms.  The provider lands in /usr/lib/ossl-modules because the
+    # build above uses --prefix=/usr --libdir=lib.
+    openssl fipsinstall -out /etc/ssl/fipsmodule.cnf \
+        -module /usr/lib/ossl-modules/fips.so
+    # Canonical FIPS-mode marker: the presence of /etc/system-fips tells
+    # OpenSSL wrappers, PAM and systemd that the system runs in FIPS mode.
+    # Written here, inside the chroot, so it lands in the target rootfs;
+    # final/12 mirrors it into the initramfs.
+    : >/etc/system-fips
+    # Activate FIPS in the system config.  OpenSSL 3.x ships these lines
+    # commented out; every edit is idempotent/grep-guarded so a format drift
+    # degrades to "provider available but not defaulted" instead of aborting
+    # the stage under `set -e`.
+    OPENSSL_CNF=/etc/ssl/openssl.cnf
+    if [ -f "$OPENSSL_CNF" ]; then
+        grep -q '^.include /etc/ssl/fipsmodule.cnf' "$OPENSSL_CNF" ||
+            sed -i '1i .include /etc/ssl/fipsmodule.cnf' "$OPENSSL_CNF"
+        sed -i -E 's|^#[[:space:]]*fips[[:space:]]*=[[:space:]]*fips_sect|fips = fips_sect|' "$OPENSSL_CNF"
+        sed -i -E 's|^#[[:space:]]*alg_section[[:space:]]*=|alg_section =|' "$OPENSSL_CNF"
+        sed -i -E 's|^#[[:space:]]*default_properties[[:space:]]*=|default_properties =|' "$OPENSSL_CNF"
+        sed -i -E 's|^(default_properties[[:space:]]*=[[:space:]]*).*$|\1fips=yes|' "$OPENSSL_CNF"
+    fi
+    # Prove the provider actually loads; a silent config typo would otherwise
+    # only surface at first boot.
+    openssl list -providers | grep -qw fips ||
+        echo "[WARNING] FIPS provider not listed by openssl; check $OPENSSL_CNF" >&2
+fi
 cd /sources
 
 # ---- IDN stack for cURL (BLFS general + basicnet) ----
@@ -383,6 +429,7 @@ run_privileged chmod +x "$LFS/build-blfs-base.sh"
 run_privileged chroot "$LFS" /usr/bin/env -i \
     HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin \
     KERNEL_TYPE="$KERNEL_TYPE" \
+    LFS_CONFIG_SECURITY_FIPS_ENABLED="${LFS_CONFIG_SECURITY_FIPS_ENABLED:-false}" \
     /bin/bash /build-blfs-base.sh
 
 log_success "BLFS base packages built successfully"

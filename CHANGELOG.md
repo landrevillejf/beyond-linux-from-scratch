@@ -4,6 +4,40 @@
 
 ### Added
 
+- **FIPS-mode crypto: OpenSSL 3 FIPS provider + kernel + boot cmdline
+  (Phase 3 of the hardening program)**
+  (`blfs/08-build-blfs-base.sh`, all six `config/kernel-config*`,
+  `final/12-create-initramfs.sh`, `final/13-create-bootloader.sh`,
+  `config/grub.cfg`, `builder.py`, `tests/test_builder.py`,
+  `tests/test_acceptance_shell.py`)
+  - Opt-in via `security.fips.enabled` (Phase 0 schema, off by default).  When
+    on, `blfs/08-build-blfs-base.sh` rebuilds OpenSSL 3 with `enable-fips`,
+    runs `openssl fipsinstall` to HMAC the module into
+    `/etc/ssl/fipsmodule.cnf`, activates the `fips` provider plus
+    `default_properties = fips=yes` in `/etc/ssl/openssl.cnf`, and drops the
+    canonical `/etc/system-fips` marker.  This is FIPS *mode*, NOT a
+    CMVP-certified validation -- a from-source build carries no CMVP
+    certificate.
+  - All six `config/kernel-config*` fragments now name
+    `CONFIG_CRYPTO_FIPS=y` (built-in, so the kernel's FIPS power-on self-test
+    runs before the initramfs); it stays inert unless `fips=1` is on the
+    kernel command line.
+  - `final/13-create-bootloader.sh` appends `fips=1` to the GRUB kernel
+    cmdline when FIPS resolves on, and `config/grub.cfg` switches to the clean
+    `${LFS_KERNEL_CMDLINE}` placeholder -- the old
+    `${LFS_KERNEL_CMDLINE:-quiet splash}` form never matched final/13's `sed`,
+    so the cmdline (and thus `fips=1`) silently never reached GRUB.
+    `final/12-create-initramfs.sh` mirrors `/etc/system-fips` into the early
+    environment.
+  - `builder.py` gains a read-only resolver `get_fips_enabled()` (mirroring
+    `get_selinux_mode()`/`get_installer_type()`): it never mutates the
+    on-disk config and resolves FIPS OFF on cross-compiled targets, because
+    `openssl fipsinstall` must EXECUTE the target-arch `fips.so` self-test,
+    which cannot run on a foreign build host.  The resolved value overrides
+    the flattened `LFS_CONFIG_SECURITY_FIPS_ENABLED` so the stage scripts
+    receive it.  Not yet first-boot validated end-to-end
+    (`/proc/sys/crypto/fips_enabled=1`); the nightly is the first true check.
+
 - **SELinux userspace + targeted policy stage (`blfs/31-build-selinux.sh`),
   enforcing on native x86_64 (Phase 2 of the hardening program)**
   (`blfs/31-build-selinux.sh`, `blfs/15-security-hardening.sh`, `builder.py`,

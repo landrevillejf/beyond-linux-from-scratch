@@ -515,6 +515,67 @@ class TestLFSBuilder:
         env = builder._get_env()
         assert env['LFS_CONFIG_SECURITY_SELINUX_MODE'] == 'permissive'
 
+    def test_fips_disabled_by_default(self, builder):
+        """FIPS-mode is opt-in: the default build resolves it off."""
+        assert builder.get_fips_enabled() is False
+        assert builder._get_env()['LFS_CONFIG_SECURITY_FIPS_ENABLED'] == 'false'
+
+    def test_fips_enabled_native_resolves_true(self, builder):
+        """A native build honours security.fips.enabled verbatim."""
+        builder.config.set('security.fips.enabled', True)
+        assert builder.get_fips_enabled() is True
+        assert builder._get_env()['LFS_CONFIG_SECURITY_FIPS_ENABLED'] == 'true'
+
+    def test_fips_enabled_accepts_string_value(self, builder):
+        """A stringified flag (env/CLI) is parsed, not truthy-by-accident.
+
+        Any non-empty string -- including 'false' -- is truthy in Python, so
+        the resolver must normalise explicitly or a disabled build would
+        silently enable FIPS-mode.
+        """
+        builder.config.set('security.fips.enabled', 'true')
+        assert builder.get_fips_enabled() is True
+        builder.config.set('security.fips.enabled', 'false')
+        assert builder.get_fips_enabled() is False
+
+    def test_fips_cross_compile_resolves_disabled(self, builder):
+        """A cross-built target cannot run openssl fipsinstall's self-test.
+
+        fipsinstall EXECUTES the just-built target-arch fips.so to perform
+        the module power-on self-test, which cannot run on a foreign host,
+        so get_fips_enabled() resolves False for cross-compiled arm64 even
+        though build.conf authors enabled=true.  The resolver is read-only:
+        it must not persist False over the committed default (the checked-in
+        build.conf ships cross_compile=true, so a persisting gate would leak
+        -- exactly the Phase 2 config/build.conf hazard).
+        """
+        from builder import ProfileManager
+        builder.config.set('security.fips.enabled', True)
+        builder.profile = 'arm64'
+        builder.profile_config = ProfileManager.get_profile('arm64')
+        builder._apply_profile_settings()
+        with patch.object(builder.logger, 'info') as info:
+            assert builder.get_fips_enabled() is False
+        info.assert_called_once()
+        assert 'cross-compiled' in info.call_args[0][0]
+        # Read-only resolver: the authored config value is untouched.
+        assert builder.config.get('security.fips.enabled') is True
+
+    def test_fips_env_export_reflects_resolved_value(self, builder):
+        """The env override carries the RESOLVED flag, not the raw config.
+
+        A cross-compiled target authors enabled=true in build.conf but the
+        stage scripts must see 'false', so _get_env overrides the flattened
+        value with get_fips_enabled() rather than exporting the stored key.
+        """
+        from builder import ProfileManager
+        builder.config.set('security.fips.enabled', True)
+        builder.profile = 'arm64'
+        builder.profile_config = ProfileManager.get_profile('arm64')
+        builder._apply_profile_settings()
+        env = builder._get_env()
+        assert env['LFS_CONFIG_SECURITY_FIPS_ENABLED'] == 'false'
+
     def test_get_build_stages_installer_iso_every_architecture(self, builder):
         """Every profile and architecture gets a bootable installer ISO.
 

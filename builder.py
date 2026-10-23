@@ -1811,6 +1811,39 @@ class LFSBuilder:
 
         return mode
 
+    def get_fips_enabled(self) -> bool:
+        """Resolve whether FIPS-mode crypto is enabled for the active build.
+
+        Mirrors get_selinux_mode()/get_installer_type(): a computed value
+        that never mutates the on-disk config, so merely planning a build
+        cannot rewrite config/build.conf (which the main() entry-point
+        tests load against the real file).
+
+        Enabling FIPS-mode rebuilds OpenSSL with its FIPS provider and
+        then runs `openssl fipsinstall`, which EXECUTES the just-built
+        target-arch fips.so to perform the module power-on self-test and
+        write its HMAC.  That cannot run on a foreign cross-compile host,
+        so cross-built targets resolve to False: CONFIG_CRYPTO_FIPS stays
+        compiled into their kernel and a native rebuild can still turn
+        FIPS on, but the build never tries to self-test a module it cannot
+        execute.  Native builds honour security.fips.enabled as-is.
+        """
+        enabled = self.config.get('security.fips.enabled', False)
+        if isinstance(enabled, str):
+            enabled = enabled.strip().lower() == 'true'
+        if not enabled:
+            return False
+
+        if self.is_cross_compile():
+            arch = self.get_target_architecture()
+            self.logger.info(
+                f"FIPS-mode disabled on cross-compiled {arch}: openssl "
+                f"fipsinstall must execute the target fips.so self-test"
+            )
+            return False
+
+        return True
+
     def get_iso_name(self, dated: Optional[bool] = None) -> str:
         """Generate the versioned ISO filename.
 
@@ -1895,6 +1928,13 @@ class LFSBuilder:
         # flattened raw config value so blfs/31 and blfs/15 receive the
         # effective mode, without the resolver ever rewriting build.conf.
         env['LFS_CONFIG_SECURITY_SELINUX_MODE'] = self.get_selinux_mode()
+
+        # FIPS-mode is likewise a resolved capability decision
+        # (get_fips_enabled): a cross-compiled target cannot run the
+        # openssl fipsinstall self-test, so the raw config flag is
+        # overridden with the effective value that blfs/08, final/12 and
+        # final/13 read -- again without the resolver rewriting build.conf.
+        env['LFS_CONFIG_SECURITY_FIPS_ENABLED'] = 'true' if self.get_fips_enabled() else 'false'
         
         # Add all profile configuration parameters
         profile_flat = self._flatten_config(self.profile_config, 'LFS_PROFILE')
