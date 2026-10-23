@@ -49,6 +49,30 @@ class TestRemainingCoverageLines:
         stage_names = [name for name, _ in stages]
         assert 'security' in stage_names
 
+    def test_runtime_hardening_scheduled_after_security(self, tmp_path):
+        """Phase 4: runtime-hardening rides with security_hardening and must
+        run immediately after the security stage so the toolset exists once
+        blfs/15's config is in place."""
+        config_file = tmp_path / "test.conf"
+        config_file.write_text("{}")
+
+        builder = LFSBuilder("secure", tmp_path, config_file)
+        stage_names = [name for name, _ in builder.get_build_stages()]
+        assert 'runtime-hardening' in stage_names
+        assert stage_names.index('runtime-hardening') == stage_names.index('security') + 1
+
+    @staticmethod
+    def test_runtime_hardening_absent_without_security_hardening(tmp_path):
+        """minimal sets security_hardening=False, so neither the security nor
+        the runtime-hardening stage may be scheduled (keeps it bootable)."""
+        config_file = tmp_path / "test.conf"
+        config_file.write_text("{}")
+
+        builder = LFSBuilder("minimal", tmp_path, config_file)
+        stage_names = [name for name, _ in builder.get_build_stages()]
+        assert 'security' not in stage_names
+        assert 'runtime-hardening' not in stage_names
+
     @staticmethod
     def test_get_build_stages_with_privacy_tools(tmp_path):
         """Test get_build_stages includes privacy when enabled (line 1064-1065)"""

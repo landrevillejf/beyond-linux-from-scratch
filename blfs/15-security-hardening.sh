@@ -107,6 +107,37 @@ net.ipv6.conf.all.accept_source_route = 0
 net.ipv6.conf.default.accept_source_route = 0
 net.ipv6.conf.all.accept_redirects = 0
 net.ipv6.conf.default.accept_redirects = 0
+net.ipv6.conf.all.accept_ra = 0
+net.ipv6.conf.default.accept_ra = 0
+
+# --- Phase 4: KSPP / CIS L1-L2 additions -----------------------------------
+# Restrict BPF: unprivileged BPF is already off above; additionally stop the
+# JIT from being user-toggleable and harden it against spray (CIS 1.5.x,
+# KSPP).  bpf_jit_enable=0 keeps the JIT off unless a privileged admin opts
+# in, and bpf_jit_harden=2 constant-blinds JIT-compiled filters.
+net.core.bpf_jit_enable = 0
+net.core.bpf_jit_harden = 2
+
+# Reject userspace mappings at address 0 so a NULL-pointer kernel deref cannot
+# be turned into code execution (CIS 1.6.1, KSPP).
+vm.mmap_min_addr = 65536
+
+# Hide kernel pointer values from unprivileged /proc readers and restrict
+# dmesg (already partly covered above; grouped here for the KSPP set).
+kernel.perf_event_paranoid = 3
+
+# Restrict ptrace to direct descendants only (Yama scope 1 is set above).
+# Scope 2/3 (admin-only / no-attach) break debuggers and crash reporters, so
+# they are intentionally not forced here.
+
+# --- Unprivileged user namespaces (documented OFF by default) --------------
+# kernel.unprivileged_userns_clone = 0  (Debian/Ubuntu out-of-tree knob)
+# user.max_user_namespaces = 0          (upstream equivalent)
+# These fully close the unprivileged-userns attack surface that most local
+# LPE exploits use, but they also break sandboxed browsers (Firefox/Chrome),
+# Flatpak, Podman/Docker rootless and bubblewrap.  Left commented so the
+# hardened baseline stays usable; enable deliberately on a kiosk/appliance
+# image that runs no containers or sandboxed browsers.
 SYSCTL
 
 # ---------------------------------------------------------------------------
@@ -380,6 +411,69 @@ NFTABLES
 run_privileged mkdir -p "$LFS/etc/nftables/conf.d"
 
 # ---------------------------------------------------------------------------
+# 11b. Core-dump restriction (Phase 4)
+# ---------------------------------------------------------------------------
+# limits.d and the shell profile already set `core 0` / `ulimit -c 0`, but a
+# setuid or crashing privileged process is captured by systemd-coredump
+# regardless of the RLIMIT, and those dumps can contain secrets.  Turn the
+# systemd-coredump backend off so nothing is spooled to /var/lib/systemd/
+# coredump.  Gated on security.privacy.disable_core_dumps so a debug image
+# can keep dumps by flipping that knob off.
+if [ "${LFS_CONFIG_SECURITY_PRIVACY_DISABLE_CORE_DUMPS:-true}" = "true" ]; then
+    run_privileged mkdir -p "$LFS/etc/systemd"
+    write_file /etc/systemd/coredump.conf 0644 <<'COREDUMP'
+# Managed by 15-security-hardening.sh (Phase 4).
+# Disable core-dump capture entirely: RLIMIT_CORE=0 does not stop
+# systemd-coredump from spooling dumps of setuid/privileged processes.
+[Coredump]
+Storage=none
+ProcessSizeMax=0
+ExternalSizeMax=0
+JournalSizeMax=0
+COREDUMP
+    log_info "core-dump capture disabled (/etc/systemd/coredump.conf)"
+fi
+
+# ---------------------------------------------------------------------------
+# 11c. fstab mount-option hardening (Phase 4)
+# ---------------------------------------------------------------------------
+# CIS L1 wants nodev/nosuid/noexec on world-writable pseudo-filesystems and
+# nodev/nosuid on /home, plus hidepid=2 on /proc so unprivileged users cannot
+# enumerate other users' processes.  The book's /etc/fstab (lfs/07) only sets
+# a subset, and the installer may add /tmp, /var/tmp or /home partitions, so
+# harden whatever is actually present rather than assuming a fixed layout.
+# The rewrite is idempotent: only missing options are appended, and lines for
+# mount points that do not exist are left untouched.
+if [ -f "$LFS/etc/fstab" ]; then
+    log_info "Hardening /etc/fstab mount options"
+    # awk only reads the (0644) fstab, so it needs no privilege; the result is
+    # staged in a temp file the invoking user can write and then installed with
+    # run_privileged, matching the write_file/tee pattern used everywhere else.
+    FSTAB_TMP="$(mktemp)"
+    awk '
+        function ensure(opt,   n, i, have, parts) {
+            n = split($4, parts, ",")
+            have = 0
+            for (i = 1; i <= n; i++) if (parts[i] == opt) have = 1
+            if (!have) $4 = ($4 == "" || $4 == "defaults") ? opt : $4 "," opt
+        }
+        $1 !~ /^#/ {
+            if ($2 == "/tmp" || $2 == "/var/tmp" || $2 == "/dev/shm") {
+                ensure("nodev"); ensure("nosuid"); ensure("noexec")
+            }
+            if ($2 == "/home") { ensure("nodev"); ensure("nosuid") }
+            if ($2 == "/proc") { ensure("hidepid=2") }
+        }
+        { print }
+    ' "$LFS/etc/fstab" >"$FSTAB_TMP"
+    run_privileged cp "$FSTAB_TMP" "$LFS/etc/fstab"
+    run_privileged chmod 0644 "$LFS/etc/fstab"
+    rm -f "$FSTAB_TMP"
+else
+    log_info "/etc/fstab not present - skipping mount-option hardening"
+fi
+
+# ---------------------------------------------------------------------------
 # 12. SELinux targeted policy (if SELinux userspace is installed)
 # ---------------------------------------------------------------------------
 if [ -x "$LFS/usr/sbin/selinuxenabled" ] || [ -x "$LFS/usr/sbin/getenforce" ]; then
@@ -505,6 +599,8 @@ log_success "  - login.defs password aging + banners  (/etc/login.defs, /etc/iss
 log_success "  - cron/at restriction + file perms     (/etc/cron.allow, /etc/at.allow)"
 log_success "  - auditd base ruleset                  (/etc/audit/rules.d/hardening.rules)"
 log_success "  - nftables firewall (default deny)     (/etc/nftables.conf)"
+log_success "  - core-dump capture disabled           (/etc/systemd/coredump.conf)"
+log_success "  - fstab mount-option hardening         (/etc/fstab)"
 log_success "  - SELinux targeted policy              (/etc/selinux/config) [if userspace present]"
 log_success "  - AppArmor targeted profiles            (/etc/apparmor.d/) [if userspace present]"
 exit 0

@@ -823,3 +823,20 @@ https://github.com/SELinuxProject/refpolicy/releases/download/RELEASE_2_20260922
 # It is the stack's only autotools component and its git tree ships no
 # generated configure, so blfs/31 bootstraps it (autogen.sh/autoreconf).
 https://github.com/linux-audit/audit-userspace/archive/refs/tags/v4.2.1.tar.gz
+
+# ============================================================================
+# Runtime-hardening toolset (runtime-hardening stage,
+# blfs/32-runtime-hardening.sh, Phase 4).  None of these has a BLFS 13.0 book
+# page, so each is pinned to its upstream release (AGENTS.md rule 15).
+# fail2ban/lynis use the /archive/refs/tags/ form deliberately: builder.py's
+# _archive_filename() only derives a repo-prefixed on-disk name for the
+# refs/{tags,heads} layout, so the bare /archive/<tag>.tar.gz form would land
+# as "1.1.0.tar.gz"/"3.1.1.tar.gz" and never match the stage's
+# <pkg>-*.tar.gz glob (the same trap documented in that function for OpenRC).
+# aide and usbguard are intentionally NOT downloaded here: aide's crypto-lib
+# dependency chain and usbguard's libqb/protobuf/catch2 stack are too heavy to
+# pin blind, so blfs/32 only wires their config when the binary is present.
+# ============================================================================
+https://github.com/fail2ban/fail2ban/archive/refs/tags/1.1.0.tar.gz
+https://github.com/CISOfy/lynis/archive/refs/tags/3.1.1.tar.gz
+https://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.8/rkhunter-1.4.8.tar.gz
