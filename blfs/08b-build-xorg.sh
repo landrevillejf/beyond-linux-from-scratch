@@ -44,6 +44,14 @@ run_privileged() { if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi; }
 DESKTOP_TYPE="${LFS_CONFIG_DESKTOP_TYPE:-xfce}"
 export DESKTOP_TYPE
 
+# The lg3d profile is desktop:none but xorg_only:true: lfs-x11-contract.md
+# requires a bare Xorg :0 with the video driver stack and no desktop on top.
+# builder.py exports the profile's xorg_only flag as LFS_PROFILE_XORG_ONLY
+# (bool -> "true"/"false"), so an X11-only profile still builds Xorg even
+# though it declares no desktop environment.
+XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"
+export XORG_ONLY
+
 # Mesa GL driver selection (lfs-x11-contract.md 3.3 wants GLX + DRI3 on a
 # hardware DDX).  The offline chroot cannot build the LLVM/libclc/rustc stack
 # most hardware gallium drivers need, so the default stays the pure-software
@@ -68,10 +76,12 @@ if [ "$IN_DOCKER" = true ]; then
     exit 0
 fi
 
-[ "$DESKTOP_TYPE" = "none" ] && {
+# Skip Xorg only when nothing needs it: a desktop profile always builds it, and
+# an xorg_only profile (lg3d) needs the bare X server even with desktop=none.
+if [ "$DESKTOP_TYPE" = "none" ] && [ "$XORG_ONLY" != "true" ]; then
     log_info "No desktop requested; skipping Xorg"
     exit 0
-}
+fi
 
 [ -x "$LFS/bin/bash" ] || {
     log_error "/bin/bash not found in $LFS/bin – run lfs-basic first"

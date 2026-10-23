@@ -381,12 +381,22 @@ fi
 SELECTOR
     chmod +x /usr/bin/lg3d-session-select
 
-    # Write a default .xinitrc for the 'lfs' user that uses the selector
-    cat > /home/lfs/.xinitrc <<'EOF'
+    # Convenience .xinitrc so a human typing `startx` at a text console lands
+    # in the selector.  This is NOT how the lg3d session is wired at boot --
+    # that is the systemd lg3d-compositor.service unit or the sysvinit inittab
+    # respawn written host-side -- so it must never be able to abort the stage.
+    # The base-cache resume tree never creates /home/lfs, and the unguarded
+    # `cat > /home/lfs/.xinitrc` died with "No such file or directory" under
+    # set -e (nightly lg3d-20261023 and lg3d-20260930).  Guard the write.
+    if [ -d /home/lfs ]; then
+        cat > /home/lfs/.xinitrc <<'EOF'
 exec lg3d-session-select
 EOF
-    chown lfs:lfs /home/lfs/.xinitrc
-    chmod 0644 /home/lfs/.xinitrc
+        chown lfs:lfs /home/lfs/.xinitrc 2>/dev/null || true
+        chmod 0644 /home/lfs/.xinitrc
+    else
+        log_warning "/home/lfs absent; skipping the convenience .xinitrc (the boot session is wired via the init unit, not .xinitrc)"
+    fi
 
     log_info "lg3d installed to /opt/lg3d."
 INNEREOF
