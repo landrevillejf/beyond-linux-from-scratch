@@ -3145,3 +3145,273 @@ class TestStopAfterCLI:
         kwargs = mock_build.call_args.kwargs
         assert kwargs['resume_from'] == 'toolchain'
         assert kwargs['stop_after'] == 'blfs-base'
+
+
+class TestSupplyChainIntegrity:
+    """Phase 6: sha256 lock file, GPG signature checks, fail-closed gate."""
+
+    # --- get_supply_chain_settings resolver -------------------------------
+
+    def test_supply_chain_settings_defaults_when_absent(self, builder):
+        """A config with no security section resolves to the safe defaults."""
+        builder.config.data.pop('security', None)
+        assert builder.get_supply_chain_settings() == {
+            'verify_signatures': True, 'provenance': False,
+            'require_lockfile': False,
+        }
+
+    def test_supply_chain_settings_normalises_strings(self, builder):
+        """Stringified flags (env/CLI) are parsed, not truthy-by-accident."""
+        builder.config.set('security.supply_chain.verify_signatures', 'false')
+        builder.config.set('security.supply_chain.provenance', True)
+        builder.config.set('security.supply_chain.require_lockfile', 'true')
+        settings = builder.get_supply_chain_settings()
+        assert settings['verify_signatures'] is False
+        assert settings['provenance'] is True
+        assert settings['require_lockfile'] is True
+        # Read-only resolver: the authored value is untouched.
+        assert builder.config.get('security.supply_chain.verify_signatures') == 'false'
+
+    # --- write_lockfile ---------------------------------------------------
+
+    def test_write_lockfile_pins_archives_and_skips_sigs(self, sources_dir, mock_logger, tmp_path):
+        """Every non-signature file is pinned, sorted, with a correct sha256."""
+        import hashlib
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'b-1.0.tar.gz').write_bytes(b'\x1f\x8b BBB')
+        (sources_dir / 'a-1.0.tar.gz').write_bytes(b'\x1f\x8b AAA')
+        (sources_dir / 'a-1.0.tar.gz.sig').write_bytes(b'sig')
+        (sources_dir / 'subdir').mkdir()
+
+        lock = tmp_path / 'sources.lock'
+        count = dl.write_lockfile(lock)
+        assert count == 2
+        lines = [ln for ln in lock.read_text().splitlines()
+                 if ln and not ln.startswith('#')]
+        assert len(lines) == 2
+        digest = hashlib.sha256(b'\x1f\x8b AAA').hexdigest()
+        assert lines[0] == f"{digest}  a-1.0.tar.gz"
+        assert lines[1].endswith('  b-1.0.tar.gz')
+
+    def test_write_lockfile_empty_dir_writes_header_only(self, sources_dir, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        lock = tmp_path / 'sources.lock'
+        assert dl.write_lockfile(lock) == 0
+        assert lock.read_text().startswith('# packages/sources.lock')
+
+    def test_write_lockfile_missing_sources_dir(self, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(tmp_path / 'does-not-exist', mock_logger)
+        lock = tmp_path / 'nested' / 'sources.lock'
+        assert dl.write_lockfile(lock) == 0
+        assert lock.exists()
+
+    # --- verify_lockfile --------------------------------------------------
+
+    def test_verify_lockfile_absent_optional(self, sources_dir, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        assert dl.verify_lockfile(tmp_path / 'missing.lock') is True
+
+    def test_verify_lockfile_absent_required_fails(self, sources_dir, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        assert dl.verify_lockfile(tmp_path / 'missing.lock', required=True) is False
+
+    def test_verify_lockfile_match_and_mismatch(self, sources_dir, mock_logger, tmp_path):
+        import hashlib
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'AAA')
+        good = hashlib.sha256(b'AAA').hexdigest()
+        lock = tmp_path / 'sources.lock'
+        lock.write_text(f"# comment\n\nbad-line-no-pair\n{good}  a.tar.gz\n")
+        assert dl.verify_lockfile(lock) is True
+        lock.write_text("deadbeef  a.tar.gz\n")
+        assert dl.verify_lockfile(lock) is False
+
+    def test_verify_lockfile_missing_pinned_file_warns(self, sources_dir, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        lock = tmp_path / 'sources.lock'
+        lock.write_text("abc123  ghost.tar.gz\n")
+        # Not downloaded -> warn, but do not fail the pin check itself.
+        assert dl.verify_lockfile(lock) is True
+
+    def test_verify_lockfile_required_rejects_unpinned(self, sources_dir, mock_logger, tmp_path):
+        import hashlib
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'AAA')
+        (sources_dir / 'extra.tar.gz').write_bytes(b'XXX')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        good = hashlib.sha256(b'AAA').hexdigest()
+        lock = tmp_path / 'sources.lock'
+        lock.write_text(f"{good}  a.tar.gz\n")
+        # extra.tar.gz is unpinned and signatures are ignored -> fail closed.
+        assert dl.verify_lockfile(lock, required=True) is False
+        lock.write_text(
+            f"{good}  a.tar.gz\n"
+            f"{hashlib.sha256(b'XXX').hexdigest()}  extra.tar.gz\n")
+        assert dl.verify_lockfile(lock, required=True) is True
+
+    # --- verify_signatures ------------------------------------------------
+
+    def test_verify_signatures_no_dir(self, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(tmp_path / 'nope', mock_logger)
+        assert dl.verify_signatures() is True
+
+    def test_verify_signatures_no_sigs(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        assert dl.verify_signatures() is True
+
+    def test_verify_signatures_gpg_missing(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        with patch('builder.shutil.which', return_value=None):
+            assert dl.verify_signatures() is True
+
+    def test_verify_signatures_good(self, sources_dir, mock_logger, tmp_path):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        with patch('builder.shutil.which', return_value='/usr/bin/gpg'), \
+                patch('builder.subprocess.run',
+                      return_value=MagicMock(returncode=0, stderr=b'')) as run:
+            assert dl.verify_signatures(keyring=tmp_path / 'kr.gpg') is True
+        assert '--keyring' in run.call_args[0][0]
+
+    def test_verify_signatures_bad_fails(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        with patch('builder.shutil.which', return_value='/usr/bin/gpg'), \
+                patch('builder.subprocess.run',
+                      return_value=MagicMock(returncode=1,
+                                             stderr=b'gpg: BAD signature from key')):
+            assert dl.verify_signatures() is False
+
+    def test_verify_signatures_no_public_key_warns(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        with patch('builder.shutil.which', return_value='/usr/bin/gpg'), \
+                patch('builder.subprocess.run',
+                      return_value=MagicMock(
+                          returncode=1,
+                          stderr=b"gpg: Can't check signature: No public key")):
+            assert dl.verify_signatures() is True
+
+    def test_verify_signatures_empty_stderr_detail(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'a.tar.gz').write_bytes(b'x')
+        (sources_dir / 'a.tar.gz.sig').write_bytes(b's')
+        with patch('builder.shutil.which', return_value='/usr/bin/gpg'), \
+                patch('builder.subprocess.run',
+                      return_value=MagicMock(returncode=1, stderr=b'')):
+            assert dl.verify_signatures() is True
+
+    def test_verify_signatures_orphan_sig_skipped(self, sources_dir, mock_logger):
+        from builder import SourceDownloader
+        dl = SourceDownloader(sources_dir, mock_logger)
+        (sources_dir / 'orphan.tar.gz.asc').write_bytes(b's')
+        with patch('builder.shutil.which', return_value='/usr/bin/gpg'), \
+                patch('builder.subprocess.run') as run:
+            assert dl.verify_signatures() is True
+        run.assert_not_called()
+
+    # --- _verify_supply_chain orchestrator --------------------------------
+
+    def test_supply_chain_default_is_noop(self, builder, tmp_path, monkeypatch):
+        """The shipped config (no lock, no sigs) verifies clean."""
+        monkeypatch.chdir(tmp_path)
+        assert builder._verify_supply_chain() is True
+
+    def test_supply_chain_uses_keyring_when_present(self, builder, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / 'packages').mkdir()
+        (tmp_path / 'packages' / 'keyring.gpg').write_bytes(b'k')
+        builder.downloader = Mock(spec=['verify_signatures', 'verify_lockfile'])
+        builder.downloader.verify_signatures.return_value = True
+        builder.config.data.setdefault('security', {}).setdefault(
+            'supply_chain', {})['verify_signatures'] = True
+        assert builder._verify_supply_chain() is True
+        passed = builder.downloader.verify_signatures.call_args[0][0]
+        assert passed is not None and passed.name == 'keyring.gpg'
+
+    def test_supply_chain_signatures_disabled(self, builder, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        builder.downloader = Mock(spec=['verify_signatures', 'verify_lockfile'])
+        sc = builder.config.data.setdefault('security', {}).setdefault('supply_chain', {})
+        sc['verify_signatures'] = False
+        sc['require_lockfile'] = False
+        assert builder._verify_supply_chain() is True
+        builder.downloader.verify_signatures.assert_not_called()
+
+    def test_supply_chain_require_lockfile_missing_fails(self, builder, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        builder.config.data.setdefault('security', {}).setdefault(
+            'supply_chain', {})['require_lockfile'] = True
+        assert builder._verify_supply_chain() is False
+
+    def test_supply_chain_checks_lockfile_when_present(self, builder, tmp_path, monkeypatch):
+        import hashlib
+        monkeypatch.chdir(tmp_path)
+        src = builder.downloader.sources_dir
+        src.mkdir(parents=True, exist_ok=True)
+        (src / 'a.tar.gz').write_bytes(b'AAA')
+        good = hashlib.sha256(b'AAA').hexdigest()
+        (tmp_path / 'packages').mkdir()
+        (tmp_path / 'packages' / 'sources.lock').write_text(f"{good}  a.tar.gz\n")
+        builder.config.data.setdefault('security', {}).setdefault(
+            'supply_chain', {})['verify_signatures'] = False
+        # require_lockfile is off, but the lock file exists so it is checked.
+        assert builder._verify_supply_chain() is True
+
+    # --- download_sources wiring + CLI ------------------------------------
+
+    def test_download_sources_aborts_on_supply_chain_failure(self, tmp_path, monkeypatch):
+        from builder import LFSBuilder, SourceDownloader
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'c.json'
+        config_file.write_text('{}')
+        b = LFSBuilder(profile='minimal', output_dir=tmp_path / 'out',
+                       config_file=config_file)
+        b.logger = MagicMock()
+        b._generated_sources_list = None
+        sources_list = b.output_dir / 'packages' / 'sources.list'
+        sources_list.parent.mkdir(parents=True, exist_ok=True)
+        sources_list.write_text('# dummy\n')
+        b.downloader = Mock(spec=SourceDownloader)
+        b.downloader.download_from_list.return_value = True
+        with patch.object(b, '_update_sources_list', return_value=False), \
+                patch.object(b, '_prune_unlisted_source_duplicates', return_value=None), \
+                patch.object(b, '_verify_supply_chain', return_value=False):
+            assert b.download_sources() is False
+
+    def test_write_lockfile_cli_option(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        config_file = tmp_path / 'c.json'
+        config_file.write_text('{}')
+        argv = ['builder.py', '--profile', 'minimal',
+                '--output', str(tmp_path / 'out'),
+                '--config', str(config_file), '--write-lockfile']
+        with patch('sys.argv', argv), \
+                patch('builder.SourceDownloader.write_lockfile',
+                      return_value=3) as mock_wl, \
+                patch('builtins.print') as mock_print:
+            main()
+        mock_wl.assert_called_once()
+        mock_print.assert_any_call("sources.lock written with 3 pins.")
+

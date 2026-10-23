@@ -56,7 +56,7 @@ This repository is designed for reproducible, profile-driven builds and CI/CD pu
 - **Parallel downloads**: fetch source tarballs concurrently, with configurable timeouts and retries.
 - **Resume capability**: restart from a failed stage without redoing previous work.
 - **Build validation**: final `validate` stage checks the produced image before publication.
-- **Supply-chain artifacts**: GPG-sign the ISO (`--sign-iso`) and generate an SPDX SBOM (`--sbom`).
+- **Supply-chain artifacts**: GPG-sign the ISO (`--sign-iso`) and generate an SPDX SBOM (`--sbom`). Pin every source with a sha256 lock file (`--write-lockfile` -> `packages/sources.lock`) and verify downloads against it plus any detached GPG signatures; fails closed under `security.supply_chain.require_lockfile`/`verify_signatures`.
 - **Milestone naming**: tag ISO filenames with a milestone label (`--milestone alpha1`).
 - **Comprehensive logging**: detailed logs per stage, with last 150 lines displayed on failure.
 - **Professional branding**: custom themes, wallpapers, and GRUB backgrounds for the installer and live system (see [Branding](docs/BRANDING.md)).
@@ -316,6 +316,7 @@ python3 builder.py --generate-sources-list
 | `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
 | `--generate-sources-list` | Generate `packages/sources.list` and exit |
+| `--write-lockfile` | Write `packages/sources.lock` (sha256 pins) from the downloaded sources and exit. A later build verifies each archive against it, and fails closed when `security.supply_chain.require_lockfile` is on |
 | `--kernel-version` | Kernel version override (e.g. `6.16.1`, `6.12.20`) |
 | `--arch` | Target architecture (`x86_64`, `aarch64`) |
 | `--sign-iso [GPG_KEY]` | Sign the generated ISO with GPG (optional key ID or email) |
