@@ -2618,6 +2618,29 @@ class TestProfilePromiseGuardrails:
         assert '[ "$DESKTOP_TYPE" = "none" ] && {' not in content, \
             "the unconditional desktop=none Xorg skip must be replaced"
 
+    def test_blfs_libs_stage_builds_for_xorg_only_desktop_none_profile(self):
+        """08a must build the BLFS core libs for an xorg_only, desktop:none profile.
+
+        builder.py schedules BOTH blfs-libs (08a) and xorg (08b) for the lg3d
+        profile via get_build_stages' `elif _xorg_only` branch, and 08b
+        fail-fasts when glib-2.0/cairo/pango/freetype2/fontconfig/gdk-pixbuf-2.0
+        are absent (its prerequisite probe).  08a used to bail on
+        `[ "$DESKTOP_TYPE" = "none" ]`, so the libs were never built and the
+        xorg stage died with "Missing BLFS library prerequisites" (nightly
+        lg3d run 39944433235, after the 08b skip was fixed).  The 08a skip must
+        be gated on the exported LFS_PROFILE_XORG_ONLY flag exactly like 08b, so
+        the whole X11-only chain builds.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        assert 'XORG_ONLY="${LFS_PROFILE_XORG_ONLY:-false}"' in content, \
+            "the blfs-libs stage must read the profile's xorg_only flag"
+        assert '[ "$DESKTOP_TYPE" = "none" ] && [ "$XORG_ONLY" != "true" ]' \
+            in content, \
+            "the desktop=none skip must be gated on xorg_only so lg3d builds " \
+            "the BLFS core libs the xorg stage requires"
+        assert '[ "$DESKTOP_TYPE" = "none" ] && {' not in content, \
+            "the unconditional desktop=none blfs-libs skip must be replaced"
+
     def test_lg3d_stage_wires_iso_contract_mode(self):
         """The lg3d stage must default to the --iso composited-desktop mode.
 
