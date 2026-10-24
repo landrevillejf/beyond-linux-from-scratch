@@ -135,12 +135,24 @@ check_cmd_version() {
     local min_version=$2
     local version_opt=${3:---version}
     local version=""
+    local first_line=""
     if ! command -v "$cmd" &>/dev/null; then
         log_error "Command '$cmd' not found."
         return 1
     fi
     # Extract version
-    version=$($cmd $version_opt 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+\.?[0-9]*' | head -n1)
+    first_line=$($cmd $version_opt 2>&1 | head -n1)
+    # Ubuntu 26.04+ ships several coreutils (ls, cat, sort, seq, ...) as the
+    # Rust "uutils" reimplementation, whose version (0.x) is unrelated to the
+    # GNU coreutils minimum we compare against, so a plain version check would
+    # reject a perfectly functional host. Accept uutils as satisfying the
+    # requirement instead of failing stage 1 on a meaningless version string.
+    if printf '%s' "$first_line" | grep -qi uutils; then
+        version=$(printf '%s' "$first_line" | grep -oE '[0-9]+\.[0-9]+\.?[0-9]*' | head -n1)
+        log_info "$cmd is uutils coreutils ${version:-?} OK (GNU minimum not applicable)"
+        return 0
+    fi
+    version=$(printf '%s' "$first_line" | grep -oE '[0-9]+\.[0-9]+\.?[0-9]*' | head -n1)
     if [ -z "$version" ]; then
         version=$($cmd -V 2>&1 | head -n1 | grep -oE '[0-9]+\.[0-9]+\.?[0-9]*' | head -n1)
     fi
