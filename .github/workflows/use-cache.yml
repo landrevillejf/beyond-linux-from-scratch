@@ -21,6 +21,21 @@ jobs:
     outputs:
       hit: ${{ steps.check.outputs.hit }}
     steps:
+      - name: Relocate build scratch off /tmp tmpfs
+        # ubuntu-latest moved to an Ubuntu 26 runner image whose /tmp is a
+        # ~7.9G RAM-backed tmpfs; the restored package cache is multiple GB
+        # under /tmp/lfs-sources, which made this job die with ENOSPC. Bind
+        # the scratch dirs onto the 145G root disk so every /tmp/lfs-* path
+        # below works unchanged. Warn (never fail) if a runner cannot bind.
+        run: |
+          sudo mkdir -p /mnt/lfs-scratch
+          for d in lfs-build lfs-sources base-cache; do
+            sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
+              || echo "::warning::could not bind /tmp/$d onto the root disk"
+          done
+          df -h /tmp /mnt/lfs-scratch
+
       - name: Download cached packages
         uses: actions/download-artifact@v4
         with:

@@ -28,6 +28,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Relocate build scratch off /tmp tmpfs
+        # ubuntu-latest moved to an Ubuntu 26 runner image whose /tmp is a
+        # ~7.9G RAM-backed tmpfs; large profiles need multiple GB under
+        # /tmp/lfs-build, which made builds die with ENOSPC. Bind the scratch
+        # dirs onto the 145G root disk so every /tmp/lfs-* path below works
+        # unchanged. Warn (never fail) if a runner cannot bind, so a runner
+        # whose /tmp is already large is unaffected.
+        run: |
+          sudo mkdir -p /mnt/lfs-scratch
+          for d in lfs-build lfs-sources base-cache; do
+            sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
+              || echo "::warning::could not bind /tmp/$d onto the root disk"
+          done
+          df -h /tmp /mnt/lfs-scratch
+
       - name: Install dependencies
         run: |
           sudo apt update
