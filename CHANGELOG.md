@@ -4,6 +4,35 @@
 
 ### Added
 
+- **Profile-scoped source downloads** (`builder.py`,
+  `tools/scan-stage-sources.py`, `packages/stage-sources.json`,
+  `packages/source-aliases.json`, `config/build.conf`,
+  `config/build.conf.json`, `config/default.json`, `tests/test_builder.py`,
+  `tests/test_config.py`, `tests/conftest.py`,
+  `tests/test_complete_coverage.py`, `README.md`, `AGENTS.md`)
+  - `_update_sources_list()` now scopes the merged LFS+BLFS wget-list to the
+    packages the active profile's stages actually build, instead of fetching
+    every URL (1088 LFS + 248 BLFS) for every profile.  A new scanner,
+    `tools/scan-stage-sources.py`, attributes each stage script's packages to
+    `packages/stage-sources.json` (raw `run_build`/`find_archive`/
+    `require_file`/`ls <pkg>-*` tokens) plus `packages/source-aliases.json`
+    (logical-name -> archive-prefix exceptions such as
+    `qt6` -> `qt-everywhere-src`).  The scanner runs with `--check` in the test
+    suite, so a script that references an unmanifested package fails CI rather
+    than silently losing a source at build time.
+  - LFS-core URLs (`repositories[0]`) are tagged with their origin at merge
+    time and are never dropped; the always-active stages (`host/*`, `lfs/*`,
+    `blfs-base`, `blfs-libs`, `build-kernel`, `final/*`) plus the
+    dispatcher-selected desktop (`blfs/09a`-`09d` by `desktop.type`) and init
+    (`lfs/06c`-`06e`) sub-scripts feed the allowlist.  Matching reuses the
+    scanner's boundary rule on the normalized archive filename, so a
+    series-qualified token like `gcr-4` still matches `gcr-4.4.0.1.tar.xz`.
+  - Scoping is bypassed for the `full`/`custom` profiles, by the new
+    `--download-all-sources` flag, or by setting `sources.profile_scoped`
+    false (default `true`, flattened to `LFS_CONFIG_SOURCES_PROFILE_SCOPED`).
+    `--generate-sources-list` is profile-aware, so the pre-generated list is
+    scoped too.
+
 - **LG3D live ISO + graphical installer** (`builder.py`,
   `blfs/22-calamares-installer.sh`, `blfs/30-install-lg3d.sh`,
   `tests/test_builder.py`, `tests/test_profile_manager.py`,
@@ -428,6 +457,27 @@
     gains `test_get_profile_lg3d_includes_privacy`.
 
 ### Fixed
+
+- **Nightly builds died with `[Errno 28] No space left on device` in the
+  download phase** (`builder.py`, 15 files under `.github/workflows/`)
+  - Two independent causes, both fixed.  (1) Every profile downloaded the
+    entire merged LFS+BLFS wget-list, so even `minimal` fetched
+    `qt-everywhere-src` (1.5 G), qtwebengine and the whole KDE/GNOME stack;
+    downloads are now profile-scoped (see Added).  (2) GitHub's
+    `ubuntu-latest` migrated to an Ubuntu 26 runner image whose `/tmp` is a
+    ~7.9 G RAM-backed tmpfs instead of a directory on the 145 G root disk, so
+    the build tree filled RAM.  Nightly #39 failed on every leg, `minimal`
+    included, in the download phase.
+  - Every workflow that hardcodes `/tmp/lfs-build`, `/tmp/lfs-sources` or
+    `/tmp/base-cache` now bind-mounts those three dirs onto `/mnt/lfs-scratch`
+    (root disk) right after checkout, leaving the runner's own `/tmp` intact
+    and all existing `/tmp/lfs-*` paths working unchanged.  The
+    `rm -rf /tmp/lfs-build` / `rm -rf /tmp/lfs-sources` "prepare" and cleanup
+    steps were converted to clear the bind mount's *contents*
+    (`/tmp/lfs-build/* /tmp/lfs-build/.[!.]*`) rather than the mountpoint
+    itself, which `rm -rf` cannot remove (EBUSY).  The bind step warns instead
+    of failing on a runner that cannot `mount --bind`, so a runner whose `/tmp`
+    is already large is unaffected.
 
 - **`lg3d` nightly aborted at `basic-networking`: invalid NetworkManager
   meson option** (`blfs/23-basic-networking.sh`)
