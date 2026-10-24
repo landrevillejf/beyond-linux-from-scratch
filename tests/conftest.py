@@ -111,6 +111,9 @@ def mock_config_file(temp_dir):
         "network": {"dhcp": True, "dns_servers": ["8.8.8.8"]},
         "custom_scripts": {"post_install": []},
         "repositories": [],
+        "sources": {
+            "profile_scoped": True
+        },
         "build_options": {
             "parallel_build": True,
             "keep_build_dirs": False,

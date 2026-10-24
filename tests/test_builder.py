@@ -2193,7 +2193,8 @@ class TestLFSBuilder:
                 milestone=None,
                 stage_timeout=None,
                 nightly=False,
-                skip_man_pages=False
+                skip_man_pages=False,
+                download_all_sources=False
             )
 
     def test_main_stage_timeout_option(self, tmp_path):
@@ -2221,6 +2222,32 @@ class TestLFSBuilder:
                 main()
 
             assert MockBuilder.call_args[1]['stage_timeout'] == 18000
+
+    def test_main_download_all_sources_flag(self, tmp_path):
+        """--download-all-sources reaches the constructor to bypass scoping."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'minimal',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--download-all-sources',
+            '--no-live',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            assert MockBuilder.call_args[1]['download_all_sources'] is True
 
     def test_main_nightly_flag(self, tmp_path):
         """--nightly reaches the LFSBuilder constructor for dated ISO naming."""
@@ -3594,4 +3621,507 @@ class TestSupplyChainIntegrity:
             main()
         mock_wl.assert_called_once()
         mock_print.assert_any_call("sources.lock written with 3 pins.")
+
+
+# Representative archives used by the profile-scoping tests.  The package stem
+# (what _package_stem(_archive_filename(url)) yields) is noted per URL.
+_LFS_URLS = (
+    # stem: linux  (LFS core wget-list -> origin 'lfs', never dropped)
+    "https://www.kernel.org/pub/linux/kernel/v6.x/linux-6.16.1.tar.xz",
+    # stem: bash   (LFS core)
+    "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz",
+)
+_BLFS_URLS = (
+    # stem: qt-everywhere-src  (only the qt6/calamares chain builds this)
+    "https://download.qt.io/official_releases/qt/6.9/qt-everywhere-src-6.9.2.tar.xz",
+    # stem: openssl  (blfs-base builds it -> kept for every profile)
+    "https://www.openssl.org/source/openssl-3.5.0.tar.gz",
+    # stem: plasma-desktop  (only the KDE stage builds this)
+    "https://download.kde.org/stable/plasma/6.4.5/plasma-desktop-6.4.5.tar.xz",
+)
+_QT_URL = _BLFS_URLS[0]
+_OPENSSL_URL = _BLFS_URLS[1]
+_PLASMA_URL = _BLFS_URLS[2]
+_LINUX_URL = _LFS_URLS[0]
+
+
+def _mock_urlopen_for(lfs_body, blfs_body):
+    """Return a urlopen stand-in serving *lfs_body* for repositories[0].
+
+    _update_sources_list tags origin by repository index, so the mock has to
+    hand back different content per URL to exercise the LFS-vs-BLFS split.
+    """
+    def fake(url, *args, **kwargs):
+        resp = MagicMock()
+        # 'lfs/view' is a substring of 'blfs/view', so discriminate on /blfs/.
+        body = blfs_body if '/blfs/' in url else lfs_body
+        resp.read.return_value = body.encode('utf-8')
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = None
+        return resp
+    return fake
+
+
+class TestProfileScopedSources:
+    """Profile-scoped downloads (Part A): _update_sources_list keeps only the
+    archives an active stage builds plus the whole LFS-core wget-list.
+
+    This is the fix for Nightly #39, where every profile downloaded the entire
+    merged LFS+BLFS list (including qt-everywhere-src and the whole KDE/GNOME
+    universe) into the Ubuntu 26 runner's 7.9 GB /tmp tmpfs and died with
+    [Errno 28] No space left on device.
+    """
+
+    # ---- manifest plumbing ----
+
+    def _write_manifests(self, tmp_path, stages, aliases=None):
+        pkg = tmp_path / 'packages'
+        pkg.mkdir(exist_ok=True)
+        (pkg / 'stage-sources.json').write_text(json.dumps({'stages': stages}))
+        (pkg / 'source-aliases.json').write_text(
+            json.dumps({'aliases': aliases or {}}))
+        return pkg
+
+    def _builder(self, tmp_path, profile='minimal', **kwargs):
+        from builder import LFSBuilder
+        out = tmp_path / f'out-{profile}'
+        out.mkdir(exist_ok=True)
+        cfg = tmp_path / f'cfg-{profile}.json'
+        if not cfg.exists():
+            cfg.write_text('{}')
+        return LFSBuilder(profile=profile, output_dir=out,
+                          config_file=cfg, **kwargs)
+
+    def test_norm_source_token_folds_case_and_underscores(self):
+        assert LFSBuilder._norm_source_token('Flit_Core') == 'flit-core'
+
+    def test_load_manifest_reads_stages_and_normalizes_aliases(
+            self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path,
+            {'blfs/08-build-blfs-base.sh': ['openssl']},
+            {'Qt6': ['Qt-Everywhere-Src']})
+        b = self._builder(tmp_path)
+        stages, aliases = b._load_stage_source_manifest()
+        assert stages == {'blfs/08-build-blfs-base.sh': ['openssl']}
+        # alias keys and forms are folded to the comparable form
+        assert aliases == {'qt6': ['qt-everywhere-src']}
+        # cached: a second call returns the identical object
+        assert b._load_stage_source_manifest() is b._stage_source_manifest_cache
+
+    def test_load_manifest_missing_files_yield_empty(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / 'packages').mkdir()
+        b = self._builder(tmp_path)
+        stages, aliases = b._load_stage_source_manifest()
+        assert stages == {} and aliases == {}
+
+    def test_load_manifest_null_sections_yield_empty(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        pkg = tmp_path / 'packages'
+        pkg.mkdir()
+        (pkg / 'stage-sources.json').write_text(json.dumps({'stages': None}))
+        (pkg / 'source-aliases.json').write_text(json.dumps({'aliases': None}))
+        b = self._builder(tmp_path)
+        stages, aliases = b._load_stage_source_manifest()
+        assert stages == {} and aliases == {}
+
+    def test_load_manifest_corrupt_json_disables_scoping(
+            self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        pkg = tmp_path / 'packages'
+        pkg.mkdir()
+        (pkg / 'stage-sources.json').write_text('{not json')
+        b = self._builder(tmp_path)
+        b.logger = MagicMock()
+        stages, aliases = b._load_stage_source_manifest()
+        assert stages == {} and aliases == {}
+        assert b._scoping_active() is False
+        b.logger.warning.assert_called()
+
+    # ---- _scoping_active gate ----
+
+    def test_scoping_active_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        assert self._builder(tmp_path)._scoping_active() is True
+
+    def test_scoping_bypassed_by_download_all_flag(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path, download_all_sources=True)
+        assert b._scoping_active() is False
+
+    def test_scoping_bypassed_for_full_and_custom(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        for prof in ('full', 'custom'):
+            assert self._builder(tmp_path, profile=prof)._scoping_active() is False
+
+    def test_scoping_bypassed_by_config_false(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path)
+        b.config.set('sources.profile_scoped', False)
+        assert b._scoping_active() is False
+
+    def test_scoping_bypassed_when_manifest_empty(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {})
+        assert self._builder(tmp_path)._scoping_active() is False
+
+    # ---- token union + matching ----
+
+    def test_active_source_tokens_empty_without_manifest(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(tmp_path, {})
+        assert self._builder(tmp_path)._active_source_tokens() == set()
+
+    def test_active_source_tokens_expands_aliases(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path,
+            {'blfs/29-build-calamares.sh': ['qt6', 'calamares']},
+            {'qt6': ['qt-everywhere-src']})
+        b = self._builder(tmp_path)
+        with patch.object(b, 'get_build_stages',
+                          return_value=[('calamares-build',
+                                         'blfs/29-build-calamares.sh')]):
+            tokens = b._active_source_tokens()
+        assert {'qt6', 'qt-everywhere-src', 'calamares'} <= tokens
+        # the alias form is what actually matches the archive
+        assert b._source_matches_tokens(_QT_URL, tokens) is True
+
+    def test_active_source_tokens_ignores_inactive_stages(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path,
+            {'blfs/08-build-blfs-base.sh': ['openssl'],
+             'blfs/09c-build-kde.sh': ['plasma-desktop']})
+        b = self._builder(tmp_path)
+        with patch.object(b, 'get_build_stages',
+                          return_value=[('blfs-base',
+                                         'blfs/08-build-blfs-base.sh')]):
+            tokens = b._active_source_tokens()
+        assert 'openssl' in tokens
+        assert 'plasma-desktop' not in tokens
+
+    def test_source_matches_tokens_boundaries(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        b = self._builder(tmp_path)
+        # exact stem
+        assert b._source_matches_tokens(_OPENSSL_URL, {'openssl'}) is True
+        # prefix on a package boundary (digit / dash / dot)
+        assert b._source_matches_tokens(
+            'https://x/glib-2.84.4.tar.xz', {'glib'}) is True
+        # no boundary -> must NOT match (exo != exotic)
+        assert b._source_matches_tokens(
+            'https://x/exotic-1.0.tar.gz', {'exo'}) is False
+        # empty tokens in the set are skipped, real one still matches
+        assert b._source_matches_tokens(_OPENSSL_URL, {'', 'openssl'}) is True
+        # unrelated token -> no match
+        assert b._source_matches_tokens(_OPENSSL_URL, {'qt'}) is False
+
+    # ---- _update_sources_list integration ----
+
+    def _run_update(self, b, lfs_body, blfs_body):
+        with patch('urllib.request.urlopen',
+                   side_effect=_mock_urlopen_for(lfs_body, blfs_body)):
+            assert b._update_sources_list() is True
+        lines = [
+            line for line in
+            (Path('packages') / 'sources.list').read_text().splitlines()
+            if line and not line.startswith('#')
+        ]
+        return lines
+
+    def test_minimal_drops_desktop_universe_keeps_lfs_and_base(
+            self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path, profile='minimal')
+        b.config.set('repositories',
+                     ['https://www.linuxfromscratch.org/lfs/view/stable/wget-list',
+                      'https://www.linuxfromscratch.org/blfs/view/stable/wget-list'])
+        lines = self._run_update(
+            b, '\n'.join(_LFS_URLS), '\n'.join(_BLFS_URLS))
+        joined = '\n'.join(lines)
+        # LFS core always kept (origin 'lfs')
+        assert 'linux-6.16.1.tar.xz' in joined
+        assert 'bash-5.3.tar.gz' in joined
+        # blfs-base package kept
+        assert 'openssl-3.5.0.tar.gz' in joined
+        # desktop universe dropped
+        assert 'qt-everywhere-src' not in joined
+        assert 'plasma-desktop' not in joined
+
+    def test_lfs_origin_url_never_dropped_even_if_unattributed(
+            self, tmp_path, monkeypatch):
+        """A package only on the LFS wget-list survives even with no token."""
+        monkeypatch.chdir(tmp_path)
+        # manifest attributes nothing that matches the LFS URLs
+        self._write_manifests(
+            tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path, profile='minimal')
+        b.config.set('repositories',
+                     ['https://www.linuxfromscratch.org/lfs/view/stable/wget-list',
+                      'https://www.linuxfromscratch.org/blfs/view/stable/wget-list'])
+        lines = self._run_update(
+            b, '\n'.join(_LFS_URLS), '\n'.join(_BLFS_URLS))
+        assert 'linux-6.16.1.tar.xz' in '\n'.join(lines)
+
+    def test_scoping_disabled_keeps_everything(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path, profile='minimal')
+        b.config.set('sources.profile_scoped', False)
+        b.config.set('repositories',
+                     ['https://www.linuxfromscratch.org/lfs/view/stable/wget-list',
+                      'https://www.linuxfromscratch.org/blfs/view/stable/wget-list'])
+        joined = '\n'.join(self._run_update(
+            b, '\n'.join(_LFS_URLS), '\n'.join(_BLFS_URLS)))
+        assert 'qt-everywhere-src' in joined
+        assert 'plasma-desktop' in joined
+
+    def test_download_all_flag_keeps_everything(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        self._write_manifests(
+            tmp_path, {'blfs/08-build-blfs-base.sh': ['openssl']})
+        b = self._builder(tmp_path, profile='minimal', download_all_sources=True)
+        b.config.set('repositories',
+                     ['https://www.linuxfromscratch.org/lfs/view/stable/wget-list',
+                      'https://www.linuxfromscratch.org/blfs/view/stable/wget-list'])
+        joined = '\n'.join(self._run_update(
+            b, '\n'.join(_LFS_URLS), '\n'.join(_BLFS_URLS)))
+        assert 'qt-everywhere-src' in joined
+
+    def test_scoping_active_but_no_tokens_keeps_everything(
+            self, tmp_path, monkeypatch):
+        """A manifest that names only inactive stages must not drop the world."""
+        monkeypatch.chdir(tmp_path)
+        # kde stage is not active for minimal -> active token set is empty
+        self._write_manifests(tmp_path, {'blfs/09c-build-kde.sh': ['plasma-desktop']})
+        b = self._builder(tmp_path, profile='minimal')
+        b.logger = MagicMock()
+        b.config.set('repositories',
+                     ['https://www.linuxfromscratch.org/lfs/view/stable/wget-list',
+                      'https://www.linuxfromscratch.org/blfs/view/stable/wget-list'])
+        assert b._scoping_active() is True
+        joined = '\n'.join(self._run_update(
+            b, '\n'.join(_LFS_URLS), '\n'.join(_BLFS_URLS)))
+        assert 'qt-everywhere-src' in joined
+        assert 'plasma-desktop' in joined
+        b.logger.warning.assert_called()
+
+
+class TestStageSourceManifests:
+    """Part A5 audit + drift: the committed manifests must stay in sync with
+    the stage scripts, and builder's matcher must agree with the scanner's so
+    no active stage ever loses a source it builds.
+    """
+
+    @staticmethod
+    def _load_scanner():
+        import importlib.util
+        path = Path('tools') / 'scan-stage-sources.py'
+        spec = importlib.util.spec_from_file_location('scan_stage_sources', str(path))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def test_manifests_are_not_stale(self):
+        """Re-running the scanner must reproduce the committed manifests."""
+        scanner = self._load_scanner()
+        assert scanner.scan(check=True) == 0, (
+            "packages/stage-sources.json or source-aliases.json is stale; "
+            "re-run: python3 tools/scan-stage-sources.py")
+
+    def test_scanner_and_builder_matchers_agree(self):
+        """Every (token, committed archive) the scanner resolves must also be
+        kept by builder._source_matches_tokens.
+
+        The two use different normalization (the scanner matches the raw
+        filename with its extension; builder strips the version via
+        _package_stem), so a disagreement here is exactly the attribution gap
+        that would silently drop a source at build time.
+        """
+        from builder import _archive_filename
+        scanner = self._load_scanner()
+        archive_names = scanner._load_archive_filenames()
+        assert archive_names, "committed source lists are empty"
+
+        stage_sources = json.loads(
+            Path('packages/stage-sources.json').read_text())['stages']
+        aliases = json.loads(
+            Path('packages/source-aliases.json').read_text())['aliases']
+
+        # filename -> a representative committed URL
+        fname_to_url = {}
+        for name in ('packages/stable/12.4/sources.list',
+                     'packages/custom-sources.list'):
+            p = Path(name)
+            if not p.exists():
+                continue
+            for line in p.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    fname_to_url[scanner._norm(_archive_filename(line))] = line
+
+        # every token any stage attributes, alias-expanded
+        all_tokens = set()
+        for toks in stage_sources.values():
+            for tok in toks:
+                nt = tok.lower().replace('_', '-')
+                all_tokens.add(nt)
+                for form in aliases.get(tok, []) + aliases.get(nt, []):
+                    all_tokens.add(form.lower().replace('_', '-'))
+
+        # a dummy builder only for its (profile-independent) matcher
+        b = LFSBuilder.__new__(LFSBuilder)
+        checked = 0
+        for tok in sorted(all_tokens):
+            for fname, url in fname_to_url.items():
+                if scanner._matches_archive(tok, {fname}):
+                    assert b._source_matches_tokens(url, {tok}), (
+                        f"scanner resolves token '{tok}' to {fname} but "
+                        f"builder would drop {url}")
+                    checked += 1
+        assert checked > 0, "no token/archive pairs were cross-checked"
+
+    def test_active_stage_tokens_flow_into_union_for_every_profile(self, tmp_path):
+        """For every profile, each active stage's attributed tokens must reach
+        _active_source_tokens(); a get_build_stages()/manifest path mismatch
+        would silently drop that stage's sources.
+
+        This includes the dispatcher stages: blfs/09-build-desktop.sh and
+        lfs/06a-init-system.sh contribute NO tokens of their own, they `source`
+        a config-selected sibling (09a-09d by desktop.type, 06c-06e by init
+        system).  The audit resolves each profile's sub-script independently
+        and asserts its packages reach the union -- the blind spot that would
+        otherwise drop every GNOME/KDE/XFCE/LXQT desktop package.
+        """
+        from builder import ProfileManager
+        stage_sources = json.loads(
+            Path('packages/stage-sources.json').read_text())['stages']
+        base_cfg = json.loads(Path('config/build.conf').read_text())
+
+        for profile in ProfileManager.list_profiles():
+            cfg = tmp_path / f'{profile}.conf'
+            cfg.write_text(json.dumps(base_cfg))
+            out = tmp_path / f'out-{profile}'
+            out.mkdir(exist_ok=True)
+            b = LFSBuilder(profile=profile, output_dir=out, config_file=cfg)
+            tokens = b._active_source_tokens()
+
+            # Every script get_build_stages() schedules, plus the sibling each
+            # dispatcher sources for this profile's config.
+            expected_scripts = {script for _name, script in b.get_build_stages()}
+            for script in list(expected_scripts):
+                dispatch = b.STAGE_DISPATCH.get(script)
+                if not dispatch:
+                    continue
+                kind, branches = dispatch
+                sub_script = branches.get(b._dispatch_selector(kind))
+                if sub_script:
+                    expected_scripts.add(sub_script)
+
+            for script in expected_scripts:
+                for tok in stage_sources.get(script, []):
+                    nt = tok.lower().replace('_', '-')
+                    assert nt in tokens, (
+                        f"profile '{profile}': token '{tok}' of active stage "
+                        f"{script} is missing from the scoped union")
+
+    def test_dispatch_selector_resolves_desktop_and_init(self, tmp_path):
+        """_dispatch_selector() must mirror what the dispatcher script branches
+        on at build time, or the union would resolve the wrong sub-script."""
+        from builder import ProfileManager
+        base_cfg = json.loads(Path('config/build.conf').read_text())
+        cfg = tmp_path / 'dispatch.conf'
+        cfg.write_text(json.dumps(base_cfg))
+        out = tmp_path / 'out-dispatch'
+        out.mkdir(exist_ok=True)
+
+        for profile in ProfileManager.list_profiles():
+            b = LFSBuilder(profile=profile, output_dir=out, config_file=cfg)
+            # desktop dispatcher branches on desktop.type, init on init system.
+            assert b._dispatch_selector('desktop') == b.config.get('desktop.type')
+            assert b._dispatch_selector('init') == b.get_init_system()
+            assert b._dispatch_selector('bogus') is None
+
+    def test_gnome_profile_keeps_gcr4_and_drops_kde_stack(self, tmp_path):
+        """Regression for the dispatcher blind spot: a GNOME profile must keep
+        gcr-4 (from blfs/09b, sourced by the blfs/09 dispatcher) while still
+        dropping the KDE/Qt stack GNOME never builds."""
+        from builder import ProfileManager
+        base_cfg = json.loads(Path('config/build.conf').read_text())
+        cfg = tmp_path / 'gnome.conf'
+        cfg.write_text(json.dumps(base_cfg))
+        out = tmp_path / 'out-gnome'
+        out.mkdir(exist_ok=True)
+        profiles = ProfileManager.list_profiles()
+        gnome = next((p for p in profiles
+                      if ProfileManager.get_profile(p).get('desktop') == 'gnome'), None)
+        if gnome is None:
+            pytest.skip('no GNOME-desktop profile defined')
+        b = LFSBuilder(profile=gnome, output_dir=out, config_file=cfg)
+        tokens = b._active_source_tokens()
+        assert 'gcr-4' in tokens
+        # GNOME must not drag in the KDE/Qt desktop universe.
+        assert 'plasma-desktop' not in tokens
+
+    def test_scanner_writes_manifests_when_not_checking(self, monkeypatch):
+        """scan(check=False) regenerates both manifests and reports 0."""
+        scanner = self._load_scanner()
+        # The scanner prints each path via relative_to(REPO_ROOT), so the temp
+        # outputs must live under the repo root; unlink them afterwards.
+        stage_out = scanner.REPO_ROOT / 'packages' / '.tmp-test-stage-sources.json'
+        alias_out = scanner.REPO_ROOT / 'packages' / '.tmp-test-source-aliases.json'
+        monkeypatch.setattr(scanner, 'STAGE_SOURCES_OUT', stage_out)
+        monkeypatch.setattr(scanner, 'SOURCE_ALIASES_OUT', alias_out)
+        try:
+            assert scanner.scan(check=False) == 0
+            assert json.loads(stage_out.read_text())['stages']
+            assert 'aliases' in json.loads(alias_out.read_text())
+        finally:
+            stage_out.unlink(missing_ok=True)
+            alias_out.unlink(missing_ok=True)
+
+    def test_scanner_check_reports_stale(self, monkeypatch):
+        """scan(check=True) returns 1 when the committed manifests differ."""
+        scanner = self._load_scanner()
+        stage_out = scanner.REPO_ROOT / 'packages' / '.tmp-test-stage-sources.json'
+        alias_out = scanner.REPO_ROOT / 'packages' / '.tmp-test-source-aliases.json'
+        stage_out.write_text('{"stages": {}}')
+        alias_out.write_text('{"aliases": {}}')
+        monkeypatch.setattr(scanner, 'STAGE_SOURCES_OUT', stage_out)
+        monkeypatch.setattr(scanner, 'SOURCE_ALIASES_OUT', alias_out)
+        try:
+            assert scanner.scan(check=True) == 1
+        finally:
+            stage_out.unlink(missing_ok=True)
+            alias_out.unlink(missing_ok=True)
+
+    def test_scanner_check_reports_stale_when_missing(self, monkeypatch):
+        """A missing manifest counts as stale (never a false 'up to date')."""
+        scanner = self._load_scanner()
+        monkeypatch.setattr(
+            scanner, 'STAGE_SOURCES_OUT',
+            scanner.REPO_ROOT / 'packages' / '.tmp-test-missing-stage.json')
+        monkeypatch.setattr(
+            scanner, 'SOURCE_ALIASES_OUT',
+            scanner.REPO_ROOT / 'packages' / '.tmp-test-missing-alias.json')
+        assert scanner.scan(check=True) == 1
+
+    def test_scanner_main_check_cli(self, monkeypatch):
+        """`scan-stage-sources.py --check` exits 0 on the committed manifests."""
+        scanner = self._load_scanner()
+        monkeypatch.setattr(sys, 'argv', ['scan-stage-sources.py', '--check'])
+        with pytest.raises(SystemExit) as exc:
+            scanner.main()
+        assert exc.value.code == 0
+
 
