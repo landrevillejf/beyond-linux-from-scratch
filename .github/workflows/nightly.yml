@@ -123,6 +123,22 @@ jobs:
           ref: main
           clean: true
 
+      - name: Relocate build scratch off /tmp tmpfs
+        # ubuntu-latest moved to an Ubuntu 26 runner image whose /tmp is a
+        # ~7.9G RAM-backed tmpfs; large profiles need multiple GB under
+        # /tmp/lfs-build, which made builds die with ENOSPC. Bind the scratch
+        # dirs onto the 145G root disk so every /tmp/lfs-* path below works
+        # unchanged. Warn (never fail) if a runner cannot bind, so a runner
+        # whose /tmp is already large is unaffected.
+        run: |
+          sudo mkdir -p /mnt/lfs-scratch
+          for d in lfs-build lfs-sources base-cache; do
+            sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
+              || echo "::warning::could not bind /tmp/$d onto the root disk"
+          done
+          df -h /tmp /mnt/lfs-scratch
+
       # ---------- RESTAURATION DU CACHE ----------
       - name: Restore package cache from release
         run: |
@@ -256,7 +272,9 @@ jobs:
       # ---------- PREPARATION DU BUILD ----------
       - name: Prepare lfs build directory
         run: |
-          sudo rm -rf /tmp/lfs-build
+          # /tmp/lfs-build is a bind mountpoint now: clear its CONTENTS, never
+          # rm -rf the mountpoint itself (that fails with EBUSY).
+          sudo rm -rf /tmp/lfs-build/* /tmp/lfs-build/.[!.]* 2>/dev/null || true
           sudo mkdir -p /tmp/lfs-build
           sudo cp -a "$GITHUB_WORKSPACE"/. /tmp/lfs-build/
           sudo chown -R lfs:lfs /tmp/lfs-build
@@ -269,8 +287,9 @@ jobs:
             sudo chown -R lfs:lfs /tmp/lfs-build/build-release
             echo "✅ Linked $(($(find /tmp/lfs-sources -type f | wc -l))) cached packages"
             # The copy above duplicates several GB of tarballs; the base
-            # prefix restore that follows needs the room.
-            sudo rm -rf /tmp/lfs-sources
+            # prefix restore that follows needs the room.  Clear the bind
+            # mount's CONTENTS, not the /tmp/lfs-sources mountpoint itself.
+            sudo rm -rf /tmp/lfs-sources/* /tmp/lfs-sources/.[!.]* 2>/dev/null || true
             df -h /tmp
           fi
 
