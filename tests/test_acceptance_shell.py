@@ -1549,7 +1549,7 @@ class TestLFSComplianceGuardrails:
         for url_fragment in (
             'fail2ban/fail2ban/archive/refs/tags/1.1.0.tar.gz',
             'CISOfy/lynis/archive/refs/tags/3.1.1.tar.gz',
-            'rkhunter/rkhunter/1.4.8/rkhunter-1.4.8.tar.gz',
+            'rkhunter/rkhunter/1.4.6/rkhunter-1.4.6.tar.gz',
         ):
             assert url_fragment in content, f"missing pin: {url_fragment}"
         # the non-matching bare form must NOT be pinned
