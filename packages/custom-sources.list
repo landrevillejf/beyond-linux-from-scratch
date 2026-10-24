@@ -839,4 +839,8 @@ https://github.com/linux-audit/audit-userspace/archive/refs/tags/v4.2.1.tar.gz
 # ============================================================================
 https://github.com/fail2ban/fail2ban/archive/refs/tags/1.1.0.tar.gz
 https://github.com/CISOfy/lynis/archive/refs/tags/3.1.1.tar.gz
-https://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.8/rkhunter-1.4.8.tar.gz
+# rkhunter: upstream SourceForge (rkhunter.sourceforge.net) latest release is
+# 1.4.6; there is no 1.4.8 (that pin 404'd on every nightly leg). Keep the
+# downloads.sourceforge.net/<ver>/rkhunter-<ver>.tar.gz form so _archive_filename()
+# derives rkhunter-1.4.6.tar.gz, which blfs/32's rkhunter-*.tar.gz glob matches.
+https://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.6/rkhunter-1.4.6.tar.gz

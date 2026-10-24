@@ -320,7 +320,7 @@
       "packages": {
         "fail2ban": {"version": "1.2.0", "url": "https://github.com/fail2ban/fail2ban/archive/1.2.0.tar.gz"},
         "lynis": {"version": "3.2.0", "url": "https://github.com/CISOfy/lynis/archive/3.2.0.tar.gz"},
-        "rkhunter": {"version": "1.4.8", "url": "https://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.8/rkhunter-1.4.8.tar.gz"},
+        "rkhunter": {"version": "1.4.6", "url": "https://downloads.sourceforge.net/project/rkhunter/rkhunter/1.4.6/rkhunter-1.4.6.tar.gz"},
         "iptables": {"version": "1.8.10", "url": "https://www.netfilter.org/projects/iptables/files/iptables-1.8.10.tar.xz"},
         "nftables": {"version": "1.1.1", "url": "https://www.netfilter.org/projects/nftables/files/nftables-1.1.1.tar.xz"}
       },
