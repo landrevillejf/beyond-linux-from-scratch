@@ -316,7 +316,8 @@ python3 builder.py --generate-sources-list
 | `--kernel-type` | Kernel type (`linux`, `linux-libre`, `gnu-hurd`, `freebsd`) |
 | `--host-distro` | Host distro override (`debian`, `fedora`, `arch`, `auto`) |
 | `--bootloader` | Bootloader override (`grub`, `uboot`, `aboot`) |
-| `--generate-sources-list` | Generate `packages/sources.list` and exit |
+| `--generate-sources-list` | Generate `packages/sources.list` and exit. The list is scoped to the active `--profile`/`--arch`/`--init` unless `--download-all-sources` is given |
+| `--download-all-sources` | Disable profile scoping and keep the full merged LFS+BLFS wget-list. By default downloads are scoped to the packages the active profile's stages build (see `packages/stage-sources.json`); `full`/`custom` profiles always download everything |
 | `--write-lockfile` | Write `packages/sources.lock` (sha256 pins) from the downloaded sources and exit. A later build verifies each archive against it, and fails closed when `security.supply_chain.require_lockfile` is on |
 | `--kernel-version` | Kernel version override (e.g. `6.16.1`, `6.12.20`) |
 | `--arch` | Target architecture (`x86_64`, `aarch64`) |
