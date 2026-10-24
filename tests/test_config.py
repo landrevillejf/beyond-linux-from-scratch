@@ -63,7 +63,7 @@ class TestLFSConfig:
             'init_system', 'package_manager', 'system_updater', 'live_system',
             'java_dev', 'desktop', 'graphics', 'security', 'bootloader', 'filesystem',
             'kernel', 'locale', 'timezone', 'hostname', 'users', 'network',
-            'build_options', 'logging', 'installer'
+            'build_options', 'logging', 'installer', 'sources'
         ]
 
         for section in required_sections:
@@ -130,6 +130,25 @@ class TestLFSConfig:
                 f"{name} disagrees with the code default on mesa_gallium_drivers"
             assert data['graphics']['mesa_llvm'] == 'disabled', \
                 f"{name} disagrees with the code default on mesa_llvm"
+
+    def test_sources_profile_scoped_agrees_across_config_sources(self, temp_dir):
+        """Every checked-in preset must default sources.profile_scoped to true.
+
+        sources.profile_scoped flattens to LFS_CONFIG_SOURCES_PROFILE_SCOPED
+        and gates whether _update_sources_list() scopes downloads to the active
+        profile's build stages.  A preset that disagreed with the code default
+        would silently restore the download-everything behaviour that overflowed
+        the Ubuntu 26 runner's /tmp tmpfs (Nightly #39, Errno 28) for whoever
+        happened to pass --config with it.
+        """
+        generated = LFSConfig(temp_dir / "fresh.conf")
+        assert generated.data['sources']['profile_scoped'] is True
+
+        for name in ('config/build.conf', 'config/build.conf.json',
+                     'config/default.json'):
+            data = json.loads(Path(name).read_text())
+            assert data['sources']['profile_scoped'] is True, \
+                f"{name} disagrees with the code default on sources.profile_scoped"
 
     def test_security_hardening_defaults_agree_across_config_sources(self, temp_dir):
         """The hardening-program security knobs must match across every source.
