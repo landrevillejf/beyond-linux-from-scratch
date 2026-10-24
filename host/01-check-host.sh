@@ -62,7 +62,7 @@ fi
 # ---------- Architecture ----------
 ARCH=$(uname -m)
 log_info "Architecture: $ARCH"
-if [[ ! "$ARCH" =~ ^(x86_64|aarch64|arm64)$ ]]; then
+if [[ ! $ARCH =~ ^(x86_64|aarch64|arm64)$ ]]; then
     log_warning "Architecture $ARCH – LFS recommends x86_64 or ARM64."
 fi
 
@@ -74,34 +74,34 @@ install_packages() {
     [ ${#packages[@]} -eq 0 ] && return 0
     log_info "Installing missing packages: ${packages[*]}"
     case "$distro" in
-        debian|ubuntu)
-            $USE_SUDO apt-get update -qq
-            $USE_SUDO apt-get install -y -qq "${packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky|almalinux)
-            if command -v dnf &>/dev/null; then
-                $USE_SUDO dnf install -y "${packages[@]}"
-            else
-                $USE_SUDO yum install -y "${packages[@]}"
-            fi
-            ;;
-        opensuse*|sles)
-            $USE_SUDO zypper install -y "${packages[@]}"
-            ;;
-        arch|manjaro)
-            $USE_SUDO pacman -Syu --noconfirm "${packages[@]}"
-            ;;
-        alpine)
-            $USE_SUDO apk add "${packages[@]}"
-            ;;
-        gentoo)
-            log_error "Gentoo detected – please install manually using emerge: ${packages[*]}"
-            exit 1
-            ;;
-        *)
-            log_error "Unknown distribution – please install manually: ${packages[*]}"
-            exit 1
-            ;;
+    debian | ubuntu)
+        $USE_SUDO apt-get update -qq
+        $USE_SUDO apt-get install -y -qq "${packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky | almalinux)
+        if command -v dnf &>/dev/null; then
+            $USE_SUDO dnf install -y "${packages[@]}"
+        else
+            $USE_SUDO yum install -y "${packages[@]}"
+        fi
+        ;;
+    opensuse* | sles)
+        $USE_SUDO zypper install -y "${packages[@]}"
+        ;;
+    arch | manjaro)
+        $USE_SUDO pacman -Syu --noconfirm "${packages[@]}"
+        ;;
+    alpine)
+        $USE_SUDO apk add "${packages[@]}"
+        ;;
+    gentoo)
+        log_error "Gentoo detected – please install manually using emerge: ${packages[*]}"
+        exit 1
+        ;;
+    *)
+        log_error "Unknown distribution – please install manually: ${packages[*]}"
+        exit 1
+        ;;
     esac
 }
 
@@ -214,14 +214,14 @@ check_symlink() {
 # ---------- LFS required tools (command:minimum_version) ----------
 declare -A REQUIRED_TOOLS=(
     ["bash"]="3.2"
-    ["binutils"]="2.13.1"    # checked via 'ld'
+    ["binutils"]="2.13.1" # checked via 'ld'
     ["bison"]="2.7"
-    ["coreutils"]="6.9"      # via 'ls'
-    ["diffutils"]="2.8.1"    # via 'diff'
-    ["findutils"]="4.2.31"   # via 'find'
+    ["coreutils"]="6.9"    # via 'ls'
+    ["diffutils"]="2.8.1"  # via 'diff'
+    ["findutils"]="4.2.31" # via 'find'
     ["gawk"]="4.0.1"
     ["gcc"]="12.0"
-    ["g++"]="12.0"           # C++ compiler
+    ["g++"]="12.0" # C++ compiler
     ["grep"]="2.5.1a"
     ["gzip"]="1.3.12"
     ["m4"]="1.4.10"
@@ -231,8 +231,8 @@ declare -A REQUIRED_TOOLS=(
     ["python3"]="3.4"
     ["sed"]="4.1.5"
     ["tar"]="1.22"
-    ["texinfo"]="4.7"        # via makeinfo
-    ["xz"]="5.0.0"           # via xz
+    ["texinfo"]="4.7" # via makeinfo
+    ["xz"]="5.0.0"    # via xz
 )
 
 # Additional required commands (no explicit version)
@@ -260,13 +260,13 @@ for cmd in "${!REQUIRED_TOOLS[@]}"; do
     min_ver="${REQUIRED_TOOLS[$cmd]}"
     # Special cases: some tools use a different command name
     case $cmd in
-        binutils)   cmd_to_check="ld" ;;
-        coreutils)  cmd_to_check="ls" ;;
-        diffutils)  cmd_to_check="diff" ;;
-        findutils)  cmd_to_check="find" ;;
-        texinfo)    cmd_to_check="makeinfo" ;;
-        xz)         cmd_to_check="xz" ;;
-        *)          cmd_to_check="$cmd" ;;
+    binutils) cmd_to_check="ld" ;;
+    coreutils) cmd_to_check="ls" ;;
+    diffutils) cmd_to_check="diff" ;;
+    findutils) cmd_to_check="find" ;;
+    texinfo) cmd_to_check="makeinfo" ;;
+    xz) cmd_to_check="xz" ;;
+    *) cmd_to_check="$cmd" ;;
     esac
     if ! check_cmd_version "$cmd_to_check" "$min_ver"; then
         pkg="${PKG_MAP[$cmd]}"
@@ -340,20 +340,20 @@ fi
 # ----- Automatic installation of missing packages -----
 if [ ${#missing_packages[@]} -ne 0 ]; then
     # Remove duplicates
-    IFS=" " read -r -a unique_pkgs <<< "$(printf '%s\n' "${missing_packages[@]}" | sort -u)"
+    IFS=" " read -r -a unique_pkgs <<<"$(printf '%s\n' "${missing_packages[@]}" | sort -u)"
     log_info "Packages to install: ${unique_pkgs[*]}"
     install_packages "$DISTRO" "${unique_pkgs[@]}"
     # Re-check after installation
     all_good=true
     for cmd in "${!REQUIRED_TOOLS[@]}"; do
         case $cmd in
-            binutils)   cmd_to_check="ld" ;;
-            coreutils)  cmd_to_check="ls" ;;
-            diffutils)  cmd_to_check="diff" ;;
-            findutils)  cmd_to_check="find" ;;
-            texinfo)    cmd_to_check="makeinfo" ;;
-            xz)         cmd_to_check="xz" ;;
-            *)          cmd_to_check="$cmd" ;;
+        binutils) cmd_to_check="ld" ;;
+        coreutils) cmd_to_check="ls" ;;
+        diffutils) cmd_to_check="diff" ;;
+        findutils) cmd_to_check="find" ;;
+        texinfo) cmd_to_check="makeinfo" ;;
+        xz) cmd_to_check="xz" ;;
+        *) cmd_to_check="$cmd" ;;
         esac
         if ! check_cmd_version "$cmd_to_check" "${REQUIRED_TOOLS[$cmd]}"; then
             log_error "Check failed for $cmd even after installation."
