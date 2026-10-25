@@ -458,6 +458,38 @@
 
 ### Fixed
 
+- **Every scoped profile aborted at `blfs-base` with `blfs-bootscripts source
+  not found`** (`tools/scan-stage-sources.py`, `packages/stage-sources.json`,
+  `tests/test_builder.py`)
+  - The profile-scoped download allowlist (see Added) drops any BLFS-origin
+    archive no active stage claims.  `blfs/08-build-blfs-base.sh` locates its
+    bootscripts tarball with a `for f in blfs-bootscripts-*.tar.xz; do ...
+    archive=$f; done` glob loop whose body assigns to a variable instead of
+    calling a build verb, so `tools/scan-stage-sources.py` never harvested
+    `blfs-bootscripts` into the stage's token list.  With no token claiming it,
+    scoping evicted the BLFS wget-list archive and `blfs-base` failed on every
+    scoped profile.  The 2026-10-25 `lg3d.yml` run (all three legs) and the
+    same night's `nightly.yml` (server, java-dev, gnome, xfce, arm64, minimal,
+    ...) all died identically; only `full`/`custom` (scoping bypassed) were
+    unaffected.
+  - The scanner now also harvests the `<name>-*.tar.<ext>` archive-glob idiom
+    anywhere in a stage script, which attributes `blfs-bootscripts` to
+    `blfs/08` and, as a bonus, the `libgedit-*` glob loop in `blfs/09b` and the
+    `freetype-doc`/`poppler-data`/`libcdio-paranoia` data sub-packages to
+    `blfs/08a`.  Both manifests are regenerated; `tests/test_builder.py` gains
+    `test_scanner_harvests_archive_glob_idiom` and
+    `test_blfs_bootscripts_survives_scoping_for_every_profile`.
+
+- **`lg3d.yml` published a `minimal` canary alongside the Project Looking
+  Glass ISOs** (`.github/workflows/lg3d.yml`)
+  - The workflow's base matrix was `minimal`/`sysvinit`/`x86_64` with the two
+    `lg3d` legs added as `include` entries, so a green run could publish a
+    `minimal` ISO under the `lg3d-nightly-<date>` tag while both `lg3d` legs
+    were red.  The matrix is now exactly the two `lg3d` legs
+    (`lg3d`/`systemd`/`x86_64` and `lg3d`/`sysvinit`/`x86_64`); `nightly.yml`
+    keeps the from-scratch `minimal` canary role, so nothing is lost.  Both
+    legs resume from the published base prefix (`USE_BASE_CACHE: "true"`).
+
 - **Nightly builds died with `[Errno 28] No space left on device` in the
   download phase** (`builder.py`, 15 files under `.github/workflows/`)
   - Two independent causes, both fixed.  (1) Every profile downloaded the

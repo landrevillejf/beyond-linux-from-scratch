@@ -1,6 +1,15 @@
 {
   "_comment": "Per-stage package tokens harvested from the stage shell scripts by tools/scan-stage-sources.py.  When builder.py scopes downloads to a profile it keeps only the source archives whose name matches a token of one of that profile's active stages (expanded through source-aliases.json), plus the whole LFS core wget-list.  Tokens are resolved against the LIVE wget-lists at build time, not the curated packages/stable subset, so a token that names no committed archive is kept (it may still match a package the live BLFS list carries).  Do not edit by hand; re-run the scanner.",
   "stages": {
+    "host/02-prepare-host.sh": [
+      "binutils",
+      "gcc"
+    ],
+    "host/04-build-toolchain.sh": [
+      "binutils",
+      "gcc",
+      "glibc"
+    ],
     "lfs/05b-build-lfs-system.sh": [
       "XML-Parser",
       "acl",
@@ -107,6 +116,7 @@
       "skalibs"
     ],
     "blfs/08-build-blfs-base.sh": [
+      "blfs-bootscripts",
       "cmake",
       "curl",
       "expat",
@@ -126,6 +136,7 @@
       "expat",
       "fontconfig",
       "freetype",
+      "freetype-doc",
       "fribidi",
       "gdk-pixbuf",
       "gegl",
@@ -148,6 +159,7 @@
       "libcap",
       "libcddb",
       "libcdio",
+      "libcdio-paranoia",
       "libcue",
       "libdrm",
       "libdvdnav",
@@ -196,6 +208,7 @@
       "pcre2",
       "pixman",
       "poppler",
+      "poppler-data",
       "pyyaml",
       "shared-mime-info",
       "spirv-headers",
@@ -349,6 +362,10 @@
       "gsettings-desktop-schemas",
       "gsound",
       "libadwaita",
+      "libgedit-amtk",
+      "libgedit-gfls",
+      "libgedit-gtksourceview",
+      "libgedit-tepl",
       "libgnomekbd",
       "libnotify",
       "libpeas",

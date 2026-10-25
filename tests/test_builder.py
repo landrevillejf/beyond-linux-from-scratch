@@ -4073,6 +4073,41 @@ class TestStageSourceManifests:
         # GNOME must not drag in the KDE/Qt desktop universe.
         assert 'plasma-desktop' not in tokens
 
+    def test_scanner_harvests_archive_glob_idiom(self):
+        """A `for f in <pkg>-*.tar.<ext>` glob loop must be harvested even when
+        its body assigns to a variable instead of calling a build verb -- the
+        idiom blfs/08 uses for blfs-bootscripts and blfs/09b for libgedit-*."""
+        scanner = self._load_scanner()
+        toks = scanner._extract_tokens(
+            'for f in blfs-bootscripts-*.tar.xz; do\n'
+            '    if [ -f "$f" ]; then archive=$f; fi\n'
+            'done\n')
+        assert 'blfs-bootscripts' in toks
+
+    def test_blfs_bootscripts_survives_scoping_for_every_profile(self, tmp_path):
+        """Regression (Nightly 2026-10-25): the scanner once missed blfs/08's
+        `for f in blfs-bootscripts-*.tar.xz` glob, so profile scoping evicted
+        the BLFS-origin archive and EVERY scoped profile aborted at blfs-base
+        with "blfs-bootscripts source not found".  blfs-base is always active,
+        so the token must reach the union and match the live BLFS URL for every
+        profile.
+        """
+        from builder import ProfileManager
+        url = ('https://anduin.linuxfromscratch.org/BLFS/blfs-bootscripts/'
+               'blfs-bootscripts-20250225.tar.xz')
+        base_cfg = json.loads(Path('config/build.conf').read_text())
+        for profile in ProfileManager.list_profiles():
+            cfg = tmp_path / f'{profile}.conf'
+            cfg.write_text(json.dumps(base_cfg))
+            out = tmp_path / f'out-bs-{profile}'
+            out.mkdir(exist_ok=True)
+            b = LFSBuilder(profile=profile, output_dir=out, config_file=cfg)
+            tokens = b._active_source_tokens()
+            assert 'blfs-bootscripts' in tokens, (
+                f"profile '{profile}': blfs-bootscripts missing from union")
+            assert b._source_matches_tokens(url, tokens), (
+                f"profile '{profile}': scoping would drop {url}")
+
     def test_scanner_writes_manifests_when_not_checking(self, monkeypatch):
         """scan(check=False) regenerates both manifests and reports 0."""
         scanner = self._load_scanner()
