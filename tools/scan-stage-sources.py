@@ -21,6 +21,8 @@ through several heterogeneous idioms:
   * ``build_pkg <name> ...`` / ``prep_src <name>`` / ``meson_build <name>``
   * literal ``find_archive <archive>`` / ``find_archive '<archive>-*.tar.*'``
   * ``for pkg in a b c; do run_build ... "$pkg"; done`` loops
+  * ``<name>-*.tar.<ext>`` archive globs (blfs/08 blfs-bootscripts, blfs/09b
+    libgedit-*), whose loop body assigns to a variable, not a build verb
   * an in-script ``archive_names()`` map (glib2 -> "glib2 glib", icu -> ...)
 
 This scanner harvests every one of those idioms, then RESOLVES each candidate
@@ -92,6 +94,16 @@ _REQUIRE_FILE_RE = re.compile(r"\brequire_file\s+[\"']([^\"']+)[\"']")
 # ls <name>-*.tar.*  (conditional stages locate their tarball this way, e.g.
 # blfs/32 `ls fail2ban-*.tar.gz`, blfs/16 `ls wireguard-tools-*.tar.xz`).
 _LS_GLOB_RE = re.compile(r"\bls\s+[\"']?(" + _TOKEN_RE + r")-\*")
+# <name>-*.tar.<ext>  anywhere in the script: the archive-glob idiom a stage
+# uses to locate a tarball whose exact version it does not hardcode.  This
+# catches the `for f in blfs-bootscripts-*.tar.xz; do ... archive=$f; done`
+# loop in blfs/08 and the `for package in libgedit-*-*.tar.*` loop in blfs/09b,
+# whose bodies assign to a variable instead of calling a build verb, so neither
+# _for_loop_items (needs a build verb) nor _LS_GLOB_RE (needs a leading `ls`)
+# harvested them.  Dropping blfs-bootscripts from the manifest made profile
+# scoping evict the BLFS-origin archive and every scoped profile abort at
+# blfs-base with "blfs-bootscripts source not found" (Nightly 2026-10-25).
+_ARCHIVE_GLOB_RE = re.compile(r"\b(" + _TOKEN_RE + r")-\*\.tar\.")
 # First shell-glob metacharacter, used to cut a require_file pattern's prefix.
 _GLOB_META_RE = re.compile(r"[*?[]")
 
@@ -221,6 +233,8 @@ def _extract_tokens(text):
         if prefix:
             tokens.add(prefix)
     for m in _LS_GLOB_RE.finditer(text):
+        tokens.add(m.group(1))
+    for m in _ARCHIVE_GLOB_RE.finditer(text):
         tokens.add(m.group(1))
     for _var, items in _for_loop_items(text):
         tokens.update(items)
