@@ -301,7 +301,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 | `xfce-live-boot-iso.yml` | manual/tag | Full live ISO release pipeline |
 | `release.yml` | tag push | Tagged release build pipeline |
 | `nightly.yml` | schedule | Matrix nightly profile builds |
-| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: full matrix plus lg3d on systemd and sysvinit, published to its own `lg3d-nightly-<date>` release |
+| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: the two `lg3d` legs only (systemd + sysvinit, x86_64), published to its own `lg3d-nightly-<date>` release |
 | `cross-compile.yml` | push/PR | ARM64 cross-compile verification |
 
 Every build job that writes under `/tmp/lfs-build`, `/tmp/lfs-sources` or
