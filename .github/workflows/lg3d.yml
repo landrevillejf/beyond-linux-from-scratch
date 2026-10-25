@@ -37,19 +37,12 @@ jobs:
   build-profiles:
     needs: check_changes
     if: needs.check_changes.outputs.has_changes == 'true'
-    # The runner follows the target arch instead of becoming a fourth matrix
-    # dimension: every include entry below pins profile/arch/init and none of
-    # them a runner, so adding one would leave those entries partial.  Deriving
-    # it here also means a future aarch64 entry lands on ARM unaided.
-    #
-    # aarch64 has to be native.  Emulated on x86_64 it cannot finish at any
-    # timeout: nightly #221's aarch64 job had built 14 of the 86 packages
-    # x86_64's lfs-system does in 59m33s, was still compiling 4h20m into that
-    # stage, and was cancelled at the 5h30m workflow budget.  A log-volume
-    # projection puts the stage near 11h against GitHub's hard 6h per-job cap,
-    # so --stage-timeout 18000 below was never what killed it.
-    # ubuntu-24.04-arm is free for public repositories.
-    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    # This workflow exists to publish ONLY the Project Looking Glass ISOs, so
+    # the matrix is pinned to x86_64 and the runner never varies.  lg3d is
+    # x86_64-only (ProfileManager pins its architecture), and an aarch64 cell
+    # would build an aarch64 kernel while the boot smoke test below is gated
+    # on matrix.arch == 'x86_64' (Nightly #227).
+    runs-on: ubuntu-latest
     # 480 sits above GitHub's hard 6 h per-job cap, so a runaway job was
     # killed by the platform rather than by us and never reached the
     # log-upload step.  5h30m produces a clean cancelled() instead.
@@ -57,44 +50,29 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # arm64 is deliberately absent from this list: ProfileManager pins
-        # that profile to architecture=aarch64 and cross_compile=True no
-        # matter what --arch says, so an arm64 x x86_64 cell built an
-        # aarch64 kernel while skipping the "Install ARM64 cross tools"
-        # step (gated on matrix.arch == 'aarch64') and then ran the boot
-        # smoke test (gated on matrix.arch == 'x86_64'), which panicked
-        # instantly under qemu-system-x86_64 (Nightly #227).  The include
-        # entry below is the only arm64 job we want.
-        profile: [ minimal ]
-        init: [ sysvinit ]
+        # lg3d is the X11-only Project Looking Glass session: the profile
+        # pins init_system=systemd (its lg3d-compositor.service unit is what
+        # blfs/30-install-lg3d.sh writes on that path), java_dev (the JDK
+        # that stage runs on) and xorg_only.  --init overrides the pinned
+        # value, and the stage also wires a sysvinit session (an
+        # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel
+        # 5), so both init flavours are built and exercised here.  These two
+        # legs are the whole point of the workflow: no minimal canary rides
+        # along (nightly.yml already re-proves the from-scratch prefix on
+        # every profile), so a red leg here is a red lg3d ISO and nothing
+        # else publishes under the lg3d-nightly tag.
+        profile: [ lg3d ]
+        init: [ systemd, sysvinit ]
         arch: [ x86_64 ]
-        include:
-          # lg3d is the X11-only Project Looking Glass session: the profile
-          # pins init_system=systemd (its lg3d-compositor.service unit is what
-          # blfs/30-install-lg3d.sh writes on that path), java_dev (the JDK
-          # that stage runs on) and xorg_only.  --init overrides the pinned
-          # value, and the stage now also wires a sysvinit session (an
-          # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel
-          # 5), so both init flavours are built and exercised here.  These are
-          # the only legs that run the lg3d stage.
-          - profile: lg3d
-            arch: x86_64
-            init: systemd
-          - profile: lg3d
-            arch: x86_64
-            init: sysvinit
     permissions:
       contents: write
     env:
       # Empty-string check on a secret is allowed in expressions; the
       # signing step below skips entirely until the repo secrets exist.
       HAVE_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY != '' }}
-      # minimal/sysvinit/x86_64 stays an uncached canary: it is the
-      # cheapest complete from-scratch build (3h47m to bootloader) and it
-      # re-proves the whole prefix every night.  An expression avoids
-      # restructuring the profile x init x arch cross-product just to hang
-      # a per-entry flag on one cell.
-      USE_BASE_CACHE: ${{ !(matrix.profile == 'minimal' && matrix.init == 'sysvinit' && matrix.arch == 'x86_64') }}
+      # Both lg3d legs resume from the published base prefix; this workflow
+      # keeps no uncached from-scratch canary (nightly.yml holds that role).
+      USE_BASE_CACHE: "true"
       # Where the published base prefix ends, expressed as the stage this
       # job picks up at.  Moving the boundary means editing these two
       # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
