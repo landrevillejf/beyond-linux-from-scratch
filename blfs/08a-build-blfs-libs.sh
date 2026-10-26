@@ -724,12 +724,24 @@ build_commands_gdk_pixbuf() {
     if [ "${SKIP_MAN_PAGES:-false}" = true ] || ! command -v rst2man >/dev/null 2>&1; then
         man_pages=false
     fi
+    # gdk-pixbuf's internal test suite (meson boolean 'tests', default
+    # true) generates tests/resources.c by running the just-built
+    # gdk-pixbuf-pixdata over tests/icc-profile.png at compile time.  On
+    # the CI runners that step aborts with "Couldn't recognize the image
+    # file format", which fails blfs-libs for every profile that builds
+    # gdk-pixbuf (Nightly #44: xfce, gnome, kde, lxqt, full, java-dev,
+    # audio-studio and lg3d).  meson gates the whole tests/ subdir on
+    # get_option('tests'), so -D tests=false skips the resource
+    # generation cleanly.  The BLFS book never builds or runs these
+    # internal tests and the shipped library is unaffected -- this is the
+    # same fix Buildroot carries for this exact failure.
     mkdir build && cd build &&
     meson setup .. \
           --prefix=/usr \
           --buildtype=release \
           -D others=enabled \
           -D man="$man_pages" \
+          -D tests=false \
           --wrap-mode=nofallback &&
     ninja && ninja install
 }

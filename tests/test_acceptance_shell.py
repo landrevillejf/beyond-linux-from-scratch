@@ -624,6 +624,31 @@ class TestLFSComplianceGuardrails:
         assert 'gdk-pixbuf/2.44' not in content, \
             "gdk-pixbuf 2.44.x requires glycin-2 (not in BLFS book)"
 
+    def test_gdk_pixbuf_disables_internal_test_suite(self):
+        """gdk-pixbuf must build with -D tests=false.
+
+        Nightly #44 died while building gdk-pixbuf's own test suite for
+        every profile that builds blfs-libs (xfce, gnome, kde, lxqt,
+        full, java-dev, audio-studio and lg3d).  meson's 'tests' boolean
+        defaults to true, so gen-resources.py runs the just-built
+        gdk-pixbuf-pixdata over tests/icc-profile.png at compile time and
+        aborts with "Couldn't recognize the image file format", which
+        fails the stage at [99/277] Generating tests/resources.c.  meson
+        gates the whole tests/ subdir on get_option('tests'), so
+        -D tests=false skips the resource generation cleanly.  The BLFS
+        book never builds or runs these internal tests and the shipped
+        library is unaffected; this mirrors the fix Buildroot carries for
+        the same failure.
+        """
+        content = Path('blfs/08a-build-blfs-libs.sh').read_text()
+        start = content.index('build_commands_gdk_pixbuf()')
+        end = content.index('build_commands_shared_mime_info()')
+        fn = content[start:end]
+        assert '-D tests=false' in fn, \
+            "gdk-pixbuf must disable its internal test suite " \
+            "(-D tests=false) so gen-resources.py never runs on " \
+            "tests/icc-profile.png (nightly #44)"
+
     def test_libtirpc_gcc15_patch_in_custom_sources(self):
         """The libtirpc gcc15 patch must be in custom-sources.list.
 

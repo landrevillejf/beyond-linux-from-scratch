@@ -458,6 +458,31 @@
 
 ### Fixed
 
+- **`blfs-libs` died building gdk-pixbuf's internal test suite for every
+  desktop profile** (`blfs/08a-build-blfs-libs.sh`,
+  `tests/test_acceptance_shell.py`)
+  - Nightly #44 (`lg3d`, both init legs) and the same night's `nightly.yml`
+    (xfce, gnome, kde, lxqt, full, java-dev, audio-studio) all aborted the
+    `blfs-libs` stage at `[99/277] Generating tests/resources.c` with
+    `failed to load ".../tests/icc-profile.png": Couldn't recognize the image
+    file format`, followed by `Required package gdk-pixbuf failed`.  The
+    gdk-pixbuf 2.42.12 meson `tests` boolean defaults to `true`, so
+    `gen-resources.py` runs the just-built `gdk-pixbuf-pixdata` over
+    `tests/icc-profile.png` at compile time; that build-time decode fails on
+    the CI runners and takes the whole stage down.  This is a pre-existing
+    fragility rather than a fresh regression: the `blfs-libs` chain was masked
+    for weeks by no-op green nightlies (`check_changes` skips `build-profiles`
+    on nights with no commits), and the 2026-10-23 commit burst made builds
+    actually run -- while PR #140's `xorg_only` gating newly routed `lg3d`
+    through `blfs-libs` too, so it hit the same failure.
+  - `build_commands_gdk_pixbuf` now passes `-D tests=false`.  meson gates the
+    entire `tests/` subdir on `get_option('tests')`, so the resource
+    generation is skipped cleanly; the shipped library, loaders, `pixdata` and
+    thumbnailer are unaffected and the BLFS book never builds or runs these
+    internal tests.  This mirrors the fix Buildroot carries for the identical
+    failure.  `tests/test_acceptance_shell.py` gains
+    `test_gdk_pixbuf_disables_internal_test_suite` to lock the flag.
+
 - **Every scoped profile aborted at `blfs-base` with `blfs-bootscripts source
   not found`** (`tools/scan-stage-sources.py`, `packages/stage-sources.json`,
   `tests/test_builder.py`)
