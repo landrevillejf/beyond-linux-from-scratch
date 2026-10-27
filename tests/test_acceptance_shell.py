@@ -2304,14 +2304,27 @@ class TestNightly214StageGuardrails:
     GI_FLOOR = (1, 83, 2)
 
     def _root_relaunch_guard(self, path, first_write):
-        """Assert the script re-execs as root before it touches $LFS."""
+        """Assert the script re-execs as root before it touches $LFS.
+
+        The relaunch must not depend on `sudo -E`: the Ubuntu 26.04
+        runner's sudo ignores it ("preserving the entire environment is
+        not supported"), which strips $LFS and the flattened
+        LFS_CONFIG_*/LFS_PROFILE_* env and drops the stage back to its
+        compiled-in default (lg3d Nightly #45).  The whole environment is
+        re-fed through `sudo env` instead.
+        """
         content = path.read_text()
         guard = content.index('if [ "$EUID" -ne 0 ]; then')
         write = content.index(first_write)
         assert guard < write, (
             f'{path} must re-launch as root before writing into $LFS'
         )
-        assert 'exec sudo -E "$0" "$@"' in content[guard:write]
+        relaunch = content[guard:write]
+        assert 'exec sudo env "${_sudo_env[@]}" "$0" "$@"' in relaunch
+        assert 'env -0' in relaunch
+        assert 'exec sudo -E' not in relaunch, (
+            f'{path} must not rely on `sudo -E`; the Ubuntu 26.04 runner '
+            'ignores it and the stage loses $LFS')
 
     def test_branding_stage_relaunches_as_root(self):
         self._root_relaunch_guard(
@@ -2355,6 +2368,62 @@ class TestNightly214StageGuardrails:
             f'gobject-introspection {effective} is below the '
             f'{".".join(str(p) for p in self.GI_FLOOR)} floor pango requires'
         )
+
+
+class TestNightlyLg3d45SudoEnvRelaunch:
+    """Guardrails for the lg3d Nightly #45 build-kernel abort.
+
+    Every stage that needs real root re-execs itself with sudo.  They used
+    `exec sudo -E "$0" "$@"`, but the Ubuntu 26.04 runner's sudo refuses
+    `-E` ("preserving the entire environment is not supported, '-E' is
+    ignored"), so the relaunched root shell lost $LFS and every flattened
+    LFS_CONFIG_*/LFS_PROFILE_* knob builder.py exported.  build-kernel then
+    fell back to its compiled-in /mnt/lfs default and died with "Sources
+    directory not found: /mnt/lfs/sources" even though the sources were
+    downloaded under the real output dir.  The relaunch now re-feeds the
+    whole current environment through `sudo env`, which never relies on
+    sudo's env_reset whitelist.  The same latent defect sat in the four
+    later root stages this build reaches (system-updater, branding,
+    initramfs, bootloader), so all five are covered here.
+    """
+
+    STAGES = (
+        Path('lfs/08-build-kernel.sh'),
+        Path('blfs/18-system-updater.sh'),
+        Path('blfs/20-branding.sh'),
+        Path('final/12-create-initramfs.sh'),
+        Path('final/13-create-bootloader.sh'),
+    )
+
+    @staticmethod
+    def _relaunch_block(content):
+        guard = content.index('if [ "$EUID" -ne 0 ]; then')
+        end = content.index('\nfi', guard)
+        return content[guard:end]
+
+    def test_every_root_stage_relaunches_via_sudo_env(self):
+        for path in self.STAGES:
+            block = self._relaunch_block(path.read_text())
+            assert 'exec sudo env "${_sudo_env[@]}" "$0" "$@"' in block, (
+                f'{path} must re-exec through `sudo env` so the environment '
+                'survives even when sudo ignores `-E`')
+            assert 'env -0' in block, (
+                f'{path} must capture the full environment with `env -0`')
+
+    def test_no_root_stage_relies_on_sudo_dash_e(self):
+        for path in self.STAGES:
+            block = self._relaunch_block(path.read_text())
+            assert 'exec sudo -E' not in block, (
+                f'{path} still relaunches with `sudo -E`, which the Ubuntu '
+                '26.04 runner ignores (lg3d Nightly #45)')
+
+    def test_build_kernel_relaunch_precedes_sources_lookup(self):
+        content = Path('lfs/08-build-kernel.sh').read_text()
+        guard = content.index('if [ "$EUID" -ne 0 ]; then')
+        sources = content.index('SOURCES_HOST="$LFS/sources"')
+        assert guard < sources, (
+            'build-kernel must re-launch as root (carrying $LFS) before it '
+            'resolves SOURCES_HOST from $LFS')
 
 
 class TestNightly215StageGuardrails:
@@ -2445,10 +2514,18 @@ class TestNightly215StageGuardrails:
             'before libinput is configured')
 
     def test_bootloader_stage_relaunches_as_root(self):
-        """chroot and the bind mounts both need real root privileges."""
+        """chroot and the bind mounts both need real root privileges.
+
+        The relaunch re-feeds the environment through `sudo env` rather
+        than `sudo -E`, which the Ubuntu 26.04 runner's sudo ignores
+        (lg3d Nightly #45).
+        """
         content = self.BOOTLOADER.read_text()
         guard = content.index('if [ "$EUID" -ne 0 ]; then')
-        assert 'exec sudo -E "$0" "$@"' in content[guard:guard + 200]
+        relaunch = content[guard:content.index('mount --bind /dev')]
+        assert 'exec sudo env "${_sudo_env[@]}" "$0" "$@"' in relaunch
+        assert 'env -0' in relaunch
+        assert 'exec sudo -E' not in relaunch
         for op in ('mount --bind /dev', 'chroot "$LFS"'):
             assert guard < content.index(op), (
                 f'final/13-create-bootloader.sh must re-launch as root '

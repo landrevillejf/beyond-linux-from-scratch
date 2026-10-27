@@ -10,7 +10,19 @@ set -e
 
 if [ "$EUID" -ne 0 ]; then
     echo "[INFO] Relaunching with sudo..."
-    exec sudo -E "$0" "$@"
+    # `sudo -E` is not reliable: the Ubuntu 26.04 runner's sudo refuses it
+    # ("preserving the entire environment is not supported, '-E' is
+    # ignored"), which stripped $LFS and every flattened LFS_CONFIG_* /
+    # LFS_PROFILE_* knob the builder exported.  This stage then fell back to
+    # its compiled-in /mnt/lfs default and died with "Sources directory not
+    # found: /mnt/lfs/sources" while the real tree lives under the builder's
+    # output dir (lg3d Nightly #45).  Re-feed the whole current environment
+    # through `sudo env`; that never relies on sudo's env_reset whitelist.
+    _sudo_env=()
+    while IFS= read -r -d '' _kv; do
+        _sudo_env+=("$_kv")
+    done < <(env -0)
+    exec sudo env "${_sudo_env[@]}" "$0" "$@"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -10,7 +10,18 @@ set -e
 # also chroots into $LFS for plymouth, which needs root anyway.
 if [ "$EUID" -ne 0 ]; then
     echo "[INFO] Relaunching with sudo..."
-    exec sudo -E "$0" "$@"
+    # `sudo -E` is not reliable: the Ubuntu 26.04 runner's sudo refuses it
+    # ("preserving the entire environment is not supported, '-E' is
+    # ignored"), which stripped $LFS and every flattened LFS_CONFIG_* /
+    # LFS_PROFILE_* knob the builder exported, dropping the stage back to its
+    # compiled-in default (lg3d Nightly #45).  Re-feed the whole current
+    # environment through `sudo env`; that never relies on sudo's env_reset
+    # whitelist.
+    _sudo_env=()
+    while IFS= read -r -d '' _kv; do
+        _sudo_env+=("$_kv")
+    done < <(env -0)
+    exec sudo env "${_sudo_env[@]}" "$0" "$@"
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

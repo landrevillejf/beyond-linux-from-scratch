@@ -458,6 +458,33 @@
 
 ### Fixed
 
+- **Root-relaunch stages lost `$LFS` when sudo ignored `-E`, aborting
+  `build-kernel`** (`lfs/08-build-kernel.sh`, `blfs/18-system-updater.sh`,
+  `blfs/20-branding.sh`, `final/12-create-initramfs.sh`,
+  `final/13-create-bootloader.sh`, `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #45 (sysvinit, x86_64) died at `build-kernel` with
+    `[ERROR] Sources directory not found: /mnt/lfs/sources` even though the
+    sources had downloaded successfully into the builder's output dir
+    (`/tmp/lfs-build/build-release/sources`).  Every stage that needs real
+    root re-execs itself with `exec sudo -E "$0" "$@"`, but the Ubuntu 26.04
+    runner's sudo refuses `-E` (`sudo: preserving the entire environment is
+    not supported, '-E' is ignored`), so the relaunched root shell lost `$LFS`
+    and every flattened `LFS_CONFIG_*`/`LFS_PROFILE_*` knob builder.py had
+    exported.  `LFS=${LFS:-/mnt/lfs}` then fell back to its compiled-in
+    default and `SOURCES_HOST="$LFS/sources"` pointed at a path that does not
+    exist.  The identical latent defect sat in the four later root stages this
+    build reaches (system-updater, branding, initramfs, bootloader), each of
+    which would have failed the same way once the kernel stage was fixed.
+  - All five relaunches now re-feed the whole current environment through
+    `sudo env` instead of relying on `-E`: the script snapshots its own
+    environment with `env -0` and re-execs via
+    `exec sudo env "${_sudo_env[@]}" "$0" "$@"`, which never depends on sudo's
+    `env_reset` whitelist and reproduces exactly what `-E` used to do.  The
+    compiled-in `$LFS` defaults stay as a last resort.  Guardrails added in
+    `tests/test_acceptance_shell.py` (`TestNightlyLg3d45SudoEnvRelaunch` plus
+    the updated branding/system-updater/bootloader relaunch guards) assert
+    every root stage relaunches via `sudo env` and none relies on `sudo -E`.
+
 - **`blfs-libs` died building gdk-pixbuf's internal test suite for every
   desktop profile** (`blfs/08a-build-blfs-libs.sh`,
   `tests/test_acceptance_shell.py`)
