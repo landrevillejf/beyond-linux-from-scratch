@@ -458,6 +458,22 @@
 
 ### Fixed
 
+- **`runtime-hardening` stage aborted installing lynis: `/usr/local/bin`
+  missing** (`blfs/32-runtime-hardening.sh`, `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #52 (`lg3d`, x86_64) died at the `runtime-hardening` stage
+    when the lynis install block ran `ln -sf /usr/local/share/lynis/lynis
+    /usr/local/bin/lynis` against a non-existent `/usr/local/bin`, so the
+    symlink failed with ENOENT and `set -e` aborted the whole stage.  lynis is
+    the only tool the stage installs under `/usr/local`, and the LFS base
+    rootfs never creates that prefix (`lfs/05a` makes `/usr/share` only); the
+    block created `/usr/local/share/lynis` but assumed `/usr/local/bin`
+    already existed.
+  - The install block now runs `mkdir -p /usr/local/share/lynis /usr/local/bin`
+    before the symlink, so the `/usr/local/bin` target always exists.  The fix
+    is profile-agnostic and only touches the lynis path; fail2ban, rkhunter,
+    aide and usbguard are unaffected.  `tests/test_acceptance_shell.py` gains a
+    guardrail asserting the mkdir and that it precedes the `ln -sf`.
+
 - **`selinux` stage aborted building refpolicy: `semodule_package` missing**
   (`blfs/31-build-selinux.sh`, `packages/custom-sources.list`,
   `packages/stage-sources.json`, `tests/test_acceptance_shell.py`)

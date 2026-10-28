@@ -1593,6 +1593,13 @@ class TestLFSComplianceGuardrails:
         assert '/etc/fail2ban/jail.local' in content
         assert 'rkhunter --propupd' in content
         assert '/usr/local/bin/lynis' in content
+        # lynis installs under /usr/local, which the LFS base rootfs never
+        # creates (lfs/05a makes /usr/share only); the block must mkdir
+        # /usr/local/bin BEFORE the symlink or `ln -sf` dies ENOENT and fails
+        # the whole runtime-hardening stage (lg3d Nightly #52).
+        assert 'mkdir -p /usr/local/share/lynis /usr/local/bin' in content
+        assert content.index('mkdir -p /usr/local/share/lynis /usr/local/bin') \
+            < content.index('ln -sf /usr/local/share/lynis/lynis /usr/local/bin/lynis')
 
     def test_custom_sources_pin_runtime_hardening_stack(self):
         """fail2ban/lynis must use the /archive/refs/tags/ URL form so
