@@ -47,7 +47,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             build-essential bison flex gawk texinfo wget \
-            xorriso parted qemu-user-static
+            xorriso parted
+          # qemu-user-static has no install candidate on ubuntu-latest (Ubuntu
+          # 26.04 resolute), where it is virtual and provided by
+          # qemu-user-binfmt. qemu is only used for a non-x86_64 dispatch
+          # input (host/00 skips it for the default x86_64 minimal profile),
+          # so treat it as best-effort and never fail the step on it.
+          sudo apt-get install -y qemu-user-static 2>/dev/null \
+            || sudo apt-get install -y qemu-user-binfmt 2>/dev/null \
+            || echo "::warning::no qemu user emulator available"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -55,7 +63,7 @@ jobs:
           python-version: '3.10'
 
       - name: Install test dependencies
-        run: pip install pytest-bdd pytest-cov
+        run: pip install pytest-bdd pytest-cov 'pytest<9.2'
 
       - name: Run BDD tests
         run: pytest tests/features/ -v --no-cov

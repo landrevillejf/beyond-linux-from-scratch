@@ -331,7 +331,13 @@ jobs:
             builder.py VERSION | sha256sum | cut -c1-12)
           PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
           HIT=false
-          mkdir -p /tmp/base-cache
+          sudo mkdir -p /tmp/base-cache
+          # The relocate step created /tmp/base-cache as a root-owned bind
+          # mountpoint; gh release download runs as the unprivileged runner and
+          # could not write the parts there, which would silently degrade every
+          # restore to a cache miss (and a full 2h prefix rebuild). Hand the
+          # dir to the runner before downloading.
+          sudo chown "$(id -u):$(id -g)" /tmp/base-cache
           cd /tmp/base-cache
           echo "Looking for ${PREFIX} in base-cache-latest"
           if gh release download base-cache-latest \

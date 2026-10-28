@@ -1,5 +1,8 @@
 # Testing and development dependencies for LFS/BLFS Builder
-pytest>=7.0.0
+# pytest capped below 9.2: pytest-bdd (<=9.0.0) still reads the private
+# FixtureManager._arg2fixturedefs attribute that pytest 9.2 renamed to
+# _arg2node2fixturedefs, which breaks every BDD scenario.
+pytest>=7.0.0,<9.2
 pytest-cov>=4.0.0
 pytest-mock>=3.10.0
 requests-mock>=1.10.0

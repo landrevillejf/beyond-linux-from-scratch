@@ -458,6 +458,76 @@
 
 ### Fixed
 
+- **Every pytest-bdd scenario failed on pytest 9.2 with
+  `AttributeError: 'FixtureManager' object has no attribute
+  '_arg2fixturedefs'`** (`tests/requirements-test.txt`, `requirements.txt`,
+  `.github/workflows/python-app.yml`, `.github/workflows/build.yml`)
+  - lg3d Nightly #50 (`lg3d`, sysvinit, x86_64) aborted the test step with 14
+    failures, all in `tests/features/`, each reporting
+    `'FixtureManager' object has no attribute '_arg2fixturedefs'. Did you
+    mean: '_arg2node2fixturedefs'?`.  pytest 9.2.0 renamed the private
+    `FixtureManager._arg2fixturedefs` mapping to `_arg2node2fixturedefs`, but
+    pytest-bdd (through 9.0.0) still reads the old attribute directly in
+    `scenario.py` (`find_fixturedefs_for_step` /
+    `inject_fixturedefs_for_step`), so every BDD scenario raised at collection.
+    The `pytest>=7.0.0` floor let CI resolve to the just-released 9.2.0.
+  - `pytest` is now capped to `>=7.0.0,<9.2` in both requirements files, and
+    the two workflows that install pytest inline (`python-app.yml`,
+    `build.yml`) pin `'pytest<9.2'` too, so the BDD suite runs on a pytest
+    pytest-bdd still supports.  Test-infrastructure change only: no
+    `builder.py` behaviour, stage order or `config/build.conf` schema touched,
+    so builder coverage stays at 100% (1052 passed locally on pytest 9.1.1).
+    Lift the cap once pytest-bdd releases a fix for the renamed attribute.
+
+- **`selinux` stage aborted while building audit: swig required by the
+  python3 bindings** (`blfs/31-build-selinux.sh`,
+  `tests/test_acceptance_shell.py`)
+  - ARM64 XFCE #93 (`arm64`, sysvinit, aarch64) died at the `selinux` stage
+    with `configure: error: Please install swig before configuring (required
+    by python/python3).` followed by `[ERROR] Required SELinux component audit
+    failed - aborting stage`.  audit-userspace v4.2.1's configure defaults
+    `--with-python3` to `auto`; because the LFS base system ships
+    `python3-config` inside the chroot, it elected to build the auparse
+    python3 bindings and then hard-required swig, which the chroot does not
+    install.
+  - `build_audit` now passes `--without-python3`, the upstream-documented way
+    to skip the bindings (configure.ac suggests exactly this flag in its error
+    path), which short-circuits before the swig check.  SELinux needs
+    libaudit/auditd, not audit's python module; the SELinux python tooling is
+    the separate optional `selinux-python` component.  The fix is
+    profile-agnostic, so the nightly/lg3d `selinux` legs benefit too, and
+    `tests/test_acceptance_shell.py` gains a guardrail asserting the flag.
+
+- **Cross-compile and dispatch builds died installing `qemu-user-static`**
+  (`.github/workflows/cross-compile.yml`, `.github/workflows/build.yml`)
+  - Cross-Compile ARM64 #158 aborted at apt with `Package 'qemu-user-static'
+    has no installation candidate` (exit 100).  On Ubuntu 26.04 (resolute),
+    which `ubuntu-latest` now points at, `qemu-user-static` became a *virtual*
+    package provided by `qemu-user-binfmt` / `qemu-user-binfmt-hwe`; the real
+    static emulator ships in `qemu-user` as `/usr/bin/qemu-aarch64`, the
+    `-static` suffix having been dropped even though the binary is static.
+  - Both workflows now install qemu through a fallback
+    (`qemu-user-static || qemu-user-binfmt`) so 24.04 and 26.04 runners both
+    work, and cross-compile.yml symlinks `qemu-aarch64` to
+    `/usr/local/bin/qemu-aarch64-static` so `host/00-setup-qemu.sh` and
+    builder.py's exported `QEMU_USER` (which look for the `-static` spelling)
+    still find an interpreter.  build.yml treats qemu as best-effort: its
+    default x86_64 `minimal` profile never runs the emulator.
+
+- **Base-cache pack and restore hit `Permission denied` on the root-owned
+  `/tmp/base-cache`** (`.github/workflows/build-base-cache.yml`,
+  `.github/workflows/nightly.yml`)
+  - Build Base Prefix Cache #70 built the full 2h16m prefix, then died packing
+    it with `split: '/tmp/base-cache/base-sysvinit-x86_64-....tar.zst.part-00':
+    Permission denied`, discarding the cache.  The shared "Relocate build
+    scratch off /tmp tmpfs" step creates `/tmp/base-cache` with `sudo` (a
+    root-owned bind mountpoint), but `split`, `sha256sum` and the metadata
+    sidecar all run as the unprivileged runner user.  The identical latent bug
+    in nightly's restore step would have silently turned every base-cache
+    download into a miss and forced a full prefix rebuild each night.
+  - Both workflows now `sudo chown "$(id -u):$(id -g)" /tmp/base-cache` before
+    writing, so the runner owns the directory it packs into and restores from.
+
 - **Root-relaunch stages lost `$LFS` when sudo ignored `-E`, aborting
   `build-kernel`** (`lfs/08-build-kernel.sh`, `blfs/18-system-updater.sh`,
   `blfs/20-branding.sh`, `final/12-create-initramfs.sh`,
