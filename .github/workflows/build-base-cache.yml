@@ -219,7 +219,14 @@ jobs:
       - name: Pack the base prefix into split parts
         run: |
           PREFIX="${{ steps.key.outputs.prefix }}"
-          mkdir -p /tmp/base-cache
+          # /tmp/base-cache is a root-owned bind mountpoint (the relocate step
+          # creates it with sudo), but split/sha256sum here and the metadata
+          # sidecar step below all run as the unprivileged runner user.
+          # build-base-cache #70 died with "split: '/tmp/base-cache/...part-00':
+          # Permission denied" after a 2h16m prefix build, discarding the cache.
+          # Hand the dir to the runner so those writes land.
+          sudo mkdir -p /tmp/base-cache
+          sudo chown "$(id -u):$(id -g)" /tmp/base-cache
           # Release assets are capped at 2 GB, so stream the zstd tarball
           # into split parts - the same convention cache-packages uses.
           # The build scaffolding shares $LFS with the rootfs and has to be

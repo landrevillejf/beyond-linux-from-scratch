@@ -51,7 +51,24 @@ jobs:
             wget curl git python3 python3-pip xorriso isolinux \
             mtools dosfstools parted rsync bc cpio kmod \
             libssl-dev libelf-dev \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-user-static
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+          # qemu-user-static is a real package on ubuntu-24.04 but became a
+          # VIRTUAL package with no install candidate on ubuntu-latest (Ubuntu
+          # 26.04 resolute), where the real provider is qemu-user-binfmt (it
+          # pulls qemu-user, which now ships the static emulator). cross #158
+          # died at apt with "Package 'qemu-user-static' has no installation
+          # candidate". Try the traditional name first for older runners, then
+          # the new one; the qemu-setup stage hard-requires the emulator.
+          sudo apt-get install -y qemu-user-static 2>/dev/null \
+            || sudo apt-get install -y qemu-user-binfmt
+          # Ubuntu 26.04's qemu-user ships the binary as /usr/bin/qemu-aarch64
+          # (the -static suffix was dropped even though it is static), but
+          # host/00-setup-qemu.sh and builder.py's QEMU_USER look for
+          # qemu-aarch64-static. Bridge the name so both package layouts work.
+          if ! command -v qemu-aarch64-static >/dev/null 2>&1 \
+            && command -v qemu-aarch64 >/dev/null 2>&1; then
+            sudo ln -sf "$(command -v qemu-aarch64)" /usr/local/bin/qemu-aarch64-static
+          fi
 
       - name: Create lfs user
         run: |
