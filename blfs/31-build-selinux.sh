@@ -278,8 +278,17 @@ build_audit() {
     if [ ! -f ./configure ]; then
         sh ./autogen.sh 2>/dev/null || autoreconf -fi
     fi
+    # --without-python3: audit's configure defaults the python3 bindings to
+    # `auto` and, because the LFS base system ships python3-config in the
+    # chroot, it elects to build them and then hard-requires swig -- which the
+    # chroot does not have -- aborting the whole SELinux stage (ARM64 XFCE #93
+    # died here: "configure: error: Please install swig before configuring").
+    # SELinux needs libaudit/auditd, not audit's auparse python3 module; the
+    # SELinux python tooling is the separate optional selinux-python component
+    # built below. configure.ac documents --without-python3 as the supported
+    # way to skip the bindings, and it short-circuits before the swig check.
     ./configure --prefix=/usr --sysconfdir=/etc --libdir=/usr/lib \
-        --sbindir=/usr/sbin --disable-zos-remote
+        --sbindir=/usr/sbin --disable-zos-remote --without-python3
     make -j"$JOBS"
     make install
     ldconfig 2>/dev/null || true
