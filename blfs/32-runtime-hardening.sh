@@ -152,7 +152,12 @@ fi
 if [ "$HIDS_ENABLED" = "true" ] && ls lynis-*.tar.gz 1>/dev/null 2>&1; then
     echo "Installing lynis..."
     tar -xf "$(ls lynis-*.tar.gz | head -n1)"
-    mkdir -p /usr/local/share/lynis
+    # lynis is the only tool here that installs under /usr/local, and the LFS
+    # base rootfs never creates it (lfs/05a makes /usr/share only), so both the
+    # share dir and /usr/local/bin must be created here: without the latter the
+    # `ln -sf ... /usr/local/bin/lynis` below dies with ENOENT and aborts the
+    # whole runtime-hardening stage (lg3d Nightly #52).
+    mkdir -p /usr/local/share/lynis /usr/local/bin
     cp -r lynis-*/. /usr/local/share/lynis/
     ln -sf /usr/local/share/lynis/lynis /usr/local/bin/lynis
     echo "lynis installed (/usr/local/bin/lynis)"
