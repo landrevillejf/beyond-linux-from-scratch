@@ -26,6 +26,9 @@ jobs:
           sudo mkdir -p /mnt/lfs-scratch
           for d in lfs-build lfs-sources base-cache; do
             sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            # sudo-created => root-owned; hand to the runner so unprivileged
+            # steps (e.g. the package-cache `tar -xz -C /tmp/`) can write here.
+            sudo chown "$(id -u):$(id -g)" "/mnt/lfs-scratch/$d" "/tmp/$d"
             sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
               || echo "::warning::could not bind /tmp/$d onto the root disk"
           done
@@ -96,6 +99,9 @@ jobs:
           sudo mkdir -p /mnt/lfs-scratch
           for d in lfs-build lfs-sources base-cache; do
             sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            # sudo-created => root-owned; hand to the runner so unprivileged
+            # steps (e.g. the package-cache `tar -xz -C /tmp/`) can write here.
+            sudo chown "$(id -u):$(id -g)" "/mnt/lfs-scratch/$d" "/tmp/$d"
             sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
               || echo "::warning::could not bind /tmp/$d onto the root disk"
           done

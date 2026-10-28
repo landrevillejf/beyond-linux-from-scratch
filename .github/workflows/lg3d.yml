@@ -95,6 +95,13 @@ jobs:
           sudo mkdir -p /mnt/lfs-scratch
           for d in lfs-build lfs-sources base-cache; do
             sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
+            # Created with sudo (root-owned), but later steps write unprivileged:
+            # the package-cache restore runs `tar -xz -C /tmp/` into
+            # /tmp/lfs-sources as the runner, which failed "Permission denied" on
+            # every file (degrading to a nightly cache MISS) while root-owned.
+            # Hand the underlying dir (seen through the bind) and the mountpoint
+            # (used if the bind fails) to the runner before mounting.
+            sudo chown "$(id -u):$(id -g)" "/mnt/lfs-scratch/$d" "/tmp/$d"
             sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
               || echo "::warning::could not bind /tmp/$d onto the root disk"
           done

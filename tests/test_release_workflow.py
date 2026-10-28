@@ -11,6 +11,42 @@ def test_release_workflow_restores_lfs_ownership_after_cache_copy():
     assert workflow.index(copy_command) < workflow.index(chown_command)
 
 
+def test_relocate_step_chowns_scratch_dirs_to_runner():
+    """The 'Relocate build scratch off /tmp tmpfs' step creates the scratch
+    dirs with ``sudo mkdir``, leaving them root-owned.  The next step restores
+    the package cache with an *unprivileged* ``tar -xz -C /tmp/`` into
+    /tmp/lfs-sources; against a root-owned target that dies with
+    'Permission denied' on every file, tar exits 2, and because the step is
+    ``continue-on-error`` the run silently degrades to a cache MISS and
+    re-downloads every source (lg3d Nightly #52).  Every workflow that
+    relocates the scratch dirs must hand them to the runner before binding.
+    """
+    mkdir_glob = 'sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"'
+    chown_glob = 'sudo chown "$(id -u):$(id -g)" "/mnt/lfs-scratch/$d" "/tmp/$d"'
+    mount_glob = 'sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d"'
+    checked = 0
+    for wf in sorted(Path(".github/workflows").glob("*.yml")):
+        text = wf.read_text()
+        n_mkdir = text.count(mkdir_glob)
+        if not n_mkdir:
+            continue
+        checked += 1
+        assert text.count(chown_glob) == n_mkdir, (
+            f"{wf.name}: relocate loop creates root-owned scratch dirs "
+            f"({n_mkdir}x) without a matching runner chown "
+            f"({text.count(chown_glob)}x); the unprivileged cache restore "
+            f"will hit 'Permission denied'"
+        )
+        # The chown must precede the bind mount so the mountpoint is
+        # runner-owned before any unprivileged write.
+        assert text.index(chown_glob) < text.index(mount_glob), (
+            f"{wf.name}: scratch chown must run before the bind mount"
+        )
+    assert checked >= 15, (
+        f"expected the relocate step in >=15 workflows, found {checked}"
+    )
+
+
 def test_release_workflow_ensures_lfs_owns_build_dir_before_builder_runs():
     """Verify a full-tree chown is run immediately before builder.py.
 
