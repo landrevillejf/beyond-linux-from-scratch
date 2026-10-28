@@ -803,7 +803,8 @@ https://github.com/calamares/calamares/releases/download/v3.3.14/calamares-3.3.1
 # its own release train and audit-userspace publishes no release asset, so
 # its GitHub refs/tags archive is used (builder.py names it after the repo).
 # Build order is enforced by the stage: libsepol -> libselinux -> audit ->
-# checkpolicy -> secilc -> libsemanage -> policycoreutils -> refpolicy.
+# checkpolicy -> secilc -> libsemanage -> policycoreutils -> semodule-utils
+# -> refpolicy.
 # ============================================================================
 https://github.com/SELinuxProject/selinux/releases/download/3.11/libsepol-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/libselinux-3.11.tar.gz
@@ -811,6 +812,13 @@ https://github.com/SELinuxProject/selinux/releases/download/3.11/checkpolicy-3.1
 https://github.com/SELinuxProject/selinux/releases/download/3.11/secilc-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/libsemanage-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/policycoreutils-3.11.tar.gz
+# semodule-utils -- provides semodule_package/semodule_unpackage/semodule_link/
+# semodule_expand.  refpolicy's modular build shells out to semodule_package to
+# package every .mod+.fc into a .pp (Rules.modular); without it the whole
+# refpolicy compile dies with `/usr/bin/semodule_package: No such file or
+# directory` / `Error 127` (nightly lg3d #51).  It links only libsepol, so it
+# builds any time after libsepol; the stage runs it just before refpolicy.
+https://github.com/SELinuxProject/selinux/releases/download/3.11/semodule-utils-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/selinux-python-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/mcstrans-3.11.tar.gz
 https://github.com/SELinuxProject/selinux/releases/download/3.11/restorecond-3.11.tar.gz

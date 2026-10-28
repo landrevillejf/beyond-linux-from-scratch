@@ -623,7 +623,8 @@
       "refpolicy",
       "restorecond",
       "secilc",
-      "selinux-python"
+      "selinux-python",
+      "semodule-utils"
     ],
     "blfs/32-runtime-hardening.sh": [
       "fail2ban",

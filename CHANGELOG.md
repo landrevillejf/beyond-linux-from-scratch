@@ -458,6 +458,32 @@
 
 ### Fixed
 
+- **`selinux` stage aborted building refpolicy: `semodule_package` missing**
+  (`blfs/31-build-selinux.sh`, `packages/custom-sources.list`,
+  `packages/stage-sources.json`, `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #51 (`lg3d`, sysvinit, x86_64) died at the `selinux` stage
+    with `/bin/bash: line 1: /usr/bin/semodule_package: No such file or
+    directory` / `make: *** [Rules.modular:106: cgmanager.pp] Error 127`,
+    followed by `[ERROR] Required SELinux component refpolicy failed`.  The
+    userspace stack built libsepol, libselinux, audit, checkpolicy, secilc,
+    libsemanage, policycoreutils, selinux-python, mcstrans and restorecond,
+    but never `semodule-utils` -- the separate SELinuxProject release
+    component that provides `semodule_package` (and
+    `semodule_unpackage`/`semodule_link`/`semodule_expand`).  It is NOT part
+    of libsemanage: libsemanage's `make install` only ships the library plus
+    `utils/semanage_migrate_store`.  refpolicy's modular build shells out to
+    `semodule_package` to package every compiled `.mod`+`.fc` into a `.pp`, so
+    the whole policy compile aborts once it is absent.
+  - `packages/custom-sources.list` now pins
+    `semodule-utils-3.11.tar.gz` from the same 3.11 monorepo release, and
+    `blfs/31-build-selinux.sh` gains a `build_semodule_utils` function run as
+    a required component after `policycoreutils` and before `refpolicy`
+    (`semodule_package` links only `-lsepol`, so any slot after libsepol is
+    valid).  `is_installed` probes `have_cmd semodule_package`, and the stage
+    token is regenerated into `packages/stage-sources.json` so profile-scoped
+    downloads keep the archive.  `tests/test_acceptance_shell.py` extends the
+    build-order guardrail and the custom-sources pin check to cover it.
+
 - **Every pytest-bdd scenario failed on pytest 9.2 with
   `AttributeError: 'FixtureManager' object has no attribute
   '_arg2fixturedefs'`** (`tests/requirements-test.txt`, `requirements.txt`,

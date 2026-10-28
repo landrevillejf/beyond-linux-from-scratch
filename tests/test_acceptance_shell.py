@@ -1368,9 +1368,15 @@ class TestLFSComplianceGuardrails:
         pam_selinux.  A resolved mode of 'disabled' must skip the stage.
         """
         content = Path('blfs/31-build-selinux.sh').read_text()
-        # Component build order (dependency-first).
+        # Component build order (dependency-first).  semodule-utils supplies
+        # semodule_package, which refpolicy's modular build shells out to when
+        # packaging each .mod+.fc into a .pp; without it the whole refpolicy
+        # compile dies with `/usr/bin/semodule_package: No such file or
+        # directory` / `Error 127` (nightly lg3d #51), so it must build before
+        # refpolicy.
         order = ('libsepol', 'libselinux', 'audit', 'checkpolicy', 'secilc',
-                 'libsemanage', 'policycoreutils', 'refpolicy')
+                 'libsemanage', 'policycoreutils', 'semodule-utils',
+                 'refpolicy')
         positions = []
         for pkg in order:
             marker = f'run_build required {pkg} '
@@ -1450,6 +1456,7 @@ class TestLFSComplianceGuardrails:
             'selinux/releases/download/3.11/checkpolicy-3.11.tar.gz',
             'selinux/releases/download/3.11/secilc-3.11.tar.gz',
             'selinux/releases/download/3.11/policycoreutils-3.11.tar.gz',
+            'selinux/releases/download/3.11/semodule-utils-3.11.tar.gz',
             'refpolicy/releases/download/RELEASE_2_20260922/',
             'audit-userspace/archive/refs/tags/v4.2.1.tar.gz',
         ):

@@ -183,6 +183,7 @@ is_installed() {
         checkpolicy) have_cmd checkpolicy ;;
         secilc) have_cmd secilc ;;
         policycoreutils) have_cmd semodule ;;
+        semodule-utils) have_cmd semodule_package ;;
         selinux-python) have_cmd semanage ;;
         audit) have_cmd auditctl ;;
         mcstrans) have_cmd mcs ;;
@@ -325,6 +326,24 @@ build_policycoreutils() {
     popd >/dev/null; rm -rf "$dir"
 }
 
+# semodule-utils: the semodule_package/unpackage/link/expand tools.  It is a
+# separate SELinuxProject release component (NOT part of libsemanage, whose
+# `make install` only ships the library plus utils/semanage_migrate_store).
+# refpolicy's modular build (Rules.modular) invokes /usr/bin/semodule_package
+# to package each .mod+.fc into a .pp; if this component is missing the entire
+# refpolicy compile aborts with `No such file or directory` / `Error 127`
+# (nightly lg3d #51).  It links only libsepol, so it must run after libsepol
+# and before refpolicy.
+build_semodule_utils() {
+    local dir; dir="$(prep_src semodule-utils)" || return 1
+    pushd "$dir" >/dev/null || return 1
+    # BINDIR defaults to $(PREFIX)/bin, so PREFIX=/usr installs the tools into
+    # /usr/bin exactly where refpolicy's Rules.modular looks for them.
+    make -j"$JOBS" PREFIX=/usr
+    make install PREFIX=/usr
+    popd >/dev/null; rm -rf "$dir"
+}
+
 build_selinux_python() {
     local dir; dir="$(prep_src selinux-python)" || return 1
     pushd "$dir" >/dev/null || return 1
@@ -380,6 +399,7 @@ run_build required checkpolicy build_checkpolicy
 run_build required secilc build_secilc
 run_build required libsemanage build_libsemanage
 run_build required policycoreutils build_policycoreutils
+run_build required semodule-utils build_semodule_utils
 
 log_info "SELinux userspace: optional helpers"
 run_build optional selinux-python build_selinux_python
