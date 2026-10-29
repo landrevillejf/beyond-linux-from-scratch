@@ -251,7 +251,7 @@ build_libsepol() {
     local dir; dir="$(prep_src libsepol)" || return 1
     pushd "$dir" >/dev/null || return 1
     se_make && se_install
-    ldconfig 2>/dev/null || true
+    /sbin/ldconfig 2>/dev/null || true
     popd >/dev/null; rm -rf "$dir"
 }
 
@@ -261,7 +261,7 @@ build_libselinux() {
     # pcre2 is in LFS core; USE_PCRE2 avoids the deprecated pcre1 path.
     se_make USE_PCRE2=y all
     se_install
-    ldconfig 2>/dev/null || true
+    /sbin/ldconfig 2>/dev/null || true
     popd >/dev/null; rm -rf "$dir"
 }
 
@@ -292,7 +292,7 @@ build_audit() {
         --sbindir=/usr/sbin --disable-zos-remote --without-python3
     make -j"$JOBS"
     make install
-    ldconfig 2>/dev/null || true
+    /sbin/ldconfig 2>/dev/null || true
     popd >/dev/null; rm -rf "$dir"
 }
 
@@ -314,7 +314,7 @@ build_libsemanage() {
     local dir; dir="$(prep_src libsemanage)" || return 1
     pushd "$dir" >/dev/null || return 1
     se_make && se_install
-    ldconfig 2>/dev/null || true
+    /sbin/ldconfig 2>/dev/null || true
     popd >/dev/null; rm -rf "$dir"
 }
 

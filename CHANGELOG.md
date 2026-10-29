@@ -458,6 +458,30 @@
 
 ### Fixed
 
+- **`lfs_check.py` reported 54 false-positive warnings against FHS-standard
+  and LFS-book-mandated paths** (`lfs_check.py`, `blfs/31-build-selinux.sh`)
+  - `python3 lfs_check.py --shellcheck` emitted 0 errors but 54 warnings that
+    were all noise: it blanket-flagged every `/opt` (FHS add-on software) and
+    `/usr/local` (FHS locally-installed software) even in BLFS-stage and
+    final-image scripts, which install third-party packages there by design
+    (lg3d under `/opt`, lynis under `/usr/local`); it flagged the
+    `/usr/local/lib` + `/opt/lib` entries `lfs/07` writes verbatim from the
+    LFS book into `/etc/ld.so.conf`; its `ldconfig` rule matched the word
+    inside the `echo "Running ldconfig..."` string in `blfs/17` (the real
+    calls there already use `/sbin/ldconfig`); and it warned that
+    `host/00-setup-qemu.sh` does not reference `$LFS`, which host scripts
+    legitimately need not.  `LFS_CHECK_README.md` already promised the path
+    rule honours exceptions ("sauf exceptions") that the code never
+    implemented.
+  - The path rule now applies only to the core build (`host/`, `lfs/`) and
+    skips the book-mandated `/etc/ld.so.conf` search-path entries; the
+    `ldconfig` rule ignores comment and `echo` lines so only real invocations
+    are flagged; and the `$LFS` heuristic is skipped for `host/`.  The four
+    genuinely bare `ldconfig` calls in `blfs/31-build-selinux.sh` are
+    normalized to `/sbin/ldconfig`, matching the rest of the tree and the
+    book.  With the real `shellcheck` on PATH the report is now 0 errors,
+    0 warnings.
+
 - **`calamares-build` stage aborted building kcoreaddons: required Qt
   component `Qml` not found** (`blfs/29-build-calamares.sh`,
   `tests/test_acceptance_shell.py`)
