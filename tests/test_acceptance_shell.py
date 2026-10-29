@@ -5419,6 +5419,19 @@ class TestCalamaresBuildStageGuardrails:
         if popt_book is not None:
             assert './configure --prefix=/usr --disable-static' in popt_book
 
+    def test_parted_disables_device_mapper(self, content):
+        """nightly #54: parted 3.6 defaults to --enable-device-mapper and its
+        configure aborts with "libdevmapper could not be found" when the
+        library is absent.  LVM2 is only the book's *recommended* dependency
+        and no stage builds device-mapper, so the flag must be disabled
+        explicitly rather than left to the default.
+        """
+        body = self._fn(self._inner(content), 'build_commands_parted')
+        assert '--disable-device-mapper' in body, \
+            'parted must be configured without device-mapper; no stage ' \
+            'builds libdevmapper, so the default --enable-device-mapper ' \
+            'aborts configure (nightly #54)'
+
     def test_optional_offline_doc_passes_are_deliberately_absent(self, content):
         """texlive is dropped from the sources and no stage installs
         doxygen, so the books' optional documentation passes would only
