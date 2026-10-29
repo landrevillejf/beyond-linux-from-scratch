@@ -458,6 +458,26 @@
 
 ### Fixed
 
+- **`calamares-build` stage aborted building parted: `libdevmapper` not
+  found** (`blfs/29-build-calamares.sh`, `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #54 (`lg3d`, both the systemd and sysvinit legs, x86_64)
+    died at the opt-in `calamares-build` stage when parted's configure aborted
+    with `checking for dm_task_create in -ldevmapper... no` /
+    `configure: error: libdevmapper could not be found, but is required for
+    the --enable-device-mapper option, which is enabled by default`, followed
+    by `[ERROR] Required package parted failed - aborting stage`.  parted 3.6
+    defaults to `--enable-device-mapper` and hard-requires libdevmapper, but
+    LVM2 is only the book's *recommended* dependency and no stage builds
+    device-mapper, so configure could never find it.  The stage comment already
+    documented the intent ("parted is configured without it"); the flag was
+    simply never passed.
+  - `build_commands_parted()` now runs
+    `./configure --prefix=/usr --disable-static --disable-device-mapper`,
+    matching the documented intent and parted's own configure hint.  kpmcore's
+    GPT work goes through sgdisk regardless, so nothing loses functionality.
+    `tests/test_acceptance_shell.py` gains `test_parted_disables_device_mapper`
+    asserting the flag so the default cannot silently return.
+
 - **`runtime-hardening` stage aborted installing lynis: `/usr/local/bin`
   missing** (`blfs/32-runtime-hardening.sh`, `tests/test_acceptance_shell.py`)
   - lg3d Nightly #52 (`lg3d`, x86_64) died at the `runtime-hardening` stage

@@ -334,13 +334,15 @@ build_commands_gptfdisk() {
     make && make install
 }
 
-# postlfs/parted.  LVM2 is the book's recommended dependency and no stage
-# builds device-mapper, so parted is configured without it; kpmcore's GPT
-# work goes through sgdisk either way.
+# postlfs/parted.  LVM2 is only the book's recommended dependency and no
+# stage builds device-mapper, so parted is configured --disable-device-mapper:
+# parted 3.6 defaults to --enable-device-mapper and its configure aborts with
+# "libdevmapper could not be found" when the library is absent (nightly #54).
+# kpmcore's GPT work goes through sgdisk either way.
 build_parted() { book_install parted build_commands_parted; }
 build_commands_parted() {
     sed -i 's/do_version ()/do_version (PedDevice** dev, PedDisk** diskp)/' parted/parted.c &&
-    ./configure --prefix=/usr --disable-static &&
+    ./configure --prefix=/usr --disable-static --disable-device-mapper &&
     make -j"$JOBS" && make install
 }
 
