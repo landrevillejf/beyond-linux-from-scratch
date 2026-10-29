@@ -457,7 +457,22 @@ build_commands_extra_cmake_modules() {
 # kde/frameworks6 chapter loop: kpmcore requires CoreAddons, I18n and
 # WidgetsAddons (>= 5.240), and Calamares' KPMcoreHelper.cmake requires
 # I18n and WidgetsAddons again once it has found kpmcore.
-build_commands_kf6() {
+#
+# KCOREADDONS_USE_QML / BUILD_WITH_QML are ON by upstream default and turn
+# Qt6 Qml into a REQUIRED component (kcoreaddons 6.17 CMakeLists.txt:37,
+# ki18n's find_package(Qt6Qml REQUIRED)), which the trimmed Qt6 above does
+# not provide because it skips qtdeclarative -- nightly lg3d #55 aborted
+# here with 'Failed to find required Qt component "Qml"'.  The flags build
+# each framework's QML plugin; nothing in this chain consumes them:
+# Calamares itself is built WITH_QML=OFF and kpmcore only links the C++
+# KF6 libraries.  Same reasoning as WITH_QML=OFF below, per package.
+#
+# book_install invokes the build-commands function with no positional
+# arguments, so the QML-off flags cannot be keyed off "$1" inside a shared
+# function.  Each QML-bearing framework therefore gets its own thin
+# build_commands wrapper around _kf6_cmake; kwidgetsaddons has no QML
+# option and keeps the flagless build_kf6_pkg fallback in run_build.
+_kf6_cmake() {
     mkdir build && cd build &&
     cmake -D CMAKE_INSTALL_PREFIX=/usr        \
           -D CMAKE_INSTALL_LIBEXECDIR=libexec \
@@ -465,9 +480,15 @@ build_commands_kf6() {
           -D CMAKE_BUILD_TYPE=Release         \
           -D BUILD_TESTING=OFF                \
           -D BUILD_PYTHON_BINDINGS=OFF        \
+          "$@"                               \
           -W no-dev .. &&
     make -j"$JOBS" && make install
 }
+build_kcoreaddons() { book_install kcoreaddons build_commands_kcoreaddons; }
+build_commands_kcoreaddons() { _kf6_cmake -D KCOREADDONS_USE_QML=OFF; }
+build_ki18n() { book_install ki18n build_commands_ki18n; }
+build_commands_ki18n() { _kf6_cmake -D BUILD_WITH_QML=OFF; }
+build_commands_kf6() { _kf6_cmake; }
 build_kf6_pkg() { book_install "$1" build_commands_kf6; }
 
 # kde/polkit-qt.  QT_MAJOR_VERSION=6 is the book's flag: it is what makes
