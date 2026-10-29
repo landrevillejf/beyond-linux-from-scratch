@@ -192,6 +192,46 @@ CONFIG_CRYPTO=y
 CONFIG_CRYPTO_FIPS=y
 
 # ============================================================================
+# STORAGE ENCRYPTION / VOLUMES  (LUKS, device-mapper, LVM, MD-RAID)
+# ----------------------------------------------------------------------------
+# Everything below is built in (=y), never a module: the boot flow
+# (final/12-create-initramfs.sh) is a busybox initramfs that loads no kernel
+# modules, so a LUKS/dm-crypt root -- and any LVM or MD-RAID volume holding
+# it -- has to be unlockable by drivers already linked into vmlinuz.  Each
+# symbol is spelled out because lfs/08-build-kernel.sh seeds .config from this
+# fragment then runs `make olddefconfig`, which drops every symbol absent here
+# to its default (n): with DM_CRYPT unset the initramfs could open no LUKS
+# container and an encrypted install was unbootable.  DM_THIN_PROVISIONING is
+# deliberately omitted -- it needs the thin-provisioning-tools userspace, which
+# no source list pins and no stage builds, so enabling it would only make lvm
+# fail at runtime.
+# ============================================================================
+# --- Multiple devices driver support (RAID + LVM live under this menu) -----
+CONFIG_MD=y
+CONFIG_BLK_DEV_MD=y
+CONFIG_MD_LINEAR=y
+CONFIG_MD_RAID0=y
+CONFIG_MD_RAID1=y
+CONFIG_MD_RAID10=y
+CONFIG_MD_RAID456=y
+# --- Device mapper core + the targets LUKS/LVM/swap use --------------------
+CONFIG_BLK_DEV_DM=y
+CONFIG_DM_CRYPT=y
+CONFIG_DM_SNAPSHOT=y
+CONFIG_DM_MIRROR=y
+CONFIG_DM_ZERO=y
+# --- Key retention service (dm-crypt/LUKS keyslots) ------------------------
+CONFIG_KEYS=y
+# --- Crypto algorithms a LUKS2 (aes-xts-plain64) volume needs --------------
+CONFIG_CRYPTO_AES=y
+CONFIG_CRYPTO_XTS=y
+CONFIG_CRYPTO_SHA256=y
+CONFIG_CRYPTO_SHA512=y
+CONFIG_CRYPTO_ESSIV=y
+CONFIG_CRYPTO_CRC32C=y
+CONFIG_CRYPTO_AUTHENC=y
+
+# ============================================================================
 # VIRTUALIZATION
 # ============================================================================
 CONFIG_KVM=y

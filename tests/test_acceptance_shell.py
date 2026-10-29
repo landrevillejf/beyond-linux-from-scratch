@@ -1187,6 +1187,28 @@ class TestLFSComplianceGuardrails:
         assert 'losetup /dev/loop0 /mnt/live.squashfs' in content
         assert 'switch_root /sysroot /sbin/init' in content
 
+    def test_initramfs_unlocks_luks_and_lvm(self):
+        """The initramfs must unlock a LUKS root and activate LVM before
+        switch_root, or an encrypted install (blfs/22 offers
+        enableLuksAutomatedPartitioning) drops to a shell at boot.
+
+        final/12 bundles the dynamic cryptsetup/lvm binaries with every
+        DT_NEEDED library they pull in, and the init script parses
+        cryptdevice=/rd.luks.uuid= from /proc/cmdline, opens the container
+        with `cryptsetup luksOpen`, then runs `lvm vgchange -ay --sysinit`
+        so an LVM-on-LUKS root resolves.  dm-crypt is built into vmlinuz
+        (config/kernel-config*), so nothing is modprobe'd here -- the
+        busybox initramfs loads no modules at all.
+        """
+        content = Path('final/12-create-initramfs.sh').read_text()
+        assert 'cryptdevice=' in content
+        assert 'luksOpen' in content
+        assert 'vgchange -ay --sysinit' in content
+        # cryptsetup + lvm must be bundled with their shared libraries.
+        assert 'bundle_tool' in content
+        assert 'Bundling cryptsetup' in content
+        assert 'Bundling lvm' in content
+
     def test_kernel_config_supports_live_boot_and_serial(self):
         """Live boot needs iso9660/squashfs/loop; the QEMU smoke test
         observes the guest through console=ttyS0."""
@@ -1336,6 +1358,39 @@ class TestLFSComplianceGuardrails:
                 f"{name} lacks CONFIG_DEBUG_CREDENTIALS"
             assert 'CONFIG_DEBUG_NOTIFIERS=y' in content, \
                 f"{name} lacks CONFIG_DEBUG_NOTIFIERS"
+
+    def test_kernel_configs_carry_storage_encryption(self):
+        """Every kernel-config fragment must build the device-mapper core,
+        dm-crypt, MD-RAID and the LUKS2 crypto algorithms INTO the kernel
+        (=y), never as modules.
+
+        The custom busybox initramfs (final/12) loads no modules, so an
+        encrypted root chosen at install time (blfs/22 offers
+        enableLuksAutomatedPartitioning) has to be unlockable from built-in
+        drivers alone.  lfs/08-build-kernel.sh seeds .config from the
+        fragment then runs `make olddefconfig`, which defaults every unnamed
+        symbol to n -- the same trap the boot-block and hardening tests above
+        document -- so each option must be named explicitly in all six
+        variants.  Without CONFIG_DM_CRYPT the initramfs `cryptsetup
+        luksOpen` cannot create the mapper node and the encrypted install
+        never boots.
+        """
+        storage = (
+            'CONFIG_MD=y',
+            'CONFIG_BLK_DEV_MD=y',
+            'CONFIG_BLK_DEV_DM=y',
+            'CONFIG_DM_CRYPT=y',
+            'CONFIG_CRYPTO_AES=y',
+            'CONFIG_CRYPTO_XTS=y',
+            'CONFIG_CRYPTO_SHA256=y',
+        )
+        variants = ('kernel-config', 'kernel-config-arm64',
+                    'kernel-config-audio-studio', 'kernel-config-brax3',
+                    'kernel-config-gnu-free', 'kernel-config-pinebook')
+        for name in variants:
+            content = Path(f'config/{name}').read_text()
+            for option in storage:
+                assert option in content, f"{name} lacks {option}"
 
     def test_kernel_stage_honors_hardening_knobs(self):
         """lfs/08-build-kernel.sh must re-apply the lockdown level and
@@ -1513,6 +1568,24 @@ class TestLFSComplianceGuardrails:
         assert '${LFS_KERNEL_CMDLINE}' in grub
         assert '${LFS_KERNEL_CMDLINE:-' not in grub, \
             "grub.cfg must use the plain placeholder final/13 substitutes"
+
+    def test_grub_initrd_matches_initramfs_output(self):
+        """config/grub.cfg must point initrd at /boot/initramfs.img, the
+        file final/12 actually writes (INITRAMFS_OUTPUT).
+
+        It used to reference /boot/initramfs-${LFS_KERNEL_VERSION}.img, a
+        name no stage ever creates, so the raw disk-image GRUB entry booted
+        to "file not found" and dropped to the GRUB rescue shell.  The
+        live/installer ISOs (final/15, final/14) and the QEMU smoke test
+        bypass grub.cfg -- the smoke test extracts the initrd straight from
+        the image -- which is why CI never caught it.  The kernel line keeps
+        vmlinuz-${LFS_KERNEL_VERSION}, which IS created, so only the initrd
+        token is asserted here.
+        """
+        grub = Path('config/grub.cfg').read_text()
+        assert '/boot/initramfs.img' in grub
+        assert 'initramfs-${LFS_KERNEL_VERSION}.img' not in grub, \
+            "grub.cfg initrd must match final/12's initramfs.img output"
 
     def test_initramfs_mirrors_fips_marker(self):
         """final/12 must mirror /etc/system-fips into the initramfs when FIPS
@@ -1971,6 +2044,7 @@ class TestBLFSErrorPolicyGuardrails:
         'blfs/25-server.sh',
         'blfs/26-printing-scanning.sh',
         'blfs/29-build-calamares.sh',
+        'blfs/21-luks-encryption.sh',
     ]
 
     # Tarball base names that differ from the script package name.
@@ -1996,6 +2070,7 @@ class TestBLFSErrorPolicyGuardrails:
         'networkmanager': ['NetworkManager'],
         'lmdb': ['LMDB_0.9.33'],
         'liburcu': ['userspace-rcu'],
+        'lvm2': ['LVM2'],
         'spirv-headers': ['SPIRV-Headers'],
         'spirv-tools': ['SPIRV-Tools'],
     }

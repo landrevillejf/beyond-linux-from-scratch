@@ -13,6 +13,13 @@ if [ -z "$LFS" ] || [ ! -d "$LFS" ]; then
     exit 1
 fi
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Branding version comes from the repo VERSION file so the installer's About
+# dialog never shows a stale hardcoded number again (it was pinned at 0.52.4
+# long after the project had moved on).
+WBLFS_VERSION="$(tr -d '[:space:]' <"$SCRIPT_DIR/../VERSION" 2>/dev/null || echo 0.0.0)"
+[ -n "$WBLFS_VERSION" ] || WBLFS_VERSION="0.0.0"
+
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then "$@"; else sudo "$@"; fi
 }
@@ -108,17 +115,17 @@ SETTINGS
 # --------------------------------------------------------------------------
 # 4. Branding configuration
 # --------------------------------------------------------------------------
-write_file /usr/share/calamares/branding/lfs/branding.desc 0644 <<'BRANDING'
+write_file /usr/share/calamares/branding/lfs/branding.desc 0644 <<BRANDING
 ---
 # Calamares branding descriptor for LFS
 componentName: lfs
 strings:
   productName: "Way Beyond Linux From Scratch"
   shortProductName: "WBLFS"
-  version: "0.52.4"
-  shortVersion: "0.52.4"
-  versionedName: "Way Beyond LFS 0.52.4"
-  shortVersionedName: "WBLFS 0.52.4"
+  version: "$WBLFS_VERSION"
+  shortVersion: "$WBLFS_VERSION"
+  versionedName: "Way Beyond LFS $WBLFS_VERSION"
+  shortVersionedName: "WBLFS $WBLFS_VERSION"
   bootloaderEntryName: "WBLFS"
   productUrl: https://github.com/landrevillejf/beyond-linux-from-scratch
   supportUrl: https://github.com/landrevillejf/beyond-linux-from-scratch/issues

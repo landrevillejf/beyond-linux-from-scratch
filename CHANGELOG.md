@@ -458,6 +458,53 @@
 
 ### Fixed
 
+- **Installer-offered disk encryption (LUKS) was decorative: an encrypted
+  install could never boot** (`blfs/21-luks-encryption.sh`,
+  `final/12-create-initramfs.sh`, `config/kernel-config`,
+  `config/kernel-config-arm64`, `config/kernel-config-audio-studio`,
+  `config/kernel-config-brax3`, `config/kernel-config-gnu-free`,
+  `config/kernel-config-pinebook`, `config/grub.cfg`,
+  `blfs/22-calamares-installer.sh`, `packages/stage-sources.json`,
+  `tests/test_acceptance_shell.py`)
+  - User-reported: `blfs/22` sets Calamares'
+    `enableLuksAutomatedPartitioning: true`, so the installer offered an
+    encrypted-disk option, but nothing in the tree could honour it.  No stage
+    compiled `cryptsetup`, `LVM2` or `mdadm`; the former
+    `blfs/21-luks-encryption.sh` only wrote `/etc` files and *warned* that
+    cryptsetup was missing, wrote the module list to the Debian path
+    `/etc/initramfs-tools/modules` that this project's custom busybox initramfs
+    never reads, and probed the non-existent kernel symbols `CONFIG_MD_CRYPT` /
+    `CONFIG_MD_DM`.  No `config/kernel-config*` variant carried dm-crypt or the
+    device-mapper core, and `final/12`'s init had no unlock path -- so a user
+    who picked encryption at install time got a system that dropped to a shell
+    at boot with no way to mount root.
+  - `blfs/21` is rewritten as a real chroot build stage (the `blfs/29` idiom)
+    that compiles `json-c` -> `popt` -> `LVM2` -> `cryptsetup` (openssl backend,
+    built by `blfs/08`) -> `mdadm`, each `run_build required`, with a host-side
+    post-condition that hard-fails if `cryptsetup`/`lvm`/`dmsetup` are absent.
+    All six `config/kernel-config*` variants now build `CONFIG_MD`,
+    `CONFIG_BLK_DEV_MD`, `CONFIG_BLK_DEV_DM`, `CONFIG_DM_CRYPT`, the LVM/DM
+    targets and the LUKS2 crypto (`AES`/`XTS`/`SHA256`/`SHA512`/`ESSIV`/
+    `CRC32C`/`AUTHENC`) INTO the kernel (`=y`), because the busybox initramfs
+    loads no modules.  `final/12` bundles the dynamic `cryptsetup`/`lvm`
+    binaries with every `DT_NEEDED` library (resolved recursively via
+    `readelf`), and its init parses `cryptdevice=`/`rd.luks.uuid=` from
+    `/proc/cmdline`, opens the container with `cryptsetup luksOpen`, then runs
+    `lvm vgchange -ay --sysinit` before `switch_root`.
+  - Two adjacent boot defects found in the same audit are fixed here:
+    `config/grub.cfg` pointed `initrd` at
+    `/boot/initramfs-${LFS_KERNEL_VERSION}.img`, a name no stage creates
+    (`final/12` writes `/boot/initramfs.img`), so the raw disk-image GRUB entry
+    dropped to the rescue shell -- the live/installer ISOs and the QEMU smoke
+    test bypass grub.cfg, which is why CI never caught it; and `blfs/22`
+    hardcoded a stale `0.52.4` branding version, now read dynamically from the
+    `VERSION` file.  `packages/stage-sources.json` is regenerated so
+    profile-scoped downloads keep the five new archives.
+    `tests/test_acceptance_shell.py` adds `blfs/21` to the WAVE2 guardrails
+    (with an `lvm2` -> `LVM2` source alias), plus
+    `test_kernel_configs_carry_storage_encryption`,
+    `test_initramfs_unlocks_luks_and_lvm` and
+    `test_grub_initrd_matches_initramfs_output`.
 - **`calamares-build` stage aborted building parted: `libdevmapper` not
   found** (`blfs/29-build-calamares.sh`, `tests/test_acceptance_shell.py`)
   - lg3d Nightly #54 (`lg3d`, both the systemd and sysvinit legs, x86_64)

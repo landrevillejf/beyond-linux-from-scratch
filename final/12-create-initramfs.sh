@@ -113,6 +113,106 @@ done
 cd - >/dev/null
 
 # --------------------------------------------------------------------------
+# LUKS/LVM support: bundle cryptsetup + lvm and every shared library they need
+# into the initramfs.  The early environment otherwise carries only a static
+# busybox, but the LUKS unlock in the init script below needs the dynamic
+# cryptsetup/lvm binaries plus each DT_NEEDED library (libdevmapper, libcrypto,
+# libjson-c, libpopt, libblkid, libuuid, libc, the dynamic loader, ...).
+# readelf resolves them recursively against $LFS.  Missing tools are NOT an
+# error: only profiles that ran the luks-encryption stage (blfs/21) have them,
+# and a profile that did not simply ships an initramfs with no LUKS path.
+# --------------------------------------------------------------------------
+INITRAMFS_LIBDIRS=("$LFS/lib" "$LFS/usr/lib" "$LFS/lib64" "$LFS/usr/lib64")
+
+resolve_host_lib() {
+    local soname="$1" d
+    for d in "${INITRAMFS_LIBDIRS[@]}"; do
+        if [ -e "$d/$soname" ]; then
+            printf '%s\n' "$d/$soname"
+            return 0
+        fi
+    done
+    return 1
+}
+
+copy_host_lib() {
+    local src="$1" rel dest tgt
+    if [ ! -e "$src" ]; then return 0; fi
+    rel="${src#"$LFS"}"
+    dest="$INITRAMFS_DIR$rel"
+    if [ ! -e "$dest" ]; then
+        mkdir -p "$(dirname "$dest")"
+        if ! cp -a "$src" "$dest" 2>/dev/null; then
+            cp -L "$src" "$dest" 2>/dev/null || echo "[WARN] could not copy $src" >&2
+        fi
+    fi
+    if [ -L "$src" ]; then
+        tgt="$(readlink -f "$src" 2>/dev/null)"
+        if [ -n "$tgt" ] && [ "$tgt" != "$src" ]; then
+            copy_host_lib "$tgt"
+        fi
+    fi
+    return 0
+}
+
+bundle_tool() {
+    # $1 = host path under $LFS, $2 = name under the initramfs /bin
+    local bin="$1" name="$2"
+    local -a queue=()
+    local -A seen=()
+    local interp need cur base p
+    if [ ! -x "$bin" ]; then return 1; fi
+    cp -a "$bin" "$INITRAMFS_DIR/bin/$name"
+    chmod 755 "$INITRAMFS_DIR/bin/$name"
+    interp="$(readelf -lW "$bin" 2>/dev/null | sed -n 's/.*program interpreter: \(.*\)\]/\1/p' | head -1)"
+    if [ -n "$interp" ]; then queue+=("$LFS$interp"); fi
+    while read -r need; do
+        if [ -n "$need" ]; then
+            if p="$(resolve_host_lib "$need")"; then queue+=("$p"); fi
+        fi
+    done < <(readelf -dW "$bin" 2>/dev/null | awk '/NEEDED/{print $NF}' | tr -d '[]')
+    while [ "${#queue[@]}" -gt 0 ]; do
+        cur="${queue[0]}"
+        queue=("${queue[@]:1}")
+        if [ ! -e "$cur" ]; then continue; fi
+        base="$(basename "$cur")"
+        if [ -n "${seen[$base]:-}" ]; then continue; fi
+        seen["$base"]=1
+        copy_host_lib "$cur"
+        while read -r need; do
+            if [ -n "$need" ]; then
+                if p="$(resolve_host_lib "$need")"; then queue+=("$p"); fi
+            fi
+        done < <(readelf -dW "$cur" 2>/dev/null | awk '/NEEDED/{print $NF}' | tr -d '[]')
+    done
+    echo "[INFO] bundled $name into the initramfs with its shared libraries"
+    return 0
+}
+
+CRYPT_BIN=""
+for p in "$LFS/usr/sbin/cryptsetup" "$LFS/sbin/cryptsetup"; do
+    if [ -x "$p" ]; then
+        CRYPT_BIN="$p"
+        break
+    fi
+done
+LVM_BIN=""
+for p in "$LFS/usr/sbin/lvm" "$LFS/sbin/lvm"; do
+    if [ -x "$p" ]; then
+        LVM_BIN="$p"
+        break
+    fi
+done
+if [ -n "$CRYPT_BIN" ]; then
+    echo "[INFO] Bundling cryptsetup for the LUKS unlock"
+    bundle_tool "$CRYPT_BIN" cryptsetup || echo "[WARN] could not bundle cryptsetup"
+fi
+if [ -n "$LVM_BIN" ]; then
+    echo "[INFO] Bundling lvm for LVM root activation"
+    bundle_tool "$LVM_BIN" lvm || echo "[WARN] could not bundle lvm"
+fi
+
+# --------------------------------------------------------------------------
 # Init script (mounts devtmpfs, so no static device nodes needed)
 # --------------------------------------------------------------------------
 cat >"$INITRAMFS_DIR/init" <<'EOF'
@@ -147,6 +247,78 @@ for param in $(cat /proc/cmdline); do
         root_b=*)     ROOT_B_DEV="${param#root_b=}" ;;
     esac
 done
+
+# ---------------------------------------------------------------------------
+# LUKS / dm-crypt + LVM unlock (runs before root resolution)
+#
+# An encrypted install puts one of these on the kernel command line:
+#   cryptdevice=<src>:<name>   mkinitcpio/Calamares convention; <src> is
+#                              UUID=..., LABEL=... or a /dev node
+#   rd.luks.uuid=<uuid>        dracut convention
+# dm-crypt is built into vmlinuz (config/kernel-config*) and cryptsetup/lvm are
+# bundled into this initramfs, so nothing has to be modprobe'd here.  The
+# container is opened first, then any LVM volume groups stacked on it are
+# activated, so the root logic below can mount /dev/mapper/<name>.
+# ---------------------------------------------------------------------------
+CRYPT_SRC=""
+CRYPT_NAME=""
+for param in $(cat /proc/cmdline); do
+    case "$param" in
+        cryptdevice=*)
+            _cd="${param#cryptdevice=}"
+            CRYPT_SRC="${_cd%%:*}"
+            _rest="${_cd#*:}"
+            CRYPT_NAME="${_rest%%:*}"
+            ;;
+        rd.luks.uuid=* | luks.uuid=*)
+            CRYPT_SRC="UUID=${param#*=}"
+            [ -n "$CRYPT_NAME" ] || CRYPT_NAME="luksroot"
+            ;;
+    esac
+done
+
+if [ -n "$CRYPT_NAME" ] && [ -x /bin/cryptsetup ]; then
+    _src="$CRYPT_SRC"
+    case "$CRYPT_SRC" in
+        UUID=* | LABEL=*) _src="$(findfs "$CRYPT_SRC" 2>/dev/null)" ;;
+    esac
+    # The physical device probe is asynchronous (see wait_for_dev below), so
+    # poll for the source node before handing it to cryptsetup.
+    _tries=0
+    while [ "$_tries" -lt 10 ]; do
+        [ -n "$_src" ] && [ -e "$_src" ] && break
+        /bin/busybox sleep 1
+        case "$CRYPT_SRC" in
+            UUID=* | LABEL=*) _src="$(findfs "$CRYPT_SRC" 2>/dev/null)" ;;
+            *) _src="$CRYPT_SRC" ;;
+        esac
+        _tries=$((_tries + 1))
+    done
+    /bin/busybox mkdir -p /dev/mapper /run
+    echo "Unlocking LUKS device $_src as $CRYPT_NAME (enter passphrase)"
+    if /bin/cryptsetup luksOpen "$_src" "$CRYPT_NAME"; then
+        echo "LUKS container $CRYPT_NAME opened"
+    else
+        echo "LUKS unlock failed for $_src. Dropping to shell."
+        /bin/busybox sh
+    fi
+elif [ -n "$CRYPT_NAME" ]; then
+    echo "cryptdevice=$CRYPT_SRC:$CRYPT_NAME is on the cmdline but /bin/cryptsetup"
+    echo "is absent: this initramfs was built without LUKS support. Dropping to shell."
+    /bin/busybox sh
+fi
+
+# Activate LVM volume groups; an LVM-backed root is /dev/mapper/<vg>-<lv>.
+if [ -x /bin/lvm ]; then
+    /bin/busybox mkdir -p /dev/mapper /run
+    /bin/lvm vgchange -ay --sysinit 2>/dev/null || true
+fi
+
+# If the cmdline named a LUKS container but no explicit root=, default the root
+# to the mapper node the unlock just created.
+if [ -n "$CRYPT_NAME" ] && [ -z "$ROOT_DEV" ] && [ -z "$ROOT_UUID" ]; then
+    ROOT_DEV="/dev/mapper/$CRYPT_NAME"
+fi
 
 # Resolve UUID to device
 if [ -n "$ROOT_UUID" ]; then
