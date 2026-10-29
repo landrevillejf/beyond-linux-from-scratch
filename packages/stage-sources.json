@@ -487,6 +487,13 @@
       "tor",
       "wireguard-tools"
     ],
+    "blfs/21-luks-encryption.sh": [
+      "cryptsetup",
+      "json-c",
+      "lvm2",
+      "mdadm",
+      "popt"
+    ],
     "blfs/23-basic-networking.sh": [
       "curl",
       "dhcpcd",
