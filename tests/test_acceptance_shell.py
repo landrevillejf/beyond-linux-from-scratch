@@ -5447,6 +5447,36 @@ class TestCalamaresBuildStageGuardrails:
         assert '-D CMAKE_INSTALL_LIBDIR=lib' in body, \
             'the partition plugin path must not depend on a lib64 libdir'
 
+    def test_kf6_qml_bearing_frameworks_disable_their_qml_plugin(self, content):
+        """kcoreaddons and ki18n must turn their QML plugin OFF.
+
+        Nightly lg3d #55 aborted the calamares-build stage at kcoreaddons
+        with 'Failed to find required Qt component "Qml"'.  The trimmed
+        Qt6 above deliberately skips qtdeclarative (no Qml/Quick), but
+        kcoreaddons 6.17 defaults KCOREADDONS_USE_QML=ON and ki18n
+        defaults BUILD_WITH_QML=ON, each of which makes find_package(Qt6
+        ... Qml) REQUIRED.  Nothing in this chain consumes the QML
+        plugins - Calamares is built WITH_QML=OFF and kpmcore links only
+        the C++ KF6 libraries - so both flags must be OFF, mirroring
+        Calamares' own WITH_QML=OFF.
+
+        book_install invokes the build-commands function with no
+        positional arguments, so the flags cannot live in a shared
+        build_commands_kf6 keyed off "$1"; each framework needs its own
+        wrapper that forwards the flag to _kf6_cmake.
+        """
+        inner = self._inner(content)
+        assert '_kf6_cmake -D KCOREADDONS_USE_QML=OFF' in inner, \
+            'kcoreaddons must disable its QML plugin (nightly lg3d #55)'
+        assert '_kf6_cmake -D BUILD_WITH_QML=OFF' in inner, \
+            'ki18n must disable its QML plugin (nightly lg3d #55)'
+        # The shared helper forwards its extra flags to cmake.
+        helper = self._fn(inner, '_kf6_cmake')
+        assert '"$@"' in helper, \
+            '_kf6_cmake must forward per-package flags to cmake'
+        # kwidgetsaddons has no QML option and keeps the flagless path.
+        assert 'build_commands_kf6() { _kf6_cmake; }' in inner
+
     def test_polkit_qt_uses_the_books_qt6_flag(self, content):
         """The book's flag is -D QT_MAJOR_VERSION=6, not -DWITH_QT6=ON.
 

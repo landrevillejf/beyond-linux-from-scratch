@@ -458,6 +458,33 @@
 
 ### Fixed
 
+- **`calamares-build` stage aborted building kcoreaddons: required Qt
+  component `Qml` not found** (`blfs/29-build-calamares.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #55 (`lg3d`, both the systemd and sysvinit legs, x86_64)
+    died at the opt-in `calamares-build` stage with `CMake Error at
+    CMakeLists.txt:37 (find_package): ... Failed to find required Qt
+    component "Qml". Expected Config file at
+    "/usr/lib/cmake/Qt6Qml/Qt6QmlConfig.cmake" does NOT exist`, followed by
+    `[ERROR] Required package kcoreaddons failed - aborting stage`.  The
+    stage's Qt6 build is deliberately trimmed to `qtbase qtsvg qttools
+    qttranslations` and skips `qtdeclarative` (which provides Qml/Quick),
+    but kcoreaddons 6.17 defaults `KCOREADDONS_USE_QML=ON` and ki18n 6.17
+    defaults `BUILD_WITH_QML=ON`; each of those makes
+    `find_package(Qt6 ... Qml)` REQUIRED, so configure aborts against the
+    trimmed Qt6.  Nothing in this chain consumes the QML plugins -- Calamares
+    is built `WITH_QML=OFF` and kpmcore links only the C++ KF6 libraries.
+  - `build_commands_kf6` is factored into a shared `_kf6_cmake` helper that
+    forwards extra flags, and kcoreaddons and ki18n each get a thin wrapper
+    passing `-D KCOREADDONS_USE_QML=OFF` / `-D BUILD_WITH_QML=OFF`
+    respectively (kwidgetsaddons has no QML option and keeps the flagless
+    path).  The flags cannot be keyed off `$1` in one shared function because
+    `book_install` invokes the build-commands function with no positional
+    arguments.  This mirrors Calamares' own `WITH_QML=OFF`.
+    `tests/test_acceptance_shell.py` gains
+    `test_kf6_qml_bearing_frameworks_disable_their_qml_plugin` so the QML
+    plugin cannot silently re-enable against the trimmed Qt6.
+
 - **Installer-offered disk encryption (LUKS) was decorative: an encrypted
   install could never boot** (`blfs/21-luks-encryption.sh`,
   `final/12-create-initramfs.sh`, `config/kernel-config`,
