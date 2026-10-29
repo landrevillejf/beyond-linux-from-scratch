@@ -20,6 +20,14 @@ EXCLUDED_FILES = ["*.py", "*.md", "*.txt", "*.json", "*.conf"]
 # Directories where certain rules are relaxed
 HOST_DIRS = {"host", "common", "lfs", "blfs", "final"}
 FINAL_DIRS = {"final", "lfs", "blfs"}           # chroot allowed here
+# The LFS "everything under /usr" rule governs the CORE build only.  /opt (FHS
+# add-on software) and /usr/local (FHS locally-installed software) are the
+# correct homes for third-party packages installed by BLFS-stage and
+# final-image scripts, so the path rule does not apply outside these dirs.
+PATH_RULE_CORE_DIRS = {"host", "lfs"}
+# Entries written verbatim into /etc/ld.so.conf by the LFS book.  They are
+# loader search paths, not install locations, so they are never a violation.
+LD_SO_CONF_ALLOW = {"/usr/local/lib", "/opt/lib"}
 
 # ------------------------------------------------------------------------------
 # Check Rules
@@ -57,7 +65,7 @@ class ScriptChecker:
         self._check_forbidden_commands(lines, rel_path, dirname)
 
         # 5. Suspicious paths
-        self._check_paths(lines, rel_path)
+        self._check_paths(lines, rel_path, dirname)
 
         # 6. Bashisms if shebang is /bin/sh
         self._check_bashisms(lines, rel_path)
@@ -105,6 +113,11 @@ class ScriptChecker:
                              "Consider adding 'set -e' (or 'set -eu') to stop on error", None)
 
     def _check_lfs_vars(self, content, rel_path):
+        # host/ scripts prepare the build host and legitimately need not touch
+        # the $LFS tree, so the heuristic does not apply there.
+        dirname = rel_path.split(os.sep)[0] if os.sep in rel_path else ""
+        if dirname == "host":
+            return
         if "LFS=" not in content and "$LFS" not in content:
             self._add_result(rel_path, "warning",
                              "Script does not appear to reference $LFS (might be OK for host scripts)", None)
@@ -122,18 +135,34 @@ class ScriptChecker:
                 if re.search(r'\bchroot\b', line) and not line.strip().startswith('#'):
                     self._add_result(rel_path, "warning",
                                      f"'chroot' used outside final/ (line {i})", i)
-        # ldconfig must be /sbin/ldconfig
+        # ldconfig must be invoked by absolute path (/sbin/ldconfig).  Comments
+        # and echo strings mention the word without invoking it, so skip them.
         for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('#') or stripped.startswith('echo'):
+                continue
             if re.search(r'\bldconfig\b', line) and not re.search(r'/sbin/ldconfig', line):
                 self._add_result(rel_path, "warning",
                                  f"'ldconfig' should be '/sbin/ldconfig' (line {i})", i)
 
-    def _check_paths(self, lines, rel_path):
+    def _check_paths(self, lines, rel_path, dirname):
+        # /opt and /usr/local are FHS-standard homes for add-on and locally
+        # installed software; BLFS-stage and final-image scripts use them for
+        # third-party packages by design.  Only the core build (host/, lfs/)
+        # is held to the LFS "everything under /usr" rule.
+        if dirname not in PATH_RULE_CORE_DIRS:
+            return
         for i, line in enumerate(lines, 1):
-            if re.search(r'/usr/local/', line) and not line.strip().startswith('#'):
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            # /etc/ld.so.conf search-path entries come verbatim from the book.
+            if stripped in LD_SO_CONF_ALLOW:
+                continue
+            if re.search(r'/usr/local/', line):
                 self._add_result(rel_path, "warning",
                                  f"Use of '/usr/local' (not LFS compliant) at line {i}", i)
-            if re.search(r'/opt/', line) and not line.strip().startswith('#'):
+            if re.search(r'/opt/', line):
                 self._add_result(rel_path, "warning",
                                  f"Use of '/opt' (not LFS standard) at line {i}", i)
 
