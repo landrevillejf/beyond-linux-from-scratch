@@ -264,11 +264,18 @@ book_install() {
 # cmake is installed by blfs/08-build-blfs-base.sh.
 # ======================================================================
 build_json_c() { book_install json-c build_commands_json_c; }
+# The policy floor is not cosmetic: json-c's apps/CMakeLists.txt declares
+# cmake_minimum_required(VERSION 2.8) and the book's cmake 4.1 refuses to
+# configure anything older than 3.5 without it (the same reason 08a, 09c
+# and blfs/29 pass it).  Without the flag the apps subdirectory aborts with
+# "Compatibility with CMake < 3.5 has been removed" and json-c -- cryptsetup's
+# LUKS2 metadata backend -- never installs (lg3d nightly #58).
 build_commands_json_c() {
     mkdir -p build && cd build &&
     cmake -D CMAKE_INSTALL_PREFIX=/usr \
           -D CMAKE_BUILD_TYPE=Release \
           -D BUILD_SHARED_LIBS=ON \
+          -D CMAKE_POLICY_VERSION_MINIMUM=3.5 \
           -W no-dev .. &&
     make -j"$JOBS" && make install
 }

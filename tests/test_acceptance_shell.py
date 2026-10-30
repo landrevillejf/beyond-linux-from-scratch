@@ -2867,6 +2867,50 @@ class TestAudioStudioStageGuardrails:
             os.unlink(tmp_path)
 
 
+class TestLuksJsonCPolicyFloor:
+    """Guardrail for the luks-encryption stage's json-c cmake policy floor.
+
+    Nightly lg3d #58 aborted the luks-encryption stage at json-c with
+    "CMake Error at apps/CMakeLists.txt:2 (cmake_minimum_required):
+    Compatibility with CMake < 3.5 has been removed".  json-c's root
+    CMakeLists declares a modern 3.9...3.12 floor, but its apps
+    subdirectory still declares VERSION 2.8, which the book's cmake 4.1
+    refuses to configure.  json-c is cryptsetup's LUKS2 metadata backend
+    and the first package this stage builds, so the abort left the whole
+    storage-encryption toolchain unbuilt.  The fix is the same
+    CMAKE_POLICY_VERSION_MINIMUM=3.5 floor 08a, 09c and blfs/29 already
+    pass to their aged cmake projects.
+    """
+
+    SCRIPT = Path('blfs/21-luks-encryption.sh')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/21 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    def test_json_c_raises_the_cmake_policy_floor(self, content):
+        body = self._fn(self._inner(content), 'build_commands_json_c')
+        assert '-D CMAKE_POLICY_VERSION_MINIMUM=3.5' in body, (
+            'json-c\'s apps/CMakeLists.txt declares VERSION 2.8, which '
+            'cmake 4.1 refuses to configure without the policy floor '
+            '(nightly lg3d #58)')
+        assert '-D BUILD_SHARED_LIBS=ON' in body, \
+            'cryptsetup links a shared libjson-c'
+
+
 class TestCustomSourcesGuardrails:
     """Guardrails against version collisions in custom-sources.list.
 
