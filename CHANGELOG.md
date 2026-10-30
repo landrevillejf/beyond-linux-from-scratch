@@ -458,6 +458,31 @@
 
 ### Fixed
 
+- **`luks-encryption` stage aborted building json-c: `Compatibility with
+  CMake < 3.5 has been removed`** (`blfs/21-luks-encryption.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #58 (`lg3d`, sysvinit, x86_64) died at the opt-in
+    `luks-encryption` stage with `CMake Error at apps/CMakeLists.txt:2
+    (cmake_minimum_required): Compatibility with CMake < 3.5 has been removed
+    from CMake`, followed by `[ERROR] Required package json-c failed -
+    aborting stage`.  json-c's root `CMakeLists.txt` declares a modern
+    `cmake_minimum_required(VERSION 3.9...3.12)`, but its `apps/`
+    subdirectory still declares `VERSION 2.8`, which the book's cmake 4.1
+    refuses to configure.  json-c is cryptsetup's LUKS2 metadata backend and
+    the first package this stage builds, so the abort left the whole
+    storage-encryption toolchain (json-c -> popt -> LVM2 -> cryptsetup ->
+    mdadm) unbuilt and an encrypted install unbootable.
+  - `build_commands_json_c()` now passes `-D CMAKE_POLICY_VERSION_MINIMUM=3.5`
+    to cmake, the same policy floor `blfs/08a` (libjpeg-turbo, tiff),
+    `blfs/09c` (sddm) and `blfs/29` (yaml-cpp) already apply to their aged
+    cmake projects; the flag propagates to subdirectories, raising the
+    `apps/` floor without touching the pinned 0.18 source.  The rest of the
+    stage's chain is autotools/make (popt, LVM2, cryptsetup, mdadm), so no
+    other package in it hits the cmake policy gate.
+    `tests/test_acceptance_shell.py` gains `TestLuksJsonCPolicyFloor::
+    test_json_c_raises_the_cmake_policy_floor` so the floor cannot silently
+    disappear.
+
 - **`calamares-build` stage aborted building yaml-cpp: `uint16_t` not
   declared** (`blfs/29-build-calamares.sh`, `tests/test_acceptance_shell.py`)
   - lg3d Nightly #57 (`lg3d`, sysvinit, x86_64) died at the opt-in
