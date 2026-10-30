@@ -458,6 +458,29 @@
 
 ### Fixed
 
+- **`calamares-build` stage aborted building yaml-cpp: `uint16_t` not
+  declared** (`blfs/29-build-calamares.sh`, `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #57 (`lg3d`, sysvinit, x86_64) died at the opt-in
+    `calamares-build` stage while compiling yaml-cpp with
+    `src/emitterutils.cpp:221:11: error: 'uint16_t' was not declared in this
+    scope` (and the matching `uint32_t` errors), followed by `[ERROR]
+    Required package yaml-cpp failed - aborting stage`.  yaml-cpp 0.7.0 --
+    pinned deliberately as the generation Calamares 3.3 was written against,
+    before the 0.8 API break -- predates GCC 13 dropping the transitive
+    `<cstdint>` include from several standard headers, so `emitterutils.cpp`
+    no longer sees `uint16_t`/`uint32_t` under the book's GCC 15.  The
+    compiler's own note points at the fix: add `#include <cstdint>`.
+  - `build_commands_yaml_cpp()` now inserts `#include <cstdint>` at the top of
+    `src/emitterutils.cpp` before configuring, guarded by `grep -q` so a re-run
+    or a future version that already ships the include stays a no-op.  This
+    matches the stage's existing sed-patch idiom (parted, gptfdisk) and keeps
+    the pinned 0.7.0 rather than risking the 0.8 API break.  The rest of the
+    chain is unaffected: kpmcore (25.08.0) and calamares (3.3.14) are current
+    releases built against modern GCC, so the same transitive-include
+    regression does not apply.
+    `tests/test_acceptance_shell.py` gains
+    `test_yaml_cpp_patches_the_missing_cstdint_include`.
+
 - **`lfs_check.py` reported 54 false-positive warnings against FHS-standard
   and LFS-book-mandated paths** (`lfs_check.py`, `blfs/31-build-selinux.sh`)
   - `python3 lfs_check.py --shellcheck` emitted 0 errors but 54 warnings that
