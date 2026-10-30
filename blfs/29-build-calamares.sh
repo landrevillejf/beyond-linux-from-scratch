@@ -516,8 +516,19 @@ build_commands_polkit_qt_1() {
 # cosmetic -- yaml-cpp declares cmake_minimum_required(VERSION 3.4) and
 # the book's cmake 4.1 refuses to configure anything older than 3.5
 # without it (the same reason 08a and 09c pass it to libportal and sddm).
+#
+# 0.7.0 is deliberately pinned (custom-sources.list: it is the generation
+# Calamares 3.3 was written against, before the 0.8 API break), but it
+# predates GCC 13 dropping the transitive <cstdint> include from several
+# standard headers.  On the book's GCC 15 src/emitterutils.cpp no longer
+# sees uint16_t/uint32_t and aborts with "'uint16_t' was not declared in
+# this scope" (lg3d nightly #57).  Add the header the compiler itself
+# points at, guarded by grep so it stays a no-op if a future bump already
+# ships it.
 build_yaml_cpp() { book_install yaml-cpp build_commands_yaml_cpp; }
 build_commands_yaml_cpp() {
+    grep -q '#include <cstdint>' src/emitterutils.cpp ||
+        sed -i '1i #include <cstdint>' src/emitterutils.cpp
     mkdir build && cd build &&
     cmake -D CMAKE_INSTALL_PREFIX=/usr         \
           -D CMAKE_BUILD_TYPE=Release          \

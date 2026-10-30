@@ -5437,6 +5437,23 @@ class TestCalamaresBuildStageGuardrails:
         assert '-D YAML_CPP_BUILD_TESTS=OFF' in body, \
             'the tests pull a bundled googletest the offline chroot lacks'
 
+    def test_yaml_cpp_patches_the_missing_cstdint_include(self, content):
+        """nightly lg3d #57: yaml-cpp 0.7.0 predates GCC 13 dropping the
+        transitive <cstdint> include, so src/emitterutils.cpp aborts on the
+        book's GCC 15 with "'uint16_t' was not declared in this scope".
+        0.7.0 stays pinned (it is the generation Calamares 3.3 was written
+        against), so the stage must add the header the compiler points at.
+        The grep guard keeps it a no-op if a future bump already ships it.
+        """
+        body = self._fn(self._inner(content), 'build_commands_yaml_cpp')
+        assert '#include <cstdint>' in body, \
+            'yaml-cpp 0.7.0 must gain the <cstdint> include that ' \
+            'emitterutils.cpp needs under GCC 15 (nightly lg3d #57)'
+        assert 'src/emitterutils.cpp' in body
+        assert 'grep -q' in body, \
+            'the include patch must be guarded so a re-run or a future ' \
+            'version that already ships it stays a no-op'
+
     def test_calamares_flags_match_its_cmakelists(self, content):
         body = self._fn(self._inner(content), 'build_commands_calamares')
         for flag in ('-D WITH_QT6=ON', '-D WITH_QML=OFF',
