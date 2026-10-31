@@ -458,6 +458,31 @@
 
 ### Fixed
 
+- **`luks-encryption` stage aborted building cryptsetup: `Building man pages
+  requires asciidoctor installed.`** (`blfs/21-luks-encryption.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #60 (`lg3d`, sysvinit, x86_64) progressed past json-c (fixed
+    for #58) and died at cryptsetup with `checking for asciidoctor... no` /
+    `configure: error: Building man pages requires asciidoctor installed.`,
+    followed by `[ERROR] Required package cryptsetup failed - aborting stage`.
+    cryptsetup's `configure.ac` defaults `enable_asciidoc` to yes and
+    `AC_MSG_ERROR`s when `asciidoctor` is absent; the offline CI chroot builds
+    no asciidoctor.  cryptsetup is the LUKS frontend and a required package in
+    this stage, so the abort left the storage-encryption toolchain (json-c ->
+    popt -> LVM2 -> cryptsetup -> mdadm) unbuilt and an encrypted install
+    unbootable.
+  - `build_commands_cryptsetup()` now passes `--disable-asciidoc` alongside the
+    existing `--with-crypto_backend=openssl` and `--disable-ssh-token`, so
+    man-page generation is turned off instead of pulling a Ruby toolchain into
+    the chroot.  Man pages are not part of the LUKS unlock path -- the
+    `final/12` initramfs only needs the `cryptsetup` binary -- so nothing the
+    encrypted boot relies on is lost.  The rest of the chain is unaffected:
+    popt and LVM2 are autotools that already configured, and mdadm is plain
+    make installing prebuilt man pages, so no other package in the stage needs
+    asciidoctor.  `tests/test_acceptance_shell.py` gains
+    `TestLuksCryptsetupAsciidoc::test_cryptsetup_disables_asciidoc_man_pages`
+    so the flag cannot silently disappear.
+
 - **`luks-encryption` stage aborted building json-c: `Compatibility with
   CMake < 3.5 has been removed`** (`blfs/21-luks-encryption.sh`,
   `tests/test_acceptance_shell.py`)

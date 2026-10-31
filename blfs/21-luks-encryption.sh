@@ -315,13 +315,22 @@ build_commands_lvm2() {
 # ssh-token helper is disabled so no libssh dependency is pulled in.
 # Needs libdevmapper (lvm2 above), popt, json-c and util-linux's
 # libuuid/libblkid (LFS chapter 8).
+#
+# --disable-asciidoc: cryptsetup's configure.ac defaults enable_asciidoc
+# to yes and hard-errors ("Building man pages requires asciidoctor
+# installed.") when asciidoctor is absent -- nightly lg3d #60 aborted the
+# stage here.  The offline CI chroot builds no asciidoctor, and man pages
+# are not part of the LUKS unlock path (the initramfs only needs the
+# cryptsetup binary), so man-page generation is turned off rather than
+# pulling in a Ruby toolchain.
 # ======================================================================
 build_cryptsetup() { book_install cryptsetup build_commands_cryptsetup; }
 build_commands_cryptsetup() {
     ./configure --prefix=/usr                 \
                 --sbindir=/usr/sbin           \
                 --with-crypto_backend=openssl \
-                --disable-ssh-token           &&
+                --disable-ssh-token           \
+                --disable-asciidoc            &&
     make -j"$JOBS" && make install
 }
 
