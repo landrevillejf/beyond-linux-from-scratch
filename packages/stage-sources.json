@@ -490,6 +490,7 @@
     "blfs/21-luks-encryption.sh": [
       "cryptsetup",
       "json-c",
+      "libaio",
       "lvm2",
       "mdadm",
       "popt"

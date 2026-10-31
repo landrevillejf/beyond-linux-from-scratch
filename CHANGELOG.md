@@ -458,6 +458,33 @@
 
 ### Fixed
 
+- **`luks-encryption` stage aborted building LVM2 on arm64: `libaio.h: No such
+  file or directory`** (`blfs/21-luks-encryption.sh`,
+  `packages/stage-sources.json`, `tests/test_acceptance_shell.py`)
+  - ARM64 XFCE Build #96 (`arm64`, sysvinit, aarch64, cross-compile) died at
+    the opt-in `luks-encryption` stage while compiling LVM2 with
+    `device/bcache.c:29:10: fatal error: libaio.h: No such file or directory`,
+    followed by `[ERROR] Required package lvm2 failed - aborting stage`.  LVM2's
+    `device/bcache.c` includes `<libaio.h>` and there is no configure flag to
+    build LVM2 without libaio, so libaio is a hard prerequisite.  `blfs/08a`
+    builds libaio, but only as `run_build optional`, so on the arm64 leg --
+    where the optional libaio did not land -- the stage reached LVM2 with no
+    `libaio.h` and aborted on a `required` package.  The x86_64 lg3d/xfce legs
+    never hit this because 08a's optional libaio succeeds there.
+  - `blfs/21` now builds libaio itself as a `required` prerequisite scheduled
+    before LVM2 (the same in-stage-owns-its-dependency pattern as json-c and
+    popt), using blfs/08a's exact commands (`sed` out the static `libaio.a`,
+    then `make && make install`).  A new `libaio)` case in `is_installed` keys
+    on `/usr/include/libaio.h` -- the header LVM2 actually includes -- so a
+    libaio blfs/08a already installed is reused rather than rebuilt, leaving
+    the desktop/x86_64 profiles unchanged.  `packages/stage-sources.json` is
+    regenerated to attribute libaio to blfs/21 (blfs-libs is always active, so
+    the tarball was already downloaded for every profile).
+    `tests/test_acceptance_shell.py` gains `TestLuksLibaioPrerequisite`
+    (`test_libaio_is_built_before_lvm2`,
+    `test_is_installed_reuses_blfs08a_libaio`) so the ordering and the
+    header-based probe cannot silently regress.
+
 - **`luks-encryption` stage aborted building cryptsetup: `Building man pages
   requires asciidoctor installed.`** (`blfs/21-luks-encryption.sh`,
   `tests/test_acceptance_shell.py`)
