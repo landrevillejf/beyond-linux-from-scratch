@@ -2911,6 +2911,53 @@ class TestLuksJsonCPolicyFloor:
             'cryptsetup links a shared libjson-c'
 
 
+class TestLuksCryptsetupAsciidoc:
+    """Guardrail for the luks-encryption stage's cryptsetup man-page flag.
+
+    Nightly lg3d #60 aborted the luks-encryption stage at cryptsetup with
+    "checking for asciidoctor... no" /
+    "configure: error: Building man pages requires asciidoctor installed.".
+    cryptsetup's configure.ac defaults enable_asciidoc to yes and
+    AC_MSG_ERRORs when asciidoctor is absent; the offline CI chroot builds
+    no asciidoctor.  cryptsetup is the LUKS frontend and a required package
+    in this stage, so the abort left the storage-encryption toolchain
+    unbuilt.  The fix is --disable-asciidoc: man pages are not part of the
+    LUKS unlock path (the initramfs only needs the cryptsetup binary), so
+    man-page generation is turned off rather than pulling in a Ruby
+    toolchain.
+    """
+
+    SCRIPT = Path('blfs/21-luks-encryption.sh')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/21 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    def test_cryptsetup_disables_asciidoc_man_pages(self, content):
+        body = self._fn(self._inner(content), 'build_commands_cryptsetup')
+        assert '--disable-asciidoc' in body, (
+            'cryptsetup configure.ac errors ("Building man pages requires '
+            'asciidoctor installed.") without --disable-asciidoc in the '
+            'offline chroot (nightly lg3d #60)')
+        assert '--with-crypto_backend=openssl' in body, \
+            'cryptsetup must keep its openssl backend'
+        assert '--disable-ssh-token' in body, \
+            'the ssh-token helper would pull in libssh'
+
+
 class TestCustomSourcesGuardrails:
     """Guardrails against version collisions in custom-sources.list.
 
