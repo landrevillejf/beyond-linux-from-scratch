@@ -28,6 +28,19 @@ die() {
     exit 1
 }
 
+# builder.py launches every stage as the unprivileged build user (the CI
+# runs `sudo -u lfs python3 builder.py`), so each write into the
+# root-owned $LFS tree and each chroot must go through sudo -- the same
+# run_privileged idiom the sibling blfs stages use.  Without it the very
+# first root-owned write (tar into $LFS/usr) dies "Permission denied".
+run_privileged() {
+    if [ "$(whoami)" = "root" ]; then
+        "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # ----------------------------------------------------------------------
 # Guard: the assistant is strictly opt-in
 # ----------------------------------------------------------------------
@@ -75,7 +88,7 @@ ENGINE_URL="https://github.com/ollama/ollama/releases/download/v${ENGINE_VERSION
 TARBALL="$LFS/sources/ollama-linux-${OLLAMA_ARCH}-${ENGINE_VERSION}.tgz"
 
 run_chroot() {
-    chroot "$LFS" /usr/bin/env -i \
+    run_privileged chroot "$LFS" /usr/bin/env -i \
         HOME=/root TERM="${TERM:-dumb}" \
         PATH=/usr/bin:/usr/sbin:/bin:/sbin \
         /bin/bash -c "$1"
@@ -121,7 +134,7 @@ if [ ! -x "$LFS/usr/bin/ollama" ]; then
     fi
     log_info "Engine checksum verified"
 
-    tar -xzf "$TARBALL" -C "$LFS/usr"
+    run_privileged tar -xzf "$TARBALL" -C "$LFS/usr"
     log_info "Engine installed into /usr"
 else
     log_info "Engine already installed - skipping download"
@@ -136,13 +149,13 @@ fi
 if ! run_chroot 'getent passwd ollama >/dev/null'; then
     run_chroot 'useradd -r -g ollama -d /var/lib/ollama -s /bin/false -c "Ollama daemon" ollama'
 fi
-mkdir -p "$LFS/var/lib/ollama"
+run_privileged mkdir -p "$LFS/var/lib/ollama"
 
 # ----------------------------------------------------------------------
 # Wrapper configuration + knowledge CLI
 # ----------------------------------------------------------------------
-mkdir -p "$LFS/etc/knowledge"
-cat >"$LFS/etc/knowledge/config.env" <<EOF
+run_privileged mkdir -p "$LFS/etc/knowledge"
+cat <<EOF | run_privileged tee "$LFS/etc/knowledge/config.env" >/dev/null
 # knowledge - local AI assistant defaults
 KNOWLEDGE_MODEL=$DEFAULT_MODEL
 KNOWLEDGE_HOST=$LISTEN
@@ -150,7 +163,7 @@ EOF
 
 # The wrapper never executes model output: suggestions are printed for
 # the user to review, nothing is eval'ed or piped into a shell.
-cat >"$LFS/usr/bin/knowledge" <<'WRAPPER'
+cat <<'WRAPPER' | run_privileged tee "$LFS/usr/bin/knowledge" >/dev/null
 #!/bin/bash
 # knowledge - local AI assistant (Ollama wrapper, fully offline)
 set -euo pipefail
@@ -228,19 +241,19 @@ case "${1:-}" in
         ;;
 esac
 WRAPPER
-chmod 0755 "$LFS/usr/bin/knowledge"
+run_privileged chmod 0755 "$LFS/usr/bin/knowledge"
 
 # ----------------------------------------------------------------------
 # Daemon environment + init service (per $INIT_SYSTEM)
 # ----------------------------------------------------------------------
-cat >"$LFS/etc/sysconfig/ollama" <<EOF
+cat <<EOF | run_privileged tee "$LFS/etc/sysconfig/ollama" >/dev/null
 OLLAMA_HOST=$LISTEN
 OLLAMA_MODELS=/var/lib/ollama/models
 EOF
 
 case "$INIT" in
 systemd)
-    cat >"$LFS/etc/systemd/system/ollama.service" <<'UNIT'
+    cat <<'UNIT' | run_privileged tee "$LFS/etc/systemd/system/ollama.service" >/dev/null
 [Unit]
 Description=Ollama service (knowledge AI assistant)
 After=network.target
@@ -255,12 +268,12 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 UNIT
-    mkdir -p "$LFS/etc/systemd/system/multi-user.target.wants"
-    ln -sf ../ollama.service \
+    run_privileged mkdir -p "$LFS/etc/systemd/system/multi-user.target.wants"
+    run_privileged ln -sf ../ollama.service \
         "$LFS/etc/systemd/system/multi-user.target.wants/ollama.service"
     ;;
 *)
-    cat >"$LFS/etc/init.d/ollama" <<'INITD'
+    cat <<'INITD' | run_privileged tee "$LFS/etc/init.d/ollama" >/dev/null
 #!/bin/sh
 ### Begin /etc/init.d/ollama
 # knowledge AI assistant daemon (Ollama)
@@ -299,9 +312,9 @@ case "$1" in
         ;;
 esac
 INITD
-    chmod 0755 "$LFS/etc/init.d/ollama"
-    mkdir -p "$LFS/etc/rc.d/rcS.d"
-    ln -sf /etc/init.d/ollama "$LFS/etc/rc.d/rcS.d/S60ollama"
+    run_privileged chmod 0755 "$LFS/etc/init.d/ollama"
+    run_privileged mkdir -p "$LFS/etc/rc.d/rcS.d"
+    run_privileged ln -sf /etc/init.d/ollama "$LFS/etc/rc.d/rcS.d/S60ollama"
     ;;
 esac
 
@@ -311,8 +324,8 @@ esac
 if [ "$PROVISION" = "first-boot" ]; then
     # One-shot service pulls the weights after installation, when the
     # machine has network; the marker keeps it from running twice.
-    mkdir -p "$LFS/usr/lib/knowledge"
-    cat >"$LFS/usr/lib/knowledge/provision-models.sh" <<'PROV'
+    run_privileged mkdir -p "$LFS/usr/lib/knowledge"
+    cat <<'PROV' | run_privileged tee "$LFS/usr/lib/knowledge/provision-models.sh" >/dev/null
 #!/bin/sh
 # One-shot model provisioning for the knowledge assistant.
 set -eu
@@ -329,12 +342,12 @@ done
 unset IFS
 touch "$MARKER"
 PROV
-    sed -i "s|__MODELS__|$MODELS|" "$LFS/usr/lib/knowledge/provision-models.sh"
-    chmod 0755 "$LFS/usr/lib/knowledge/provision-models.sh"
+    run_privileged sed -i "s|__MODELS__|$MODELS|" "$LFS/usr/lib/knowledge/provision-models.sh"
+    run_privileged chmod 0755 "$LFS/usr/lib/knowledge/provision-models.sh"
 
     case "$INIT" in
     systemd)
-        cat >"$LFS/etc/systemd/system/knowledge-provision.service" <<'UNIT'
+        cat <<'UNIT' | run_privileged tee "$LFS/etc/systemd/system/knowledge-provision.service" >/dev/null
 [Unit]
 Description=One-shot model provisioning for the knowledge assistant
 After=ollama.service network-online.target
@@ -348,11 +361,11 @@ ExecStart=/usr/lib/knowledge/provision-models.sh
 [Install]
 WantedBy=multi-user.target
 UNIT
-        ln -sf ../knowledge-provision.service \
+        run_privileged ln -sf ../knowledge-provision.service \
             "$LFS/etc/systemd/system/multi-user.target.wants/knowledge-provision.service"
         ;;
     *)
-        cat >"$LFS/etc/init.d/knowledge-provision" <<'INITD'
+        cat <<'INITD' | run_privileged tee "$LFS/etc/init.d/knowledge-provision" >/dev/null
 #!/bin/sh
 ### Begin /etc/init.d/knowledge-provision
 # One-shot model provisioning for the knowledge assistant
@@ -369,8 +382,8 @@ case "$1" in
     *) echo "Usage: $0 {start}"; exit 1 ;;
 esac
 INITD
-        chmod 0755 "$LFS/etc/init.d/knowledge-provision"
-        ln -sf /etc/init.d/knowledge-provision \
+        run_privileged chmod 0755 "$LFS/etc/init.d/knowledge-provision"
+        run_privileged ln -sf /etc/init.d/knowledge-provision \
             "$LFS/etc/rc.d/rcS.d/S61knowledge-provision"
         ;;
     esac
@@ -379,7 +392,7 @@ fi
 if [ "$PROVISION" = "build-time" ]; then
     log_info "Provisioning models at build time"
     run_chroot 'chown -R ollama:ollama /var/lib/ollama'
-    chroot "$LFS" /usr/bin/env -i \
+    run_privileged chroot "$LFS" /usr/bin/env -i \
         HOME=/var/lib/ollama \
         PATH=/usr/bin:/usr/sbin:/bin:/sbin \
         /bin/sh -c 'su -s /bin/sh ollama -c "OLLAMA_HOST=127.0.0.1:11434 /usr/bin/ollama serve" >/var/log/ollama-build.log 2>&1 &'
