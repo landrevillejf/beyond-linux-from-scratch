@@ -221,6 +221,7 @@ is_installed() {
     case "$pkg" in
         json-c)      have_pc json-c || have_lib 'libjson-c.so*' ;;
         popt)        have_pc popt || have_lib 'libpopt.so*' ;;
+        libaio)      [ -f /usr/include/libaio.h ] || have_lib 'libaio.so*' ;;
         lvm2)        have_cmd lvm && have_lib 'libdevmapper.so*' ;;
         cryptsetup)  have_cmd cryptsetup ;;
         mdadm)       have_cmd mdadm ;;
@@ -287,6 +288,24 @@ build_commands_json_c() {
 build_popt() { book_install popt build_commands_popt; }
 build_commands_popt() {
     ./configure --prefix=/usr --disable-static &&
+    make -j"$JOBS" && make install
+}
+
+# ======================================================================
+# general/libaio.  LVM2's device/bcache.c includes <libaio.h> and
+# hard-requires it -- there is no configure flag to build LVM2 without
+# libaio.  blfs/08a builds libaio, but only as `run_build optional`, so a
+# profile whose optional libaio did not land (the arm64 cross-compile leg,
+# ARM64 XFCE Build #96: `device/bcache.c:29:10: fatal error: libaio.h: No
+# such file or directory` -> `Required package lvm2 failed`) reaches this
+# stage with no libaio.h and aborts on the required LVM2.  Build it here
+# as a required prerequisite so the stage owns its own dependency; the
+# is_installed probe reuses blfs/08a's copy when it already installed one.
+# The sed drops the static libaio.a from the install, matching 08a/BLFS.
+# ======================================================================
+build_libaio() { book_install libaio build_commands_libaio; }
+build_commands_libaio() {
+    sed -i "/install.*libaio.a/s/^/#/" src/Makefile &&
     make -j"$JOBS" && make install
 }
 
@@ -370,6 +389,9 @@ run_build required json-c
 
 log_info "Building popt (cryptsetup CLI parser)"
 run_build required popt
+
+log_info "Building libaio (LVM2 bcache prerequisite)"
+run_build required libaio
 
 log_info "Building LVM2 (libdevmapper + lvm/dmsetup)"
 run_build required lvm2

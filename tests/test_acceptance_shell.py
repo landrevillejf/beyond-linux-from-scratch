@@ -2958,6 +2958,65 @@ class TestLuksCryptsetupAsciidoc:
             'the ssh-token helper would pull in libssh'
 
 
+class TestLuksLibaioPrerequisite:
+    """Guardrail for the luks-encryption stage building libaio before LVM2.
+
+    ARM64 XFCE Build #96 aborted the luks-encryption stage at LVM2 with
+    "device/bcache.c:29:10: fatal error: libaio.h: No such file or
+    directory" / "[ERROR] Required package lvm2 failed - aborting stage".
+    LVM2's device/bcache.c includes <libaio.h> and there is no configure
+    flag to build LVM2 without it, so libaio is a hard prerequisite.
+    blfs/08a builds libaio only as `run_build optional`, so a profile whose
+    optional libaio did not land (the arm64 cross-compile leg) reaches this
+    stage with no libaio.h.  The stage must own the dependency: build libaio
+    as `required` before lvm2, with an is_installed probe that reuses
+    blfs/08a's copy when it already installed one.
+    """
+
+    SCRIPT = Path('blfs/21-luks-encryption.sh')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/21 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    def test_libaio_is_built_before_lvm2(self, content):
+        inner = self._inner(content)
+        # The build function must exist and compile/install libaio.
+        body = self._fn(inner, 'build_commands_libaio')
+        assert 'make install' in body, \
+            'libaio must be installed so LVM2 finds libaio.h'
+        # libaio must be scheduled required, and strictly before lvm2.
+        libaio_at = inner.index('run_build required libaio')
+        lvm2_at = inner.index('run_build required lvm2')
+        assert libaio_at < lvm2_at, (
+            'libaio must be built before LVM2 or device/bcache.c aborts '
+            'with "libaio.h: No such file or directory" (ARM64 Build #96)')
+
+    def test_is_installed_reuses_blfs08a_libaio(self, content):
+        """The probe must key on the header LVM2 actually includes, so a
+        libaio blfs/08a already installed is reused, not rebuilt."""
+        inner = self._inner(content)
+        fn = self._fn(inner, 'is_installed')
+        assert 'libaio)' in fn, \
+            'is_installed has no libaio case; blfs/08a copy is never reused'
+        assert '/usr/include/libaio.h' in fn, (
+            'the probe must test libaio.h (the header LVM2 includes), not '
+            'just the shared object')
+
+
 class TestCustomSourcesGuardrails:
     """Guardrails against version collisions in custom-sources.list.
 
