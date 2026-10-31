@@ -8,3 +8,4 @@ lfs-build/
 branding/installer/backgrounds/*.png
 .DS_Store
 /docs/books/
+node_modules/

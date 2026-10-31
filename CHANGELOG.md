@@ -481,6 +481,28 @@
 
 ### Fixed
 
+- **Removed the unused `jest` devDependency and its committed `node_modules`,
+  clearing 20 transitive npm Dependabot alerts** (`package.json`,
+  `package-lock.json`, `node_modules/`, `.gitignore`)
+  - Dependabot flagged `brace-expansion` (#12/#14, quadratic/expansion CPU
+    DoS) and `deepmerge` (#18, `mergeObject()` prototype poisoning) in
+    `package-lock.json`, plus `glob`/`minimatch` -- 20 vulnerabilities in
+    total (1 high, 16 moderate, 3 low).  Every one is transitive under the
+    sole `devDependencies` entry `jest@^30.4.2`.
+  - `jest` was vestigial: the repo is Python + Bash (pytest/shellcheck),
+    there are no first-party JS tests, no `test`/`jest` script or config in
+    `package.json`, and no workflow runs `npm ci`/`install`/`test`/`audit`
+    (`codacy-security-scan.yml` only *excludes* `node_modules` from its
+    scan).  `deepmerge` has no patched release (4.3.1 is the latest and is
+    itself vulnerable), so alert #18 could not be cleared by a version bump
+    at all -- `npm audit fix --force` only offered a breaking downgrade to
+    `jest@25.1.0`.
+  - Removing `package.json`, `package-lock.json` and the 5400 tracked
+    `node_modules` files eliminates every alert at its single root with zero
+    functional impact, and `node_modules/` is added to `.gitignore` so an
+    accidental local `npm install` can never re-commit it.  No build stage,
+    test or CI job depends on the JS toolchain.
+
 - **`luks-encryption` stage aborted building LVM2 on arm64: `libaio.h: No such
   file or directory`** (`blfs/21-luks-encryption.sh`,
   `packages/stage-sources.json`, `tests/test_acceptance_shell.py`)
