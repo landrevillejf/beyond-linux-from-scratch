@@ -481,6 +481,40 @@
 
 ### Fixed
 
+- **`knowledge` stage died `tar: ... Permission denied` extracting the Ollama
+  engine into the root-owned `$LFS/usr`** (`blfs/28-knowledge.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #61 (`lg3d`, sysvinit, x86_64) reached the `knowledge` stage
+    for the first time -- PR #175 made `lg3d` schedule it -- and died with
+    `tar: bin/ollama: Cannot open: Permission denied` / `tar: lib/ollama:
+    Cannot mkdir: Permission denied` right after "Engine checksum verified",
+    then `Build failed at stage: knowledge (exit code: 2)`.  `builder.py`
+    launches every stage as the unprivileged build user (the CI runs
+    `sudo -u lfs python3 builder.py`) and `ScriptExecutor.run_script` execs the
+    script directly with no sudo wrapper, so each stage owns its own privilege
+    escalation through the `run_privileged` helper (root passthrough, else
+    `sudo`) that every sibling blfs stage defines.  `blfs/28-knowledge.sh`
+    never defined it: it wrote bare `tar -xzf ... -C "$LFS/usr"`,
+    `cat > "$LFS/etc/..."`, `mkdir`/`chmod`/`ln`/`chown`/`sed -i` and `chroot`
+    straight into the root-owned tree.  The download into `$LFS/sources`
+    succeeded only because `blfs/08` chowns that dir to the build user, which
+    is why the failure surfaced at the first root-owned write, the engine
+    extraction.
+  - The stage now defines `run_privileged()` (the `blfs/08c` idiom) and routes
+    every root-owned operation through it: `run_chroot()` chroots via
+    `run_privileged`, the engine `tar` extracts via `run_privileged`, and each
+    `mkdir`/`chmod`/`ln`/`chown`/`sed -i` into `$LFS/{usr,etc,var}` is
+    privileged.  Every heredoc that used to redirect `cat > "$LFS/..."` is
+    rewritten as `cat <<'TAG' | run_privileged tee "$LFS/..." >/dev/null`,
+    because a shell redirect runs as the invoking user regardless of a leading
+    `sudo` (shellcheck SC2024).  The `$LFS/sources` download path is left
+    unprivileged on purpose: that dir is chown'd to the build user, so making
+    it root-owned would break the `curl` that fetches the 1.8 GB engine.
+    `tests/test_acceptance_shell.py` updates the wrapper guardrail's heredoc
+    marker and gains
+    `TestKnowledgeStageGuardrails::test_root_owned_writes_go_through_run_privileged`
+    so a bare redirect into the root-owned tree cannot silently regress.
+
 - **Removed the unused `jest` devDependency and its committed `node_modules`,
   clearing 20 transitive npm Dependabot alerts** (`package.json`,
   `package-lock.json`, `node_modules/`, `.gitignore`)

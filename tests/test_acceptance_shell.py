@@ -4049,10 +4049,33 @@ class TestKnowledgeStageGuardrails:
     def test_wrapper_never_executes_model_output(self, content):
         """The knowledge CLI prints suggestions; it never runs them."""
         wrapper = content.split(
-            'cat >"$LFS/usr/bin/knowledge"')[1].split('\nWRAPPER\n')[0]
+            'run_privileged tee "$LFS/usr/bin/knowledge"')[1].split('\nWRAPPER\n')[0]
         assert 'eval' not in wrapper, \
             "knowledge wrapper must not eval model output"
         assert 'never auto-runs' in wrapper
+
+    def test_root_owned_writes_go_through_run_privileged(self, content):
+        """Nightly #61: builder.py runs every stage as the unprivileged
+        build user (`sudo -u lfs`), so writes into the root-owned $LFS
+        tree and chroot must use run_privileged like the sibling blfs
+        stages.  The stage originally wrote bare `tar -xzf ... -C
+        "$LFS/usr"` and died "Permission denied" the first time lg3d
+        scheduled it.  $LFS/sources stays unprivileged on purpose: it is
+        chown'd to the build user so curl can download the engine."""
+        assert 'run_privileged()' in content, \
+            "stage must define the run_privileged helper"
+        assert 'run_privileged tar -xzf "$TARBALL" -C "$LFS/usr"' in content, \
+            "engine extraction into root-owned /usr must be privileged"
+        assert 'run_privileged chroot "$LFS"' in content, \
+            "chroot must be privileged"
+        # No bare redirect may write into the root-owned $LFS tree
+        # (SC2024: sudo does not apply to shell redirections).
+        for line in content.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                continue
+            assert not re.search(r'(?<!tee )>\s*"\$LFS/(?!sources)', line), \
+                f"bare redirect into root-owned $LFS: {stripped}"
 
     def test_shellcheck_clean(self):
         try:
