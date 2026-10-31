@@ -4,6 +4,29 @@
 
 ### Added
 
+- **LG3D ships the local `knowledge` AI assistant** (`builder.py`,
+  `config/build.conf`, `tests/test_builder.py`,
+  `tests/test_profile_manager.py`, `README.md`, `AGENTS.md`,
+  `docs/KNOWLEDGE_DESIGN.md`)
+  - The `lg3d` profile now sets `knowledge: True`, so the opt-in
+    `knowledge` stage (`blfs/28-knowledge.sh`, an Ollama engine) is
+    scheduled with the profile.  `_apply_profile_settings()` flips config
+    `knowledge.enabled` from that flag -- the same profile-flag -> config
+    pattern as `privacy_tools` and `graphical_installer` -- and
+    `get_build_stages()` places `blfs/28` just before `base-packages` so
+    stage 14's manifest capture turns the installed assistant into LPM
+    packages.
+  - `config/build.conf` pins `knowledge.engine_sha256` to the verified
+    `ollama-linux-amd64.tgz` v0.12.6 digest
+    (`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`)
+    while `enabled` stays `false` globally, so the stage stays secure by
+    default (it refuses to unpack an unpinned engine) and `lg3d` is the
+    only profile that turns it on out of the box; every other profile
+    still opts in with `--with-knowledge` or an explicit config enable.
+    `provision_models` stays `first-boot` to keep the live ISO small.
+  - LG3D-only: no other profile gains the assistant.  `builder.py` stays
+    at 100% coverage.
+
 - **Profile-scoped source downloads** (`builder.py`,
   `tools/scan-stage-sources.py`, `packages/stage-sources.json`,
   `packages/source-aliases.json`, `config/build.conf`,

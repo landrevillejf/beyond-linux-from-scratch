@@ -715,6 +715,15 @@ class ProfileManager:
             # profile, and privacy_tools=True also flips the config's
             # security.privacy.disable_telemetry hardening on.
             'privacy_tools': True,
+            # The LG3D showcase ships the local "knowledge" AI assistant
+            # (blfs/28-knowledge.sh, Ollama).  _apply_profile_settings()
+            # flips config knowledge.enabled from this flag, which is what
+            # get_build_stages() gates the stage on -- the same profile-flag
+            # -> config pattern as privacy_tools.  The stage is still secure
+            # by default: it refuses to unpack an engine without the pinned
+            # knowledge.engine_sha256, and provision_models stays first-boot
+            # so the ISO ships small and models are pulled on the target.
+            'knowledge': True,
             # The lg3d profile ships a live ISO (final/15) whose LG3D start
             # menu offers a graphical installer, so live_system is on.  The
             # installed system boots to the LightDM greeter written by
@@ -1903,6 +1912,15 @@ class LFSBuilder:
 
         if self.profile_config.get('privacy_tools', False):
             self.config.set('security.privacy.disable_telemetry', True)
+
+        # A profile that asks for the local "knowledge" AI assistant turns
+        # the stage on (get_build_stages gates blfs/28 on knowledge.enabled).
+        # Mirrors the privacy_tools flag: only ever flips it ON, so the
+        # --with-knowledge CLI override and an explicit config enable still
+        # work for any profile, and a profile without the flag never forces
+        # the assistant off.
+        if self.profile_config.get('knowledge', False):
+            self.config.set('knowledge.enabled', True)
 
     def is_cross_compile(self) -> bool:
         """Check if cross-compilation is enabled"""
