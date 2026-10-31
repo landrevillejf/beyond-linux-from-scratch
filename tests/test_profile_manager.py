@@ -187,6 +187,9 @@ class TestProfileManager:
         assert profile['security_hardening'] is True
         assert profile['live_system'] is True
         assert profile['graphical_installer'] is True
+        # lg3d is the showcase profile for the local knowledge assistant:
+        # it flips config knowledge.enabled on so blfs/28 ships with it.
+        assert profile['knowledge'] is True
 
     def test_list_profiles_includes_all(self):
         """Test that list_profiles includes all expected profiles"""

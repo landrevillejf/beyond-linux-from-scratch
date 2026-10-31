@@ -26,8 +26,11 @@ wrapper, and (optionally) pre-provisioned model weights.
 
 - **Free and open source**: Ollama engine + open-weight models only.
   No paid API keys, no vendor lock-in, no telemetry.
-- **Opt-in**: disabled by default in `config/build.conf`; no profile
-  ships it unless the user asks for it (`--with-knowledge`).
+- **Opt-in**: disabled by default in `config/build.conf`; the `lg3d`
+  showcase profile is the only one that turns it on by default (its
+  `ProfileManager` entry sets `knowledge: True`), and any other profile
+  can opt in with `--with-knowledge` or an explicit
+  `knowledge.enabled=true`.
 - **Offline-first**: the assistant must work with no network connection.
   Model weights are either baked into the image at build time or pulled
   once at first boot, then cached locally.
@@ -138,6 +141,14 @@ Key semantics:
 - `listen` — bind address; defaults to loopback only. A non-loopback
   address is rejected unless `allow_network=true` is set explicitly.
 - `web_ui` — reserved for the deferred Open WebUI phase.
+
+The `lg3d` profile ships the assistant by default, so `config/build.conf`
+pins `engine_sha256` to the verified `ollama-linux-amd64.tgz` v0.12.6
+digest (`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`)
+while keeping `enabled=false` globally: `_apply_profile_settings()` flips
+`knowledge.enabled` on only for `lg3d` (from its `knowledge: True` flag),
+and `provision_models` stays `first-boot` so the live ISO ships small.
+Any other profile that opts in inherits the same pinned checksum.
 
 ### 6.2 Environment contract
 

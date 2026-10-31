@@ -823,6 +823,64 @@ class TestLFSBuilder:
         assert 'knowledge' in stage_names
         assert stage_names.index('knowledge') < stage_names.index('base-packages')
 
+    def test_lg3d_profile_schedules_knowledge_stage(self, builder):
+        """The lg3d profile ships the local knowledge assistant.
+
+        lg3d is the showcase profile for the Ollama-backed assistant, so
+        its ProfileManager entry sets knowledge=True.  _apply_profile_
+        settings() flips config knowledge.enabled from that flag -- the
+        same profile-flag -> config pattern as graphical_installer -- and
+        get_build_stages() then schedules blfs/28 ahead of base-packages
+        so stage 14's manifest capture includes the assistant files.
+        """
+        from builder import ProfileManager
+        builder.profile = 'lg3d'
+        builder.profile_config = ProfileManager.get_profile('lg3d')
+        builder._apply_profile_settings()
+        assert builder.config.get('knowledge.enabled') is True
+        stage_names = [s[0] for s in builder.get_build_stages()]
+        assert 'knowledge' in stage_names
+        assert dict(builder.get_build_stages())['knowledge'] == \
+            'blfs/28-knowledge.sh'
+        assert stage_names.index('knowledge') < \
+            stage_names.index('base-packages')
+
+    def test_knowledge_profile_flag_resolves_config_enabled(self, builder):
+        """The profile flag must resolve into knowledge.enabled.
+
+        Mirrors test_graphical_installer_flag_resolves_installer_type:
+        the resolution lives in _apply_profile_settings so a config file
+        written before the key existed still enables the stage, and the
+        flag only ever turns it ON (never forces it off another profile).
+        Unlike installer.type (set unconditionally), knowledge.enabled is
+        only written when the flag is truthy, so a non-lg3d fixture has no
+        key at all -- assert it falsy rather than against a literal False.
+        """
+        assert not builder.config.get('knowledge.enabled')
+        builder.profile_config['knowledge'] = True
+        builder._apply_profile_settings()
+        assert builder.config.get('knowledge.enabled') is True
+        # A profile without the flag must not disable an explicit enable.
+        builder.profile_config['knowledge'] = False
+        builder._apply_profile_settings()
+        assert builder.config.get('knowledge.enabled') is True
+
+    def test_only_lg3d_enables_knowledge(self):
+        """lg3d is the only profile that ships the assistant by default.
+
+        Every other profile keeps the opt-in blfs/28 stage out of its
+        stage list until it explicitly asks for it (config or
+        --with-knowledge), so no lean profile silently downloads the
+        ~1.8 GB Ollama engine.
+        """
+        from builder import ProfileManager
+        enabled = [
+            name for name, profile in ProfileManager.PROFILES.items()
+            if profile.get('knowledge', False)
+        ]
+        assert enabled == ['lg3d'], \
+            f"only lg3d may enable knowledge by default, got {enabled}"
+
     def test_master_stage_list_places_knowledge_before_base_packages(self):
         """BUILD_STAGES lists knowledge after audio-studio and before
         base-packages."""

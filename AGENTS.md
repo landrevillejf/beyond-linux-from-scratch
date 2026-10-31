@@ -202,6 +202,23 @@ tor/wireguard-tools/dnscrypt-proxy/mat2 only when their archives are present;
 each install is guarded by `if ls <pkg>-*`, so it is a no-op-safe addition to
 this `desktop: none` / `xorg_only` profile.
 
+The `lg3d` profile also sets `knowledge: True`, so the opt-in local "knowledge"
+AI assistant stage (`blfs/28-knowledge.sh`, an Ollama engine) is scheduled with
+the profile -- lg3d is its showcase. `_apply_profile_settings()` flips config
+`knowledge.enabled` from that flag (the same profile-flag -> config pattern as
+`privacy_tools` and `graphical_installer`), and `get_build_stages()` gates
+`blfs/28` on `knowledge.enabled`, placing it just before `base-packages` so
+stage 14's manifest capture turns the installed assistant into LPM packages.
+The stage stays secure by default: it refuses to unpack an engine unless
+`knowledge.engine_sha256` is pinned -- now set in `config/build.conf` to the
+verified `ollama-linux-amd64.tgz` v0.12.6 digest
+(`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`) -- and
+`provision_models` stays `first-boot` so the live ISO ships small and models are
+pulled on the target. lg3d is the only profile that enables it by default; every
+other profile keeps the stage out until it opts in with `--with-knowledge` or an
+explicit config enable, and the flag only ever flips `knowledge.enabled` ON (it
+never forces the assistant off a profile that asked for it).
+
 The `lg3d` profile also sets `live_system: True` and `graphical_installer:
 True`, so it ships a live ISO (`final/15-create-live-system.sh`) whose LG3D
 start menu offers a graphical Calamares installer. With `installer.type`
