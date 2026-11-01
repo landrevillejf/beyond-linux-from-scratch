@@ -4,26 +4,26 @@
 
 ### Added
 
-- **LG3D wires the local `knowledge` AI assistant** (`builder.py`,
+- **LG3D ships the local `knowledge` AI assistant** (`builder.py`,
   `config/build.conf`, `tests/test_builder.py`,
   `tests/test_profile_manager.py`, `README.md`, `AGENTS.md`,
   `docs/KNOWLEDGE_DESIGN.md`)
   - The `lg3d` profile now sets `knowledge: True`, so the opt-in
-    `knowledge` stage (`blfs/28-knowledge.sh`) is scheduled with the
-    profile.  `_apply_profile_settings()` flips config
+    `knowledge` stage (`blfs/28-knowledge.sh`, an Ollama engine) is
+    scheduled with the profile.  `_apply_profile_settings()` flips config
     `knowledge.enabled` from that flag -- the same profile-flag -> config
     pattern as `privacy_tools` and `graphical_installer` -- and
     `get_build_stages()` places `blfs/28` just before `base-packages` so
-    stage 14's manifest capture turns the wired assistant into an LPM
-    package.
+    stage 14's manifest capture turns the installed assistant into LPM
+    packages.
   - `config/build.conf` pins `knowledge.engine_sha256` to the verified
     `ollama-linux-amd64.tgz` v0.12.6 digest
     (`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`)
-    while `enabled` stays `false` globally, so `lg3d` is the only profile
-    that turns the assistant on out of the box and every other profile
+    while `enabled` stays `false` globally, so the stage stays secure by
+    default (it refuses to unpack an unpinned engine) and `lg3d` is the
+    only profile that turns it on out of the box; every other profile
     still opts in with `--with-knowledge` or an explicit config enable.
-    The pin is what the on-demand installer on the target verifies; the
-    image itself carries no engine (see Fixed below).
+    `provision_models` stays `first-boot` to keep the live ISO small.
   - LG3D-only: no other profile gains the assistant.  `builder.py` stays
     at 100% coverage.
 
@@ -481,207 +481,39 @@
 
 ### Fixed
 
-- **The lg3d live ISO shipped the Ollama engine, and no release could carry
-  it** (`blfs/28-knowledge.sh`, `final/16-validate-build.sh`,
-  `tests/test_acceptance_shell.py`, `builder.py`, `tests/test_builder.py`,
-  `AGENTS.md`, `README.md`, `docs/KNOWLEDGE_DESIGN.md`, `docs/content.md`)
-  - lg3d nightly #69 failed in `create-release` with
-    `Validation Failed: {"resource":"ReleaseAsset","code":"custom","field":"size","message":"size must be less than 2147483648"}`.
-    The two images it tried to publish measured 2856 MB (systemd) and
-    2850 MB (sysvinit); #68 had failed the same way, so no lg3d ISO had
-    ever reached a release.
-  - The bulk was the assistant, not the desktop.  `blfs/28-knowledge.sh`
-    unpacked `ollama-linux-amd64.tgz` v0.12.6 -- 1 903 757 843 bytes of
-    already deflate-packed data, roughly 2 GB extracted -- into
-    `$LFS/usr`, and `$LFS` is simultaneously the live session's squashfs
-    and the tree Calamares copies onto the disk, so every image and every
-    installed system carried an inference runtime nobody had asked for.
-    xz recovers almost nothing from a gzip payload, which is why an
-    "already compressed" engine still pushed the image past the ceiling.
-    Filling in `knowledge.engine_sha256` is what enabled it: the stage
-    refuses to unpack an *unpinned* engine, so committing the digest
-    silently turned an opt-in blob into a shipped default.
-  - The stage now ships the integration only -- the `knowledge` CLI, the
-    two config files, the `ollama` system user, service files that stay
-    inert (`ConditionPathExists=/usr/bin/ollama`, nothing linked into
-    `multi-user.target.wants` or `rcS.d`, because enabling a daemon whose
-    binary is absent buys a failed unit at every boot), and a
-    `provision-models.sh` one-shot that reports the missing engine and
-    exits 0 instead of failing the boot.  The engine itself comes from
-    `/usr/lib/knowledge/install-engine.sh`, which the operator runs on
-    the target: it fetches exactly the pinned version and sha256, refuses
-    a non-root caller or a foreign architecture, unpacks nothing until the
-    digest matches, then enables the service and pulls the models.  The
-    stage also strips an engine that a resumed build or a restored pre-fix
-    cache left in `$LFS` and dies if the strip does not hold, and
-    `final/16-validate-build.sh` section 14 turns a shipped engine into a
-    build failure.  `provision_models=build-time` is rejected outright,
-    because its weights land in `$LFS/var/lib/ollama/models`.
-  - Verified by running the generated installer, not just by reading it:
-    an unprivileged invocation refused (exit 1), a pin belonging to
-    another architecture refused before fetching anything, a wrong digest
-    stopped with `/usr` untouched, and a matching digest downloaded,
-    unpacked, enabled the service and cleaned up its temporary file.  The
-    same probe caught `mktemp /tmp/ollama-engine-XXXXXX.tgz` being refused
-    by busybox (GNU accepts it), so the template keeps its X's trailing.
-  - `builder.py` logic is untouched: the lg3d flag, `knowledge.enabled` and
-    the `LFS_CONFIG_KNOWLEDGE_*` contract are unchanged, so no scheduling or
-    coverage behaviour moves (only the profile comment, which described the
-    old engine-in-the-image behaviour).  Tests: new
-    `TestKnowledgeEngineNeverShips` (8 cases, each verified against 11
-    mutants) plus the two `TestKnowledgeStageGuardrails` assertions that
-    encoded the old install-the-engine contract.
-
-- **`lg3d` nightly published a release with no bootable ISO**
-  (`tools/split-release-assets.sh`, `.github/workflows/lg3d.yml`,
-  `nightly.yml`, `weekly-full.yml`, `release.yml`,
-  `build-iso-from-cache.yml`, `xfce-live-boot-iso.yml`,
-  `release-multi-host.yml`, `xfce-systemd-x86_64-build-cache.yml`,
-  `xfce-sysvinit-x86_64-build-cache.yml`, `tests/test_split_release_assets.py`,
-  `tests/test_release_workflow.py`, `AGENTS.md`)
-  - lg3d Nightly #69 (`lg3d`, both init legs) built and signed its images but
-    `create-release` aborted on the upload:
-    `Validation Failed: {"resource":"ReleaseAsset","code":"custom","field":"size","message":"size must be less than 2147483648"}`.
-    GitHub's Release API refuses any single asset of 2 GiB or more, and the
-    live ISO is 2 856 MB, because final/15 packs the whole lg3d rootfs (JDK,
-    lg3d, the Qt6/KF6/Calamares installer stack, mesa, kernel -- plus, in #68
-    and #69, the Ollama engine that the entry above removes) into
-    `live.squashfs`.  That engine was the dominant term; this helper is the
-    safety net for whatever payload is still over the cap.  Every small asset
-    uploaded, both ISOs were refused, and
-    the nightly shipped a release whose only pointer led nowhere -- no
-    download URL for either image.
-  - The ISO cannot be recompressed into compliance: an xz-compressed squashfs
-    already sits at its entropy floor, so a second compressor buys a few
-    percent, not the 30% the cap demands.  A new `tools/split-release-assets.sh`
-    applies the convention the cache releases have always used
-    (`split -b 1900m -d -a 2`): each over-cap payload becomes `<name>.part-NN`
-    pieces plus a `<name>.parts` manifest (whole-file size/sha256, explicit
-    `assemble=cat ... > <name>` line, part count) and a `<name>.parts.sha256`
-    for per-part verification; the original is removed so the uploader never
-    sees an oversized asset again.  `*.pointer` assets that advertised the
-    split file are rewritten to resolve the manifest instead of 404ing, and
-    `--tag` deletes the parts an earlier generation of the same dated tag left
-    behind, since softprops overwrites equal names but never removes one.
-  - Wired into every workflow that attaches a build artifact to a release, not
-    only the one that reported the failure: the three matrix publishers split
-    inside `create-release` (their `files: artifacts/**/*` glob picks the parts
-    up automatically, so those jobs gained a sparse `tools/` checkout), while
-    the explicit-list publishers (`release.yml`, `build-iso-from-cache.yml`,
-    `xfce-live-boot-iso.yml`, `release-multi-host.yml`) also list
-    `*.iso.part-*`/`*.iso.parts`, and the two `xfce-*-x86_64-build-cache.yml`
-    jobs cover their single opaque rootfs tarball.  `build-iso-from-cache.yml`'s
-    `if: always()` "Verify ISO presence" gate now accepts parts, which would
-    otherwise have turned a successful release red.  Actions artifacts keep the
-    single-file ISO: that channel has no such cap and the QEMU gate needs a
-    bootable image.
-  - Scan depth is part of the contract: the helper only reads the top level of
-    the directory it is given, because `release.yml`,
-    `build-iso-from-cache.yml` and `xfce-live-boot-iso.yml` point it at
-    `build-release/`, which *is* `$LFS` -- a recursive scan there would cut data
-    files of the installed system rather than a release payload.  The three
-    matrix publishers pass `--recursive`, since `download-artifact` stages one
-    subdirectory per matrix leg and the ISOs never sit at `artifacts/` itself.
-    Those same build-tree jobs first hand the payload directory to the runner
-    (`sudo chown "$(id -u):$(id -g)"`), because the build ran as `lfs` and an
-    unprivileged split could not create parts there; running the helper as root
-    instead would have lost `GITHUB_TOKEN` to sudo's `env_reset` and silently
-    disabled the stale-part purge.  `release.yml` gained that hand-over as its
-    own step, since its checksum, pointer, SBOM and cosign steps all write into
-    `build-release/` as the runner too.
-  - `tests/test_split_release_assets.py` runs the helper for real (byte-exact
-    reassembly through the manifest's own `assemble` line, per-part checksums,
-    pointer repair and mode, cap boundary at exactly one byte, idempotent
-    re-run, multi-leg tree, >99-part suffix widening, usage errors);
-    `tests/test_release_workflow.py::TestReleaseAssetSizeCap` proves the
-    structural coverage -- splitter present and ordered before every
-    `softprops/action-gh-release` upload, parts listed in every explicit
-    `files:` block, token on every purge-capable step, and the right scan depth
-    and privilege level at every call site.
-
-- **QEMU boot smoke test panicked with `invalid opcode` in busybox**
-  (`tools/qemu-boot-smoke.sh`)
-  - lg3d Nightly #68 (`lg3d`, sysvinit, x86_64) died in the post-build QEMU
-    boot smoke test with `traps: init[1] trap invalid opcode ... in busybox`
-    followed by `Kernel panic - not syncing: Attempted to kill init!`.  The
-    busybox binary in the initramfs is the pre-built x86_64-musl static from
-    busybox.net, which is compiled with AVX instructions (`vmovdqu` etc.).
-    QEMU's default `qemu64` CPU model doesn't expose AVX, so busybox trapped
-    on the first AVX instruction and the kernel panicked before userspace was
-    reached.
-  - The QEMU command now uses `-cpu max` to enable every CPU feature the
-    accelerator supports (AVX/AVX2/AES/...), matching what the busybox binary
-    expects.  With KVM (GitHub runners expose `/dev/kvm`), `-cpu max` maps to
-    the host CPU; with TCG, it enables QEMU's full emulation set.
-
-- **`lg3d` nightly pre-download of the private ProjectLookingGlass source died
-  `curl: (23) ... on write of 585 bytes`** (`.github/workflows/lg3d.yml`,
-  `tests/test_release_workflow.py`)
-  - The first dispatched run after PR #179 (run 41298802966, both lg3d legs)
-    failed at the new `Pre-download private ProjectLookingGlass source` step
-    with `curl: (23) client returned ERROR on write of 585 bytes`.  curl (23)
-    is a *local write* error, not an auth error: the token was fine (curl
-    received the first 585-byte body chunk before failing), but the step wrote
-    `curl -o` straight into `/tmp/lfs-build/build-release/sources`, which the
-    preceding `Link cached packages to build directory` step creates with
-    `sudo` and `chown -R lfs:lfs`.  The pre-download step runs as the
-    unprivileged runner user, which has no write permission in that lfs-owned
-    directory, so curl could not create the output file.
-  - The step now downloads into a runner-writable `mktemp` file, validates it,
-    then `sudo cp`s it into the lfs-owned sources dir and `sudo chown`s the
-    single archive to `lfs:lfs` before `builder.py` runs.  It also drops
-    `curl -f` in favour of capturing `%{http_code}` explicitly, so a future
-    token-scope or ref regression (401/403/404) prints the API's JSON message
-    instead of a bare curl exit code, and a non-gzip body is rejected before it
-    is staged.  `tests/test_release_workflow.py` gains
-    `TestLg3dPrivateSourcePreDownload` asserting the temp-then-sudo placement
-    (never a direct write into the lfs-owned dir), the HTTP/gzip validation,
-    the unset-secret guard and the ordering before any `builder.py`
-    invocation.
-
-- **`lg3d` stage aborted: `required source archive missing:
-  ProjectLookingGlass-*.tar.gz` (private upstream repo)**
-  (`.github/workflows/lg3d.yml`)
-  - lg3d Nightly #63 (`lg3d`, sysvinit, x86_64) reached the `lg3d` stage and
-    died with `[ERROR] required source archive missing:
-    ProjectLookingGlass-*.tar.gz` after the download phase logged
-    `Permanent error downloading
-    https://github.com/landrevillejf/ProjectLookingGlass/archive/refs/heads/main.tar.gz:
-    HTTP Error 404: Not Found`.  The `landrevillejf/ProjectLookingGlass`
-    repository is private, so `builder.py`'s unauthenticated urllib fetch of
-    its `custom-sources.list` pin answers 404 and no archive ever lands in
-    `sources/`; `blfs/30-install-lg3d.sh`'s `require_file
-    'ProjectLookingGlass-*.tar.gz'` then aborts the stage.
-  - `.github/workflows/lg3d.yml` gains a `Pre-download private
-    ProjectLookingGlass source` step that runs before any `builder.py`
-    invocation: it fetches the default-branch tarball through the
-    authenticated `repos/landrevillejf/ProjectLookingGlass/tarball/main` API
-    endpoint and writes it to
-    `/tmp/lfs-build/build-release/sources/ProjectLookingGlass-main.tar.gz`
-    (the exact name `_archive_filename()` derives from the pin), so
-    `SourceDownloader` logs `Already exists` and never hits the 404.  The step
-    `gzip -t`-validates the archive and fails fast on a zero-byte/HTML error
-    body rather than 5 hours into the build.  Because GitHub's repo-scoped
-    `GITHUB_TOKEN` cannot read a *different* private repository, the fetch
-    authenticates with the `PLG_SOURCE_TOKEN` repository secret (a PAT /
-    fine-grained token with `Contents: read` on `ProjectLookingGlass`) and
-    errors out clearly when that secret is unset.
-
-- **Disabled the scheduled pipelines that do not feed the Project Looking
-  Glass nightly** (`.github/workflows/*.yml`)
-  - Per maintainer request the `schedule:` trigger is commented out (not
-    deleted, so the cron cadence stays documented and reversible) in
-    `nightly.yml`, `arm64-xfce.yml`, `cross-compile.yml`, `benchmark.yml`,
-    `build-rootfs-cache.yml`, `xfce-systemd-x86_64-build-cache.yml`,
-    `xfce-sysvinit-x86_64-build-cache.yml`, `codacy-security-scan.yml` and
-    `codeql.yml`.  `lg3d.yml` keeps its nightly schedule, and
-    `build-base-cache.yml` and `cache-packages.yml` keep theirs on purpose:
-    they publish the base-prefix and package caches `lg3d.yml` restores, so
-    disabling them would silently push every lg3d nightly onto a from-scratch
-    build.  `workflow_dispatch` (manual) and, for `codacy`/`codeql`, the
-    `push`/`pull_request` triggers that back the branch-protection required
-    checks are all preserved, so PRs still validate and any disabled pipeline
-    can still be run by hand.
+- **`luks-encryption` stage aborted building mdadm: `all warnings being
+  treated as errors` under GCC 15** (`blfs/21-luks-encryption.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #62 (`lg3d`, sysvinit, x86_64) progressed past cryptsetup
+    (fixed for #60) and died at mdadm -- the last package in the chain
+    (json-c -> popt -> libaio -> LVM2 -> cryptsetup -> mdadm) -- with
+    `platform-intel.h:28:37: error: initializer-string for array of
+    'unsigned char' truncates NUL terminator but destination lacks
+    'nonstring' attribute (5 chars into 4 available)
+    [-Werror=unterminated-string-initialization]`, followed by
+    `cc1: all warnings being treated as errors` and `[ERROR] Required
+    package mdadm failed - aborting stage`.  mdadm's `platform-intel.c`
+    initialises `unsigned char signature[4]` with 5-char literals
+    (`"$VER"`/`"$NVM"`/`"$VMD"`) -- intentional 4-byte OROM signature
+    tags, not NUL-terminated strings -- and GCC 15's new
+    `-Wunterminated-string-initialization` fires on each one; the
+    Makefile's `-Werror` (in `CWFLAGS`) turns them fatal.  mdadm 4.4 is the
+    latest release, so there is no upstream bump to reach for.
+  - `build_commands_mdadm()` now overrides `CXFLAGS` on the make command
+    line, restating its `?=` default (`-O2 -U_FORTIFY_SOURCE
+    -D_FORTIFY_SOURCE`) plus `-Wno-error=unterminated-string-initialization`.
+    mdadm's Makefile builds `CFLAGS = $(CWFLAGS) $(CXFLAGS) ...` and has no
+    `EXTRA_CFLAGS` hook, so `CXFLAGS` -- documented as the extra-CC-flags
+    variable and placed after the `-Werror`-carrying `CWFLAGS` -- is the only
+    injection point that demotes this single warning back to non-fatal while
+    `-Werror` still guards every other diagnostic.  The pinned 4.4 source is
+    untouched.  The rest of the chain is unaffected: json-c/popt/LVM2/
+    cryptsetup are cmake/autotools builds that do not add `-Werror`, and
+    mdadm is the last package, so no further package in this stage trips the
+    same gate.  `tests/test_acceptance_shell.py` gains
+    `TestLuksMdadmUnterminatedString::
+    test_mdadm_demotes_the_gcc15_unterminated_string_error` so the CXFLAGS
+    demotion cannot silently disappear.
 
 - **`knowledge` stage died `tar: ... Permission denied` extracting the Ollama
   engine into the root-owned `$LFS/usr`** (`blfs/28-knowledge.sh`,

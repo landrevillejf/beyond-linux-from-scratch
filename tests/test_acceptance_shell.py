@@ -1184,9 +1184,7 @@ class TestLFSComplianceGuardrails:
         """
         content = Path('final/12-create-initramfs.sh').read_text()
         assert 'live.squashfs' in content
-        # mount -o loop automatically sets up the loop device, avoiding the
-        # need for /dev/loop0 to exist beforehand (devtmpfs may not create it).
-        assert 'mount -o loop,ro /mnt/live.squashfs /sysroot' in content
+        assert 'losetup /dev/loop0 /mnt/live.squashfs' in content
         assert 'switch_root /sysroot /sbin/init' in content
 
     def test_initramfs_unlocks_luks_and_lvm(self):
@@ -3019,40 +3017,64 @@ class TestLuksLibaioPrerequisite:
             'just the shared object')
 
 
-class TestLuksMdadmGccCompatibility:
-    """Keep mdadm's intentional IMSM signatures buildable with current GCC."""
+class TestLuksMdadmUnterminatedString:
+    """Guardrail for the luks-encryption stage's mdadm CXFLAGS override.
+
+    Nightly lg3d #62 aborted the luks-encryption stage at mdadm -- the
+    last package in the chain -- with
+    "platform-intel.h:28:37: error: initializer-string for array of
+    'unsigned char' truncates NUL terminator ..."
+    / "cc1: all warnings being treated as errors" /
+    "[ERROR] Required package mdadm failed - aborting stage".
+    mdadm's platform-intel.c initialises `unsigned char signature[4]`
+    with 5-char literals ("$VER"/"$NVM"/"$VMD") -- intentional 4-byte
+    OROM tags, not strings -- and GCC 15's new
+    -Wunterminated-string-initialization makes each one fatal under the
+    Makefile's -Werror.  mdadm's Makefile builds
+    `CFLAGS = $(CWFLAGS) $(CXFLAGS) ...`, so the documented CXFLAGS
+    hook (placed after CWFLAGS) is the injection point for a
+    -Wno-error= demotion that keeps -Werror guarding everything else.
+    """
 
     SCRIPT = Path('blfs/21-luks-encryption.sh')
 
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def content(self):
         return self.SCRIPT.read_text()
 
     @staticmethod
-    def _inner(content):
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
         match = re.search(
             r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
             content, re.DOTALL | re.MULTILINE)
         assert match, 'blfs/21 has no INNEREOF chroot payload'
         return match.group(1)
 
-    def test_mdadm_demotes_only_gcc_string_initialization_warning(self,
-                                                                  content):
-        inner = self._inner(content)
-        body = inner.split('build_commands_mdadm() {', 1)[1]
-        body = body.split('\n}\n', 1)[0]
-        assert "gcc --help=warnings" in body, (
-            'check whether GCC recognizes the warning before passing its '
-            'option, since older GCC treats unknown warning options as errors')
-        assert ("grep -F -- '-Wunterminated-string-initialization' "
-                ">/dev/null") in body
-        assert 'mdadm_cc="$mdadm_cc -Wno-error=unterminated-string-initialization"' \
-            in body, (
-                'mdadm 4.4 fails with GCC when this warning is promoted by '
-                '-Werror; demote only this intentional fixed-width signature')
-        assert 'make -j"$JOBS" CC="$mdadm_cc"' in body
-        assert 'CFLAGS=' not in body, (
-            'do not replace mdadm compiler flags, which include hardening')
+    def test_mdadm_demotes_the_gcc15_unterminated_string_error(self, content):
+        body = self._fn(self._inner(content), 'build_commands_mdadm')
+        assert 'CXFLAGS=' in body, (
+            'mdadm must inject its -Wno-error demotion through the '
+            'documented CXFLAGS hook; mdadm\'s Makefile has no EXTRA_CFLAGS '
+            'and a bare `make` lets GCC 15 -Werror abort platform-intel.c '
+            '(nightly lg3d #62)')
+        assert '-Wno-error=unterminated-string-initialization' in body, (
+            'the demotion must target -Wunterminated-string-initialization '
+            '(the GCC 15 warning platform-intel.c\'s 4-byte "$VER"/"$NVM"/'
+            '"$VMD" signature tags trip) so only that warning becomes '
+            'non-fatal')
+        # CXFLAGS is a `?=` default, so restating the upstream flags keeps
+        # -O2 / _FORTIFY_SOURCE rather than silently dropping them.
+        assert '-O2' in body and '_FORTIFY_SOURCE' in body, (
+            'overriding CXFLAGS replaces its `?=` default; the upstream '
+            '-O2 / _FORTIFY_SOURCE flags must be restated alongside the '
+            'demotion')
+        assert 'make install SYSCONFDIR=/etc' in body, \
+            'mdadm must still install into the target'
 
 
 class TestCustomSourcesGuardrails:
@@ -4026,7 +4048,7 @@ class TestStandaloneSwitchSameFileGuards:
 class TestKnowledgeStageGuardrails:
     """Guardrails for the optional 'knowledge' AI assistant stage.
 
-    blfs/28-knowledge.sh wires a free, fully local Ollama-based
+    blfs/28-knowledge.sh installs a free, fully local Ollama-based
     assistant. Because it is opt-in, installs a third-party binary and
     generates a CLI that fronts an LLM, the stage must stay strictly
     gated, checksum-verified, loopback-only, and must never execute
@@ -4068,14 +4090,11 @@ class TestKnowledgeStageGuardrails:
         assert 'engine_sha256 must be pinned' in result.stderr
 
     def test_engine_requires_pinned_sha256(self, content):
-        """The pin is still mandatory even though the build unpacks
-        nothing: it is the digest the on-demand installer verifies, so an
-        unpinned stage would ship an installer that trusts whatever the
-        network returns."""
+        """The checksum is verified before the tarball is extracted."""
         assert 'knowledge.engine_sha256 must be pinned' in content
-        assert "SHA256='__SHA256__'" in content
-        assert 's|__SHA256__|$ENGINE_SHA256|' in content
-        assert 'engine checksum mismatch - refusing to install' in content
+        assert 'Engine sha256 mismatch' in content
+        assert content.index('Engine sha256 mismatch') < \
+            content.index('tar -xzf')
 
     def test_listen_defaults_to_loopback(self, content):
         assert '127.0.0.1:11434' in content
@@ -4101,15 +4120,12 @@ class TestKnowledgeStageGuardrails:
         tree and chroot must use run_privileged like the sibling blfs
         stages.  The stage originally wrote bare `tar -xzf ... -C
         "$LFS/usr"` and died "Permission denied" the first time lg3d
-        scheduled it.  That extraction is gone (see
-        TestKnowledgeEngineNeverShips), but the helper contract is
-        unchanged: every $LFS write, including the strip, is privileged."""
+        scheduled it.  $LFS/sources stays unprivileged on purpose: it is
+        chown'd to the build user so curl can download the engine."""
         assert 'run_privileged()' in content, \
             "stage must define the run_privileged helper"
-        assert 'run_privileged rm -rf "${leftovers[@]}"' in content, \
-            "stripping the engine out of the root-owned tree must be privileged"
-        assert 'run_privileged tee "$LFS/usr/lib/knowledge/install-engine.sh"' in content, \
-            "the on-demand installer must be written through tee"
+        assert 'run_privileged tar -xzf "$TARBALL" -C "$LFS/usr"' in content, \
+            "engine extraction into root-owned /usr must be privileged"
         assert 'run_privileged chroot "$LFS"' in content, \
             "chroot must be privileged"
         # No bare redirect may write into the root-owned $LFS tree
@@ -4130,153 +4146,6 @@ class TestKnowledgeStageGuardrails:
         result = subprocess.run(['shellcheck', str(self.SCRIPT)],
                                 capture_output=True, text=True)
         assert result.returncode == 0, result.stdout
-
-
-class TestKnowledgeEngineNeverShips:
-    """Nightly #68/#69 built a 2856 MB / 2850 MB lg3d ISO that GitHub's
-    release API rejected outright: "size must be less than 2147483648".
-
-    The Ollama engine is what made it that big. blfs/28 unpacked a
-    prebuilt tarball into $LFS/usr - ollama-linux-amd64.tgz v0.12.6 is
-    1903757843 bytes on its own - and $LFS is simultaneously the live
-    session's squashfs and the tree the installer copies onto the disk.
-    The archive is already deflate-packed, so xz recovers almost nothing
-    from it, and every image silently carried a multi-gigabyte inference
-    runtime plus the weights it would pull.
-
-    Running a local model is the operator's decision, so the contract is
-    now: the image ships the assistant's integration (CLI wrapper, service
-    files, provisioning one-shot) plus a pinned on-demand installer, and
-    never the engine.  final/16 proves the absence on the finished rootfs.
-    """
-
-    SCRIPT = Path('blfs/28-knowledge.sh')
-    VALIDATE = Path('final/16-validate-build.sh')
-
-    # Terminators of the scripts blfs/28 embeds for the target.
-    HEREDOCS = ('EOF', 'WRAPPER', 'UNIT', 'INITD', 'PROV', 'ENGINE')
-
-    @pytest.fixture(scope='class')
-    def content(self):
-        return self.SCRIPT.read_text()
-
-    @classmethod
-    def _stage_code(cls, content):
-        """blfs/28 without its comments and without the scripts it
-        generates for the target.
-
-        An assertion about the stage must not be satisfiable by the prose
-        that explains the policy, nor by an installer whose curl/tar/
-        enable lines are precisely what the stage itself may no longer
-        run."""
-        kept = []
-        in_heredoc = False
-        for line in content.splitlines():
-            stripped = line.strip()
-            if in_heredoc:
-                if stripped in cls.HEREDOCS:
-                    in_heredoc = False
-                continue
-            if not stripped or stripped.startswith('#'):
-                continue
-            if re.search(r"<<-?'?[A-Z]+'?", line):
-                in_heredoc = True
-                continue
-            kept.append(line)
-        return '\n'.join(kept)
-
-    @staticmethod
-    def _generated(content, opener, terminator):
-        """The body of one embedded target script, tokens included."""
-        return content.split(opener, 1)[1].split('\n%s\n' % terminator, 1)[0]
-
-    def test_the_build_never_fetches_or_unpacks_the_engine(self, content):
-        code = self._stage_code(content)
-        for forbidden in ('curl', 'tar -xzf', 'wget', 'TARBALL'):
-            assert forbidden not in code, \
-                f"the build must not {forbidden} the engine into the image"
-        assert '$LFS/sources/ollama' not in content, \
-            "no engine archive may be staged in the build tree"
-
-    def test_the_engine_is_stripped_from_a_resumed_or_restored_tree(self, content):
-        """A $LFS restored from a pre-fix cache, or resumed with
-        --resume-from, still holds the engine; leaving it there would put
-        the ISO back over the ceiling with this stage reporting success."""
-        for path in ('"$LFS/usr/bin/ollama"',
-                     '"$LFS/usr/lib/ollama"',
-                     '"$LFS/var/lib/ollama/models"'):
-            assert path in content, f"{path} is not stripped from the image"
-        assert 'run_privileged rm -rf "${leftovers[@]}"' in content
-        assert 'the engine must not ship' in content, \
-            "the stage must fail if the engine survived the strip"
-
-    def test_the_installer_keeps_the_integrity_gates(self, content):
-        """Moving the download to the target may not weaken it: same pin,
-        same refusal before anything is unpacked."""
-        installer = self._generated(
-            content, 'install-engine.sh" >/dev/null\n', 'ENGINE')
-        assert '"$(id -u)" -eq 0' in installer
-        assert "SHA256='__SHA256__'" in installer
-        assert "BUILD_ARCH='__BUILD_ARCH__'" in installer
-        assert 'sha256sum --status -c -' in installer
-        assert 'refusing to install' in installer
-        assert 'tar -xzf "$TMP" -C /usr' in installer
-        assert "trap 'rm -f \"$TMP\"' EXIT" in installer
-        # busybox mktemp rejects a template whose X's are not trailing
-        # (measured: GNU accepts /tmp/x-XXXXXX.tgz, busybox exits 1).
-        assert 'mktemp /tmp/ollama-engine-XXXXXX)' in installer
-        assert '$LFS' not in installer, \
-            "the target installer must not reference the build tree"
-
-    def test_services_ship_inert_until_the_engine_exists(self, content):
-        """Enabling a daemon whose binary is absent buys a failed unit at
-        every boot, so enabling is part of installing."""
-        code = self._stage_code(content)
-        assert 'multi-user.target.wants' not in code
-        assert 'rcS.d/S60ollama' not in code
-        assert 'rcS.d/S61knowledge-provision' not in code
-        assert 'ConditionPathExists=/usr/bin/ollama' in content
-        installer = self._generated(
-            content, 'install-engine.sh" >/dev/null\n', 'ENGINE')
-        assert 'systemctl enable --now ollama.service' in installer
-        assert installer.count('rcS.d/S60ollama') == 1
-
-    def test_build_time_provisioning_is_rejected(self, content):
-        """Weights live in $LFS/var/lib/ollama/models, so baking them in
-        would ship gigabytes exactly like the engine did."""
-        assert 'die "provision_models=build-time is not supported' in content
-        assert 'ollama-build.log' not in content
-        assert 'df -Pk "$LFS"' not in content, \
-            "the build-time disk preflight has no subject any more"
-        assert 'model_size_kb' not in content
-
-    @pytest.mark.parametrize('opener,terminator,tokens', [
-        ('install-engine.sh" >/dev/null\n', 'ENGINE',
-         ('__VERSION__', '__SHA256__', '__URL__', '__BUILD_ARCH__')),
-        ('provision-models.sh" >/dev/null\n', 'PROV', ('__MODELS__',)),
-    ])
-    def test_generated_target_scripts_parse_as_posix_sh(self, content,
-                                                        opener, terminator,
-                                                        tokens, tmp_path):
-        """These bodies only ever run on the target, where a syntax error
-        is discovered by a user, not by a build log."""
-        body = self._generated(content, opener, terminator)
-        for token in tokens:
-            body = body.replace(token, 'substituted')
-        assert '__' not in body, 'a token was left unsubstituted'
-        script = tmp_path / 'generated.sh'
-        script.write_text(body)
-        result = subprocess.run(['sh', '-n', str(script)],
-                                capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-
-    def test_the_validator_proves_the_engine_is_absent_from_the_image(self):
-        """final/16 is the net: blfs/28 strips, the validator fails the
-        build if anything put the runtime back."""
-        content = self.VALIDATE.read_text()
-        assert 'no Ollama engine baked into the image' in content
-        assert '/usr/bin/ollama /usr/lib/ollama /var/lib/ollama/models' in content
-        assert 'log_fail "assistant engine would ship in the ISO' in content
 
 
 class TestBLFSBookCommandGuardrails:
