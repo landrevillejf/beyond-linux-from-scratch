@@ -1,8 +1,8 @@
 name: ARM64 XFCE Build
 
 on:
-  schedule:
-    - cron: '0 3 * * *'   # 3am daily
+#  schedule:
+#    - cron: '0 3 * * *'   # disabled: only the lg3d nightly stays scheduled
   workflow_dispatch:   # <-- permet de lancer manuellement
 
 permissions:

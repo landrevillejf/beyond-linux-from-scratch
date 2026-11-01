@@ -2,8 +2,8 @@ name: Build Rootfs Cache
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 4 15 * *'
+#  schedule:
+#    - cron: '0 4 15 * *'   # disabled: only the lg3d nightly stays scheduled
 
 permissions:
   contents: write

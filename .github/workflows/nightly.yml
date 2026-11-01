@@ -1,8 +1,8 @@
 name: Nightly Builds
 
 on:
-  schedule:
-    - cron: '0 3 * * *'
+#  schedule:
+#    - cron: '0 3 * * *'      # disabled: only the lg3d nightly stays scheduled
   workflow_dispatch:
 
 permissions:

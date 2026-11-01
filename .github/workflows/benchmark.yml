@@ -3,8 +3,8 @@ name: Benchmark
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 5 * * 1'   # weekly on Monday
+#  schedule:
+#    - cron: '0 5 * * 1'   # disabled: only the lg3d nightly stays scheduled
 
 permissions:
   contents: read
