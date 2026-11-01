@@ -356,10 +356,25 @@ build_commands_cryptsetup() {
 # ======================================================================
 # postlfs/mdadm.  Plain Makefile; MD-RAID assembly for redundant installs.
 # The matching CONFIG_MD* symbols are built into every kernel-config variant.
+#
+# CXFLAGS override: mdadm's Makefile builds CFLAGS as
+# `$(CWFLAGS) $(CXFLAGS) ...` where CWFLAGS carries `-Werror`, and
+# platform-intel.c initialises `unsigned char signature[4]` with 5-char
+# literals ("$VER"/"$NVM"/"$VMD") -- intentional 4-byte OROM tags, not
+# strings.  GCC 15's new -Wunterminated-string-initialization fires on
+# each one and -Werror turns it fatal
+# ("cc1: all warnings being treated as errors"), aborting the last
+# package of this stage -- nightly lg3d #62.  CXFLAGS is documented as
+# the extra-CC-flags hook and sits after CWFLAGS, so appending
+# -Wno-error=unterminated-string-initialization demotes only that one
+# warning back to non-fatal while -Werror still guards every other
+# diagnostic.  The default CXFLAGS (-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE)
+# is restated because a command-line assignment replaces the `?=` default.
 # ======================================================================
 build_mdadm() { book_install mdadm build_commands_mdadm; }
 build_commands_mdadm() {
-    make -j"$JOBS" SYSCONFDIR=/etc &&
+    make -j"$JOBS" SYSCONFDIR=/etc \
+        CXFLAGS="-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE -Wno-error=unterminated-string-initialization" &&
     make install SYSCONFDIR=/etc
 }
 

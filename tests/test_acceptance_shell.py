@@ -3017,6 +3017,66 @@ class TestLuksLibaioPrerequisite:
             'just the shared object')
 
 
+class TestLuksMdadmUnterminatedString:
+    """Guardrail for the luks-encryption stage's mdadm CXFLAGS override.
+
+    Nightly lg3d #62 aborted the luks-encryption stage at mdadm -- the
+    last package in the chain -- with
+    "platform-intel.h:28:37: error: initializer-string for array of
+    'unsigned char' truncates NUL terminator ..."
+    / "cc1: all warnings being treated as errors" /
+    "[ERROR] Required package mdadm failed - aborting stage".
+    mdadm's platform-intel.c initialises `unsigned char signature[4]`
+    with 5-char literals ("$VER"/"$NVM"/"$VMD") -- intentional 4-byte
+    OROM tags, not strings -- and GCC 15's new
+    -Wunterminated-string-initialization makes each one fatal under the
+    Makefile's -Werror.  mdadm's Makefile builds
+    `CFLAGS = $(CWFLAGS) $(CXFLAGS) ...`, so the documented CXFLAGS
+    hook (placed after CWFLAGS) is the injection point for a
+    -Wno-error= demotion that keeps -Werror guarding everything else.
+    """
+
+    SCRIPT = Path('blfs/21-luks-encryption.sh')
+
+    @pytest.fixture(scope='class')
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _inner(cls, content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/21 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    def test_mdadm_demotes_the_gcc15_unterminated_string_error(self, content):
+        body = self._fn(self._inner(content), 'build_commands_mdadm')
+        assert 'CXFLAGS=' in body, (
+            'mdadm must inject its -Wno-error demotion through the '
+            'documented CXFLAGS hook; mdadm\'s Makefile has no EXTRA_CFLAGS '
+            'and a bare `make` lets GCC 15 -Werror abort platform-intel.c '
+            '(nightly lg3d #62)')
+        assert '-Wno-error=unterminated-string-initialization' in body, (
+            'the demotion must target -Wunterminated-string-initialization '
+            '(the GCC 15 warning platform-intel.c\'s 4-byte "$VER"/"$NVM"/'
+            '"$VMD" signature tags trip) so only that warning becomes '
+            'non-fatal')
+        # CXFLAGS is a `?=` default, so restating the upstream flags keeps
+        # -O2 / _FORTIFY_SOURCE rather than silently dropping them.
+        assert '-O2' in body and '_FORTIFY_SOURCE' in body, (
+            'overriding CXFLAGS replaces its `?=` default; the upstream '
+            '-O2 / _FORTIFY_SOURCE flags must be restated alongside the '
+            'demotion')
+        assert 'make install SYSCONFDIR=/etc' in body, \
+            'mdadm must still install into the target'
+
+
 class TestCustomSourcesGuardrails:
     """Guardrails against version collisions in custom-sources.list.
 

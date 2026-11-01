@@ -481,6 +481,40 @@
 
 ### Fixed
 
+- **`luks-encryption` stage aborted building mdadm: `all warnings being
+  treated as errors` under GCC 15** (`blfs/21-luks-encryption.sh`,
+  `tests/test_acceptance_shell.py`)
+  - lg3d Nightly #62 (`lg3d`, sysvinit, x86_64) progressed past cryptsetup
+    (fixed for #60) and died at mdadm -- the last package in the chain
+    (json-c -> popt -> libaio -> LVM2 -> cryptsetup -> mdadm) -- with
+    `platform-intel.h:28:37: error: initializer-string for array of
+    'unsigned char' truncates NUL terminator but destination lacks
+    'nonstring' attribute (5 chars into 4 available)
+    [-Werror=unterminated-string-initialization]`, followed by
+    `cc1: all warnings being treated as errors` and `[ERROR] Required
+    package mdadm failed - aborting stage`.  mdadm's `platform-intel.c`
+    initialises `unsigned char signature[4]` with 5-char literals
+    (`"$VER"`/`"$NVM"`/`"$VMD"`) -- intentional 4-byte OROM signature
+    tags, not NUL-terminated strings -- and GCC 15's new
+    `-Wunterminated-string-initialization` fires on each one; the
+    Makefile's `-Werror` (in `CWFLAGS`) turns them fatal.  mdadm 4.4 is the
+    latest release, so there is no upstream bump to reach for.
+  - `build_commands_mdadm()` now overrides `CXFLAGS` on the make command
+    line, restating its `?=` default (`-O2 -U_FORTIFY_SOURCE
+    -D_FORTIFY_SOURCE`) plus `-Wno-error=unterminated-string-initialization`.
+    mdadm's Makefile builds `CFLAGS = $(CWFLAGS) $(CXFLAGS) ...` and has no
+    `EXTRA_CFLAGS` hook, so `CXFLAGS` -- documented as the extra-CC-flags
+    variable and placed after the `-Werror`-carrying `CWFLAGS` -- is the only
+    injection point that demotes this single warning back to non-fatal while
+    `-Werror` still guards every other diagnostic.  The pinned 4.4 source is
+    untouched.  The rest of the chain is unaffected: json-c/popt/LVM2/
+    cryptsetup are cmake/autotools builds that do not add `-Werror`, and
+    mdadm is the last package, so no further package in this stage trips the
+    same gate.  `tests/test_acceptance_shell.py` gains
+    `TestLuksMdadmUnterminatedString::
+    test_mdadm_demotes_the_gcc15_unterminated_string_error` so the CXFLAGS
+    demotion cannot silently disappear.
+
 - **`knowledge` stage died `tar: ... Permission denied` extracting the Ollama
   engine into the root-owned `$LFS/usr`** (`blfs/28-knowledge.sh`,
   `tests/test_acceptance_shell.py`)
