@@ -16,8 +16,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  schedule:
-    - cron: '36 2 * * 4'
+#  schedule:
+#    - cron: '36 2 * * 4'   # disabled: only the lg3d nightly stays scheduled
 
 jobs:
   analyze:

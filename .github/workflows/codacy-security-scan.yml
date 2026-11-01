@@ -5,8 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-  schedule:
-    - cron: '27 11 * * 5'
+#  schedule:
+#    - cron: '27 11 * * 5'   # disabled: only the lg3d nightly stays scheduled
 
 permissions:
   contents: read

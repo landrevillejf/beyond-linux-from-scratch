@@ -2,8 +2,8 @@ name: Cache LFS/BLFS Packages
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 1 * *'  # First day of month at 2 AM UTC
+#  schedule:
+#    - cron: '0 2 1 * *'  # disabled: only the lg3d nightly stays scheduled
 
 permissions:
   contents: write

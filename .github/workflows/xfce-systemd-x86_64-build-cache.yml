@@ -1,8 +1,8 @@
 name: XFCE SYSTEMD x86_64 Build Cache & Release
 
 on:
-  schedule:
-    - cron: '0 0 * * 0'
+#  schedule:
+#    - cron: '0 0 * * 0'   # disabled: only the lg3d nightly stays scheduled
   workflow_dispatch:
 
 concurrency:
