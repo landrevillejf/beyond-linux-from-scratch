@@ -3017,6 +3017,42 @@ class TestLuksLibaioPrerequisite:
             'just the shared object')
 
 
+class TestLuksMdadmGccCompatibility:
+    """Keep mdadm's intentional IMSM signatures buildable with current GCC."""
+
+    SCRIPT = Path('blfs/21-luks-encryption.sh')
+
+    @pytest.fixture
+    def content(self):
+        return self.SCRIPT.read_text()
+
+    @staticmethod
+    def _inner(content):
+        match = re.search(
+            r"cat <<'INNEREOF' \| run_privileged tee.*?\n(.*?)^INNEREOF$",
+            content, re.DOTALL | re.MULTILINE)
+        assert match, 'blfs/21 has no INNEREOF chroot payload'
+        return match.group(1)
+
+    def test_mdadm_demotes_only_gcc_string_initialization_warning(self,
+                                                                  content):
+        inner = self._inner(content)
+        body = inner.split('build_commands_mdadm() {', 1)[1]
+        body = body.split('\n}\n', 1)[0]
+        assert "gcc --help=warnings" in body, (
+            'check whether GCC recognizes the warning before passing its '
+            'option, since older GCC treats unknown warning options as errors')
+        assert ("grep -F -- '-Wunterminated-string-initialization' "
+                ">/dev/null") in body
+        assert 'mdadm_cc="$mdadm_cc -Wno-error=unterminated-string-initialization"' \
+            in body, (
+                'mdadm 4.4 fails with GCC when this warning is promoted by '
+                '-Werror; demote only this intentional fixed-width signature')
+        assert 'make -j"$JOBS" CC="$mdadm_cc"' in body
+        assert 'CFLAGS=' not in body, (
+            'do not replace mdadm compiler flags, which include hardening')
+
+
 class TestCustomSourcesGuardrails:
     """Guardrails against version collisions in custom-sources.list.
 
