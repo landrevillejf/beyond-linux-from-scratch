@@ -446,8 +446,10 @@ fi
 if [ -f /mnt/live.squashfs ]; then
     echo "Live media detected, mounting live.squashfs"
     mkdir -p /sysroot /sysroot/media/live
-    if /bin/busybox losetup /dev/loop0 /mnt/live.squashfs 2>/dev/null &&
-       /bin/busybox mount -t squashfs -o ro /dev/loop0 /sysroot 2>/dev/null; then
+    # mount -o loop automatically sets up the loop device, avoiding the
+    # need for /dev/loop0 to exist beforehand (devtmpfs may not create it).
+    # This is more robust than explicit losetup in a minimal initramfs.
+    if /bin/busybox mount -o loop,ro /mnt/live.squashfs /sysroot 2>/dev/null; then
         # Move the boot media mount inside the new root so the file
         # backing the loop device survives switch_root.
         /bin/busybox mount -o move /mnt /sysroot/media/live 2>/dev/null || true
