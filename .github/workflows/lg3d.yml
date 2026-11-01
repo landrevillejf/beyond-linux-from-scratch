@@ -261,6 +261,40 @@ jobs:
             df -h /tmp
           fi
 
+      - name: Pre-download private ProjectLookingGlass source
+        env:
+          # A repo-scoped GITHUB_TOKEN cannot read a DIFFERENT private repo
+          # (ProjectLookingGlass), so this needs a PAT / fine-grained token
+          # with Contents:read on that repo, stored as the PLG_SOURCE_TOKEN
+          # repository secret.
+          PLG_TOKEN: ${{ secrets.PLG_SOURCE_TOKEN }}
+        run: |
+          # landrevillejf/ProjectLookingGlass is a private repo, so the
+          # unauthenticated urllib fetch builder.py runs for its
+          # custom-sources.list pin answers 404 (lg3d nightly #63: the lg3d
+          # stage aborted on "required source archive missing:
+          # ProjectLookingGlass-*.tar.gz").  Authenticate the API tarball
+          # endpoint -- which follows the default branch, exactly like the
+          # refs/heads/main.tar.gz URL it stands in for -- and drop the
+          # result under the name builder.py's _archive_filename() derives
+          # from that URL.  SourceDownloader then logs "Already exists" and
+          # never hits the 404.
+          if [ -z "$PLG_TOKEN" ]; then
+            echo "::error::secrets.PLG_SOURCE_TOKEN is not set; cannot fetch the private ProjectLookingGlass archive"
+            exit 1
+          fi
+          SRC_DIR=/tmp/lfs-build/build-release/sources
+          mkdir -p "$SRC_DIR"
+          curl -fsSL \
+            -H "Authorization: Bearer ${PLG_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/landrevillejf/ProjectLookingGlass/tarball/main \
+            -o "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
+          # Fail here rather than 5 hours into the build: a zero-byte or
+          # HTML error body would otherwise die in blfs/30's require_file.
+          gzip -t "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
+          sudo chown -R lfs:lfs "$SRC_DIR"
+
       - name: Ensure fresh kernel
         run: |
           sudo rm -f /tmp/lfs-build/build-release/sources/linux-*.tar.xz

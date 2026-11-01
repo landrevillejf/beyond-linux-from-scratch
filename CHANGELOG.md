@@ -481,6 +481,48 @@
 
 ### Fixed
 
+- **`lg3d` stage aborted: `required source archive missing:
+  ProjectLookingGlass-*.tar.gz` (private upstream repo)**
+  (`.github/workflows/lg3d.yml`)
+  - lg3d Nightly #63 (`lg3d`, sysvinit, x86_64) reached the `lg3d` stage and
+    died with `[ERROR] required source archive missing:
+    ProjectLookingGlass-*.tar.gz` after the download phase logged
+    `Permanent error downloading
+    https://github.com/landrevillejf/ProjectLookingGlass/archive/refs/heads/main.tar.gz:
+    HTTP Error 404: Not Found`.  The `landrevillejf/ProjectLookingGlass`
+    repository is private, so `builder.py`'s unauthenticated urllib fetch of
+    its `custom-sources.list` pin answers 404 and no archive ever lands in
+    `sources/`; `blfs/30-install-lg3d.sh`'s `require_file
+    'ProjectLookingGlass-*.tar.gz'` then aborts the stage.
+  - `.github/workflows/lg3d.yml` gains a `Pre-download private
+    ProjectLookingGlass source` step that runs before any `builder.py`
+    invocation: it fetches the default-branch tarball through the
+    authenticated `repos/landrevillejf/ProjectLookingGlass/tarball/main` API
+    endpoint and writes it to
+    `/tmp/lfs-build/build-release/sources/ProjectLookingGlass-main.tar.gz`
+    (the exact name `_archive_filename()` derives from the pin), so
+    `SourceDownloader` logs `Already exists` and never hits the 404.  The step
+    `gzip -t`-validates the archive and fails fast on a zero-byte/HTML error
+    body rather than 5 hours into the build.  Because GitHub's repo-scoped
+    `GITHUB_TOKEN` cannot read a *different* private repository, the fetch
+    authenticates with the `PLG_SOURCE_TOKEN` repository secret (a PAT /
+    fine-grained token with `Contents: read` on `ProjectLookingGlass`) and
+    errors out clearly when that secret is unset.
+
+- **Disabled every scheduled pipeline except the Project Looking Glass
+  nightly** (`.github/workflows/*.yml`)
+  - Per maintainer request the only workflow that keeps its `schedule:`
+    trigger is `lg3d.yml`.  The `schedule:` blocks are commented out (not
+    deleted, so the cron cadence stays documented and reversible) in
+    `nightly.yml`, `arm64-xfce.yml`, `cross-compile.yml`, `benchmark.yml`,
+    `build-base-cache.yml`, `build-rootfs-cache.yml`, `cache-packages.yml`,
+    `xfce-systemd-x86_64-build-cache.yml`,
+    `xfce-sysvinit-x86_64-build-cache.yml`, `codacy-security-scan.yml` and
+    `codeql.yml`.  `workflow_dispatch` (manual) and, for `codacy`/`codeql`,
+    the `push`/`pull_request` triggers that back the branch-protection
+    required checks are all preserved, so PRs still validate and any disabled
+    pipeline can still be run by hand.
+
 - **`knowledge` stage died `tar: ... Permission denied` extracting the Ollama
   engine into the root-owned `$LFS/usr`** (`blfs/28-knowledge.sh`,
   `tests/test_acceptance_shell.py`)
