@@ -1184,7 +1184,9 @@ class TestLFSComplianceGuardrails:
         """
         content = Path('final/12-create-initramfs.sh').read_text()
         assert 'live.squashfs' in content
-        assert 'losetup /dev/loop0 /mnt/live.squashfs' in content
+        # mount -o loop automatically sets up the loop device, avoiding the
+        # need for /dev/loop0 to exist beforehand (devtmpfs may not create it).
+        assert 'mount -o loop,ro /mnt/live.squashfs /sysroot' in content
         assert 'switch_root /sysroot /sbin/init' in content
 
     def test_initramfs_unlocks_luks_and_lvm(self):
