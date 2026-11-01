@@ -481,6 +481,31 @@
 
 ### Fixed
 
+- **`lg3d` nightly pre-download of the private ProjectLookingGlass source died
+  `curl: (23) ... on write of 585 bytes`** (`.github/workflows/lg3d.yml`,
+  `tests/test_release_workflow.py`)
+  - The first dispatched run after PR #179 (run 41298802966, both lg3d legs)
+    failed at the new `Pre-download private ProjectLookingGlass source` step
+    with `curl: (23) client returned ERROR on write of 585 bytes`.  curl (23)
+    is a *local write* error, not an auth error: the token was fine (curl
+    received the first 585-byte body chunk before failing), but the step wrote
+    `curl -o` straight into `/tmp/lfs-build/build-release/sources`, which the
+    preceding `Link cached packages to build directory` step creates with
+    `sudo` and `chown -R lfs:lfs`.  The pre-download step runs as the
+    unprivileged runner user, which has no write permission in that lfs-owned
+    directory, so curl could not create the output file.
+  - The step now downloads into a runner-writable `mktemp` file, validates it,
+    then `sudo cp`s it into the lfs-owned sources dir and `sudo chown`s the
+    single archive to `lfs:lfs` before `builder.py` runs.  It also drops
+    `curl -f` in favour of capturing `%{http_code}` explicitly, so a future
+    token-scope or ref regression (401/403/404) prints the API's JSON message
+    instead of a bare curl exit code, and a non-gzip body is rejected before it
+    is staged.  `tests/test_release_workflow.py` gains
+    `TestLg3dPrivateSourcePreDownload` asserting the temp-then-sudo placement
+    (never a direct write into the lfs-owned dir), the HTTP/gzip validation,
+    the unset-secret guard and the ordering before any `builder.py`
+    invocation.
+
 - **`lg3d` stage aborted: `required source archive missing:
   ProjectLookingGlass-*.tar.gz` (private upstream repo)**
   (`.github/workflows/lg3d.yml`)

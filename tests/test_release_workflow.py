@@ -1088,3 +1088,80 @@ class TestPackagesCachePurge:
         assert "--json assets --jq '.assets[].name' 2>/dev/null || true" \
             in body
         assert "for asset in $assets; do" in body
+
+
+class TestLg3dPrivateSourcePreDownload:
+    """Guardrails for the `Pre-download private ProjectLookingGlass source`
+    step in lg3d.yml.
+
+    ProjectLookingGlass is a private repo, so builder.py's unauthenticated
+    urllib fetch of its custom-sources.list pin 404s and blfs/30 aborts on a
+    missing ProjectLookingGlass-*.tar.gz (lg3d Nightly #63).  The step pulls
+    the tarball through the authenticated API and stages it under the name
+    _archive_filename() derives.  Run 41298802966 then died with
+    `curl: (23) ... on write of 585 bytes`: build-release/sources is created
+    lfs-owned by the "Link cached packages" step, so the unprivileged runner
+    could not curl straight into it.  The download must go to a runner-writable
+    temp and be sudo-placed, never written directly into the lfs-owned dir.
+    """
+
+    WORKFLOW = "lg3d.yml"
+    STEP = "Pre-download private ProjectLookingGlass source"
+
+    def _read(self):
+        return Path(f".github/workflows/{self.WORKFLOW}").read_text()
+
+    def _step(self, workflow, name):
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        return "\n".join(line for line in text.splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def _body(self):
+        return self._commands(self._step(self._read(), self.STEP))
+
+    def test_downloads_to_a_temp_not_the_lfs_owned_sources_dir(self):
+        """The regression: curl -o straight into build-release/sources, which
+        is lfs-owned, dies with curl (23) for the unprivileged runner."""
+        body = self._body()
+        assert 'TMP_TARBALL="$(mktemp)"' in body
+        assert '-o "$TMP_TARBALL"' in body
+        # Never write the curl output directly into the lfs-owned dir.
+        assert '-o "$SRC_DIR/ProjectLookingGlass-main.tar.gz"' not in body
+
+    def test_sudo_places_the_validated_archive_and_hands_it_to_lfs(self):
+        body = self._body()
+        assert 'sudo mkdir -p "$SRC_DIR"' in body
+        assert 'sudo cp "$TMP_TARBALL" "$SRC_DIR/ProjectLookingGlass-main.tar.gz"' in body
+        assert 'sudo chown lfs:lfs "$SRC_DIR/ProjectLookingGlass-main.tar.gz"' in body
+        # The temp must be placed before the final cleanup removes it
+        # (rindex: the error branches also rm the temp, earlier).
+        assert body.index("sudo cp") < body.rindex('rm -f "$TMP_TARBALL"')
+
+    def test_validates_http_status_and_gzip_before_staging(self):
+        """Fail fast and legibly: an auth/scope regression must print the API's
+        HTTP code, and a non-gzip body must be rejected before it is staged."""
+        body = self._body()
+        assert "-w '%{http_code}'" in body
+        assert '[ "$HTTP_CODE" != "200" ]' in body
+        assert 'gzip -t "$TMP_TARBALL"' in body
+
+    def test_guards_on_an_unset_token_secret(self):
+        body = self._body()
+        assert 'PLG_TOKEN: ${{ secrets.PLG_SOURCE_TOKEN }}' in self._step(
+            self._read(), self.STEP)
+        assert '[ -z "$PLG_TOKEN" ]' in body
+
+    def test_runs_before_any_builder_invocation(self):
+        """The archive must be staged before builder.py's SourceDownloader
+        checks for it, or the 404 path is taken again."""
+        workflow = self._read()
+        step_pos = workflow.index(f"- name: {self.STEP}")
+        build_pos = workflow.index("sudo -u lfs python3 builder.py")
+        assert step_pos < build_pos

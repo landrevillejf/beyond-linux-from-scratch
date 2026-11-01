@@ -283,17 +283,43 @@ jobs:
             echo "::error::secrets.PLG_SOURCE_TOKEN is not set; cannot fetch the private ProjectLookingGlass archive"
             exit 1
           fi
+          # build-release/sources is created root-then-chowned to lfs by the
+          # "Link cached packages" step above, so this unprivileged runner
+          # cannot curl straight into it: run 41298802966 died here with
+          # "curl: (23) client returned ERROR on write of 585 bytes" -- curl
+          # received the first body chunk (auth was fine) but could not open
+          # the output file in the lfs-owned dir.  Fetch into a runner-writable
+          # temp, validate it, then sudo it into place and hand the single file
+          # to lfs.
           SRC_DIR=/tmp/lfs-build/build-release/sources
-          mkdir -p "$SRC_DIR"
-          curl -fsSL \
+          TMP_TARBALL="$(mktemp)"
+          # No -f: capture the final HTTP status ourselves so an auth/scope
+          # regression (401/403/404) prints the API's JSON message instead of
+          # a bare curl exit code.  The body never contains the token.
+          HTTP_CODE=$(curl -sSL -w '%{http_code}' \
             -H "Authorization: Bearer ${PLG_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/landrevillejf/ProjectLookingGlass/tarball/main \
-            -o "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
+            -o "$TMP_TARBALL")
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::ProjectLookingGlass tarball fetch returned HTTP ${HTTP_CODE} (PLG_SOURCE_TOKEN lacks Contents:read on the repo, or the ref is wrong). Response body:"
+            head -c 500 "$TMP_TARBALL"; echo
+            rm -f "$TMP_TARBALL"
+            exit 1
+          fi
           # Fail here rather than 5 hours into the build: a zero-byte or
-          # HTML error body would otherwise die in blfs/30's require_file.
-          gzip -t "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
-          sudo chown -R lfs:lfs "$SRC_DIR"
+          # HTML/JSON error body would otherwise die in blfs/30's require_file.
+          if ! gzip -t "$TMP_TARBALL"; then
+            echo "::error::downloaded body is not a valid gzip archive; first bytes:"
+            head -c 300 "$TMP_TARBALL"; echo
+            rm -f "$TMP_TARBALL"
+            exit 1
+          fi
+          sudo mkdir -p "$SRC_DIR"
+          sudo cp "$TMP_TARBALL" "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
+          sudo chown lfs:lfs "$SRC_DIR/ProjectLookingGlass-main.tar.gz"
+          rm -f "$TMP_TARBALL"
+          echo "Staged ProjectLookingGlass-main.tar.gz into ${SRC_DIR}"
 
       - name: Ensure fresh kernel
         run: |
