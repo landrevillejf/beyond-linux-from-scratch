@@ -356,10 +356,17 @@ build_commands_cryptsetup() {
 # ======================================================================
 # postlfs/mdadm.  Plain Makefile; MD-RAID assembly for redundant installs.
 # The matching CONFIG_MD* symbols are built into every kernel-config variant.
+# mdadm 4.4's fixed-width IMSM signatures intentionally omit a NUL; GCC
+# versions that warn about this promote it to an error under mdadm's -Werror.
 # ======================================================================
 build_mdadm() { book_install mdadm build_commands_mdadm; }
 build_commands_mdadm() {
-    make -j"$JOBS" SYSCONFDIR=/etc &&
+    local mdadm_cc="gcc"
+    if gcc --help=warnings 2>/dev/null |
+        grep -F -- '-Wunterminated-string-initialization' >/dev/null; then
+        mdadm_cc="$mdadm_cc -Wno-error=unterminated-string-initialization"
+    fi
+    make -j"$JOBS" CC="$mdadm_cc" SYSCONFDIR=/etc &&
     make install SYSCONFDIR=/etc
 }
 
