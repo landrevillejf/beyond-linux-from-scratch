@@ -509,19 +509,21 @@
     fine-grained token with `Contents: read` on `ProjectLookingGlass`) and
     errors out clearly when that secret is unset.
 
-- **Disabled every scheduled pipeline except the Project Looking Glass
-  nightly** (`.github/workflows/*.yml`)
-  - Per maintainer request the only workflow that keeps its `schedule:`
-    trigger is `lg3d.yml`.  The `schedule:` blocks are commented out (not
+- **Disabled the scheduled pipelines that do not feed the Project Looking
+  Glass nightly** (`.github/workflows/*.yml`)
+  - Per maintainer request the `schedule:` trigger is commented out (not
     deleted, so the cron cadence stays documented and reversible) in
     `nightly.yml`, `arm64-xfce.yml`, `cross-compile.yml`, `benchmark.yml`,
-    `build-base-cache.yml`, `build-rootfs-cache.yml`, `cache-packages.yml`,
-    `xfce-systemd-x86_64-build-cache.yml`,
+    `build-rootfs-cache.yml`, `xfce-systemd-x86_64-build-cache.yml`,
     `xfce-sysvinit-x86_64-build-cache.yml`, `codacy-security-scan.yml` and
-    `codeql.yml`.  `workflow_dispatch` (manual) and, for `codacy`/`codeql`,
-    the `push`/`pull_request` triggers that back the branch-protection
-    required checks are all preserved, so PRs still validate and any disabled
-    pipeline can still be run by hand.
+    `codeql.yml`.  `lg3d.yml` keeps its nightly schedule, and
+    `build-base-cache.yml` and `cache-packages.yml` keep theirs on purpose:
+    they publish the base-prefix and package caches `lg3d.yml` restores, so
+    disabling them would silently push every lg3d nightly onto a from-scratch
+    build.  `workflow_dispatch` (manual) and, for `codacy`/`codeql`, the
+    `push`/`pull_request` triggers that back the branch-protection required
+    checks are all preserved, so PRs still validate and any disabled pipeline
+    can still be run by hand.
 
 - **`knowledge` stage died `tar: ... Permission denied` extracting the Ollama
   engine into the root-owned `$LFS/usr`** (`blfs/28-knowledge.sh`,
