@@ -203,19 +203,42 @@ each install is guarded by `if ls <pkg>-*`, so it is a no-op-safe addition to
 this `desktop: none` / `xorg_only` profile.
 
 The `lg3d` profile also sets `knowledge: True`, so the opt-in local "knowledge"
-AI assistant stage (`blfs/28-knowledge.sh`, an Ollama engine) is scheduled with
-the profile -- lg3d is its showcase. `_apply_profile_settings()` flips config
+AI assistant stage (`blfs/28-knowledge.sh`) is scheduled with the profile --
+lg3d is its showcase. `_apply_profile_settings()` flips config
 `knowledge.enabled` from that flag (the same profile-flag -> config pattern as
 `privacy_tools` and `graphical_installer`), and `get_build_stages()` gates
 `blfs/28` on `knowledge.enabled`, placing it just before `base-packages` so
-stage 14's manifest capture turns the installed assistant into LPM packages.
-The stage stays secure by default: it refuses to unpack an engine unless
-`knowledge.engine_sha256` is pinned -- now set in `config/build.conf` to the
-verified `ollama-linux-amd64.tgz` v0.12.6 digest
-(`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`) -- and
-`provision_models` stays `first-boot` so the live ISO ships small and models are
-pulled on the target. lg3d is the only profile that enables it by default; every
-other profile keeps the stage out until it opts in with `--with-knowledge` or an
+stage 14's manifest capture turns the wired assistant into an LPM package.
+
+**The image ships the assistant's integration, never the Ollama engine.**
+`$LFS` is simultaneously the live squashfs and the tree Calamares installs onto
+the disk, and `ollama-linux-amd64.tgz` v0.12.6 is 1 903 757 843 bytes of
+already deflate-packed data that `mksquashfs -comp xz` barely shrinks: with the
+engine unpacked into `$LFS/usr`, nightly #68/#69 measured 2856 MB (systemd) /
+2850 MB (sysvinit) for the lg3d ISO -- above the 2 147 483 648-byte ceiling
+GitHub's release API enforces per asset, and above the point where shipping an
+assistant silently meant shipping an inference runtime. The stage therefore
+downloads nothing. It writes the `knowledge` CLI wrapper,
+`/etc/knowledge/config.env`, `/etc/sysconfig/ollama`, the `ollama` system user,
+*inert* service files (the systemd unit carries
+`ConditionPathExists=/usr/bin/ollama`, and nothing is linked into
+`multi-user.target.wants` or `rcS.d` -- enabling a daemon whose binary is
+absent only produces a failed unit at every boot), a `provision-models.sh`
+one-shot that exits 0 while the engine is absent, and
+`/usr/lib/knowledge/install-engine.sh`. The operator runs that on the target:
+it fetches exactly the version, URL and sha256 that `knowledge.engine_sha256`
+pins -- which is why that pin stays mandatory and why the stage still dies
+without it -- refuses a non-root caller or a foreign architecture, unpacks
+nothing until the digest matches, and then enables the service and pulls the
+models. The stage also strips an engine that a resumed build or a restored
+pre-fix cache left in `$LFS` and dies if it survives, and
+`final/16-validate-build.sh` section 14 fails the build when a finished rootfs
+still carries `/usr/bin/ollama`, `/usr/lib/ollama` or model weights.
+`provision_models=build-time` is rejected outright, because weights land in
+`$LFS/var/lib/ollama/models` -- inside the image.
+
+lg3d is the only profile that enables the assistant by default; every other
+profile keeps the stage out until it opts in with `--with-knowledge` or an
 explicit config enable, and the flag only ever flips `knowledge.enabled` ON (it
 never forces the assistant off a profile that asked for it).
 

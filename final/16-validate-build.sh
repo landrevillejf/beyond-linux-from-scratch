@@ -486,6 +486,32 @@ if [ "$HARDENING" = "true" ]; then
 fi
 
 # --------------------------------------------------------------------------
+# 14. Image payload hygiene (the assistant's engine must not ship)
+# --------------------------------------------------------------------------
+# blfs/28 wires only the integration: the Ollama runtime is a ~2 GB blob
+# that /usr/lib/knowledge/install-engine.sh fetches on the target, under a
+# pinned checksum.  Whatever lands in $LFS here rides into the live
+# squashfs *and* onto every installed disk, and it is exactly what pushed
+# nightly #68/#69 to 2856 MB / 2850 MB - past the 2147483648-byte ceiling
+# that makes GitHub reject the release asset outright.  Unconditional and a
+# hard failure, because no profile is allowed to ship the engine: finding
+# one here means a restored cache or a resumed $LFS carried it in.
+echo ""
+echo "--- Image payload hygiene ---"
+log_check "no Ollama engine baked into the image"
+engine_present=""
+for path in /usr/bin/ollama /usr/lib/ollama /var/lib/ollama/models; do
+    if [ -e "$LFS$path" ]; then
+        engine_present="$engine_present $path"
+    fi
+done
+if [ -z "$engine_present" ]; then
+    log_pass
+else
+    log_fail "assistant engine would ship in the ISO:$engine_present (run blfs/28 to strip it)"
+fi
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 echo ""

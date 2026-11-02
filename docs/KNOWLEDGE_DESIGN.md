@@ -16,9 +16,12 @@ cloud service, which aligns with the project's privacy stance
 (`blfs/16-privacy-tools.sh`, `security.privacy.disable_telemetry`).
 
 When disabled (the default), the built system is byte-for-byte identical
-to today's output. When enabled, the builder installs the Ollama daemon,
-an init service matching the chosen init system, the `knowledge` CLI
-wrapper, and (optionally) pre-provisioned model weights.
+to today's output. When enabled, the builder wires the assistant into the
+image: the `knowledge` CLI wrapper, `/etc/knowledge/config.env`, an inert
+init service for the chosen init system, the one-shot model provisioner,
+and `/usr/lib/knowledge/install-engine.sh` — the pinned installer the
+operator runs on the target. Neither the Ollama engine nor its weights is
+ever part of the image (section 8 explains why, with measurements).
 
 ---
 
@@ -31,9 +34,10 @@ wrapper, and (optionally) pre-provisioned model weights.
   `ProfileManager` entry sets `knowledge: True`), and any other profile
   can opt in with `--with-knowledge` or an explicit
   `knowledge.enabled=true`.
-- **Offline-first**: the assistant must work with no network connection.
-  Model weights are either baked into the image at build time or pulled
-  once at first boot, then cached locally.
+- **Offline-first**: once the operator has installed the engine and
+  pulled weights on the target, the assistant works with no network
+  connection at all. The image itself is deliberately the small half:
+  integration, not runtime.
 - **Follow the existing architecture contract**: one new Bash stage
   script driven by `LFS_CONFIG_*` environment variables exported from
   `builder.py`; no new Python entry point.
@@ -89,11 +93,17 @@ users can swap any GGUF model available in the Ollama registry.
 Runtime layout inside the target rootfs:
 
 ```
-/usr/bin/ollama                  engine binary (+ bundled runner libs)
-/usr/bin/knowledge               wrapper script
-/etc/knowledge/config.env        assistant defaults (model, listen addr)
-/var/lib/ollama/                 model storage (owned by user `ollama`)
-/etc/sysvinit/ollama             OR /etc/systemd/system/ollama.service
+/usr/bin/knowledge                  wrapper script
+/etc/knowledge/config.env           assistant defaults (model, listen addr)
+/etc/sysconfig/ollama               OLLAMA_HOST / OLLAMA_MODELS env file
+/etc/init.d/ollama                  OR /etc/systemd/system/ollama.service
+/usr/lib/knowledge/install-engine.sh   pinned on-demand engine installer
+/usr/lib/knowledge/provision-models.sh one-shot model puller
+/var/lib/ollama/                    model storage (owned by user `ollama`)
+
+# Written by install-engine.sh on the target, never by the build:
+/usr/bin/ollama                     engine binary
+/usr/lib/ollama/                    bundled runner libraries
 ```
 
 ### 5.1 Request flow
@@ -130,24 +140,25 @@ Runtime layout inside the target rootfs:
 Key semantics:
 
 - `enabled` — master switch; the stage skips everything when false.
-- `engine_sha256` — **mandatory when enabled**: the stage refuses to
-  install the engine without a pinned sha256 checksum (secure by
-  default; no unverified binary is ever unpacked into the rootfs).
-- `provision_models` — `build-time` (weights downloaded during the
-  build and baked into the image; fully offline first boot) or
-  `first-boot` (image stays small; a one-shot boot service pulls models
-  when network is available). Default is `first-boot` to keep images
-  small and CI builds fast.
+- `engine_sha256` — **mandatory when enabled**: the stage refuses to run
+  without a pinned sha256. It no longer guards an unpack (the build
+  unpacks nothing); it is the digest baked into `install-engine.sh`, so
+  an empty value would ship an installer that trusts whatever the network
+  returns.
+- `provision_models` — only `first-boot` is supported. `build-time`
+  provisioning started a daemon in the chroot and pulled weights into
+  `$LFS/var/lib/ollama/models`, which *is* the image, so the stage now
+  aborts on it and points at the on-demand installer.
 - `listen` — bind address; defaults to loopback only. A non-loopback
   address is rejected unless `allow_network=true` is set explicitly.
 - `web_ui` — reserved for the deferred Open WebUI phase.
 
-The `lg3d` profile ships the assistant by default, so `config/build.conf`
+The `lg3d` profile wires the assistant by default, so `config/build.conf`
 pins `engine_sha256` to the verified `ollama-linux-amd64.tgz` v0.12.6
 digest (`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`)
 while keeping `enabled=false` globally: `_apply_profile_settings()` flips
 `knowledge.enabled` on only for `lg3d` (from its `knowledge: True` flag),
-and `provision_models` stays `first-boot` so the live ISO ships small.
+and that digest is what the on-demand installer verifies on the target.
 Any other profile that opts in inherits the same pinned checksum.
 
 ### 6.2 Environment contract
@@ -211,20 +222,24 @@ Follows the same rules as every other stage:
 
 1. **Guard**: `[ "$LFS_CONFIG_KNOWLEDGE_ENABLED" = "true" ] || exit 0`.
 2. **Listen address check**: loopback only unless `allow_network=true`.
-3. **Checksum check**: refuse to continue with an empty `engine_sha256`.
-4. **Disk preflight** (`build-time` provisioning): estimate engine +
-   model sizes and fail fast with a clear message when the target
-   filesystem is too small.
-5. **Install engine**: download the pinned release tarball from
-   `github.com/ollama/ollama/releases`, verify the sha256, extract into
-   `/usr` (idempotent: skipped when the binary already exists).
-6. **Create user/group** `ollama` (system account, no login shell,
+3. **Checksum check**: refuse to continue with an empty `engine_sha256`
+   (it is the digest `install-engine.sh` will verify on the target).
+4. **Architecture check**: `x86_64`/`aarch64` only — a pinned digest
+   belongs to one archive.
+5. **Reject `build-time` provisioning**: the weights would land inside
+   `$LFS`, which is the image.
+6. **Strip any engine already in `$LFS`** (`/usr/bin/ollama`,
+   `/usr/lib/ollama`, `/var/lib/ollama/models`) and abort if it is still
+   there — a resumed build or a restored pre-fix cache must not ship it.
+7. **Create user/group** `ollama` (system account, no login shell,
    home `/var/lib/ollama`).
-7. **Install init service** per `$INIT_SYSTEM` (section 9).
-8. **Install `knowledge` wrapper** + `/etc/knowledge/config.env`.
-9. **Provision models**: `build-time` starts the daemon, pulls each
-   model, stops the daemon; `first-boot` installs a one-shot provision
-   service instead.
+8. **Install wrapper + configuration**: `/usr/bin/knowledge`,
+   `/etc/knowledge/config.env`, `/etc/sysconfig/ollama`.
+9. **Install the init service, inert** (section 9): written, not enabled.
+10. **Write `install-engine.sh`** with the pinned version, URL, digest and
+    architecture substituted.
+11. **Write `provision-models.sh`** and its one-shot service; both exit
+    successfully while the engine is absent, so a boot stays clean.
 
 ---
 
@@ -239,14 +254,34 @@ project decision:
 | B. Build from source with Go | Full LFS/BLFS spirit | Requires bootstrapping Go in the chroot; long build; CI time cost |
 
 **Decision: Option A** (prebuilt tarball) with hard integrity controls,
-mirroring how the java-dev stage already consumes upstream binaries:
+delivered **on the target rather than in the image**, mirroring how the
+java-dev stage already consumes upstream binaries:
 
-- Download from the pinned release URL
-  `https://github.com/ollama/ollama/releases/download/v<version>/ollama-linux-<arch>.tgz`.
-- The sha256 **must** be pinned in configuration (`engine_sha256`);
-  the stage refuses to run without it and aborts on any mismatch.
+- The build downloads nothing. It generates
+  `/usr/lib/knowledge/install-engine.sh`, which fetches the pinned URL
+  `https://github.com/ollama/ollama/releases/download/v<version>/ollama-linux-<arch>.tgz`
+  when the operator runs it.
+- The sha256 **must** be pinned in configuration (`engine_sha256`): the
+  stage refuses to run without it, and the generated installer verifies
+  the digest and refuses to unpack a mismatch (verified by running the
+  generated script against a wrong digest: it stops with `/usr`
+  untouched).
+- It also refuses to run unprivileged, re-checks `uname -m` against the
+  architecture the pin was made for, and cleans its temporary archive on
+  exit.
 - Support both `x86_64` and `aarch64` archives selected from
   `$LFS_CONFIG_ARCHITECTURE`.
+
+**Why not ship the engine**: `ollama-linux-amd64.tgz` v0.12.6 is
+1 903 757 843 bytes of already deflate-packed data, so `mksquashfs -comp
+xz` recovers almost none of it. With the engine inside, the lg3d live ISO
+measured 2856 MB (systemd) / 2850 MB (sysvinit) in nightly #68/#69 --
+above the 2 147 483 648-byte ceiling that makes GitHub reject the release
+asset outright, and above the point where "the showcase ships an
+assistant" silently meant "every image carries an inference runtime, plus
+whatever weights the operator's model list pulls next". `$LFS` is both
+the live squashfs and the tree Calamares copies to disk, so shipping it
+also removed the user's choice.
 
 Option B is recorded as a future improvement for users who require a
 100% from-source system.
@@ -261,8 +296,11 @@ The daemon starts at boot only when enabled, following the
 ### 9.1 sysvinit
 
 ```
-/etc/sysvinit/ollama            start/stop/status, runs as user `ollama`
-/etc/rc.d/rcS.d/S60ollama       boot symlink
+/etc/init.d/ollama              start/stop/status, runs as user `ollama`;
+                                start refuses with a hint while
+                                /usr/bin/ollama is absent
+/etc/rc.d/rcS.d/S60ollama       boot symlink - created by install-engine.sh,
+                                never by the build
 /etc/sysconfig/ollama           OLLAMA_HOST / OLLAMA_MODELS env file
 ```
 
@@ -273,8 +311,13 @@ The daemon starts at boot only when enabled, following the
 ```
 
 `User=ollama`, `Restart=on-failure`, `After=network.target`,
-`WantedBy=multi-user.target`. Installed only when
-`$INIT_SYSTEM = systemd`.
+`WantedBy=multi-user.target`, and
+`ConditionPathExists=/usr/bin/ollama` so the unit stays inert while the
+engine is absent. The build does **not** link it into
+`multi-user.target.wants`: enabling a daemon whose binary does not exist
+only produces a failed unit at every boot. `install-engine.sh` runs
+`systemctl enable --now ollama.service` once the binary is in place.
+Installed only when `$INIT_SYSTEM = systemd`.
 
 ### 9.3 openrc / runit / s6 (follow-up)
 
@@ -286,10 +329,15 @@ those inits end-to-end.
 
 ## 10. LPM Integration
 
-- The assistant's files live under standard paths, so stage 14's
-  per-package manifest capture produces real binary packages once
-  registered — installed systems can then reinstall/upgrade through
-  the normal LPM repository pipeline.
+- The assistant's integration files live under standard paths, so stage
+  14's per-package manifest capture produces a real binary package once
+  registered — installed systems can then reinstall/upgrade the
+  integration through the normal LPM repository pipeline.
+- The engine is never part of that manifest, because it is not in `$LFS`
+  when stage 14 runs. Putting it on a host system is
+  `install-engine.sh`'s job, outside LPM: upstream ships no package
+  metadata we could track, and its version cadence is pinned in
+  configuration instead (section 17).
 - Models are **not** LPM packages: weights are large, versioned
   independently, and live in `/var/lib/ollama`. Management stays with
   `ollama pull/rm` (and `knowledge model ...` wrappers).
@@ -319,7 +367,9 @@ Design rules:
 - **Never executes generated commands automatically.** Suggestions are
   printed for the user to review. This is a hard safety requirement
   (no `eval`, no `bash -c "$model_output"`).
-- Works with the daemon down: prints a hint to start the service.
+- Works with the daemon down: prints a hint to start the service, and
+  when the engine is not installed at all, points at
+  `/usr/lib/knowledge/install-engine.sh` instead of failing obscurely.
 
 ---
 
@@ -328,8 +378,10 @@ Design rules:
 - Daemon binds to `127.0.0.1` only; the stage rejects a non-loopback
   listen address unless `allow_network=true` is set explicitly.
 - Runs as dedicated system user `ollama` (no login shell, no sudo).
-- Engine binary is installed only after sha256 verification against
-  the pinned `engine_sha256`; an empty or mismatched checksum aborts.
+- The engine is never installed by the build. On the target it is
+  installed only after sha256 verification against the pinned
+  `engine_sha256`; a mismatch, a wrong architecture or a non-root caller
+  aborts before anything is unpacked.
 - No telemetry: Ollama does not phone home except for explicit
   `ollama pull` downloads.
 - Firewall: existing nftables rules from
@@ -353,20 +405,24 @@ Design rules:
 
 ## 14. Resource Budget
 
-| Item | Size (approx.) |
-|---|---|
-| Ollama engine + runners | 1.5 GB |
-| `llama3.2:3b` weights | 2.0 GB |
-| `qwen2.5-coder:7b` weights | 4.7 GB |
-| Runtime RAM (3b / 7b) | ~4 GB / ~8 GB |
+| Item | Size (approx.) | In the image? |
+|---|---|---|
+| Ollama engine archive (`ollama-linux-amd64.tgz`) | 1.9 GB compressed | no |
+| Ollama engine + runners, unpacked | ~2 GB | no (target only) |
+| `llama3.2:3b` weights | 2.0 GB | no (target only) |
+| `qwen2.5-coder:7b` weights | 4.7 GB | no (target only) |
+| Integration shipped by blfs/28 | < 1 MB | yes |
+| Runtime RAM (3b / 7b) | ~4 GB / ~8 GB | n/a |
 
 Implications:
 
-- `provision_models=build-time` grows the image accordingly; the stage
-  runs a disk preflight and fails fast with a clear message instead of
-  dying mid-copy.
-- Default `provision_models=first-boot` keeps images and CI builds
-  small; the one-shot service pulls weights after installation.
+- `provision_models=build-time` is rejected outright: the weights land in
+  `$LFS/var/lib/ollama/models`, which is inside the image, and the engine
+  that would pull them is not there either.
+- The image carries the integration only, so live ISOs stay within
+  GitHub's 2 147 483 648-byte release-asset ceiling and the operator
+  decides whether to spend 2 GB of disk and a multi-gigabyte download on
+  an inference runtime.
 
 ---
 
@@ -388,11 +444,20 @@ behavioral change):
 2. **Guardrail tests (`tests/test_acceptance_shell.py`)**
    - `../blfs/28-knowledge.sh` exists, shellcheck-clean,
      `set -euo pipefail`, guarded on `LFS_CONFIG_KNOWLEDGE_ENABLED`.
-   - Refuses to install without a pinned sha256; verifies the checksum
-     before extraction.
+   - Refuses to run without a pinned sha256; the generated installer
+     keeps the verification, the root gate and the architecture gate.
+   - The build fetches and unpacks nothing (`curl`/`tar`/`wget` appear
+     only inside the installer written for the target), and strips an
+     engine a resumed or restored `$LFS` may still hold.
+   - Services ship inert: no enable symlink at build time, and
+     `ConditionPathExists=/usr/bin/ollama` on the unit.
+   - `build-time` provisioning is rejected.
+   - Both generated target scripts parse as POSIX `sh` after token
+     substitution.
+   - `final/16-validate-build.sh` fails the build when the engine is
+     present in the finished rootfs.
    - Listen address defaults to loopback; non-loopback requires the
      explicit override.
-   - Init service installed only for the active `$INIT_SYSTEM`.
    - The `knowledge` wrapper never contains `eval` or auto-execution
      of model output.
 

@@ -715,14 +715,16 @@ class ProfileManager:
             # profile, and privacy_tools=True also flips the config's
             # security.privacy.disable_telemetry hardening on.
             'privacy_tools': True,
-            # The LG3D showcase ships the local "knowledge" AI assistant
-            # (blfs/28-knowledge.sh, Ollama).  _apply_profile_settings()
-            # flips config knowledge.enabled from this flag, which is what
-            # get_build_stages() gates the stage on -- the same profile-flag
-            # -> config pattern as privacy_tools.  The stage is still secure
-            # by default: it refuses to unpack an engine without the pinned
-            # knowledge.engine_sha256, and provision_models stays first-boot
-            # so the ISO ships small and models are pulled on the target.
+            # The LG3D showcase wires the local "knowledge" AI assistant
+            # (blfs/28-knowledge.sh).  _apply_profile_settings() flips config
+            # knowledge.enabled from this flag, which is what get_build_stages()
+            # gates the stage on -- the same profile-flag -> config pattern as
+            # privacy_tools.  The stage ships integration only, never the
+            # engine: it writes the session wiring plus an on-demand
+            # /usr/lib/knowledge/install-engine.sh for the operator to run on
+            # the target, and strips any engine leftover from the image, so the
+            # live ISO stays under the 2 GiB release-asset cap.  The pinned
+            # knowledge.engine_sha256 is what that installer verifies.
             'knowledge': True,
             # The lg3d profile ships a live ISO (final/15) whose LG3D start
             # menu offers a graphical installer, so live_system is on.  The

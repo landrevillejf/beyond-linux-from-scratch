@@ -3,16 +3,28 @@ set -euo pipefail
 #======================================================================
 # 28-knowledge.sh - optional local AI assistant "knowledge" (Ollama)
 #
-# Installs a free, open source, fully local AI assistant into the
-# built system. Opt-in: this stage is a no-op unless
+# Wires a free, open source, fully local AI assistant into the built
+# system. Opt-in: this stage is a no-op unless
 # LFS_CONFIG_KNOWLEDGE_ENABLED=true (config/build.conf "knowledge"
 # section, or the --with-knowledge CLI flag).
 #
-# Book deviation (documented in docs/KNOWLEDGE_DESIGN.md): Ollama is
-# not a BLFS package, so the official prebuilt release tarball is
-# installed, pinned by version AND by a mandatory sha256 checksum
-# (knowledge.engine_sha256). The stage refuses to install anything
-# without a pinned checksum, and aborts on any mismatch.
+# The stage ships the INTEGRATION, never the ENGINE.  $LFS is both the
+# live session's squashfs and what the installer copies onto the disk,
+# so anything put here is in every image: the engine tarball alone is
+# 1.9 GB compressed (ollama-linux-amd64.tgz v0.12.6 = 1903757843 bytes)
+# and is already deflate-packed, so xz barely shrinks it and lg3d
+# nightlies #68/#69 measured 2856 MB / 2850 MB for an ISO the GitHub
+# release API rejects outright (an asset's size must stay under
+# 2147483648 bytes).  Running the assistant is the user's decision on
+# the target, so the image carries only the CLI wrapper, the service
+# files, the model-provisioning one-shot and
+# /usr/lib/knowledge/install-engine.sh.  Nothing is downloaded here.
+#
+# Book deviation (documented in docs/KNOWLEDGE_DESIGN.md): Ollama is not
+# a BLFS package.  knowledge.engine_sha256 stays mandatory even though
+# the build unpacks nothing any more -- it is the digest the on-demand
+# installer verifies, and an installer without a pin is a remote code
+# execution vector, so the stage still refuses to run without one.
 #
 # Environment contract (exported by builder.py):
 #   LFS_CONFIG_KNOWLEDGE_ENABLED/ENGINE/ENGINE_VERSION/ENGINE_SHA256
@@ -32,7 +44,8 @@ die() {
 # runs `sudo -u lfs python3 builder.py`), so each write into the
 # root-owned $LFS tree and each chroot must go through sudo -- the same
 # run_privileged idiom the sibling blfs stages use.  Without it the very
-# first root-owned write (tar into $LFS/usr) dies "Permission denied".
+# first root-owned write (a config file into $LFS/etc) dies "Permission
+# denied".  Nightly #61.
 run_privileged() {
     if [ "$(whoami)" = "root" ]; then
         "$@"
@@ -74,7 +87,7 @@ case "$LISTEN" in
     ;;
 esac
 
-# Secure by default: never unpack an engine without a pinned checksum
+# Secure by default: never describe an engine we cannot verify
 [ -n "$ENGINE_SHA256" ] ||
     die "knowledge.engine_sha256 must be pinned before installing the engine"
 
@@ -84,8 +97,8 @@ aarch64) OLLAMA_ARCH=arm64 ;;
 *) die "Unsupported architecture for knowledge: $ARCH" ;;
 esac
 
+# Baked into the on-demand installer below, for the target to fetch.
 ENGINE_URL="https://github.com/ollama/ollama/releases/download/v${ENGINE_VERSION}/ollama-linux-${OLLAMA_ARCH}.tgz"
-TARBALL="$LFS/sources/ollama-linux-${OLLAMA_ARCH}-${ENGINE_VERSION}.tgz"
 
 run_chroot() {
     run_privileged chroot "$LFS" /usr/bin/env -i \
@@ -94,51 +107,31 @@ run_chroot() {
         /bin/bash -c "$1"
 }
 
-# Rough GGUF weight budget per model family (kilobytes)
-model_size_kb() {
-    case "$1" in
-    *0.5b* | *1b* | *3b*) echo 2621440 ;; # ~2.5 GB
-    *7b* | *8b*) echo 5767168 ;;          # ~5.5 GB
-    *) echo 8388608 ;;                    # ~8 GB, conservative
-    esac
-}
-
-# ----------------------------------------------------------------------
-# Disk preflight: build-time provisioning bakes weights into the image
-# ----------------------------------------------------------------------
+# Weights cannot be baked in either: /var/lib/ollama/models is inside
+# $LFS, so it would ride into the squashfs exactly like the engine did,
+# multiplied by the 5.5 GB of a 7b model.
 if [ "$PROVISION" = "build-time" ]; then
-    required_kb=2097152 # engine + runners ~2 GB
-    IFS=',' read -r -a preflight_models <<<"$MODELS"
-    for m in "${preflight_models[@]}"; do
-        required_kb=$((required_kb + $(model_size_kb "$m")))
-    done
-    avail_kb=$(df -Pk "$LFS" | awk 'NR==2 {print $4}')
-    if [ "$avail_kb" -lt "$required_kb" ]; then
-        die "Not enough disk for build-time models: need $((required_kb / 1024)) MB, have $((avail_kb / 1024)) MB (use provision_models=first-boot or grow filesystem.size_mb)"
-    fi
+    die "provision_models=build-time is not supported: the image ships no engine to pull models with (use provision_models=first-boot, then run /usr/lib/knowledge/install-engine.sh on the target)"
 fi
 
 # ----------------------------------------------------------------------
-# Engine install (idempotent: skip when the binary is already there)
+# The engine must not exist in the image (idempotent: a $LFS resumed or
+# restored from a pre-fix cache still has one, and it would ride into
+# the squashfs exactly as it did in nightly #68/#69)
 # ----------------------------------------------------------------------
-if [ ! -x "$LFS/usr/bin/ollama" ]; then
-    mkdir -p "$LFS/sources"
-    log_info "Downloading Ollama v$ENGINE_VERSION ($OLLAMA_ARCH)"
-    curl -fsSL --retry 3 --connect-timeout 15 -o "$TARBALL.part" "$ENGINE_URL"
-    mv "$TARBALL.part" "$TARBALL"
-
-    actual_sha256=$(sha256sum "$TARBALL" | awk '{print $1}')
-    if [ "$actual_sha256" != "$ENGINE_SHA256" ]; then
-        rm -f "$TARBALL"
-        die "Engine sha256 mismatch: expected $ENGINE_SHA256, got $actual_sha256"
-    fi
-    log_info "Engine checksum verified"
-
-    run_privileged tar -xzf "$TARBALL" -C "$LFS/usr"
-    log_info "Engine installed into /usr"
-else
-    log_info "Engine already installed - skipping download"
+leftovers=()
+for path in "$LFS/usr/bin/ollama" "$LFS/usr/lib/ollama" "$LFS/var/lib/ollama/models"; do
+    [ -e "$path" ] || continue
+    leftovers+=("$path")
+done
+if [ ${#leftovers[@]} -gt 0 ]; then
+    log_warn "removing the engine from the image: ${leftovers[*]}"
+    log_warn "the assistant is installed on the target instead, by /usr/lib/knowledge/install-engine.sh"
+    run_privileged rm -rf "${leftovers[@]}"
 fi
+for path in "$LFS/usr/bin/ollama" "$LFS/usr/lib/ollama"; do
+    [ ! -e "$path" ] || die "$path is in the image; the engine must not ship"
+done
 
 # ----------------------------------------------------------------------
 # Dedicated unprivileged user (idempotent)
@@ -190,6 +183,11 @@ USAGE
 
 daemon_hint() {
     echo "The knowledge daemon is not running." >&2
+    if [ ! -x /usr/bin/ollama ]; then
+        echo "The engine is not installed - the image ships only the assistant's integration." >&2
+        echo "Install it: sudo /usr/lib/knowledge/install-engine.sh" >&2
+        return 1
+    fi
     echo "Start it: sudo /etc/init.d/ollama start (or systemctl start ollama)" >&2
 }
 
@@ -257,6 +255,9 @@ systemd)
 [Unit]
 Description=Ollama service (knowledge AI assistant)
 After=network.target
+# The engine is not part of the image, so this unit has to stay inert
+# until install-engine.sh puts a binary down and enables the service.
+ConditionPathExists=/usr/bin/ollama
 
 [Service]
 User=ollama
@@ -268,9 +269,9 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 UNIT
-    run_privileged mkdir -p "$LFS/etc/systemd/system/multi-user.target.wants"
-    run_privileged ln -sf ../ollama.service \
-        "$LFS/etc/systemd/system/multi-user.target.wants/ollama.service"
+    # Deliberately not linked into multi-user.target.wants: enabling a
+    # daemon whose binary is absent only adds boot noise.  The installer
+    # run on the target enables it as part of installing the engine.
     ;;
 *)
     cat <<'INITD' | run_privileged tee "$LFS/etc/init.d/ollama" >/dev/null
@@ -286,6 +287,10 @@ export HOME=/var/lib/ollama
 
 case "$1" in
     start)
+        if [ ! -x /usr/bin/ollama ]; then
+            echo "Ollama is not installed: sudo /usr/lib/knowledge/install-engine.sh" >&2
+            exit 1
+        fi
         echo "Starting Ollama (knowledge)..."
         su -s /bin/sh ollama -c "/usr/bin/ollama serve >/var/log/ollama.log 2>&1 &"
         ;;
@@ -313,24 +318,111 @@ case "$1" in
 esac
 INITD
     run_privileged chmod 0755 "$LFS/etc/init.d/ollama"
-    run_privileged mkdir -p "$LFS/etc/rc.d/rcS.d"
-    run_privileged ln -sf /etc/init.d/ollama "$LFS/etc/rc.d/rcS.d/S60ollama"
+    # Deliberately not linked into rcS.d; see the systemd note above.
     ;;
 esac
+
+# ----------------------------------------------------------------------
+# On-demand engine installer (runs on the target, never during the build)
+# ----------------------------------------------------------------------
+run_privileged mkdir -p "$LFS/usr/lib/knowledge"
+cat <<'ENGINE' | run_privileged tee "$LFS/usr/lib/knowledge/install-engine.sh" >/dev/null
+#!/bin/sh
+# Installs the Ollama engine that the "knowledge" assistant fronts.
+#
+# A WBLFS image ships this script and no engine: the runtime is a ~2 GB
+# blob (ollama-linux-amd64.tgz is 1.9 GB compressed and is already
+# deflate-packed, so it survives xz almost untouched), and running a
+# local model is the operator's decision, not the build's.  Run it when
+# you want the assistant:
+#
+#   sudo /usr/lib/knowledge/install-engine.sh
+#
+# VERSION and SHA256 below are the digest this build pinned, so a
+# tampered archive stops before anything is unpacked.
+set -eu
+
+VERSION='__VERSION__'
+SHA256='__SHA256__'
+URL='__URL__'
+BUILD_ARCH='__BUILD_ARCH__'
+
+[ "$(id -u)" -eq 0 ] || { echo "install-engine.sh must run as root" >&2; exit 1; }
+
+if [ -x /usr/bin/ollama ]; then
+    echo "Ollama is already installed (/usr/bin/ollama) - nothing to do"
+    exit 0
+fi
+
+case "$(uname -m)" in
+x86_64) ARCH=amd64 ;;
+aarch64) ARCH=arm64 ;;
+*) ARCH=unknown ;;
+esac
+# The pin belongs to one architecture; verifying it against another
+# would reject a perfectly good engine, so refuse instead.
+[ "$ARCH" = "$BUILD_ARCH" ] || {
+    echo "this image pins the $BUILD_ARCH engine, and $(uname -m) is not that" >&2
+    exit 1
+}
+
+TMP="$(mktemp /tmp/ollama-engine-XXXXXX)"
+trap 'rm -f "$TMP"' EXIT
+
+echo "Downloading Ollama v$VERSION ($ARCH)..."
+curl -fsSL --retry 3 --connect-timeout 15 -o "$TMP" "$URL"
+
+if ! echo "$SHA256  $TMP" | sha256sum --status -c -; then
+    echo "engine checksum mismatch - refusing to install" >&2
+    exit 1
+fi
+
+tar -xzf "$TMP" -C /usr
+chown ollama:ollama /var/lib/ollama 2>/dev/null || true
+
+# Enabling the daemon is part of installing it: the service files ship
+# inert because /usr/bin/ollama does not exist yet.
+if [ -d "/run/systemd/system" ]; then
+    systemctl enable --now ollama.service
+else
+    ln -sf /etc/init.d/ollama /etc/rc.d/rcS.d/S60ollama
+    /etc/init.d/ollama start
+fi
+
+# Weights are the other multi-gigabyte half, so pull them only now.
+if [ -x /usr/lib/knowledge/provision-models.sh ]; then
+    su -s /bin/sh ollama -c "/usr/lib/knowledge/provision-models.sh" ||
+        echo "model provisioning failed - rerun it once online" >&2
+fi
+
+echo "Done.  Check the assistant with: knowledge status"
+ENGINE
+run_privileged sed -i \
+    -e "s|__VERSION__|$ENGINE_VERSION|" \
+    -e "s|__SHA256__|$ENGINE_SHA256|" \
+    -e "s|__URL__|$ENGINE_URL|" \
+    -e "s|__BUILD_ARCH__|$OLLAMA_ARCH|" \
+    "$LFS/usr/lib/knowledge/install-engine.sh"
+run_privileged chmod 0755 "$LFS/usr/lib/knowledge/install-engine.sh"
 
 # ----------------------------------------------------------------------
 # Model provisioning
 # ----------------------------------------------------------------------
 if [ "$PROVISION" = "first-boot" ]; then
-    # One-shot service pulls the weights after installation, when the
-    # machine has network; the marker keeps it from running twice.
-    run_privileged mkdir -p "$LFS/usr/lib/knowledge"
+    # One-shot service pulls the weights once the engine exists on the
+    # target; the marker keeps it from running twice.
     cat <<'PROV' | run_privileged tee "$LFS/usr/lib/knowledge/provision-models.sh" >/dev/null
 #!/bin/sh
 # One-shot model provisioning for the knowledge assistant.
 set -eu
 MARKER=/var/lib/ollama/.models-provisioned
 [ -e "$MARKER" ] && exit 0
+# No engine in the image, so this is a no-op until the operator installs
+# one.  Exiting 0 keeps a boot clean rather than failing a unit.
+[ -x /usr/bin/ollama ] || {
+    echo "knowledge: no engine installed - run sudo /usr/lib/knowledge/install-engine.sh" >&2
+    exit 0
+}
 . /etc/knowledge/config.env 2>/dev/null || true
 export OLLAMA_HOST="${KNOWLEDGE_HOST:-127.0.0.1:11434}"
 IFS=','
@@ -361,8 +453,9 @@ ExecStart=/usr/lib/knowledge/provision-models.sh
 [Install]
 WantedBy=multi-user.target
 UNIT
-        run_privileged ln -sf ../knowledge-provision.service \
-            "$LFS/etc/systemd/system/multi-user.target.wants/knowledge-provision.service"
+        # Not enabled here: provisioning needs an engine the image does
+        # not carry.  install-engine.sh pulls the models directly, and
+        # `systemctl enable knowledge-provision` remains available.
         ;;
     *)
         cat <<'INITD' | run_privileged tee "$LFS/etc/init.d/knowledge-provision" >/dev/null
@@ -383,38 +476,11 @@ case "$1" in
 esac
 INITD
         run_privileged chmod 0755 "$LFS/etc/init.d/knowledge-provision"
-        run_privileged ln -sf /etc/init.d/knowledge-provision \
-            "$LFS/etc/rc.d/rcS.d/S61knowledge-provision"
+        # Not linked into rcS.d; see the systemd note above.
         ;;
     esac
 fi
 
-if [ "$PROVISION" = "build-time" ]; then
-    log_info "Provisioning models at build time"
-    run_chroot 'chown -R ollama:ollama /var/lib/ollama'
-    run_privileged chroot "$LFS" /usr/bin/env -i \
-        HOME=/var/lib/ollama \
-        PATH=/usr/bin:/usr/sbin:/bin:/sbin \
-        /bin/sh -c 'su -s /bin/sh ollama -c "OLLAMA_HOST=127.0.0.1:11434 /usr/bin/ollama serve" >/var/log/ollama-build.log 2>&1 &'
-
-    daemon_up=false
-    for _ in $(seq 1 30); do
-        if run_chroot 'curl -fsS http://127.0.0.1:11434/ >/dev/null 2>&1'; then
-            daemon_up=true
-            break
-        fi
-        sleep 1
-    done
-    "$daemon_up" || die "ollama daemon did not start for build-time model provisioning"
-
-    IFS=',' read -r -a provision_models <<<"$MODELS"
-    for m in "${provision_models[@]}"; do
-        log_info "Pulling model: $m"
-        run_chroot "su -s /bin/sh ollama -c '/usr/bin/ollama pull $m'" ||
-            die "Failed to pull model $m at build time"
-    done
-    run_chroot 'pkill -u ollama -x ollama' || true
-fi
-
-log_info "knowledge assistant installed (engine v$ENGINE_VERSION, model: $DEFAULT_MODEL)"
+log_info "knowledge assistant wired - no engine in the image"
+log_info "on the target: sudo /usr/lib/knowledge/install-engine.sh (pinned v$ENGINE_VERSION, models: $MODELS)"
 exit 0

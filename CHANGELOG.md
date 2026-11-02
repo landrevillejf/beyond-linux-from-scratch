@@ -4,26 +4,26 @@
 
 ### Added
 
-- **LG3D ships the local `knowledge` AI assistant** (`builder.py`,
+- **LG3D wires the local `knowledge` AI assistant** (`builder.py`,
   `config/build.conf`, `tests/test_builder.py`,
   `tests/test_profile_manager.py`, `README.md`, `AGENTS.md`,
   `docs/KNOWLEDGE_DESIGN.md`)
   - The `lg3d` profile now sets `knowledge: True`, so the opt-in
-    `knowledge` stage (`blfs/28-knowledge.sh`, an Ollama engine) is
-    scheduled with the profile.  `_apply_profile_settings()` flips config
+    `knowledge` stage (`blfs/28-knowledge.sh`) is scheduled with the
+    profile.  `_apply_profile_settings()` flips config
     `knowledge.enabled` from that flag -- the same profile-flag -> config
     pattern as `privacy_tools` and `graphical_installer` -- and
     `get_build_stages()` places `blfs/28` just before `base-packages` so
-    stage 14's manifest capture turns the installed assistant into LPM
-    packages.
+    stage 14's manifest capture turns the wired assistant into an LPM
+    package.
   - `config/build.conf` pins `knowledge.engine_sha256` to the verified
     `ollama-linux-amd64.tgz` v0.12.6 digest
     (`de82adce2ab79235115d511ff22fcb099ac53b67127870f12b80198c033ec0a1`)
-    while `enabled` stays `false` globally, so the stage stays secure by
-    default (it refuses to unpack an unpinned engine) and `lg3d` is the
-    only profile that turns it on out of the box; every other profile
+    while `enabled` stays `false` globally, so `lg3d` is the only profile
+    that turns the assistant on out of the box and every other profile
     still opts in with `--with-knowledge` or an explicit config enable.
-    `provision_models` stays `first-boot` to keep the live ISO small.
+    The pin is what the on-demand installer on the target verifies; the
+    image itself carries no engine (see Fixed below).
   - LG3D-only: no other profile gains the assistant.  `builder.py` stays
     at 100% coverage.
 
@@ -480,6 +480,57 @@
     gains `test_get_profile_lg3d_includes_privacy`.
 
 ### Fixed
+
+- **The lg3d live ISO shipped the Ollama engine, and no release could carry
+  it** (`blfs/28-knowledge.sh`, `final/16-validate-build.sh`,
+  `tests/test_acceptance_shell.py`, `builder.py`, `tests/test_builder.py`,
+  `AGENTS.md`, `README.md`, `docs/KNOWLEDGE_DESIGN.md`, `docs/content.md`)
+  - lg3d nightly #69 failed in `create-release` with
+    `Validation Failed: {"resource":"ReleaseAsset","code":"custom","field":"size","message":"size must be less than 2147483648"}`.
+    The two images it tried to publish measured 2856 MB (systemd) and
+    2850 MB (sysvinit); #68 had failed the same way, so no lg3d ISO had
+    ever reached a release.
+  - The bulk was the assistant, not the desktop.  `blfs/28-knowledge.sh`
+    unpacked `ollama-linux-amd64.tgz` v0.12.6 -- 1 903 757 843 bytes of
+    already deflate-packed data, roughly 2 GB extracted -- into
+    `$LFS/usr`, and `$LFS` is simultaneously the live session's squashfs
+    and the tree Calamares copies onto the disk, so every image and every
+    installed system carried an inference runtime nobody had asked for.
+    xz recovers almost nothing from a gzip payload, which is why an
+    "already compressed" engine still pushed the image past the ceiling.
+    Filling in `knowledge.engine_sha256` is what enabled it: the stage
+    refuses to unpack an *unpinned* engine, so committing the digest
+    silently turned an opt-in blob into a shipped default.
+  - The stage now ships the integration only -- the `knowledge` CLI, the
+    two config files, the `ollama` system user, service files that stay
+    inert (`ConditionPathExists=/usr/bin/ollama`, nothing linked into
+    `multi-user.target.wants` or `rcS.d`, because enabling a daemon whose
+    binary is absent buys a failed unit at every boot), and a
+    `provision-models.sh` one-shot that reports the missing engine and
+    exits 0 instead of failing the boot.  The engine itself comes from
+    `/usr/lib/knowledge/install-engine.sh`, which the operator runs on
+    the target: it fetches exactly the pinned version and sha256, refuses
+    a non-root caller or a foreign architecture, unpacks nothing until the
+    digest matches, then enables the service and pulls the models.  The
+    stage also strips an engine that a resumed build or a restored pre-fix
+    cache left in `$LFS` and dies if the strip does not hold, and
+    `final/16-validate-build.sh` section 14 turns a shipped engine into a
+    build failure.  `provision_models=build-time` is rejected outright,
+    because its weights land in `$LFS/var/lib/ollama/models`.
+  - Verified by running the generated installer, not just by reading it:
+    an unprivileged invocation refused (exit 1), a pin belonging to
+    another architecture refused before fetching anything, a wrong digest
+    stopped with `/usr` untouched, and a matching digest downloaded,
+    unpacked, enabled the service and cleaned up its temporary file.  The
+    same probe caught `mktemp /tmp/ollama-engine-XXXXXX.tgz` being refused
+    by busybox (GNU accepts it), so the template keeps its X's trailing.
+  - `builder.py` logic is untouched: the lg3d flag, `knowledge.enabled` and
+    the `LFS_CONFIG_KNOWLEDGE_*` contract are unchanged, so no scheduling or
+    coverage behaviour moves (only the profile comment, which described the
+    old engine-in-the-image behaviour).  Tests: new
+    `TestKnowledgeEngineNeverShips` (8 cases, each verified against 11
+    mutants) plus the two `TestKnowledgeStageGuardrails` assertions that
+    encoded the old install-the-engine contract.
 
 - **QEMU boot smoke test panicked with `invalid opcode` in busybox**
   (`tools/qemu-boot-smoke.sh`)
