@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+import pytest
 
 
 def test_release_workflow_restores_lfs_ownership_after_cache_copy():
@@ -1165,3 +1168,124 @@ class TestLg3dPrivateSourcePreDownload:
         step_pos = workflow.index(f"- name: {self.STEP}")
         build_pos = workflow.index("sudo -u lfs python3 builder.py")
         assert step_pos < build_pos
+
+
+class TestReleaseAssetSizeCap:
+    """Every release that can carry an ISO must split it under GitHub's cap.
+
+    GitHub's Release API rejects an asset whose size is not "less than
+    2147483648" bytes.  lg3d Nightly #69 hit that with the 2 856 MB live ISO
+    (final/15 packs the whole lg3d rootfs - JDK, Qt6/KF6/Calamares, mesa,
+    kernel - into live.squashfs): create-release uploaded every small asset,
+    lost both ISOs, and published a nightly with nothing bootable in it.  The
+    caches had worked around the cap with `split -b 1900m` for a long time; the
+    ISOs never did, so this guardrail pins the splitter into every workflow
+    that attaches a build artifact to a release - the same step duplicated
+    across files must never be fixed in only the one that reported the
+    failure.
+    """
+
+    SPLIT_INVOCATION = "tools/split-release-assets.sh"
+
+    # Workflows that publish an ISO image.
+    ISO_PUBLISHERS = (
+        "lg3d.yml",
+        "nightly.yml",
+        "weekly-full.yml",
+        "release.yml",
+        "build-iso-from-cache.yml",
+        "xfce-live-boot-iso.yml",
+        "release-multi-host.yml",
+    )
+
+    # Workflows that publish one opaque rootfs tarball, which grows with the
+    # desktop and crosses the same line.
+    TARBALL_PUBLISHERS = (
+        "xfce-systemd-x86_64-build-cache.yml",
+        "xfce-sysvinit-x86_64-build-cache.yml",
+    )
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, workflow, name):
+        marker = f"- name: {name}\n"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def test_helper_encodes_the_cap_the_api_enforces(self):
+        helper = Path("tools/split-release-assets.sh")
+        text = helper.read_text()
+        assert "ASSET_CAP_BYTES=2147483648" in text
+        # 1900 MiB is the size the cache releases already use.
+        assert 'PART_SIZE="1900m"' in text
+        assert os.access(helper, os.X_OK)
+
+    @pytest.mark.parametrize("name", ISO_PUBLISHERS + TARBALL_PUBLISHERS)
+    def test_publisher_splits_before_it_uploads(self, name):
+        workflow = self._read(name)
+        assert self.SPLIT_INVOCATION in workflow, (
+            f"{name}: publishes release assets without respecting the "
+            f"2 GiB per-asset cap"
+        )
+        assert workflow.index(self.SPLIT_INVOCATION) < workflow.index(
+            "softprops/action-gh-release@v2"
+        ), f"{name}: the split must run before the release upload"
+
+    @pytest.mark.parametrize("name", ISO_PUBLISHERS + TARBALL_PUBLISHERS)
+    def test_split_step_is_authorized_to_purge_stale_parts(self, name):
+        """--tag only works with a token, and a step without one silently
+        keeps the previous generation's tail parts on the release."""
+        body = self._step(self._read(name), "Split release assets over the 2 GiB cap")
+        assert "--tag" in body
+        assert "--repo" in body
+        assert 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' in body
+
+    @pytest.mark.parametrize("name", ("lg3d.yml", "nightly.yml", "weekly-full.yml"))
+    def test_artifact_glob_publishes_the_parts(self, name):
+        # create-release uploads everything under artifacts/, so the parts the
+        # splitter leaves behind travel with no extra listing.
+        workflow = self._read(name)
+        assert "files: artifacts/**/*" in workflow
+
+    @pytest.mark.parametrize(
+        "name,glob",
+        [
+            ("release.yml", "/tmp/lfs-build/build-release/*.iso.part-*"),
+            ("build-iso-from-cache.yml", "/tmp/lfs-build/build-release/*.iso.part-*"),
+            ("xfce-live-boot-iso.yml", "/tmp/lfs-build/*.iso.part-*"),
+            ("release-multi-host.yml", "dist/*.iso.part-*"),
+            ("xfce-systemd-x86_64-build-cache.yml", "./artifact/*.tar.zst.part-*"),
+            ("xfce-sysvinit-x86_64-build-cache.yml", "./artifact/*.tar.zst.part-*"),
+        ],
+    )
+    def test_explicit_file_lists_include_the_parts(self, name, glob):
+        # softprops only uploads what the list names: a splitter that removes
+        # the original without listing the parts publishes an empty release.
+        workflow = self._read(name)
+        assert glob in workflow
+        assert glob.replace(".part-*", ".parts") in workflow
+
+    @pytest.mark.parametrize(
+        "name", ("lg3d.yml", "nightly.yml", "weekly-full.yml", "release-multi-host.yml")
+    )
+    def test_publish_only_jobs_check_out_the_helper(self, name):
+        """These create-release jobs never built anything, so they had no
+        checkout at all - and the splitter lives in tools/."""
+        workflow = self._read(name)
+        release_job = workflow.split("create-release:")[-1] if name != (
+            "release-multi-host.yml") else workflow.split("publish-release:")[-1]
+        assert "actions/checkout@v4" in release_job
+        assert "sparse-checkout: tools" in release_job
+        assert release_job.index("sparse-checkout: tools") < release_job.index(
+            self.SPLIT_INVOCATION
+        )
+
+    def test_build_iso_from_cache_still_finds_its_image(self):
+        """Its 'Verify ISO presence' gate runs with if: always() after the
+        upload; once the splitter removes the single file, that check must
+        accept the parts or the job goes red on a successful release."""
+        body = self._step(self._read("build-iso-from-cache.yml"), "Verify ISO presence")
+        assert ".part-*" in body
