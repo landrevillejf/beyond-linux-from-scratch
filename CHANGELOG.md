@@ -481,6 +481,21 @@
 
 ### Fixed
 
+- **QEMU boot smoke test panicked with `invalid opcode` in busybox**
+  (`tools/qemu-boot-smoke.sh`)
+  - lg3d Nightly #68 (`lg3d`, sysvinit, x86_64) died in the post-build QEMU
+    boot smoke test with `traps: init[1] trap invalid opcode ... in busybox`
+    followed by `Kernel panic - not syncing: Attempted to kill init!`.  The
+    busybox binary in the initramfs is the pre-built x86_64-musl static from
+    busybox.net, which is compiled with AVX instructions (`vmovdqu` etc.).
+    QEMU's default `qemu64` CPU model doesn't expose AVX, so busybox trapped
+    on the first AVX instruction and the kernel panicked before userspace was
+    reached.
+  - The QEMU command now uses `-cpu max` to enable every CPU feature the
+    accelerator supports (AVX/AVX2/AES/...), matching what the busybox binary
+    expects.  With KVM (GitHub runners expose `/dev/kvm`), `-cpu max` maps to
+    the host CPU; with TCG, it enables QEMU's full emulation set.
+
 - **`lg3d` nightly pre-download of the private ProjectLookingGlass source died
   `curl: (23) ... on write of 585 bytes`** (`.github/workflows/lg3d.yml`,
   `tests/test_release_workflow.py`)
