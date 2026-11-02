@@ -283,29 +283,11 @@ jobs:
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           bash tools/qemu-boot-smoke.sh "$ISO_PATH"
 
-      - name: Split release assets over the 2 GiB cap
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # GitHub's Release API refuses any asset whose size is not "less
-          # than 2147483648" bytes.  A stable release ships the xfce live ISO
-          # whenever the profile enables live_system, and that image packs the
-          # whole rootfs into live.squashfs - the same wall lg3d Nightly #69
-          # hit.  Split into 1900 MiB parts and publish the manifest next to
-          # them, so the release always carries a restorable image.
-          bash tools/split-release-assets.sh \
-            --tag "${GITHUB_REF_NAME}" \
-            --repo "${{ github.repository }}" \
-            /tmp/lfs-build/build-release
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
-            /tmp/lfs-build/build-release/*.iso.part-*
-            /tmp/lfs-build/build-release/*.iso.parts
-            /tmp/lfs-build/build-release/*.iso.parts.sha256
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/SHA256SUMS

@@ -134,14 +134,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          # This job only publishes the tarball the build job produced, so the
-          # single thing it needs from the tree is tools/split-release-assets.
-          sparse-checkout: tools
-          sparse-checkout-cone-mode: false
-
       - name: Download cache artifact
         uses: actions/download-artifact@v4
         with:
@@ -156,21 +148,6 @@ jobs:
           echo "name=XFCE SYSTEMD x86_64 Cache $VERSION" >> $GITHUB_OUTPUT
           echo "asset_path=./artifact/rootfs-cache-xfce-systemd-x86_64.tar.zst" >> $GITHUB_OUTPUT
 
-      - name: Split release assets over the 2 GiB cap
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # GitHub's Release API refuses any asset whose size is not "less
-          # than 2147483648" bytes.  A zstd xfce rootfs usually fits, but it
-          # is one opaque tarball and it grows with the desktop: split it the
-          # way build-rootfs-cache.yml already splits its cache, publishing
-          # `<tarball>.part-NN` plus the `.parts` manifest, instead of losing
-          # the release the way lg3d Nightly #69 lost its ISO.
-          bash tools/split-release-assets.sh \
-            --tag "${{ steps.vars.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            ./artifact
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -180,8 +157,5 @@ jobs:
           prerelease: false
           files: |
             ${{ steps.vars.outputs.asset_path }}
-            ./artifact/*.tar.zst.part-*
-            ./artifact/*.tar.zst.parts
-            ./artifact/*.tar.zst.parts.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

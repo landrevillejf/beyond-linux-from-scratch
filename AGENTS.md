@@ -355,31 +355,6 @@ must add the same step right after checkout, and must clear a scratch dir's
 *contents* (`rm -rf /tmp/lfs-build/* /tmp/lfs-build/.[!.]*`), never the bind
 mountpoint itself (which `rm -rf` cannot remove).
 
-GitHub's Release API rejects any single asset whose size is not "less than
-2147483648" bytes (2 GiB), and a live ISO can easily exceed that: `final/15`
-packs the whole rootfs into `live.squashfs`, so the `lg3d` image shipped at
-2 856 MB and lg3d nightly #69 published a release with every small asset but
-**no bootable image at all**. Recompression is not an option (an xz-compressed
-squashfs is already at its entropy floor). Therefore **every workflow step that
-attaches build output to a release runs
-`bash tools/split-release-assets.sh <dir>` immediately before
-`softprops/action-gh-release@v2`.** The helper cuts each over-cap file into
-`<name>.part-NN` pieces (1900 MiB, the size the cache releases already use),
-deletes the original, and writes `<name>.parts` (whole-file size/sha256 plus an
-explicit `assemble=cat ... > <name>` line) and `<name>.parts.sha256`; it also
-rewrites any `*.pointer` that advertised the split file so the pointer resolves
-the manifest instead of 404ing. Publish-only jobs (`create-release`,
-`publish-release`) had no checkout at all, so they now do a sparse
-`sparse-checkout: tools` one first. Workflows whose `files:` input is an
-explicit list must also name `*.iso.part-*` / `*.iso.parts`; the matrix
-publishers need nothing, since `files: artifacts/**/*` already matches the
-parts. Actions *artifacts* keep the single-file ISO (that channel has no such
-cap, and the QEMU boot gate needs a real image). Pass `--tag`/`--repo` plus
-`GITHUB_TOKEN` so a re-dispatch of a dated tag deletes the previous
-generation's tail parts instead of leaving them to corrupt a glob-based
-reassembly. `tests/test_release_workflow.py::TestReleaseAssetSizeCap` fails if
-any publisher loses the step or a `files:` list loses the parts.
-
 ---
 
 ## Guidelines for agents

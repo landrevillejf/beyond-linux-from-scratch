@@ -185,22 +185,6 @@ jobs:
             /tmp/lfs-build/SHA256SUMS
           if-no-files-found: error
 
-      - name: Split release assets over the 2 GiB cap
-        if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          # GitHub's Release API refuses any asset whose size is not "less
-          # than 2147483648" bytes, and this job publishes the xfce LIVE ISO,
-          # which carries the whole rootfs in live.squashfs - the same wall
-          # lg3d Nightly #69 hit at 2 856 MB.  Split into 1900 MiB parts so
-          # the release always ships something restorable; the artifact above
-          # keeps the single-file ISO, which actions/upload-artifact accepts.
-          bash tools/split-release-assets.sh \
-            --tag "${{ steps.release_info.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            /tmp/lfs-build/build-release
-
       - name: Upload ISO to release
         if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2
@@ -209,9 +193,6 @@ jobs:
           name: ${{ steps.release_info.outputs.name }}
           files: |
             /tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}
-            /tmp/lfs-build/build-release/*.iso.part-*
-            /tmp/lfs-build/build-release/*.iso.parts
-            /tmp/lfs-build/build-release/*.iso.parts.sha256
             /tmp/lfs-build/build-release/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
           generate_release_notes: true
@@ -221,11 +202,7 @@ jobs:
       - name: Verify ISO presence
         if: always()
         run: |
-          # The split step above removes the single-file ISO whenever it
-          # crosses GitHub's 2 GiB asset cap, so "the build produced an image"
-          # means the ISO itself or the parts it was cut into.
-          if [ -s "/tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}" ] ||
-              ls /tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}.part-* >/dev/null 2>&1; then
+          if [ -s "/tmp/lfs-build/build-release/${{ steps.release_info.outputs.iso_name }}" ]; then
             echo "ISO built successfully"
           else
             echo "ISO not found"
