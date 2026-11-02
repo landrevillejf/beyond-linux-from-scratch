@@ -363,7 +363,18 @@ packs the whole rootfs into `live.squashfs`, so the `lg3d` image shipped at
 squashfs is already at its entropy floor). Therefore **every workflow step that
 attaches build output to a release runs
 `bash tools/split-release-assets.sh <dir>` immediately before
-`softprops/action-gh-release@v2`.** The helper cuts each over-cap file into
+`softprops/action-gh-release@v2`.** Scan depth is part of that contract: only the
+top level of `<dir>` is scanned by default, because `release.yml`,
+`build-iso-from-cache.yml` and `xfce-live-boot-iso.yml` point the helper at
+`build-release/` -- which *is* `$LFS` -- and a recursive scan would cut data
+files of the installed system instead of release payloads. The matrix publishers
+pass `--recursive`, since `download-artifact` stages one subdirectory per leg.
+Those three build-tree jobs first hand the payload directory to the runner
+(`sudo chown "$(id -u):$(id -g)"`) because the build ran as `lfs` and an
+unprivileged split could not create parts there; running the helper as root
+instead would lose `GITHUB_TOKEN` to sudo's `env_reset` and silently disable the
+stale-part purge, so it stays unprivileged. (`hand_back_to_caller` still covers
+any caller that does use sudo.) The helper cuts each over-cap file into
 `<name>.part-NN` pieces (1900 MiB, the size the cache releases already use),
 deletes the original, and writes `<name>.parts` (whole-file size/sha256 plus an
 explicit `assemble=cat ... > <name>` line) and `<name>.parts.sha256`; it also

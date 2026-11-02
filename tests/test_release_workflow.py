@@ -1215,6 +1215,26 @@ class TestReleaseAssetSizeCap:
         end = workflow.find("\n      - name: ", start + len(marker))
         return workflow[start:] if end == -1 else workflow[start:end]
 
+    def _split_command(self, workflow):
+        """The splitter invocation as the shell sees it: the line that calls it,
+        joined with its backslash continuations.
+
+        Prose in the step's comments must never satisfy a flag assertion - a
+        test that passes because a comment mentioned --recursive is the test
+        that keeps shipping a nightly with no ISO in it.
+        """
+        lines = workflow.splitlines()
+        for index, line in enumerate(lines):
+            if self.SPLIT_INVOCATION in line and not line.strip().startswith("#"):
+                break
+        else:
+            raise AssertionError(f"{self.SPLIT_INVOCATION} is never invoked")
+        cmd = lines[index].strip()
+        while cmd.endswith("\\"):
+            index += 1
+            cmd = cmd[:-1].strip() + " " + lines[index].strip()
+        return cmd
+
     def test_helper_encodes_the_cap_the_api_enforces(self):
         helper = Path("tools/split-release-assets.sh")
         text = helper.read_text()
@@ -1238,9 +1258,11 @@ class TestReleaseAssetSizeCap:
     def test_split_step_is_authorized_to_purge_stale_parts(self, name):
         """--tag only works with a token, and a step without one silently
         keeps the previous generation's tail parts on the release."""
-        body = self._step(self._read(name), "Split release assets over the 2 GiB cap")
-        assert "--tag" in body
-        assert "--repo" in body
+        workflow = self._read(name)
+        cmd = self._split_command(workflow)
+        assert "--tag" in cmd
+        assert "--repo" in cmd
+        body = self._step(workflow, "Split release assets over the 2 GiB cap")
         assert 'GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}' in body
 
     @pytest.mark.parametrize("name", ("lg3d.yml", "nightly.yml", "weekly-full.yml"))
@@ -1289,3 +1311,71 @@ class TestReleaseAssetSizeCap:
         accept the parts or the job goes red on a successful release."""
         body = self._step(self._read("build-iso-from-cache.yml"), "Verify ISO presence")
         assert ".part-*" in body
+
+    @pytest.mark.parametrize("name", ("lg3d.yml", "nightly.yml", "weekly-full.yml"))
+    def test_artifact_tree_publishers_scan_recursively(self, name):
+        """download-artifact stages one subdirectory per matrix leg, so the
+        ISOs these jobs publish are not at the top of artifacts/.  Without
+        --recursive the splitter would find nothing and the nightly would keep
+        publishing a release with no bootable image."""
+        cmd = self._split_command(self._read(name))
+        assert "--recursive" in cmd, (
+            f"{name}: payloads live under artifacts/<leg>/ and need --recursive"
+        )
+
+    @pytest.mark.parametrize(
+        "name",
+        (
+            "release.yml",
+            "build-iso-from-cache.yml",
+            "xfce-live-boot-iso.yml",
+            "release-multi-host.yml",
+            "xfce-systemd-x86_64-build-cache.yml",
+            "xfce-sysvinit-x86_64-build-cache.yml",
+        ),
+    )
+    def test_flat_publishers_do_not_recurse(self, name):
+        """The first three point at build-release/, which *is* $LFS: recursing
+        would cut data files of the installed system, not release payloads.
+        The rest download one flat file, so the top level is all there is."""
+        cmd = self._split_command(self._read(name))
+        assert "--recursive" not in cmd, (
+            f"{name}: recursing here would split files of the installed system"
+        )
+
+    @pytest.mark.parametrize(
+        "name,payload,hand_over",
+        (
+            (
+                "release.yml",
+                '/tmp/lfs-build/build-release',
+                'sudo chown "$(id -u):$(id -g)" /tmp/lfs-build/build-release',
+            ),
+            (
+                "build-iso-from-cache.yml",
+                "ISO_DIR=/tmp/lfs-build/build-release",
+                'sudo chown "$(id -u):$(id -g)" "$ISO_DIR"',
+            ),
+            (
+                "xfce-live-boot-iso.yml",
+                "ISO_DIR=/tmp/lfs-build",
+                'sudo chown "$(id -u):$(id -g)" "$ISO_DIR"',
+            ),
+        ),
+    )
+    def test_build_tree_publishers_split_unprivileged_after_a_hand_over(
+        self, name, payload, hand_over
+    ):
+        """The build ran as lfs, so the runner cannot create parts inside the
+        payload tree.  Running the splitter as root would work but would also
+        drop GITHUB_TOKEN (sudo's env_reset), silently disabling the stale-part
+        purge, so these jobs hand the directory over and stay unprivileged."""
+        workflow = self._read(name)
+        for marker in (payload, hand_over):
+            assert marker in workflow, f"{name}: {marker} missing"
+            assert workflow.index(marker) < workflow.index(self.SPLIT_INVOCATION), (
+                f"{name}: {marker} must precede the split"
+            )
+        assert self._split_command(workflow).startswith("bash tools/"), (
+            f"{name}: a root split loses GITHUB_TOKEN for the --tag purge"
+        )
