@@ -3,6 +3,9 @@
 Tests for SourceDownloader class
 """
 
+import bz2
+import gzip
+import lzma
 import pytest
 import hashlib
 import urllib.error
@@ -22,9 +25,9 @@ class TestSourceDownloader:
 
     def test_download_file_already_exists(self, sources_dir, mock_logger):
         """Test downloading file that already exists"""
-        # Create existing file with a valid gzip header so it is trusted
+        # Existing cached sources must have a complete gzip stream.
         test_file = sources_dir / "test.tar.gz"
-        test_file.write_bytes(b"\x1f\x8b\x08\x00existing content")
+        test_file.write_bytes(gzip.compress(b'existing content'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         result = downloader.download("https://example.com/test.tar.gz", "test.tar.gz")
@@ -357,7 +360,7 @@ class TestNightly212DownloadResilience:
             if len(seen) == 1:
                 raise urllib.error.HTTPError(url=url, code=404,
                                              msg='Not Found', hdrs=None, fp=None)
-            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+            Path(path).write_bytes(lzma.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
@@ -495,7 +498,7 @@ class TestNightly213VoidMirrorFallback:
             if 'conglomeration' in url:
                 raise urllib.error.HTTPError(url=url, code=404,
                                              msg='Not Found', hdrs=None, fp=None)
-            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+            Path(path).write_bytes(lzma.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('builder.time.sleep'), \
@@ -607,7 +610,7 @@ class TestBaseCacheRun5GnuMirrorFallback:
             if urlparse(url).hostname == 'ftpmirror.gnu.org':
                 raise urllib.error.HTTPError(url=url, code=504,
                                              msg='Gateway Time-out', hdrs=None, fp=None)
-            Path(path).write_bytes(b'\xfd7zXZ\x00payload')
+            Path(path).write_bytes(lzma.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
@@ -696,7 +699,7 @@ class TestGluedNameAndUnifontFallbacks:
             if urlparse(url).hostname == 'invisible-mirror.net':
                 raise urllib.error.HTTPError(url=url, code=404,
                                              msg='Not Found', hdrs=None, fp=None)
-            Path(path).write_bytes(b'BZh9payload')
+            Path(path).write_bytes(bz2.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
@@ -722,7 +725,7 @@ class TestGluedNameAndUnifontFallbacks:
                 raise urllib.error.HTTPError(url=url, code=503,
                                              msg='Service Unavailable',
                                              hdrs=None, fp=None)
-            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+            Path(path).write_bytes(gzip.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve):
@@ -801,7 +804,7 @@ class TestBaseCacheRun22ZlibGithubFallback:
                 # conglomeration and Void do not keep the pinned 1.3.1
                 raise urllib.error.HTTPError(url=url, code=404,
                                              msg='Not Found', hdrs=None, fp=None)
-            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+            Path(path).write_bytes(gzip.compress(b'payload'))
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         with patch('builder.time.sleep'), \

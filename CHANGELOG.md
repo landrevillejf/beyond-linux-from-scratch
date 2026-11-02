@@ -481,6 +481,14 @@
 
 ### Fixed
 
+- **Truncated source archives no longer fail during package extraction**
+  (`builder.py`, `tests/conftest.py`, `tests/test_builder.py`,
+  `tests/test_source_downloader.py`)
+  - Source downloads and restored archives are now read through their
+    compressed-stream end marker; ZIP entries are checked for CRC errors.
+    Invalid files are discarded and downloaded again instead of being
+    mistaken for complete archives based only on their first bytes.
+
 - **The lg3d live ISO shipped the Ollama engine, and no release could carry
   it** (`blfs/28-knowledge.sh`, `final/16-validate-build.sh`,
   `tests/test_acceptance_shell.py`, `builder.py`, `tests/test_builder.py`,
