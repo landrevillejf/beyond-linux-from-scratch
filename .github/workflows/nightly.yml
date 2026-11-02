@@ -740,10 +740,7 @@ jobs:
           # --tag drops the parts an earlier generation of this same dated tag
           # left behind, which a `cat *.part-*` reassembly would otherwise
           # splice onto the ISO.
-          # --recursive is required here because download-artifact stages one
-          # subdirectory per matrix leg; the ISOs sit at artifacts/<leg>/.
           bash tools/split-release-assets.sh \
-            --recursive \
             --tag "nightly-${{ steps.date.outputs.date }}" \
             --repo "${{ github.repository }}" \
             artifacts

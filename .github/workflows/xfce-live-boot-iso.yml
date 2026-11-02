@@ -146,18 +146,10 @@ jobs:
           # parts and publish the manifest beside them; the ISO artifact above
           # stays a single file, because actions/upload-artifact has no such
           # cap and the QEMU gate needs a bootable image.
-          # This job passes --output /tmp/lfs-build, so that directory is both
-          # $LFS and the staging area; only its top level is scanned, which is
-          # where final/15 writes the ISO and where no rootfs data file lives.
-          # builder.py ran as lfs, so the runner could not create parts in its
-          # tree; handing back the directory keeps the split unprivileged, which
-          # is what leaves GITHUB_TOKEN in reach of the stale-part purge.
-          ISO_DIR=/tmp/lfs-build
-          sudo chown "$(id -u):$(id -g)" "$ISO_DIR"
           bash tools/split-release-assets.sh \
             --tag "${{ steps.release_info.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            "$ISO_DIR"
+            /tmp/lfs-build
 
       - name: Create release with ISO and kernel
         if: steps.release_info.outputs.tag != ''

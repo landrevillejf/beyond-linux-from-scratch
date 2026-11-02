@@ -211,16 +211,6 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
-      - name: Hand the payload directory to the publishing steps
-        run: |
-          # The build runs as lfs, while every step below - checksums, the ISO
-          # pointer, the asset splitter, the SBOM and the cosign bundles - runs
-          # as the runner and writes a new file into build-release/.  Without
-          # this hand-over the first of them dies on "Permission denied".
-          # Only the directory itself is handed back: the ISO is already built,
-          # so nothing downstream needs lfs to own the gigabytes inside it.
-          sudo chown "$(id -u):$(id -g)" /tmp/lfs-build/build-release
-
       - name: Resolve ISO name
         id: iso_name
         run: |
@@ -303,12 +293,6 @@ jobs:
           # whole rootfs into live.squashfs - the same wall lg3d Nightly #69
           # hit.  Split into 1900 MiB parts and publish the manifest next to
           # them, so the release always carries a restorable image.
-          # Only the top level is scanned: build-release/ IS the installed
-          # system, and the ISO final/15 writes is the single oversized file
-          # in it (the squashfs scratch deliberately lives outside $LFS).
-          # The split stays unprivileged, which is what keeps GITHUB_TOKEN in
-          # reach of the stale-part purge; the directory was handed to the
-          # runner by 'Hand the payload directory to the publishing steps'.
           bash tools/split-release-assets.sh \
             --tag "${GITHUB_REF_NAME}" \
             --repo "${{ github.repository }}" \

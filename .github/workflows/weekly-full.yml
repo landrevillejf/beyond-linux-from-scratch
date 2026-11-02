@@ -623,10 +623,7 @@ jobs:
           # state the reassembly command; the files: glob below picks the
           # parts up automatically.  The tag is the ref this workflow runs
           # on, exactly as the pointer step in the build job assumes.
-          # --recursive is required here because download-artifact stages one
-          # subdirectory per matrix leg; the ISOs sit at artifacts/<leg>/.
           bash tools/split-release-assets.sh \
-            --recursive \
             --tag "${{ github.ref_name }}" \
             --repo "${{ github.repository }}" \
             artifacts

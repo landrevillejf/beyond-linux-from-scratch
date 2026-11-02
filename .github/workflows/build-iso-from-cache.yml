@@ -196,18 +196,10 @@ jobs:
           # lg3d Nightly #69 hit at 2 856 MB.  Split into 1900 MiB parts so
           # the release always ships something restorable; the artifact above
           # keeps the single-file ISO, which actions/upload-artifact accepts.
-          # Only the top level is scanned: build-release/ IS the installed
-          # system, and the ISO is the single oversized file in it.  The build
-          # stages chowned this tree to lfs, so the runner could not create the
-          # parts; handing back the directory itself keeps the split
-          # unprivileged, which is what leaves GITHUB_TOKEN in reach of the
-          # stale-part purge, and the uploader below only reads the result.
-          ISO_DIR=/tmp/lfs-build/build-release
-          sudo chown "$(id -u):$(id -g)" "$ISO_DIR"
           bash tools/split-release-assets.sh \
             --tag "${{ steps.release_info.outputs.tag }}" \
             --repo "${{ github.repository }}" \
-            "$ISO_DIR"
+            /tmp/lfs-build/build-release
 
       - name: Upload ISO to release
         if: github.event_name == 'schedule' || github.event.inputs.create_release == 'true'

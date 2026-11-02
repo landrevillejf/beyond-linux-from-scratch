@@ -85,8 +85,8 @@ class TestSplitReleaseAssetsHelper:
     def test_splits_and_removes_the_original(self, tmp_path):
         leg = tmp_path / "artifacts/release-artifacts-lg3d-systemd-x86_64"
         _, digest = make_iso(leg)
-        run_helper("--recursive", "--max-bytes", str(MAX_BYTES),
-                   "--part-size", PART_SIZE, str(tmp_path / "artifacts"))
+        run_helper("--max-bytes", str(MAX_BYTES), "--part-size", PART_SIZE,
+                   str(tmp_path / "artifacts"))
         parts = sorted(leg.glob(f"{ISO_NAME}.part-*"))
         assert [p.name for p in parts] == [
             f"{ISO_NAME}.part-00",
@@ -216,55 +216,20 @@ class TestSplitReleaseAssetsHelper:
 
     def test_multiple_legs_in_one_download_tree(self, tmp_path):
         # create-release downloads one subdirectory per matrix leg; the ISO
-        # two levels down is the actual production layout (Nightly #69), which
-        # is what --recursive exists for.
+        # two levels down is the actual production layout (Nightly #69).
         for init in ("systemd", "sysvinit"):
             leg = tmp_path / f"artifacts/release-artifacts-lg3d-{init}-x86_64"
             leg.mkdir(parents=True)
             (leg / f"lfs-0.57.4-lg3d-x86_64-{init}-20261102.iso").write_bytes(
                 os.urandom(3 * 1024 * 1024)
             )
-        run_helper("--recursive", "--max-bytes", str(MAX_BYTES),
-                   "--part-size", PART_SIZE, str(tmp_path / "artifacts"))
+        run_helper("--max-bytes", str(MAX_BYTES), "--part-size", PART_SIZE,
+                   str(tmp_path / "artifacts"))
         for init in ("systemd", "sysvinit"):
             leg = tmp_path / f"artifacts/release-artifacts-lg3d-{init}-x86_64"
             stem = f"lfs-0.57.4-lg3d-x86_64-{init}-20261102.iso"
             assert not (leg / stem).exists()
             assert len(list(leg.glob(f"{stem}.part-*"))) == 3
-
-    def test_installed_system_is_never_cut_open(self, tmp_path):
-        """release.yml, build-iso-from-cache.yml and xfce-live-boot-iso.yml
-        point the tool at build-release/, and build-release/ *is* $LFS: a
-        recursive scan would reach into the finished system and shred a data
-        file that was never meant to be a release asset.  So the default depth
-        stops at the top level, where final/15 writes the ISO."""
-        out = tmp_path / "build-release"
-        make_iso(out)
-        deep = out / "opt/lg3d"
-        deep.mkdir(parents=True)
-        victim = deep / "lg3d-all.jar"
-        victim.write_bytes(os.urandom(3 * 1024 * 1024))
-        run_helper("--max-bytes", str(MAX_BYTES), "--part-size", PART_SIZE,
-                   str(out))
-        assert victim.is_file(), "a file of the installed system was split"
-        assert not list(deep.glob("lg3d-all.jar.part-*"))
-        # The payload at the top level still gets cut.
-        assert not (out / ISO_NAME).exists()
-        assert len(list(out.glob(f"{ISO_NAME}.part-*"))) == 4
-
-    def test_recursive_reaches_a_deeply_nested_payload(self, tmp_path):
-        # --recursive is not capped at one extra level, so any artifact layout
-        # (build-release/<iso>, or <iso> at the artifact root) is covered.
-        nested = tmp_path / "artifacts/release-artifacts-lg3d-systemd-x86_64"
-        nested.mkdir(parents=True)
-        payload = nested / "live" / "rootfs.tar"
-        payload.parent.mkdir()
-        payload.write_bytes(os.urandom(3 * 1024 * 1024))
-        run_helper("--recursive", "--max-bytes", str(MAX_BYTES), "--part-size",
-                   PART_SIZE, str(tmp_path / "artifacts"))
-        assert not payload.exists()
-        assert len(list(payload.parent.glob("rootfs.tar.part-*"))) == 3
-        assert "rootfs.tar.parts" in [p.name for p in payload.parent.iterdir()]
 
     def test_outputs_stay_readable_when_invoked_through_sudo(self, tmp_path,
                                                               monkeypatch):

@@ -38,19 +38,11 @@
 # Usage:
 #   split-release-assets.sh [options] <dir>...
 #
-# Only the top level of <dir> is scanned by default: release.yml and
-# build-iso-from-cache.yml point this tool at build-release/, and $LFS *is*
-# build-release/, so a recursive scan would reach into the installed system and
-# cut a data file that is not a release payload at all.  Pass --recursive for
-# the create-release download tree, where one subdirectory per matrix leg is
-# exactly the layout being published.
-#
 # Options:
 #   --max-bytes N     split files larger than N (default 2147483647, one byte
 #                     under the API cap; the default needs no tuning)
 #   --part-size SIZE  piece size passed to split(1) (default 1900m, the size
 #                     the cache releases already use)
-#   --recursive       also scan <dir>/*/, for the create-release tree
 #   --tag TAG         release tag to purge superseded parts from (optional;
 #                     needs gh + GITHUB_TOKEN, skipped with a warning when
 #                     either is missing, because purging must never block a
@@ -76,7 +68,6 @@ PART_SIZE="1900m"
 RELEASE_TAG=""
 REPO="${GITHUB_REPOSITORY:-}"
 DRY_RUN=0
-SCAN=(-maxdepth 1)
 DIRS=()
 
 log_info() { echo "[INFO] $*"; }
@@ -89,7 +80,6 @@ usage: split-release-assets.sh [options] <dir>...
 
   --max-bytes N     split files larger than N (default 2147483647)
   --part-size SIZE  piece size for split(1) (default 1900m)
-  --recursive       also scan <dir>/*/ (default: <dir> only)
   --tag TAG         purge superseded parts from this release tag
   --repo REPO       owner/repo for --tag (default $GITHUB_REPOSITORY)
   --dry-run         report only
@@ -117,10 +107,10 @@ to_bytes() {
     echo $((size * mult))
 }
 
-# A caller whose payload tree belongs to the build user either hands that
-# directory over first (what the workflow steps do) or runs this through sudo;
-# either way the step that uploads the result runs unprivileged.  Hand
-# everything back, or the upload dies on a file it cannot read.
+# A split run inside build-release/ is usually privileged (the directory is
+# root-owned, so release.yml and friends invoke this through sudo), but the
+# step that uploads the result runs as the runner.  Hand everything back, or
+# the upload dies on a file it cannot read.
 hand_back_to_caller() {
     local path
     [ -n "${SUDO_UID:-}" ] && [ -n "${SUDO_GID:-}" ] || return 0
@@ -249,11 +239,10 @@ purge_superseded() {
     fi
     # Compare by basename: create-release downloads one artifact directory per
     # matrix leg, so the parts of different legs never share a directory.
-    stems=$(find "$dir" "${SCAN[@]}" -type f -name '*.part-*' -printf '%f\n' 2>/dev/null |
+    stems=$(find "$dir" -type f -name '*.part-*' -printf '%f\n' 2>/dev/null |
         sed -E 's/\.part-[0-9]+$//' | sort -u)
     [ -n "$stems" ] || return 0
-    local_parts=$(find "$dir" "${SCAN[@]}" -type f -name '*.part-*' \
-        -printf '%f\n' 2>/dev/null | sort -u)
+    local_parts=$(find "$dir" -type f -name '*.part-*' -printf '%f\n' 2>/dev/null | sort -u)
     if ! gh release view "$RELEASE_TAG" --repo "$REPO" --json assets \
         >"$ASSET_JSON" 2>/dev/null; then
         log_warn "release $RELEASE_TAG is not published yet: nothing to purge"
@@ -291,10 +280,6 @@ while [ $# -gt 0 ]; do
         ;;
     --dry-run)
         DRY_RUN=1
-        shift
-        ;;
-    --recursive)
-        SCAN=()
         shift
         ;;
     -h | --help)
@@ -339,15 +324,15 @@ for dir in "${DIRS[@]}"; do
         log_fail "not a directory: $dir"
         exit 2
     fi
-    # Depth follows SCAN: create-release downloads one subdirectory per
-    # matrix leg (artifacts/release-artifacts-<profile>-<init>-<arch>/) and
-    # needs --recursive, while the jobs that point at build-release/ must stay
-    # at the top level or they would cut files of the installed system.
+    # Recursive: create-release downloads one subdirectory per matrix leg
+    # (artifacts/release-artifacts-<profile>-<init>-<arch>/) and softprops
+    # uploads them with `files: artifacts/**/*`, so a payload two levels
+    # down is exactly the case this tool exists for.
     while IFS= read -r file; do
         found=$((found + 1))
         split_file "$file"
     done < <(
-        find "$dir" "${SCAN[@]}" -type f ! -name '*.part-*' ! -name '*.parts' \
+        find "$dir" -type f ! -name '*.part-*' ! -name '*.parts' \
             ! -name '*.parts.sha256' ! -name '*.pointer' -size +"$MAX_BYTES"c | sort
     )
     purge_superseded "$dir"
