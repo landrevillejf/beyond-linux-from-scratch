@@ -128,6 +128,14 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # This job only publishes what the host jobs built, so the single
+          # thing it needs from the tree is the asset splitter in tools/.
+          sparse-checkout: tools
+          sparse-checkout-cone-mode: false
+
       - name: Download built host artifacts
         uses: actions/download-artifact@v4
         with:
@@ -135,12 +143,28 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Split release assets over the 2 GiB cap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's Release API refuses any asset whose size is not "less
+          # than 2147483648" bytes, and a live ISO of any host crosses it once
+          # the profile ships a desktop rootfs (lg3d Nightly #69 at 2 856 MB).
+          # Split into 1900 MiB parts and publish the manifest beside them.
+          bash tools/split-release-assets.sh \
+            --tag "${{ inputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            dist
+
       - name: Publish all host artifacts to one release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.release_tag }}
           files: |
             dist/*.iso
+            dist/*.iso.part-*
+            dist/*.iso.parts
+            dist/*.iso.parts.sha256
             dist/*.txt
             dist/*.json
           generate_release_notes: true

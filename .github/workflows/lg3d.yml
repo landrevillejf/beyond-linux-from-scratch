@@ -705,6 +705,14 @@ jobs:
       # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.
       id-token: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # This job only publishes what the legs uploaded, so the single
+          # thing it needs from the tree is the asset splitter in tools/.
+          sparse-checkout: tools
+          sparse-checkout-cone-mode: false
+
       - name: Compute nightly date
         id: date
         run: echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
@@ -731,6 +739,29 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
             echo "No profile produced release artifacts; skipping the release."
           fi
+
+      - name: Split release assets over the 2 GiB cap
+        if: steps.artifacts.outputs.found == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's Release API refuses any asset whose size is not "less
+          # than 2147483648" bytes, and the lg3d live ISO is 2 856 MB: the
+          # whole rootfs (JDK, lg3d, the Qt6/KF6/Calamares installer stack,
+          # mesa and the kernel) is packed into live.squashfs by final/15,
+          # and an xz-compressed squashfs has nothing left to give a second
+          # compressor.  Nightly #69 therefore uploaded every small asset and
+          # lost both ISOs, publishing a release with no bootable image.
+          # Split into 1900 MiB parts - the convention the cache releases
+          # already use - and emit a manifest that spells out the reassembly
+          # command.  The files: glob below picks the parts up automatically.
+          # --tag additionally drops the parts an earlier generation of this
+          # same dated tag left behind: softprops overwrites equal names but
+          # never removes one, so a stale tail would corrupt `cat *.part-*`.
+          bash tools/split-release-assets.sh \
+            --tag "lg3d-nightly-${{ steps.date.outputs.date }}" \
+            --repo "${{ github.repository }}" \
+            artifacts
 
       - name: Create Release
         if: steps.artifacts.outputs.found == 'true'

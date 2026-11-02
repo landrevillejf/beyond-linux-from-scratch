@@ -134,6 +134,23 @@ jobs:
           fi
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
+      - name: Split release assets over the 2 GiB cap
+        if: steps.release_info.outputs.tag != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's Release API refuses any asset whose size is not "less
+          # than 2147483648" bytes, and this is a LIVE xfce image: final/15
+          # packs the whole rootfs into live.squashfs, which is exactly how
+          # lg3d Nightly #69 lost its ISO at 2 856 MB.  Split into 1900 MiB
+          # parts and publish the manifest beside them; the ISO artifact above
+          # stays a single file, because actions/upload-artifact has no such
+          # cap and the QEMU gate needs a bootable image.
+          bash tools/split-release-assets.sh \
+            --tag "${{ steps.release_info.outputs.tag }}" \
+            --repo "${{ github.repository }}" \
+            /tmp/lfs-build
+
       - name: Create release with ISO and kernel
         if: steps.release_info.outputs.tag != ''
         uses: softprops/action-gh-release@v2
@@ -146,8 +163,14 @@ jobs:
             - Init: sysvinit
             - ISO: ${{ steps.iso_name.outputs.iso_name }}
             - Includes: live ISO + compiled kernel + SHA256SUMS + LPM repository manifest
+            - An ISO over GitHub's 2 GiB asset cap ships as `<iso>.part-NN`
+              pieces plus a `<iso>.parts` manifest; concatenate the listed
+              parts, check the sha256, then write or mount the result.
           files: |
             /tmp/lfs-build/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/*.iso.part-*
+            /tmp/lfs-build/*.iso.parts
+            /tmp/lfs-build/*.iso.parts.sha256
             /tmp/lfs-build/image/boot/vmlinuz*
             /tmp/lfs-build/SHA256SUMS
             /tmp/lfs-build/lpm-repo/packages.list*
