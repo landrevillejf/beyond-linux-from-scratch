@@ -243,7 +243,7 @@ The build process is divided into ordered stages. Profiles include or skip stage
 25. **server** – install server packages (profiles declaring `ssh`/`server-tools`).
 26. **printing-scanning** – install CUPS/SANE (profiles declaring `printing` or `all`).
 27. **audio-studio** – install pro audio tooling (audio profiles only).
-28. **knowledge** – install the opt-in local AI assistant (Ollama).
+28. **knowledge** – wire the opt-in local AI assistant (the Ollama engine installs on the target, never in the image).
 29. **package-manager** – install the LPM package manager.
 30. **base-packages** – install base packages via LPM.
 31. **security** – apply security hardening.

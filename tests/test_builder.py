@@ -870,8 +870,11 @@ class TestLFSBuilder:
 
         Every other profile keeps the opt-in blfs/28 stage out of its
         stage list until it explicitly asks for it (config or
-        --with-knowledge), so no lean profile silently downloads the
-        ~1.8 GB Ollama engine.
+        --with-knowledge).  The stage no longer downloads an engine at
+        all (it writes an on-demand installer for the target), but it
+        still owns /usr/bin/knowledge, the service files and the
+        provisioning one-shot, so an unwanted enable would still add
+        integration a lean image has no use for.
         """
         from builder import ProfileManager
         enabled = [

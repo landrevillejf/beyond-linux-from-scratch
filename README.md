@@ -174,7 +174,7 @@ cross-compiled architectures). The master ordered list is:
 25. `server` (profiles declaring `ssh` or `server-tools`)
 26. `printing-scanning` (profiles declaring `printing`, or `all`)
 27. `audio-studio` (audio profiles only)
-28. `knowledge` (when enabled; the `lg3d` profile enables it by default)
+28. `knowledge` (when enabled; the `lg3d` profile enables it by default; wires the assistant - the Ollama engine installs on the target, never in the image)
 29. `package-manager`
 30. `base-packages`
 31. `selinux` (SELinux userspace + targeted policy; when `security_hardening` and the resolved `security.selinux.mode` is not `disabled`)
@@ -326,7 +326,7 @@ python3 builder.py --generate-sources-list
 | `--milestone` | Milestone tag for ISO naming (e.g. `alpha1`, `beta1`, `rc1`) |
 | `--nightly` | Nightly build mode: append today's date to the ISO filename |
 | `--skip-man-pages` | Export `SKIP_MAN_PAGES=true` so stage scripts skip man page generation even when `rst2man` is present |
-| `--with-knowledge` | Enable the local "knowledge" AI assistant (Ollama, opt-in; see `docs/KNOWLEDGE_DESIGN.md`) |
+| `--with-knowledge` | Wire the local "knowledge" AI assistant (Ollama backend, opt-in; the image ships the integration and `/usr/lib/knowledge/install-engine.sh` installs the pinned engine on the target - see `docs/KNOWLEDGE_DESIGN.md`) |
 | `--installer` | Graphical installer override (`none`, `calamares`; default: from the profile's `graphical_installer` flag, currently `none` everywhere). `calamares` schedules the `calamares-build` stage, which compiles Qt6, KF6, kpmcore and Calamares before `blfs/22-calamares-installer.sh` configures them |
 
 ## Professional Branding System
@@ -382,7 +382,7 @@ Profiles are defined in `ProfileManager` and drive stage inclusion and defaults.
 | `arm64` | ARM64 server profile | none | No | 2 | 3 |
 | `pinebook` | Pinebook profile | xfce | No | 4 | 4 |
 | `brax3` | Brax3 smartphone profile | phosh | No | 4 | 5 |
-| `lg3d` | Project Looking Glass: bare X11 with Java, lg3d as WM/compositor; a LightDM greeter lists all five lg3d modes at login (iso/3D/2D/swing/dev, iso default); ships a live ISO with a Calamares installer launched from the LG3D start menu, hardened with privacy tools, and ships the local `knowledge` AI assistant (Ollama) | none | Yes | 6 | 5 |
+| `lg3d` | Project Looking Glass: bare X11 with Java, lg3d as WM/compositor; a LightDM greeter lists all five lg3d modes at login (iso/3D/2D/swing/dev, iso default); ships a live ISO with a Calamares installer launched from the LG3D start menu, hardened with privacy tools, and wires the local `knowledge` AI assistant (the Ollama engine is installed on the target, not shipped in the image) | none | Yes | 6 | 5 |
 | `custom` | User-defined profile template | none | No | 5 | 5 |
 
 ---
