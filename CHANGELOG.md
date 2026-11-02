@@ -575,6 +575,20 @@
     otherwise have turned a successful release red.  Actions artifacts keep the
     single-file ISO: that channel has no such cap and the QEMU gate needs a
     bootable image.
+  - Scan depth is part of the contract: the helper only reads the top level of
+    the directory it is given, because `release.yml`,
+    `build-iso-from-cache.yml` and `xfce-live-boot-iso.yml` point it at
+    `build-release/`, which *is* `$LFS` -- a recursive scan there would cut data
+    files of the installed system rather than a release payload.  The three
+    matrix publishers pass `--recursive`, since `download-artifact` stages one
+    subdirectory per matrix leg and the ISOs never sit at `artifacts/` itself.
+    Those same build-tree jobs first hand the payload directory to the runner
+    (`sudo chown "$(id -u):$(id -g)"`), because the build ran as `lfs` and an
+    unprivileged split could not create parts there; running the helper as root
+    instead would have lost `GITHUB_TOKEN` to sudo's `env_reset` and silently
+    disabled the stale-part purge.  `release.yml` gained that hand-over as its
+    own step, since its checksum, pointer, SBOM and cosign steps all write into
+    `build-release/` as the runner too.
   - `tests/test_split_release_assets.py` runs the helper for real (byte-exact
     reassembly through the manifest's own `assemble` line, per-part checksums,
     pointer repair and mode, cap boundary at exactly one byte, idempotent
@@ -582,7 +596,8 @@
     `tests/test_release_workflow.py::TestReleaseAssetSizeCap` proves the
     structural coverage -- splitter present and ordered before every
     `softprops/action-gh-release` upload, parts listed in every explicit
-    `files:` block, token on every purge-capable step.
+    `files:` block, token on every purge-capable step, and the right scan depth
+    and privilege level at every call site.
 
 - **QEMU boot smoke test panicked with `invalid opcode` in busybox**
   (`tools/qemu-boot-smoke.sh`)
