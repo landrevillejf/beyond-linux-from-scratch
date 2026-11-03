@@ -333,11 +333,11 @@ class TestBasePrefixCache:
     def test_both_workflows_agree_on_the_boundary_stage(self):
         publisher = self._read("build-base-cache.yml")
         nightly = self._read("nightly.yml")
-        assert "BASE_STAGE: lfs-system" in publisher
+        assert "BASE_STAGE: display-manager" in publisher
         assert '--stop-after "$BASE_STAGE"' in publisher
         published_resume = publisher.split("RESUME_STAGE: ")[1].splitlines()[0]
         consumed_resume = nightly.split("BASE_CACHE_RESUME_STAGE: ")[1].splitlines()[0]
-        assert published_resume.strip() == consumed_resume.strip() == "init-system"
+        assert published_resume.strip() == consumed_resume.strip() == "build-kernel"
 
     def test_canary_excludes_exactly_minimal_sysvinit_x86_64(self):
         """One job must keep proving the from-scratch path every night,
