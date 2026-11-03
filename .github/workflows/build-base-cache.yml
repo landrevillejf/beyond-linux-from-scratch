@@ -1,16 +1,17 @@
 name: Build Base Prefix Cache
 
-# Every nightly job rebuilds the same 2h15m prefix (host-check through
-# lfs-system) before it can do anything profile-specific.  This workflow
+# Every nightly job rebuilds the same 4h30m prefix (host-check through
+# display-manager) before it can do anything profile-specific.  This workflow
 # builds that prefix once per (init, arch) pair and publishes it to the
 # base-cache-latest release; nightly.yml restores it and resumes from the
 # next stage.
 #
-# The prefix is genuinely shared: host/04-build-toolchain.sh has no profile
-# or LFS_PROFILE_* references, and lfs/05a and lfs/05b branch only on
-# INIT_SYSTEM and KERNEL_TYPE.  aarch64 is deliberately absent - its
-# lfs-system alone ran 4h04m and failed, so it can neither produce nor fit
-# inside a cache.
+# The prefix is genuinely shared: host/04-build-toolchain.sh, lfs/05a, lfs/05b,
+# and the BLFS display stack (blfs/08a-08d) have no profile-specific logic
+# beyond the desktop/xorg_only flags, and the xfce profile below builds the
+# full X11+Wayland stack that lg3d (xorg_only) and other desktop profiles
+# reuse.  aarch64 is deliberately absent - its lfs-system alone ran 4h04m and
+# failed, so it can neither produce nor fit inside a cache.
 
 on:
   workflow_dispatch:
@@ -31,11 +32,14 @@ permissions:
   contents: write
 
 env:
-  # The boundary is a variable, not a hardcoded stage name: moving it to
-  # display-manager once a nightly proves xorg and wayland complete means
-  # updating these two lines plus the matching nightly resume/image stages.
-  BASE_STAGE: lfs-system
-  RESUME_STAGE: init-system
+  # The boundary is a variable, not a hardcoded stage name: moving it further
+  # (e.g. to build-kernel) means updating these two lines plus the matching
+  # nightly resume/image stages.  display-manager was chosen because the
+  # X11/Wayland/display stack is the longest profile-independent block
+  # (~2h30m for xorg+wayland+blfs-libs) and is shared by every desktop
+  # profile and lg3d.
+  BASE_STAGE: display-manager
+  RESUME_STAGE: build-kernel
 
 jobs:
   check_changes:
@@ -168,10 +172,17 @@ jobs:
           # git ls-tree -r emits blob SHAs, so any edit under these paths
           # changes the key on its own - no second hashing pass, and no way
           # for a nightly to restore a base built from different inputs.
-          # Paths outside the list (blfs/, final/, profiles/) intentionally
-          # keep the cache valid.
+          # The key now includes the BLFS display stack scripts (blfs/08a-08d)
+          # since those stages are part of the cached prefix.  Paths outside
+          # the list (blfs/09+, final/, profiles/) intentionally keep the
+          # cache valid for profile-specific work downstream.
           BASE_KEY=$(git ls-tree -r HEAD -- host \
             lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            lfs/06a-init-system.sh lfs/06b-service-management.sh \
+            lfs/07-configure-lfs.sh \
+            blfs/08-build-blfs-base.sh blfs/08a-build-blfs-libs.sh \
+            blfs/08b-build-xorg.sh blfs/08c-build-wayland.sh \
+            blfs/08d-build-display-manager.sh \
             config packages/sources.list packages/custom-sources.list \
             builder.py VERSION | sha256sum | cut -c1-12)
           test -n "$BASE_KEY"
@@ -182,10 +193,15 @@ jobs:
       - name: Build base prefix (${{ matrix.init }} / ${{ matrix.arch }})
         run: |
           cd /tmp/lfs-build
-          # minimal is the cheapest profile that still runs the whole
-          # prefix; the prefix content does not depend on it.
+          # xfce builds the full X11+Wayland+display-manager stack that lg3d
+          # (xorg_only) and other desktop profiles reuse.  The prefix content
+          # up to display-manager is profile-independent: blfs/08a-08d have
+          # no profile-specific logic beyond the desktop/xorg_only flags, so
+          # the xfce-built cache is valid for every profile that needs the
+          # display stack.  minimal/desktop=none skips those stages entirely,
+          # which is why it cannot be used here.
           sudo -u lfs python3 builder.py \
-            --profile minimal \
+            --profile xfce \
             --init ${{ matrix.init }} \
             --arch ${{ matrix.arch }} \
             --output ./build-release \

@@ -74,10 +74,12 @@ jobs:
       # keeps no uncached from-scratch canary (nightly.yml holds that role).
       USE_BASE_CACHE: "true"
       # Where the published base prefix ends, expressed as the stage this
-      # job picks up at.  Moving the boundary means editing these two
+      # job picks up at.  The base cache now covers through display-manager
+      # (X11/Wayland/display stack, ~4h30m of build time), so lg3d resumes
+      # from build-kernel.  Moving the boundary means editing these two
       # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
-      BASE_CACHE_RESUME_STAGE: init-system
-      BASE_CACHE_IMAGE_STAGE: disk-image
+      BASE_CACHE_RESUME_STAGE: build-kernel
+      BASE_CACHE_IMAGE_STAGE: display-manager
     steps:
       - uses: actions/checkout@v4
         with:
@@ -376,9 +378,16 @@ print('✅ UEFI support enabled in build.conf')
           ARCH="${{ matrix.arch }}"
           # Same key the publisher computes: git ls-tree -r emits blob
           # SHAs, so a nightly can never restore a base built from
-          # different inputs.
+          # different inputs.  The key includes the BLFS display stack
+          # scripts (blfs/08a-08d) since those stages are now part of
+          # the cached prefix.
           BASE_KEY=$(git ls-tree -r HEAD -- host \
             lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            lfs/06a-init-system.sh lfs/06b-service-management.sh \
+            lfs/07-configure-lfs.sh \
+            blfs/08-build-blfs-base.sh blfs/08a-build-blfs-libs.sh \
+            blfs/08b-build-xorg.sh blfs/08c-build-wayland.sh \
+            blfs/08d-build-display-manager.sh \
             config packages/sources.list packages/custom-sources.list \
             builder.py VERSION | sha256sum | cut -c1-12)
           PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
