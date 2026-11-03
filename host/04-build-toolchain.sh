@@ -121,16 +121,16 @@ NUM_JOBS=${NUM_JOBS:-$(nproc 2>/dev/null || echo 4)}
 # ($LFS_TGT-*) still resolves from $LFS/tools/bin, the only place it
 # exists.
 case "$LFS_TGT" in
-    "$(uname -m)"*)
-        PATH="$LFS/tools/bin:/usr/bin:/bin"
-        ;;
-    *)
-        PATH="/usr/bin:/bin:$LFS/tools/bin"
-        # If the host executes target binaries through qemu-user
-        # (binfmt_misc), point it at the target sysroot so the ELF
-        # interpreter /lib/ld-*.so.1 resolves to $LFS/lib/ld-*.so.1.
-        export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-$LFS}"
-        ;;
+"$(uname -m)"*)
+    PATH="$LFS/tools/bin:/usr/bin:/bin"
+    ;;
+*)
+    PATH="/usr/bin:/bin:$LFS/tools/bin"
+    # If the host executes target binaries through qemu-user
+    # (binfmt_misc), point it at the target sysroot so the ELF
+    # interpreter /lib/ld-*.so.1 resolves to $LFS/lib/ld-*.so.1.
+    export QEMU_LD_PREFIX="${QEMU_LD_PREFIX:-$LFS}"
+    ;;
 esac
 export LFS LFS_TGT LC_ALL=POSIX PATH
 
@@ -208,7 +208,7 @@ build_toolchain() {
     # lib64 is part of the x86_64 target layout, so key on the
     # target triple rather than the build host architecture.
     case "$LFS_TGT" in
-        x86_64*) mkdir -pv "$LFS/lib64" ;;
+    x86_64*) mkdir -pv "$LFS/lib64" ;;
     esac
 
     # ==============================================================
@@ -264,13 +264,13 @@ build_toolchain() {
     # Without this, GCC installs target libraries into /usr/lib64
     # (MULTILIB_OSDIRNAMES default), splitting the sysroot layout.
     case "$LFS_TGT" in
-        x86_64*)
-            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
-            ;;
-        aarch64*)
-            sed -e '/mabi.lp64=/s/lib64/lib/' \
-                -i.orig gcc/config/aarch64/t-aarch64-linux
-            ;;
+    x86_64*)
+        sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+        ;;
+    aarch64*)
+        sed -e '/mabi.lp64=/s/lib64/lib/' \
+            -i.orig gcc/config/aarch64/t-aarch64-linux
+        ;;
     esac
     mkdir -v build
     cd build
@@ -311,10 +311,10 @@ build_toolchain() {
 
     ARCH=$(echo "$LFS_TGT" | cut -d- -f1)
     case "$ARCH" in
-        aarch64) ARCH=arm64 ;;
-        x86_64)  ARCH=x86 ;;
-        armv7l|armhf) ARCH=arm ;;
-        riscv64) ARCH=riscv ;;
+    aarch64) ARCH=arm64 ;;
+    x86_64) ARCH=x86 ;;
+    armv7l | armhf) ARCH=arm ;;
+    riscv64) ARCH=riscv ;;
     esac
 
     LINUX_TAR=$(find . -maxdepth 1 -type f -printf '%f\n' | grep -E "^${KERNEL_TYPE}-[0-9].*\\.tar\\.xz$" | head -n1)
@@ -351,10 +351,10 @@ build_toolchain() {
         fi
         local tar_cmd="tar -tf"
         case "$tarball" in
-            *.tar.gz|*.tgz) tar_cmd="tar -tzf" ;;
-            *.tar.xz|*.txz) tar_cmd="tar -tJf" ;;
-            *.tar.bz2|*.tbz) tar_cmd="tar -tjf" ;;
-            *) tar_cmd="tar -tf" ;;
+        *.tar.gz | *.tgz) tar_cmd="tar -tzf" ;;
+        *.tar.xz | *.txz) tar_cmd="tar -tJf" ;;
+        *.tar.bz2 | *.tbz) tar_cmd="tar -tjf" ;;
+        *) tar_cmd="tar -tf" ;;
         esac
         if ! $tar_cmd "$tarball" >/dev/null 2>&1; then
             log_error "Tarball integrity check failed: $tarball"
@@ -417,11 +417,11 @@ build_toolchain() {
     # These belong to the target system, so key on the target
     # triple instead of the build host architecture.
     case "$LFS_TGT" in
-        i?86*) ln -sfv ld-linux.so.2 "$LFS/lib/ld-lsb.so.3" ;;
-        x86_64*)
-            ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64"
-            ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64/ld-lsb-x86-64.so.3"
-            ;;
+    i?86*) ln -sfv ld-linux.so.2 "$LFS/lib/ld-lsb.so.3" ;;
+    x86_64*)
+        ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64"
+        ln -sfv ../lib/ld-linux-x86-64.so.2 "$LFS/lib64/ld-lsb-x86-64.so.3"
+        ;;
     esac
     GLIBC_TAR=$(find . -maxdepth 1 -name "glibc-*.tar.xz" -print -quit)
     tar -xf "$GLIBC_TAR"
@@ -436,7 +436,7 @@ build_toolchain() {
     fi
     mkdir -v build
     cd build
-    echo "rootsbindir=/usr/sbin" > configparms
+    echo "rootsbindir=/usr/sbin" >configparms
     ../configure --prefix=/usr \
         --host="$LFS_TGT" \
         --build="$(../scripts/config.guess)" \
@@ -460,13 +460,13 @@ build_toolchain() {
     # Same lib64 -> lib normalization as GCC pass 1 above, keyed on the
     # target: otherwise libstdc++ lands in /usr/lib64 on aarch64.
     case "$LFS_TGT" in
-        x86_64*)
-            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
-            ;;
-        aarch64*)
-            sed -e '/mabi.lp64=/s/lib64/lib/' \
-                -i.orig gcc/config/aarch64/t-aarch64-linux
-            ;;
+    x86_64*)
+        sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+        ;;
+    aarch64*)
+        sed -e '/mabi.lp64=/s/lib64/lib/' \
+            -i.orig gcc/config/aarch64/t-aarch64-linux
+        ;;
     esac
     mkdir -v build-libstdc++
     cd build-libstdc++
@@ -557,13 +557,13 @@ build_toolchain() {
     # installs libgcc_s.so.1 relative to this multilib OS dir name, and
     # it must end up in $LFS/usr/lib for the temporary tools below.
     case "$LFS_TGT" in
-        x86_64*)
-            sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
-            ;;
-        aarch64*)
-            sed -e '/mabi.lp64=/s/lib64/lib/' \
-                -i.orig gcc/config/aarch64/t-aarch64-linux
-            ;;
+    x86_64*)
+        sed -e '/m64=/s/lib64/lib/' -i.orig gcc/config/i386/t-linux64
+        ;;
+    aarch64*)
+        sed -e '/mabi.lp64=/s/lib64/lib/' \
+            -i.orig gcc/config/aarch64/t-aarch64-linux
+        ;;
     esac
     sed '/thread_header =/s/@.*@/gthr-posix.h/' \
         -i libgcc/Makefile.in libstdc++-v3/include/Makefile.in
@@ -589,7 +589,8 @@ build_toolchain() {
     make -j"$NUM_JOBS"
     make DESTDIR="$LFS" install
     # Finishing touch from LFS 12.4 section 6.18: generic cc symlink.
-    ln -sv gcc "$LFS/usr/bin/cc"
+    # Guard against cached toolchain where the symlink already exists.
+    [ -e "$LFS/usr/bin/cc" ] || ln -sv gcc "$LFS/usr/bin/cc"
     # Pass 2 installs libgcc_s.so.1 into the sysroot ($LFS/usr/lib).
     # The temporary tools below still link with the pass 1 compiler,
     # whose static-only libgcc keeps unwind symbols hidden since
@@ -690,7 +691,8 @@ build_toolchain() {
                 LDFLAGS="-lgcc_s $tools_rpath"
             make -j"$NUM_JOBS"
             make TIC_PATH="$(pwd)/build/progs/tic" install
-            ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"
+            # Guard against cached build where symlink already exists.
+            [ -e "$LFS/tools/lib/libncurses.so" ] || ln -sv libncursesw.so "$LFS/tools/lib/libncurses.so"
             sed -e 's/^#if.*XOPEN.*$/#if 1/' \
                 -i "$LFS/tools/include/ncursesw/curses.h"
             ;;
@@ -770,7 +772,8 @@ build_toolchain() {
             make install
             if [ "$pkg" = "bash" ]; then
                 # LFS 12.4 section 6.4: /bin/sh compatibility symlink.
-                ln -sv bash "$LFS/tools/bin/sh"
+                # Guard against cached build where symlink already exists.
+                [ -e "$LFS/tools/bin/sh" ] || ln -sv bash "$LFS/tools/bin/sh"
             elif [ "$pkg" = "xz" ]; then
                 # Libtool archives are harmful for cross compilation.
                 rm -fv "$LFS/tools/lib/liblzma.la"
