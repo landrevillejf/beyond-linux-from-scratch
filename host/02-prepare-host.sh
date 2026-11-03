@@ -76,34 +76,34 @@ install_packages() {
     log_info "Installing packages: ${packages[*]}"
 
     case "$distro" in
-        debian|ubuntu)
-            $USE_SUDO apt-get update -qq
-            $USE_SUDO apt-get install -y -qq "${packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky|almalinux)
-            if command -v dnf &>/dev/null; then
-                $USE_SUDO dnf install -y "${packages[@]}"
-            else
-                $USE_SUDO yum install -y "${packages[@]}"
-            fi
-            ;;
-        opensuse*|sles)
-            $USE_SUDO zypper install -y "${packages[@]}"
-            ;;
-        arch|manjaro)
-            $USE_SUDO pacman -Syu --noconfirm "${packages[@]}"
-            ;;
-        alpine)
-            $USE_SUDO apk add "${packages[@]}"
-            ;;
-        gentoo)
-            log_error "Gentoo detected – please install manually using emerge: ${packages[*]}"
-            exit 1
-            ;;
-        *)
-            log_error "Unknown distribution – please install manually: ${packages[*]}"
-            exit 1
-            ;;
+    debian | ubuntu)
+        $USE_SUDO apt-get update -qq
+        $USE_SUDO apt-get install -y -qq "${packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky | almalinux)
+        if command -v dnf &>/dev/null; then
+            $USE_SUDO dnf install -y "${packages[@]}"
+        else
+            $USE_SUDO yum install -y "${packages[@]}"
+        fi
+        ;;
+    opensuse* | sles)
+        $USE_SUDO zypper install -y "${packages[@]}"
+        ;;
+    arch | manjaro)
+        $USE_SUDO pacman -Syu --noconfirm "${packages[@]}"
+        ;;
+    alpine)
+        $USE_SUDO apk add "${packages[@]}"
+        ;;
+    gentoo)
+        log_error "Gentoo detected – please install manually using emerge: ${packages[*]}"
+        exit 1
+        ;;
+    *)
+        log_error "Unknown distribution – please install manually: ${packages[*]}"
+        exit 1
+        ;;
     esac
 }
 
@@ -227,7 +227,7 @@ setup_user_env() {
 
     # .bashrc
     if [ ! -f "$home_dir/.bashrc" ]; then
-        cat > "$home_dir/.bashrc" <<"EOF"
+        cat >"$home_dir/.bashrc" <<"EOF"
 set +h
 umask 022
 LFS=/mnt/lfs
@@ -246,7 +246,7 @@ EOF
 
     # .bash_profile
     if [ ! -f "$home_dir/.bash_profile" ]; then
-        cat > "$home_dir/.bash_profile" <<"EOF"
+        cat >"$home_dir/.bash_profile" <<"EOF"
 if [ -f "$HOME/.bashrc" ] ; then
     source "$HOME/.bashrc"
 fi
@@ -284,57 +284,57 @@ install_dependencies() {
     )
 
     case "$distro" in
-        debian|ubuntu)
-            install_packages "$distro" "${common_packages[@]}"
-            ;;
-        fedora|rhel|centos|rocky|almalinux)
-            local rh_packages=(
-                gcc gcc-c++ make bison flex gawk texinfo
-                wget curl git python3 python3-pip
-                xorriso syslinux mtools dosfstools
-                parted rsync sudo
-                bc cpio unzip xz
-                openssl-devel elfutils-libelf-devel kmod cpio
-            )
-            install_packages "$distro" "${rh_packages[@]}"
-            ;;
-        arch|manjaro)
-            local arch_packages=(
-                base-devel bison flex gawk texinfo
-                wget curl git python python-pip
-                xorriso libisoburn syslinux mtools
-                dosfstools parted rsync sudo
-                bc cpio unzip xz
-                openssl elfutils kmod cpio
-            )
-            install_packages "$distro" "${arch_packages[@]}"
-            ;;
-        opensuse*|sles)
-            local suse_packages=(
-                gcc gcc-c++ make bison flex gawk texinfo
-                wget curl git python3 python3-pip
-                xorriso syslinux mtools dosfstools
-                parted rsync sudo
-                bc cpio unzip xz
-                libopenssl-devel libelf-devel kmod cpio
-            )
-            install_packages "$distro" "${suse_packages[@]}"
-            ;;
-        alpine)
-            local alpine_packages=(
-                build-base bison flex gawk texinfo
-                wget curl git python3 py3-pip
-                xorriso syslinux mtools dosfstools
-                parted rsync sudo
-                bc cpio unzip xz
-                openssl-dev elfutils-dev kmod cpio
-            )
-            install_packages "$distro" "${alpine_packages[@]}"
-            ;;
-        *)
-            log_warning "Unknown distribution, attempting to install common packages anyway"
-            install_packages "$distro" "${common_packages[@]}" || true
-            ;;
+    debian | ubuntu)
+        install_packages "$distro" "${common_packages[@]}"
+        ;;
+    fedora | rhel | centos | rocky | almalinux)
+        local rh_packages=(
+            gcc gcc-c++ make bison flex gawk texinfo
+            wget curl git python3 python3-pip
+            xorriso syslinux mtools dosfstools
+            parted rsync sudo
+            bc cpio unzip xz
+            openssl-devel elfutils-libelf-devel kmod cpio
+        )
+        install_packages "$distro" "${rh_packages[@]}"
+        ;;
+    arch | manjaro)
+        local arch_packages=(
+            base-devel bison flex gawk texinfo
+            wget curl git python python-pip
+            xorriso libisoburn syslinux mtools
+            dosfstools parted rsync sudo
+            bc cpio unzip xz
+            openssl elfutils kmod cpio
+        )
+        install_packages "$distro" "${arch_packages[@]}"
+        ;;
+    opensuse* | sles)
+        local suse_packages=(
+            gcc gcc-c++ make bison flex gawk texinfo
+            wget curl git python3 python3-pip
+            xorriso syslinux mtools dosfstools
+            parted rsync sudo
+            bc cpio unzip xz
+            libopenssl-devel libelf-devel kmod cpio
+        )
+        install_packages "$distro" "${suse_packages[@]}"
+        ;;
+    alpine)
+        local alpine_packages=(
+            build-base bison flex gawk texinfo
+            wget curl git python3 py3-pip
+            xorriso syslinux mtools dosfstools
+            parted rsync sudo
+            bc cpio unzip xz
+            openssl-dev elfutils-dev kmod cpio
+        )
+        install_packages "$distro" "${alpine_packages[@]}"
+        ;;
+    *)
+        log_warning "Unknown distribution, attempting to install common packages anyway"
+        install_packages "$distro" "${common_packages[@]}" || true
+        ;;
     esac
 }
 
@@ -342,7 +342,7 @@ install_dependencies() {
 create_build_script() {
     log_info "Creating LFS build script at $LFS/build-lfs.sh"
 
-    cat > "$LFS/build-lfs.sh" <<"EOF"
+    cat >"$LFS/build-lfs.sh" <<"EOF"
 #!/usr/bin/env bash
 # Main LFS build script - to be run as lfs user
 # This is a template; actual build steps should follow LFS book chapters.
