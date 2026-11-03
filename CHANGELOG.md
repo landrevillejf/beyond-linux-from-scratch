@@ -481,6 +481,14 @@
 
 ### Fixed
 
+- **Truncated source archives no longer fail during package extraction**
+  (`builder.py`, `tests/conftest.py`, `tests/test_builder.py`,
+  `tests/test_source_downloader.py`)
+  - Source downloads and restored archives are now read through their
+    compressed-stream end marker; ZIP entries are checked for CRC errors.
+    Invalid files are discarded and downloaded again instead of being
+    mistaken for complete archives based only on their first bytes.
+
 - **The lg3d live ISO shipped the Ollama engine, and no release could carry
   it** (`blfs/28-knowledge.sh`, `final/16-validate-build.sh`,
   `tests/test_acceptance_shell.py`, `builder.py`, `tests/test_builder.py`,
@@ -531,6 +539,73 @@
     `TestKnowledgeEngineNeverShips` (8 cases, each verified against 11
     mutants) plus the two `TestKnowledgeStageGuardrails` assertions that
     encoded the old install-the-engine contract.
+
+- **`lg3d` nightly published a release with no bootable ISO**
+  (`tools/split-release-assets.sh`, `.github/workflows/lg3d.yml`,
+  `nightly.yml`, `weekly-full.yml`, `release.yml`,
+  `build-iso-from-cache.yml`, `xfce-live-boot-iso.yml`,
+  `release-multi-host.yml`, `xfce-systemd-x86_64-build-cache.yml`,
+  `xfce-sysvinit-x86_64-build-cache.yml`, `tests/test_split_release_assets.py`,
+  `tests/test_release_workflow.py`, `AGENTS.md`)
+  - lg3d Nightly #69 (`lg3d`, both init legs) built and signed its images but
+    `create-release` aborted on the upload:
+    `Validation Failed: {"resource":"ReleaseAsset","code":"custom","field":"size","message":"size must be less than 2147483648"}`.
+    GitHub's Release API refuses any single asset of 2 GiB or more, and the
+    live ISO is 2 856 MB, because final/15 packs the whole lg3d rootfs (JDK,
+    lg3d, the Qt6/KF6/Calamares installer stack, mesa, kernel -- plus, in #68
+    and #69, the Ollama engine that the entry above removes) into
+    `live.squashfs`.  That engine was the dominant term; this helper is the
+    safety net for whatever payload is still over the cap.  Every small asset
+    uploaded, both ISOs were refused, and
+    the nightly shipped a release whose only pointer led nowhere -- no
+    download URL for either image.
+  - The ISO cannot be recompressed into compliance: an xz-compressed squashfs
+    already sits at its entropy floor, so a second compressor buys a few
+    percent, not the 30% the cap demands.  A new `tools/split-release-assets.sh`
+    applies the convention the cache releases have always used
+    (`split -b 1900m -d -a 2`): each over-cap payload becomes `<name>.part-NN`
+    pieces plus a `<name>.parts` manifest (whole-file size/sha256, explicit
+    `assemble=cat ... > <name>` line, part count) and a `<name>.parts.sha256`
+    for per-part verification; the original is removed so the uploader never
+    sees an oversized asset again.  `*.pointer` assets that advertised the
+    split file are rewritten to resolve the manifest instead of 404ing, and
+    `--tag` deletes the parts an earlier generation of the same dated tag left
+    behind, since softprops overwrites equal names but never removes one.
+  - Wired into every workflow that attaches a build artifact to a release, not
+    only the one that reported the failure: the three matrix publishers split
+    inside `create-release` (their `files: artifacts/**/*` glob picks the parts
+    up automatically, so those jobs gained a sparse `tools/` checkout), while
+    the explicit-list publishers (`release.yml`, `build-iso-from-cache.yml`,
+    `xfce-live-boot-iso.yml`, `release-multi-host.yml`) also list
+    `*.iso.part-*`/`*.iso.parts`, and the two `xfce-*-x86_64-build-cache.yml`
+    jobs cover their single opaque rootfs tarball.  `build-iso-from-cache.yml`'s
+    `if: always()` "Verify ISO presence" gate now accepts parts, which would
+    otherwise have turned a successful release red.  Actions artifacts keep the
+    single-file ISO: that channel has no such cap and the QEMU gate needs a
+    bootable image.
+  - Scan depth is part of the contract: the helper only reads the top level of
+    the directory it is given, because `release.yml`,
+    `build-iso-from-cache.yml` and `xfce-live-boot-iso.yml` point it at
+    `build-release/`, which *is* `$LFS` -- a recursive scan there would cut data
+    files of the installed system rather than a release payload.  The three
+    matrix publishers pass `--recursive`, since `download-artifact` stages one
+    subdirectory per matrix leg and the ISOs never sit at `artifacts/` itself.
+    Those same build-tree jobs first hand the payload directory to the runner
+    (`sudo chown "$(id -u):$(id -g)"`), because the build ran as `lfs` and an
+    unprivileged split could not create parts there; running the helper as root
+    instead would have lost `GITHUB_TOKEN` to sudo's `env_reset` and silently
+    disabled the stale-part purge.  `release.yml` gained that hand-over as its
+    own step, since its checksum, pointer, SBOM and cosign steps all write into
+    `build-release/` as the runner too.
+  - `tests/test_split_release_assets.py` runs the helper for real (byte-exact
+    reassembly through the manifest's own `assemble` line, per-part checksums,
+    pointer repair and mode, cap boundary at exactly one byte, idempotent
+    re-run, multi-leg tree, >99-part suffix widening, usage errors);
+    `tests/test_release_workflow.py::TestReleaseAssetSizeCap` proves the
+    structural coverage -- splitter present and ordered before every
+    `softprops/action-gh-release` upload, parts listed in every explicit
+    `files:` block, token on every purge-capable step, and the right scan depth
+    and privilege level at every call site.
 
 - **QEMU boot smoke test panicked with `invalid opcode` in busybox**
   (`tools/qemu-boot-smoke.sh`)

@@ -211,6 +211,16 @@ jobs:
         env:
           LFS_BUILDER_NONINTERACTIVE: 1
 
+      - name: Hand the payload directory to the publishing steps
+        run: |
+          # The build runs as lfs, while every step below - checksums, the ISO
+          # pointer, the asset splitter, the SBOM and the cosign bundles - runs
+          # as the runner and writes a new file into build-release/.  Without
+          # this hand-over the first of them dies on "Permission denied".
+          # Only the directory itself is handed back: the ISO is already built,
+          # so nothing downstream needs lfs to own the gigabytes inside it.
+          sudo chown "$(id -u):$(id -g)" /tmp/lfs-build/build-release
+
       - name: Resolve ISO name
         id: iso_name
         run: |
@@ -283,11 +293,35 @@ jobs:
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           bash tools/qemu-boot-smoke.sh "$ISO_PATH"
 
+      - name: Split release assets over the 2 GiB cap
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's Release API refuses any asset whose size is not "less
+          # than 2147483648" bytes.  A stable release ships the xfce live ISO
+          # whenever the profile enables live_system, and that image packs the
+          # whole rootfs into live.squashfs - the same wall lg3d Nightly #69
+          # hit.  Split into 1900 MiB parts and publish the manifest next to
+          # them, so the release always carries a restorable image.
+          # Only the top level is scanned: build-release/ IS the installed
+          # system, and the ISO final/15 writes is the single oversized file
+          # in it (the squashfs scratch deliberately lives outside $LFS).
+          # The split stays unprivileged, which is what keeps GITHUB_TOKEN in
+          # reach of the stale-part purge; the directory was handed to the
+          # runner by 'Hand the payload directory to the publishing steps'.
+          bash tools/split-release-assets.sh \
+            --tag "${GITHUB_REF_NAME}" \
+            --repo "${{ github.repository }}" \
+            /tmp/lfs-build/build-release
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/*.iso.part-*
+            /tmp/lfs-build/build-release/*.iso.parts
+            /tmp/lfs-build/build-release/*.iso.parts.sha256
             /tmp/lfs-build/build-release/image/boot/vmlinuz*
             /tmp/lfs-build/build-release/build_info.json
             /tmp/lfs-build/build-release/SHA256SUMS

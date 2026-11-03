@@ -690,6 +690,14 @@ jobs:
       # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.
       id-token: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          # This job only publishes what the legs uploaded, so the single
+          # thing it needs from the tree is the asset splitter in tools/.
+          sparse-checkout: tools
+          sparse-checkout-cone-mode: false
+
       - name: Compute nightly date
         id: date
         run: echo "date=$(date +%Y%m%d)" >> $GITHUB_OUTPUT
@@ -716,6 +724,29 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
             echo "No profile produced release artifacts; skipping the release."
           fi
+
+      - name: Split release assets over the 2 GiB cap
+        if: steps.artifacts.outputs.found == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GitHub's Release API refuses any asset whose size is not "less
+          # than 2147483648" bytes.  Every profile here ships an ISO and the
+          # desktop ones pack their whole rootfs into live.squashfs, so an
+          # xfce/gnome/kde live image can cross that line exactly like lg3d
+          # did (Nightly #69).  Split into 1900 MiB parts - the convention the
+          # cache releases use - and let the manifest state the reassembly
+          # command; the files: glob below picks the parts up automatically.
+          # --tag drops the parts an earlier generation of this same dated tag
+          # left behind, which a `cat *.part-*` reassembly would otherwise
+          # splice onto the ISO.
+          # --recursive is required here because download-artifact stages one
+          # subdirectory per matrix leg; the ISOs sit at artifacts/<leg>/.
+          bash tools/split-release-assets.sh \
+            --recursive \
+            --tag "nightly-${{ steps.date.outputs.date }}" \
+            --repo "${{ github.repository }}" \
+            artifacts
 
       - name: Create Release
         if: steps.artifacts.outputs.found == 'true'

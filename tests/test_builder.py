@@ -3,12 +3,17 @@
 Tests for LFSBuilder class
 """
 
+import bz2
+import gzip
+import io
 import json
 import logging
+import lzma
 import os
 import sys
 import tarfile
 import tempfile
+import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock, call
 
@@ -1937,18 +1942,26 @@ class TestLFSBuilder:
             assert result is False
 
     def test_is_valid_archive_magic_bytes(self, sources_dir, mock_logger):
-        """_is_valid_archive must accept real archives and reject junk."""
+        """_is_valid_archive must verify compressed archive integrity."""
         from builder import SourceDownloader
 
         downloader = SourceDownloader(sources_dir, mock_logger)
+        zip_data = io.BytesIO()
+        with zipfile.ZipFile(zip_data, 'w') as archive:
+            archive.writestr('file', b'contents')
+        gz_data = gzip.compress(b'contents')
 
         cases = {
-            'ok.tar.gz': (b'\x1f\x8b\x08\x00rest', True),
-            'ok.tgz': (b'\x1f\x8b\x08\x00rest', True),
-            'ok.tar.xz': (b'\xfd7zXZ\x00rest', True),
-            'ok.tar.bz2': (b'BZh9rest', True),
-            'ok.zip': (b'PK\x03\x04rest', True),
-            'ok.orig.tar.xz': (b'\xfd7zXZ\x00rest', True),
+            'ok.tar.gz': (gz_data, True),
+            'ok.tgz': (gz_data, True),
+            'ok.tar.xz': (lzma.compress(b'contents'), True),
+            'ok.tar.bz2': (bz2.compress(b'contents'), True),
+            'ok.zip': (zip_data.getvalue(), True),
+            'ok.orig.tar.xz': (lzma.compress(b'contents'), True),
+            'truncated.tar.gz': (gz_data[:-4], False),
+            'truncated.tar.xz': (lzma.compress(b'contents')[:-4], False),
+            'truncated.tar.bz2': (bz2.compress(b'contents')[:-4], False),
+            'truncated.zip': (zip_data.getvalue()[:-4], False),
             'bad.tar.gz': (b'<html>404 Not Found</html>', False),
             'empty.tar.xz': (b'', False),
             'notes.patch': (b'diff --git a/file', True),  # unknown ext: pass
@@ -1974,16 +1987,16 @@ class TestLFSBuilder:
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         dest = sources_dir / 'zlib-1.3.1.tar.gz'
-        dest.write_bytes(b'<html>503</html>')
+        dest.write_bytes(gzip.compress(b'contents')[:-4])
 
         def fake_retrieve(url, path, *args):
             with open(path, 'wb') as f:
-                f.write(b'\x1f\x8b\x08\x00')
+                f.write(gzip.compress(b'contents'))
 
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve) as mock_dl:
             assert downloader.download('http://example.com/zlib-1.3.1.tar.gz') is True
         mock_dl.assert_called_once()
-        assert dest.read_bytes().startswith(b'\x1f\x8b')
+        assert gzip.decompress(dest.read_bytes()) == b'contents'
 
     def test_download_keeps_valid_existing_file(self, sources_dir, mock_logger):
         """A valid existing archive is accepted without any download."""
@@ -1991,7 +2004,7 @@ class TestLFSBuilder:
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         dest = sources_dir / 'pkg-1.0.tar.gz'
-        dest.write_bytes(b'\x1f\x8b\x08\x00')
+        dest.write_bytes(gzip.compress(b'contents'))
 
         with patch('urllib.request.urlretrieve') as mock_dl:
             assert downloader.download('http://example.com/pkg-1.0.tar.gz') is True
@@ -2008,7 +2021,7 @@ class TestLFSBuilder:
 
         downloader = SourceDownloader(sources_dir, mock_logger)
         dest = sources_dir / 'ncurses-6.5-20250809.tgz'
-        bodies = [b'<html>snapshot rotated</html>', b'\x1f\x8b\x08\x00real']
+        bodies = [b'<html>snapshot rotated</html>', gzip.compress(b'contents')]
 
         def fake_retrieve(url, path, *args):
             with open(path, 'wb') as f:
@@ -2020,7 +2033,7 @@ class TestLFSBuilder:
                 'https://example.com/ncurses-6.5-20250809.tgz', dest,
                 'ncurses-6.5-20250809.tgz', 2) is True
         assert mock_dl.call_count == 2
-        assert dest.read_bytes().startswith(b'\x1f\x8b')
+        assert gzip.decompress(dest.read_bytes()) == b'contents'
 
     def test_download_attempt_gives_up_on_persistently_corrupt_body(self, sources_dir, mock_logger):
         """When every attempt serves junk nothing may be left on disk."""
@@ -2068,14 +2081,16 @@ class TestLFSBuilder:
                'ncurses-6.5-20250809.tgz')
 
         def fake_retrieve(u, path, *args):
-            body = b'\x1f\x8b\x08\x00real' if 'osuosl' in u else b'<html>rotated</html>'
+            body = gzip.compress(b'contents') if 'osuosl' in u else b'<html>rotated</html>'
             with open(path, 'wb') as f:
                 f.write(body)
 
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve), \
                 patch('builder.time.sleep'):
             assert downloader.download(url, retries=1) is True
-        assert (sources_dir / 'ncurses-6.5-20250809.tgz').read_bytes().startswith(b'\x1f\x8b')
+        assert gzip.decompress(
+            (sources_dir / 'ncurses-6.5-20250809.tgz').read_bytes()
+        ) == b'contents'
 
     def test_script_executor_stage_timeout(self, tmp_path):
         """run_script honours the executor-level stage timeout."""
@@ -3022,7 +3037,7 @@ class TestNightly194Fixes:
             if len(observed) == 1:
                 raise OSError(101, 'Network is unreachable')
             with open(dest, 'wb') as f:
-                f.write(b'\x1f\x8b\x08\x00')
+                f.write(gzip.compress(b'contents'))
 
         downloader = SourceDownloader(sources_dir, mock_logger, timeout=1)
         with patch('urllib.request.urlretrieve', side_effect=fake_retrieve), \
@@ -4219,5 +4234,3 @@ class TestStageSourceManifests:
         with pytest.raises(SystemExit) as exc:
             scanner.main()
         assert exc.value.code == 0
-
-

@@ -3,6 +3,7 @@
 Pytest configuration and shared fixtures
 """
 
+import gzip
 import json
 import os
 import shutil
@@ -232,11 +233,11 @@ def downloader(temp_dir, mock_logger):
 def fake_urlretrieve():
     """Factory for urlretrieve stand-ins that leave a real archive behind.
 
-    download() validates the response body's magic bytes once urlretrieve
-    returns, so the "success" leg of a retry test has to write an actual
-    file: a bare MagicMock() writes nothing, and the attempt is then
-    reported as a corrupt body instead of a download that worked.  Each
-    argument is raised, in call order, before the first success.
+    download() validates the response body's compressed stream once
+    urlretrieve returns, so the "success" leg of a retry test has to write
+    an actual file: a bare MagicMock() writes nothing, and the attempt is
+    then reported as a corrupt body instead of a download that worked.
+    Each argument is raised, in call order, before the first success.
     """
     def factory(*failures):
         seen = []
@@ -245,7 +246,7 @@ def fake_urlretrieve():
             seen.append(url)
             if len(seen) <= len(failures):
                 raise failures[len(seen) - 1]
-            Path(path).write_bytes(b'\x1f\x8b\x08\x00payload')
+            Path(path).write_bytes(gzip.compress(b'payload'))
 
         return retrieve
     return factory

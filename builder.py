@@ -6,10 +6,13 @@ Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026
 """
 
 import argparse
+import bz2
 import copy
+import gzip
 import hashlib
 import json
 import logging
+import lzma
 import os
 import platform
 import pwd
@@ -24,6 +27,8 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
+import zlib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -941,7 +946,7 @@ class SourceDownloader:
         return opener
 
     def _is_valid_archive(self, path: Path) -> bool:
-        """Check the magic bytes of an archive by extension.
+        """Check the magic bytes and compressed stream integrity.
 
         Cache-restored files may be HTML error pages or truncated
         downloads (Nightly #162/#163 died on a corrupt zlib tarball);
@@ -968,7 +973,27 @@ class SourceDownloader:
                 header = f.read(6)
         except OSError:
             return False
-        return any(header.startswith(m) for m in expected)
+        if not any(header.startswith(m) for m in expected):
+            return False
+
+        try:
+            if key == '.zip':
+                with zipfile.ZipFile(path) as archive:
+                    return archive.testzip() is None
+
+            opener = {
+                '.gz': gzip.open,
+                '.tgz': gzip.open,
+                '.xz': lzma.open,
+                '.bz2': bz2.open,
+            }[key]
+            with opener(path, 'rb') as archive:
+                while archive.read(1024 * 1024):
+                    pass
+        except (OSError, EOFError, ValueError, RuntimeError,
+                zipfile.BadZipFile, zlib.error, lzma.LZMAError):
+            return False
+        return True
 
     def _backoff_delay(self, attempt: int, rate_limited: bool = False) -> float:
         """Exponential backoff, far more patient on rate-limit answers.
