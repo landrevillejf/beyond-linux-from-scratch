@@ -38,6 +38,12 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 BOOTLOADER="${LFS_CONFIG_BOOTLOADER_TYPE:-grub}"
 echo "[INFO] Bootloader selected: $BOOTLOADER"
 
+# UEFI support: read from environment (exported by builder.py from config/build.conf)
+UEFI_SUPPORT="${LFS_CONFIG_BOOTLOADER_UEFI_SUPPORT:-false}"
+if [ "$UEFI_SUPPORT" = "true" ]; then
+    echo "[INFO] UEFI support enabled: will install GRUB for both BIOS and UEFI"
+fi
+
 # Auto-detect target disk device
 GRUB_TARGET="${LFS_CONFIG_BOOTLOADER_TARGET:-}"
 if [ -z "$GRUB_TARGET" ]; then
@@ -96,10 +102,39 @@ case "$BOOTLOADER" in
 grub)
     echo "[INFO] Installing GRUB bootloader..."
     if [ -f "$LFS/usr/sbin/grub-install" ]; then
+        # --- BIOS installation (always done for hybrid support) ---
         if [ -n "$GRUB_TARGET" ]; then
             chroot "$LFS" grub-install --target=i386-pc "$GRUB_TARGET" || echo "GRUB BIOS install skipped"
         else
             echo "[WARNING] No target disk found for GRUB BIOS install – skipping"
+        fi
+
+        # --- UEFI installation (when enabled) ---
+        if [ "$UEFI_SUPPORT" = "true" ]; then
+            EFI_DIR="$LFS/boot/efi"
+            if [ -d "$EFI_DIR" ]; then
+                echo "[INFO] Installing GRUB for UEFI (x86_64-efi)..."
+                # grub-install for UEFI needs --efi-directory and --bootloader-id
+                # The --target=x86_64-efi is required to install the EFI bootloader
+                chroot "$LFS" grub-install \
+                    --target=x86_64-efi \
+                    --efi-directory=/boot/efi \
+                    --bootloader-id=GRUB \
+                    --recheck || echo "[WARNING] GRUB UEFI install failed"
+
+                # Create EFI-side GRUB config (minimal, points to main config)
+                mkdir -p "$EFI_DIR/EFI/GRUB"
+                cat >"$EFI_DIR/EFI/GRUB/grub.cfg" <<'EFICFG'
+# Minimal GRUB config for UEFI firmware
+# This file is loaded by the UEFI firmware and chains to the main config
+search --fs-uuid --set=root ${LFS_ROOT_UUID}
+set prefix=($root)/boot/grub
+configfile $prefix/grub.cfg
+EFICFG
+                echo "[INFO] UEFI GRUB config written to /boot/efi/EFI/GRUB/grub.cfg"
+            else
+                echo "[WARNING] EFI directory $EFI_DIR not found – skipping UEFI install"
+            fi
         fi
 
         # Use config/grub.cfg template if available, else generate with grub-mkconfig

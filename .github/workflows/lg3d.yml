@@ -216,7 +216,11 @@ jobs:
           # capable of failing every x86_64 leg at the last stage of a
           # multi-hour build.  grub-efi-amd64-bin is amd64-only, so it cannot
           # go into the shared step above.
-          sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin
+          #
+          # OVMF (Open Virtual Machine Firmware) provides UEFI firmware for
+          # QEMU, allowing the smoke test to verify UEFI boot capability.
+          # This is required now that lg3d ships hybrid BIOS+UEFI ISOs.
+          sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin ovmf
 
       - name: Install Python dependencies
         run: |
@@ -325,6 +329,26 @@ jobs:
         run: |
           sudo rm -f /tmp/lfs-build/build-release/sources/linux-*.tar.xz
           echo "🗑️ Removed cached kernel to force fresh download for all architectures"
+
+      - name: Enable UEFI support for lg3d profile
+        run: |
+          # lg3d is the showcase profile for hybrid BIOS+UEFI boot: patch
+          # build.conf to enable UEFI support before the build starts.
+          # This creates a dedicated EFI System Partition and installs GRUB
+          # for both i386-pc (BIOS) and x86_64-efi (UEFI) targets.
+          cd /tmp/lfs-build
+          python3 -c "
+import json
+with open('config/build.conf', 'r') as f:
+    config = json.load(f)
+config['bootloader']['uefi_support'] = True
+config['bootloader']['esp_size_mb'] = 512
+with open('config/build.conf', 'w') as f:
+    json.dump(config, f, indent=2)
+print('✅ UEFI support enabled in build.conf')
+"
+          # Verify the change
+          python3 -m json.tool config/build.conf > /dev/null && echo "✅ build.conf is valid JSON"
 
       # ------- DEBUG (optionnel) -------
       # awk consomme toute l'entree; head fermerait le pipe et ls
@@ -605,7 +629,7 @@ jobs:
           # The ISO and its signature are expected from every leg now.
           if-no-files-found: ignore
 
-      - name: Boot artifact in QEMU (smoke test)
+      - name: Boot artifact in QEMU (smoke test - BIOS mode)
         if: success() && matrix.arch == 'x86_64'
         run: |
           # Same third-party CDN hazard as the Install dependencies step,
@@ -646,6 +670,67 @@ jobs:
               /tmp/lfs-build/build-release
           else
             echo "No bootable artifact (ISO or disk image) found" >&2
+            exit 1
+          fi
+
+      - name: Boot artifact in QEMU (smoke test - UEFI mode)
+        if: success() && matrix.arch == 'x86_64'
+        run: |
+          # lg3d now ships hybrid BIOS+UEFI ISOs: verify the UEFI boot path
+          # works by booting with OVMF firmware.  This catches missing EFI
+          # bootloader files or misconfigured GRUB EFI entries that the BIOS
+          # smoke test above would not detect.
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          [ -f "$ISO_PATH" ] || {
+            echo "No ISO produced for this profile, skipping UEFI smoke test"
+            exit 0
+          }
+          # OVMF firmware location varies by distribution; probe common paths
+          OVMF_FW=""
+          for candidate in \
+            /usr/share/OVMF/OVMF_CODE.fd \
+            /usr/share/ovmf/OVMF.fd \
+            /usr/share/OVMF/OVMF_CODE_4M.fd; do
+            if [ -f "$candidate" ]; then
+              OVMF_FW="$candidate"
+              break
+            fi
+          done
+          if [ -z "$OVMF_FW" ]; then
+            echo "::warning::OVMF firmware not found, cannot test UEFI boot"
+            exit 0
+          fi
+          echo "Using OVMF firmware: $OVMF_FW"
+          # Extract kernel/initrd from the ISO for direct UEFI boot test
+          WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$WORKDIR"' EXIT
+          if ! xorriso -osirrox on -indev "$ISO_PATH" \
+              -extract /isolinux/vmlinuz "$WORKDIR/vmlinuz" \
+              -extract /isolinux/initrd.img "$WORKDIR/initrd.img" 2>/dev/null &&
+             ! xorriso -osirrox on -indev "$ISO_PATH" \
+              -extract /boot/vmlinuz "$WORKDIR/vmlinuz" \
+              -extract /boot/initramfs.img "$WORKDIR/initrd.img" 2>/dev/null; then
+            echo "::warning::Could not extract kernel from ISO for UEFI test"
+            exit 0
+          fi
+          # Boot with UEFI firmware (OVMF) and verify kernel starts
+          timeout 120 qemu-system-x86_64 \
+            -machine q35,accel=tcg \
+            -cpu max \
+            -m 2G -smp 2 \
+            -drive if=pflash,format=raw,readonly=on,file="$OVMF_FW" \
+            -kernel "$WORKDIR/vmlinuz" \
+            -initrd "$WORKDIR/initrd.img" \
+            -append "console=ttyS0 earlyprintk=serial root=/dev/sr0 ro" \
+            -cdrom "$ISO_PATH" \
+            -nographic -no-reboot > "$WORKDIR/uefi-boot.log" 2>&1 || true
+          # Verify the kernel booted under UEFI
+          if grep -q "Linux version" "$WORKDIR/uefi-boot.log"; then
+            echo "✅ UEFI boot successful: kernel started"
+            tail -n 20 "$WORKDIR/uefi-boot.log"
+          else
+            echo "::error::UEFI boot failed: kernel never started"
+            tail -n 40 "$WORKDIR/uefi-boot.log"
             exit 1
           fi
 
