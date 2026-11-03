@@ -33,7 +33,18 @@ fi
 IMAGE_SIZE_MB=${IMAGE_SIZE_MB:-8192}
 BOOT_SIZE_MB=${BOOT_SIZE_MB:-512}
 SWAP_SIZE_MB=${SWAP_SIZE_MB:-2048}
-ROOT_SIZE_MB=$((IMAGE_SIZE_MB - BOOT_SIZE_MB - SWAP_SIZE_MB))
+# UEFI support: read from environment (exported by builder.py from config/build.conf)
+UEFI_SUPPORT="${LFS_CONFIG_BOOTLOADER_UEFI_SUPPORT:-false}"
+ESP_SIZE_MB="${LFS_CONFIG_BOOTLOADER_ESP_SIZE_MB:-512}"
+
+if [ "$UEFI_SUPPORT" = "true" ]; then
+    # UEFI layout: ESP (p1) + boot (p2) + swap (p3) + root (p4)
+    ROOT_SIZE_MB=$((IMAGE_SIZE_MB - ESP_SIZE_MB - BOOT_SIZE_MB - SWAP_SIZE_MB))
+    log_info "UEFI support enabled: creating EFI System Partition (${ESP_SIZE_MB}MB)"
+else
+    # Legacy BIOS layout: boot (p1) + swap (p2) + root (p3)
+    ROOT_SIZE_MB=$((IMAGE_SIZE_MB - BOOT_SIZE_MB - SWAP_SIZE_MB))
+fi
 
 log_info "Root partition size: ${ROOT_SIZE_MB}MB"
 
@@ -190,10 +201,20 @@ create_image_native() {
         return $?
     }
 
-    $USE_SUDO parted -s "$LOOP_DEV" mkpart primary fat32 1MiB "${BOOT_SIZE_MB}MiB" 2>/dev/null || true
-    $USE_SUDO parted -s "$LOOP_DEV" mkpart primary linux-swap "${BOOT_SIZE_MB}MiB" "$((BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 2>/dev/null || true
-    $USE_SUDO parted -s "$LOOP_DEV" mkpart primary ext4 "$((BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 100% 2>/dev/null || true
-    $USE_SUDO parted -s "$LOOP_DEV" set 1 esp on 2>/dev/null || true
+    if [ "$UEFI_SUPPORT" = "true" ]; then
+        # UEFI layout: ESP (p1) + boot (p2) + swap (p3) + root (p4)
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary fat32 1MiB "${ESP_SIZE_MB}MiB" 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" set 1 esp on 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary ext4 "${ESP_SIZE_MB}MiB" "$((ESP_SIZE_MB + BOOT_SIZE_MB))MiB" 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary linux-swap "$((ESP_SIZE_MB + BOOT_SIZE_MB))MiB" "$((ESP_SIZE_MB + BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary ext4 "$((ESP_SIZE_MB + BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 100% 2>/dev/null || true
+    else
+        # Legacy BIOS layout: boot (p1) + swap (p2) + root (p3)
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary fat32 1MiB "${BOOT_SIZE_MB}MiB" 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary linux-swap "${BOOT_SIZE_MB}MiB" "$((BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" mkpart primary ext4 "$((BOOT_SIZE_MB + SWAP_SIZE_MB))MiB" 100% 2>/dev/null || true
+        $USE_SUDO parted -s "$LOOP_DEV" set 1 esp on 2>/dev/null || true
+    fi
 
     # Wait for partitions to appear
     log_info "Waiting for partitions..."
@@ -203,29 +224,65 @@ create_image_native() {
 
     # Format partitions
     log_info "Formatting partitions..."
-    $USE_SUDO mkfs.vfat -F32 "${LOOP_DEV}p1" 2>/dev/null || {
-        log_warning "Failed to format boot partition, continuing..."
-    }
-    $USE_SUDO mkswap "${LOOP_DEV}p2" 2>/dev/null || {
-        log_warning "Failed to format swap partition, continuing..."
-    }
-    $USE_SUDO mkfs.ext4 -F "${LOOP_DEV}p3" 2>/dev/null || {
-        log_warning "Failed to format root partition, continuing..."
-    }
+    if [ "$UEFI_SUPPORT" = "true" ]; then
+        # UEFI layout: p1=ESP, p2=boot, p3=swap, p4=root
+        $USE_SUDO mkfs.vfat -F32 "${LOOP_DEV}p1" 2>/dev/null || {
+            log_warning "Failed to format EFI System Partition, continuing..."
+        }
+        $USE_SUDO mkfs.ext4 -F "${LOOP_DEV}p2" 2>/dev/null || {
+            log_warning "Failed to format boot partition, continuing..."
+        }
+        $USE_SUDO mkswap "${LOOP_DEV}p3" 2>/dev/null || {
+            log_warning "Failed to format swap partition, continuing..."
+        }
+        $USE_SUDO mkfs.ext4 -F "${LOOP_DEV}p4" 2>/dev/null || {
+            log_warning "Failed to format root partition, continuing..."
+        }
+    else
+        # Legacy BIOS layout: p1=boot, p2=swap, p3=root
+        $USE_SUDO mkfs.vfat -F32 "${LOOP_DEV}p1" 2>/dev/null || {
+            log_warning "Failed to format boot partition, continuing..."
+        }
+        $USE_SUDO mkswap "${LOOP_DEV}p2" 2>/dev/null || {
+            log_warning "Failed to format swap partition, continuing..."
+        }
+        $USE_SUDO mkfs.ext4 -F "${LOOP_DEV}p3" 2>/dev/null || {
+            log_warning "Failed to format root partition, continuing..."
+        }
+    fi
 
     # Mount partitions
     log_info "Mounting partitions..."
     mkdir -pv "$LFS" 2>/dev/null || true
-    $USE_SUDO mount "${LOOP_DEV}p3" "$LFS" 2>/dev/null || {
-        log_warning "Failed to mount root partition"
-    }
-    mkdir -pv "$LFS/boot" 2>/dev/null || true
-    $USE_SUDO mount "${LOOP_DEV}p1" "$LFS/boot" 2>/dev/null || {
-        log_warning "Failed to mount boot partition"
-    }
-    $USE_SUDO swapon "${LOOP_DEV}p2" 2>/dev/null || {
-        log_warning "Failed to enable swap"
-    }
+    if [ "$UEFI_SUPPORT" = "true" ]; then
+        # UEFI layout: p1=ESP, p2=boot, p3=swap, p4=root
+        $USE_SUDO mount "${LOOP_DEV}p4" "$LFS" 2>/dev/null || {
+            log_warning "Failed to mount root partition"
+        }
+        mkdir -pv "$LFS/boot" 2>/dev/null || true
+        $USE_SUDO mount "${LOOP_DEV}p2" "$LFS/boot" 2>/dev/null || {
+            log_warning "Failed to mount boot partition"
+        }
+        mkdir -pv "$LFS/boot/efi" 2>/dev/null || true
+        $USE_SUDO mount "${LOOP_DEV}p1" "$LFS/boot/efi" 2>/dev/null || {
+            log_warning "Failed to mount EFI System Partition"
+        }
+        $USE_SUDO swapon "${LOOP_DEV}p3" 2>/dev/null || {
+            log_warning "Failed to enable swap"
+        }
+    else
+        # Legacy BIOS layout: p1=boot, p2=swap, p3=root
+        $USE_SUDO mount "${LOOP_DEV}p3" "$LFS" 2>/dev/null || {
+            log_warning "Failed to mount root partition"
+        }
+        mkdir -pv "$LFS/boot" 2>/dev/null || true
+        $USE_SUDO mount "${LOOP_DEV}p1" "$LFS/boot" 2>/dev/null || {
+            log_warning "Failed to mount boot partition"
+        }
+        $USE_SUDO swapon "${LOOP_DEV}p2" 2>/dev/null || {
+            log_warning "Failed to enable swap"
+        }
+    fi
 
     log_success "Disk image created and mounted at $LFS"
     log_info "Loop device: $LOOP_DEV"
@@ -288,9 +345,18 @@ cleanup() {
     if [ -f /tmp/lfs_loop_device ]; then
         LOOP_DEV=$(cat /tmp/lfs_loop_device 2>/dev/null)
         if [ -n "$LOOP_DEV" ]; then
-            $USE_SUDO umount "${LOOP_DEV}p3" 2>/dev/null || true
-            $USE_SUDO umount "${LOOP_DEV}p1" 2>/dev/null || true
-            $USE_SUDO swapoff "${LOOP_DEV}p2" 2>/dev/null || true
+            if [ "$UEFI_SUPPORT" = "true" ]; then
+                # UEFI layout: p1=ESP, p2=boot, p3=swap, p4=root
+                $USE_SUDO umount "${LOOP_DEV}p2" 2>/dev/null || true
+                $USE_SUDO umount "${LOOP_DEV}p1" 2>/dev/null || true
+                $USE_SUDO umount "${LOOP_DEV}p4" 2>/dev/null || true
+                $USE_SUDO swapoff "${LOOP_DEV}p3" 2>/dev/null || true
+            else
+                # Legacy BIOS layout: p1=boot, p2=swap, p3=root
+                $USE_SUDO umount "${LOOP_DEV}p1" 2>/dev/null || true
+                $USE_SUDO umount "${LOOP_DEV}p3" 2>/dev/null || true
+                $USE_SUDO swapoff "${LOOP_DEV}p2" 2>/dev/null || true
+            fi
             $USE_SUDO losetup -d "$LOOP_DEV" 2>/dev/null || true
             rm -f /tmp/lfs_loop_device
         fi
