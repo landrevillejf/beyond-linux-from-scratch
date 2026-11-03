@@ -5439,8 +5439,8 @@ class TestNightly232IsoOutputGuardrails:
         split = efi.index('\nelse\n')
         arm_arm, x86_arm = efi[:split], efi[split:]
         x86_arm = x86_arm[:x86_arm.index('\nfi\n')]
-        for needle in ('cp /usr/lib/ISOLINUX/isolinux.bin',
-                       'cp /usr/lib/ISOLINUX/isohdpfx.bin'):
+        for needle in ('isolinux_payload "$ISO_ROOT/isolinux"',
+                       'ISOHDPFX=$(isolinux_file isohdpfx.bin)'):
             assert needle in x86_arm, \
                 f'{needle} must sit in the non-aarch64 arm of the EFI ' \
                 f'conditional: isolinux is an x86 BIOS loader with no ' \
@@ -5548,6 +5548,150 @@ class TestNightly232IsoOutputGuardrails:
         # If the FORCE is ever dropped, that coupling needs re-examining
         # rather than being silently relied upon.
         assert 'CONFIG_CMDLINE_FORCE=y' in code
+
+
+class TestIsolinuxBiosPayloadGuardrails:
+    """The nightly ISOs booted to "Failed to load ldlinux.c32".
+
+    syslinux 6.x splits its loader in two: isolinux.bin is a ~38 KiB first
+    stage whose only job is to load ldlinux.c32 - the core - from the same
+    directory on the boot media, and ldlinux.c32 in turn loads
+    libcom32.c32.  final/14 copied isolinux.bin alone and final/15 copied
+    the modules only when the Debian directory happened to exist, so every
+    image shipped a bootloader that could not boot.
+
+    Nothing in the pipeline could have caught it, which is why these
+    guardrails exist as well as the fix: xorriso exits 0 on an incomplete
+    payload, and tools/qemu-boot-smoke.sh boots with -kernel/-initrd, so it
+    never executes isolinux at all.  Only reading the modules back out of
+    the finished image turns this failure class into a build error.
+    """
+
+    INSTALLER = Path('final/14-create-installer.sh')
+    LIVE = Path('final/15-create-live-system.sh')
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+    HOST = Path('host/02-prepare-host.sh')
+    LG3D_WF = Path('.github/workflows/lg3d.yml')
+
+    # The payload isolinux needs beside it.  menu.c32/vesamenu.c32 are not
+    # among them because neither cfg uses `ui`, and libutil.c32 is included
+    # as part of the module set ldlinux expects to find on the media.
+    MODULES = ('ldlinux.c32', 'libcom32.c32', 'libutil.c32')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @staticmethod
+    def _fn(content, name):
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    def test_payload_is_probed_across_distro_layouts(self):
+        """A single hard-coded prefix is what made the failure silent.
+
+        Debian/Ubuntu keep isolinux.bin in /usr/lib/ISOLINUX and the
+        modules in /usr/lib/syslinux/modules/bios, Fedora and openSUSE put
+        both in /usr/share/syslinux, Arch in /usr/lib/syslinux/bios.  A
+        stage that only knows one of them ships an unbootable ISO wherever
+        the other is used - including every local build on a non-Debian
+        host.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            start = code.index('ISOLINUX_DIRS=(')
+            dirs = code[start:code.index(')\n', start)]
+            for prefix in ('/usr/lib/ISOLINUX',
+                           '/usr/lib/syslinux/modules/bios',
+                           '/usr/lib/syslinux/bios',
+                           '/usr/share/syslinux'):
+                assert prefix in dirs, \
+                    f'{script} does not probe {prefix}'
+
+    def test_modules_are_a_hard_requirement_not_an_optional_glob(self):
+        """The old step was `cp modules/*.c32 ... || true` behind an -d test.
+
+        A glob that matches nothing and an error swallowed by `|| true`
+        cannot fail a build, so the defect could only ever surface on the
+        boot media.  Every file must be resolved and a missing one must
+        abort the stage with the package name to install.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            payload = self._fn(code, 'isolinux_payload')
+            for module in ('isolinux.bin',) + self.MODULES:
+                assert module in payload, \
+                    f'{script} no longer packs {module}'
+            assert 'return 1' in payload, \
+                f'{script} must fail, not warn, on a missing module'
+            assert '|| true' not in payload and '*.c32' not in payload, \
+                f'{script} hides a missing module again'
+            assert 'syslinux-common' in payload, \
+                f'{script} must name the package that fixes it'
+            # The call site has to propagate that failure.
+            assert 'isolinux_payload "$ISO' in code
+            assert '|| exit 1' in code, \
+                f'{script} continues after an incomplete payload'
+
+    def test_iso_stages_read_the_payload_back_out_of_the_image(self):
+        """The finished image is the only place the defect is visible.
+
+        xorriso writes an ISO and exits 0 whatever the payload contains, so
+        both stages must extract the modules again and reject the image -
+        deleting it, or a later stage publishes the file it just proved
+        unbootable.
+        """
+        for script, var in ((self.INSTALLER, '$INSTALLER_ISO'),
+                            (self.LIVE, '$ISO_OUT')):
+            code = self._code(script.read_text())
+            start = code.index(
+                'for need in isolinux.bin ldlinux.c32 libcom32.c32')
+            # final/14 keeps its loop inside the non-aarch64 conditional,
+            # so the terminating `done` is indented there and not here.
+            loop = re.split(r'\n\s*done\n', code[start:], maxsplit=1)[0]
+            for module in ('isolinux.bin', 'ldlinux.c32', 'libcom32.c32'):
+                assert module in loop, \
+                    f'{script} does not verify {module} in the image'
+            assert '-osirrox on -indev "' + var + '"' in loop, \
+                f'{script} must read the payload out of the finished image'
+            assert '"/isolinux/$need"' in loop, \
+                f'{script} must extract from the image, not the scratch tree'
+            failure = loop[loop.index('carries no /isolinux/'):]
+            assert f'"{var}"' in failure and 'rm -f' in failure, \
+                f'{script} must delete an ISO it rejected'
+            assert 'exit 1' in failure
+
+    def test_initramfs_can_mount_the_boot_media(self):
+        """An ISO that boots isolinux still needs its root mounted.
+
+        Both ISOs pass root=/dev/sr0, and the static busybox in the
+        initramfs has no /etc/filesystems to consult, so a bare mount of an
+        optical device falls through to the fstype list.  With only disk
+        filesystems there, isolinux loads and the kernel then drops to a
+        shell at "Failed to mount /dev/sr0".
+        """
+        code = self._code(self.INITRAMFS.read_text())
+        try_mount = self._fn(code, 'try_mount')
+        for fstype in ('iso9660', 'udf'):
+            assert fstype in try_mount, \
+                f'try_mount cannot mount the live media as {fstype}'
+
+    def test_build_hosts_install_the_modules(self):
+        """isolinux does not depend on syslinux-common on Debian/Ubuntu.
+
+        The CI apt lists and host/02 install `isolinux` with
+        --no-install-recommends, which leaves the modules off the host and
+        would now abort every ISO stage; the package has to be named.
+        """
+        host = self._code(self.HOST.read_text()) \
+            if self.HOST.exists() else ''
+        assert 'syslinux-common' in host, \
+            'host/02 must install the Debian/Ubuntu module package'
+        wf = self.LG3D_WF.read_text()
+        assert 'syslinux-common' in wf, \
+            'lg3d.yml must install the module package the ISO stage needs'
 
 
 class TestCalamaresBuildStageGuardrails:

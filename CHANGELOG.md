@@ -481,6 +481,54 @@
 
 ### Fixed
 
+- **Every ISO died at the BIOS prompt: `Failed to load ldlinux.c32`**
+  (`final/14-create-installer.sh`, `final/15-create-live-system.sh`,
+  `final/12-create-initramfs.sh`, `host/02-prepare-host.sh`,
+  `.github/workflows/*.yml`, `tests/test_acceptance_shell.py`)
+  - lg3d nightly #70 published `lfs-0.57.4-lg3d-x86_64-systemd-20261103.iso`
+    and its sysvinit twin -- the first images ever to reach a release --
+    and both stopped before the kernel: ISOLINUX printed its banner and
+    then `Failed to load ldlinux.c32` / `Boot failed: press a key to
+    retry...`.  Listing the media confirms it: `/isolinux/` carried
+    `boot.cat`, `isolinux.bin`, `isolinux.cfg`, `vmlinuz` and `initrd.img`
+    and no `.c32` at all.
+  - syslinux 6.x splits its loader.  `isolinux.bin` is a ~38 KiB first
+    stage whose only job is to load `ldlinux.c32` -- the core -- from the
+    same directory on the boot media, and `ldlinux.c32` in turn loads
+    `libcom32.c32`.  `final/14` copied `isolinux.bin` alone from the
+    hard-coded `/usr/lib/ISOLINUX/`, and `final/15` copied the modules
+    behind `if [ -d /usr/lib/syslinux/modules/bios ]` with a
+    `cp ... || true`.  On the Ubuntu runners `isolinux` does not pull
+    `syslinux-common`, where those modules live, so the conditional never
+    ran and the stage still exited 0.
+  - No automated gate could see it.  `xorriso -as mkisofs` exits 0 whether
+    or not the payload it packs is complete, and
+    `tools/qemu-boot-smoke.sh` boots with `-kernel`/`-initrd`, so it never
+    executes isolinux at all -- it only tests the kernel and the
+    initramfs.
+  - Both stages now resolve the payload across the known distribution
+    layouts (`/usr/lib/ISOLINUX`, `/usr/lib/syslinux/modules/bios`,
+    `/usr/lib/syslinux/bios`, `/usr/lib/syslinux`, `/usr/share/syslinux`),
+    require `isolinux.bin`, `ldlinux.c32`, `libcom32.c32` and
+    `libutil.c32` -- a missing one aborts the stage and names the package
+    to install -- and read `isolinux.bin` and the two core modules back out
+    of the finished image, deleting it and failing if any is absent.
+    `isohdpfx.bin` is resolved the same way instead of being hard-coded.
+  - The next link in the chain was broken too: the initramfs' `try_mount`
+    fell back through `ext4 xfs btrfs f2fs` only, and the static busybox it
+    runs has no `/etc/filesystems` to consult, so once isolinux works the
+    kernel would still have dropped to a shell at `Failed to mount
+    /dev/sr0` -- `root=/dev/sr0` is what both ISOs pass.  `iso9660` and
+    `udf` are now in that list.
+  - `host/02-prepare-host.sh` and the 13 workflows that install `isolinux`
+    now also install `syslinux-common` (and `syslinux` on Arch), so the
+    requirements the stages enforce are met on the build hosts.
+  - Tests: new `TestIsolinuxBiosPayloadGuardrails` (5 cases) over both ISO
+    stages, the initramfs and the host/CI package lists; every case fails
+    against the pre-fix scripts.  The two `cp /usr/lib/ISOLINUX/...`
+    needles in `TestNightly232IsoOutputGuardrails` moved to the new
+    payload-call form.
+
 - **The lg3d live ISO shipped the Ollama engine, and no release could carry
   it** (`blfs/28-knowledge.sh`, `final/16-validate-build.sh`,
   `tests/test_acceptance_shell.py`, `builder.py`, `tests/test_builder.py`,

@@ -52,7 +52,7 @@ jobs:
           # depending on a busybox.net download for the initramfs shell.
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
-            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            xorriso isolinux syslinux-common mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
             squashfs-tools jq zstd ca-certificates sed \
             grub-efi-amd64-bin busybox-static
 
