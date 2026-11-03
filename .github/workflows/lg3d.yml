@@ -398,37 +398,11 @@ jobs:
           echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
           echo "Base prefix cache hit: ${HIT}"
 
-      - name: Recreate disk image after cache restore
-        if: steps.base_cache.outputs.hit == 'true'
-        run: |
-          cd /tmp/lfs-build
-          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
-            PROFILE="arm64"
-          else
-            PROFILE="${{ matrix.profile }}"
-          fi
-          # host/03 umounts the loop partition when the stage exits, so
-          # re-running it hides nothing: it recreates build-release.img,
-          # which the headless-profile artifact check and the QEMU smoke
-          # test both look for, and leaves the restored rootfs untouched.
-          # Resuming and stopping on the same stage runs host/03 alone -
-          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
-          # the system is self-hosting.
-          sudo -u lfs python3 builder.py \
-            --profile "$PROFILE" \
-            --init ${{ matrix.init }} \
-            --arch ${{ matrix.arch }} \
-            --output ./build-release \
-            --verbose \
-            --resume-from "$BASE_CACHE_IMAGE_STAGE" \
-            --stop-after "$BASE_CACHE_IMAGE_STAGE" \
-            --download-timeout 600 \
-            --download-retries 5 \
-            --stage-timeout 18000
-        env:
-          LFS_BUILDER_NONINTERACTIVE: 1
-
       # ------- BUILD -------
+      # Single builder.py invocation: resume from disk-image (the first
+      # stage after the base cache cutoff) and run through live-system.
+      # This avoids the coordination issues between two separate calls
+      # that prevented ISO creation in nightly #68/#69.
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
           cd /tmp/lfs-build
@@ -445,8 +419,8 @@ jobs:
           # runs the full build exactly as before.
           RESUME_ARGS=""
           if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
-            RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
-            echo "♻️ Base cache hit: resuming from $BASE_CACHE_RESUME_STAGE"
+            RESUME_ARGS="--resume-from disk-image"
+            echo "♻️ Base cache hit: resuming from disk-image"
           fi
 
           sudo -u lfs python3 builder.py \
