@@ -267,10 +267,16 @@ install_dependencies() {
     log_info "Installing build dependencies for distribution: $distro"
 
     # Common packages (Debian/Ubuntu names)
+    # syslinux-common is not a dependency of isolinux and carries every
+    # *.c32 module: syslinux 6.x splits its loader, so isolinux.bin on the
+    # boot media cannot do anything without ldlinux.c32 beside it.  Without
+    # this the ISO stages either abort (final/14, final/15 now require the
+    # modules) or, as before nightly #70, ship an image that dies at the
+    # BIOS prompt with "Failed to load ldlinux.c32".
     local common_packages=(
         build-essential bison flex gawk texinfo
         wget curl git python3 python3-pip
-        xorriso isolinux mtools dosfstools
+        xorriso isolinux syslinux-common mtools dosfstools
         parted rsync sudo
         bc cpio unzip xz-utils
         libssl-dev libelf-dev
@@ -296,7 +302,7 @@ install_dependencies() {
             local arch_packages=(
                 base-devel bison flex gawk texinfo
                 wget curl git python python-pip
-                xorriso libisoburn mtools
+                xorriso libisoburn syslinux mtools
                 dosfstools parted rsync sudo
                 bc cpio unzip xz
                 openssl elfutils kmod cpio

@@ -326,11 +326,18 @@ if [ -n "$ROOT_UUID" ]; then
 fi
 
 # try_mount <device> – attempt to mount with auto-detection + known fstypes
+# iso9660 and udf belong in the list, not just in the auto-detect attempt
+# above it: the live and installer ISOs both pass root=/dev/sr0, so this is
+# the mount that has to succeed before /mnt/live.squashfs can even be seen.
+# The static busybox here has no /etc/filesystems to consult in the
+# initramfs, so an optical device with no -t falls through to the disk
+# types; without iso9660 the boot media never mounts and the live path
+# below is unreachable.
 try_mount() {
     local dev="$1"
     [ -b "$dev" ] || return 1
     /bin/busybox mount "$dev" /mnt 2>/dev/null && return 0
-    for fstype in ext4 xfs btrfs f2fs; do
+    for fstype in ext4 xfs btrfs f2fs iso9660 udf; do
         /bin/busybox mount -t "$fstype" "$dev" /mnt 2>/dev/null && return 0
     done
     return 1

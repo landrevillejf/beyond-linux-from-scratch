@@ -88,18 +88,62 @@ cp -v "$KERNEL" "$ISO_DIR/isolinux/vmlinuz"
 cp -v "$INITRAMFS" "$ISO_DIR/isolinux/initrd.img"
 cp -v "$SQUASHFS" "$ISO_DIR/live.squashfs"
 
-# Isolinux
-ISOLINUX_BIN="/usr/lib/ISOLINUX/isolinux.bin"
-[ -f "$ISOLINUX_BIN" ] || ISOLINUX_BIN="/usr/lib/syslinux/isolinux.bin"
-if [ ! -f "$ISOLINUX_BIN" ]; then
-    echo "[ERROR] isolinux.bin not found"
-    exit 1
-fi
-cp -v "$ISOLINUX_BIN" "$ISO_DIR/isolinux/"
+# --- Isolinux BIOS payload -----------------------------------------------
+# syslinux 6.x splits its loader in two: isolinux.bin is a ~38 KiB first
+# stage whose only job is to load ldlinux.c32 - the actual core - from the
+# same directory on the boot media, and ldlinux.c32 in turn loads
+# libcom32.c32.  An ISO that ships isolinux.bin alone prints its banner and
+# then dies with "Failed to load ldlinux.c32 / Boot failed: press a key to
+# retry...", which is what every nightly live ISO did: the modules were
+# treated as optional and looked for in the Debian path only, so a host
+# without that directory silently wrote an unbootable image.  Distributions
+# install the payload under different prefixes, so probe them all and fail
+# loudly when none carries it rather than ship an ISO no firmware can boot.
+ISOLINUX_DIRS=(
+    /usr/lib/ISOLINUX
+    /usr/lib/syslinux/modules/bios
+    /usr/lib/syslinux/bios
+    /usr/lib/syslinux
+    /usr/share/syslinux
+)
 
-# Modules isolinux (optionnel)
-if [ -d "/usr/lib/syslinux/modules/bios" ]; then
-    cp -v /usr/lib/syslinux/modules/bios/*.c32 "$ISO_DIR/isolinux/" 2>/dev/null || true
+isolinux_file() {
+    local name="$1" dir
+    for dir in "${ISOLINUX_DIRS[@]}"; do
+        if [ -f "$dir/$name" ]; then
+            echo "$dir/$name"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Every file the BIOS boot path needs, copied into the isolinux directory of
+# the image.  libutil.c32 is not loaded by this config but is part of the
+# module set ldlinux expects to find beside it, and costs 25 KiB.
+isolinux_payload() {
+    local dest="$1" src name
+    for name in isolinux.bin ldlinux.c32 libcom32.c32 libutil.c32; do
+        if ! src=$(isolinux_file "$name"); then
+            echo "[ERROR] $name not found on this host."
+            echo "        Install it: apt install isolinux syslinux-common,"
+            echo "        dnf install syslinux, or pacman -S syslinux."
+            return 1
+        fi
+        cp -v "$src" "$dest/"
+    done
+}
+
+isolinux_payload "$ISO_DIR/isolinux" || exit 1
+
+# The isohybrid MBR that makes the same image writable onto a stick.  Losing
+# it is not survivable: xorriso would abort on the missing file anyway, but
+# only after the squashfs has been packed into the image.
+ISOHDPFX=$(isolinux_file isohdpfx.bin) || ISOHDPFX=""
+if [ -z "$ISOHDPFX" ]; then
+    echo "[ERROR] isohdpfx.bin not found: no hybrid MBR can be written."
+    echo "        It ships with isolinux (Debian/Ubuntu) or syslinux."
+    exit 1
 fi
 
 # Configuration isolinux
@@ -131,7 +175,7 @@ if [ -n "$EFI_OPTION" ]; then
         -iso-level 4 \
         -r -V "LFS_LIVE" \
         -J -joliet-long \
-        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -isohybrid-mbr "$ISOHDPFX" \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
         -boot-load-size 4 -boot-info-table -no-emul-boot \
@@ -142,12 +186,31 @@ else
         -iso-level 4 \
         -r -V "LFS_LIVE" \
         -J -joliet-long \
-        -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
+        -isohybrid-mbr "$ISOHDPFX" \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
         -boot-load-size 4 -boot-info-table -no-emul-boot \
         -o "$ISO_OUT" "$ISO_DIR"
 fi
+
+# Read the BIOS payload back out of the finished image.  xorriso exits 0
+# whether or not the modules it was told to pack are complete, and
+# tools/qemu-boot-smoke.sh boots with -kernel/-initrd, so it never runs
+# isolinux at all: without this gate an ISO missing ldlinux.c32 passes every
+# automated check and fails on the first real boot, as nightly #70 did.
+VERIFY_BOOT="${SCRATCH_DIR}/verify-boot-payload.bin"
+for need in isolinux.bin ldlinux.c32 libcom32.c32; do
+    rm -f "$VERIFY_BOOT"
+    if ! xorriso -osirrox on -indev "$ISO_OUT" \
+        -extract "/isolinux/$need" "$VERIFY_BOOT" >/dev/null 2>&1 ||
+        [ ! -s "$VERIFY_BOOT" ]; then
+        echo "[ERROR] $ISO_OUT carries no /isolinux/$need; it cannot boot."
+        rm -f "$VERIFY_BOOT" "$ISO_OUT"
+        exit 1
+    fi
+done
+rm -f "$VERIFY_BOOT"
+echo "[INFO] BIOS boot payload verified in image"
 
 # Nettoyage
 rm -rf "$ISO_DIR" "$SQUASHFS"

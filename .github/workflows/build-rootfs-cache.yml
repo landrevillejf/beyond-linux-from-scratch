@@ -42,7 +42,7 @@ jobs:
           # final/14 preflights by path before building the installer ISO.
           sudo apt-get install -y --no-install-recommends \
             build-essential bison flex gawk texinfo wget git python3 python3-pip \
-            xorriso isolinux mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
+            xorriso isolinux syslinux-common mtools dosfstools parted rsync bc cpio libssl-dev libelf-dev \
             squashfs-tools jq zstd ca-certificates sed \
             libgmp-dev libmpfr-dev libmpc-dev zlib1g-dev \
             grub-efi-amd64-bin busybox-static
