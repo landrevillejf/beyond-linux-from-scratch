@@ -340,15 +340,15 @@ jobs:
           # for both i386-pc (BIOS) and x86_64-efi (UEFI) targets.
           cd /tmp/lfs-build
           python3 -c "
-import json
-with open('config/build.conf', 'r') as f:
-    config = json.load(f)
-config['bootloader']['uefi_support'] = True
-config['bootloader']['esp_size_mb'] = 512
-with open('config/build.conf', 'w') as f:
-    json.dump(config, f, indent=2)
-print('✅ UEFI support enabled in build.conf')
-"
+          import json
+          with open('config/build.conf', 'r') as f:
+              config = json.load(f)
+          config['bootloader']['uefi_support'] = True
+          config['bootloader']['esp_size_mb'] = 512
+          with open('config/build.conf', 'w') as f:
+              json.dump(config, f, indent=2)
+          print('UEFI support enabled in build.conf')
+          "
           # Verify the change
           python3 -m json.tool config/build.conf > /dev/null && echo "✅ build.conf is valid JSON"
 
