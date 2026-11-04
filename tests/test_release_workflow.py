@@ -1165,3 +1165,81 @@ class TestLg3dPrivateSourcePreDownload:
         step_pos = workflow.index(f"- name: {self.STEP}")
         build_pos = workflow.index("sudo -u lfs python3 builder.py")
         assert step_pos < build_pos
+
+
+class TestLg3dUefiConfigPatch:
+    """Guardrails for the `Enable UEFI support for lg3d profile` step.
+
+    The step rewrites /tmp/lfs-build/config/build.conf, and the `Prepare lfs
+    build directory` step just before it ends with `sudo chown -R lfs:lfs
+    /tmp/lfs-build`, so build.conf is lfs-owned mode 0644 while this step runs
+    as the runner -- which therefore holds only the 'other' read bit.  Nightly
+    #85 tried to fix that with `sudo chmod u+w config/build.conf`, which
+    grants write to the *owner*, who already had it: the effective mode stayed
+    0644 and Nightly #86 died with the identical
+    `PermissionError: [Errno 13] Permission denied: 'config/build.conf'` on the
+    open('w').  The patch must be done with the privilege that actually owns
+    the write, and the file must end up back in lfs's hands, because the build
+    runs as `sudo -u lfs python3 builder.py` and rewrites this same config on
+    every LFSConfig.save().
+    """
+
+    WORKFLOW = "lg3d.yml"
+    STEP = "Enable UEFI support for lg3d profile"
+
+    def _read(self):
+        return Path(f".github/workflows/{self.WORKFLOW}").read_text()
+
+    def _step(self):
+        workflow = self._read()
+        marker = f"- name: {self.STEP}\n"
+        assert marker in workflow, f"step {self.STEP!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def _body(self):
+        return "\n".join(line for line in self._step().splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def test_the_write_is_done_with_privilege(self):
+        """The regression: an unprivileged open('w') against an lfs-owned
+        file.  chmod cannot grant the runner access to someone else's file."""
+        body = self._body()
+        assert 'sudo python3 -c "' in body
+        assert "open('config/build.conf', 'w')" in body
+
+    def test_the_owner_only_chmod_no_op_is_gone(self):
+        """`chmod u+w` on a 0644 file changes nothing, so it must not come
+        back as a permission fix; nor may the file be made world-writable to
+        work around it."""
+        body = self._body()
+        assert "chmod" not in body
+
+    def test_build_conf_is_handed_back_to_lfs_after_the_patch(self):
+        """Root writing the file leaves it root-owned; the build user must own
+        it again or builder.py's own config save fails the same way one stage
+        later."""
+        body = self._body()
+        chown = "sudo chown lfs:lfs config/build.conf"
+        assert chown in body
+        assert body.index("json.dump(config, f, indent=2)") < body.index(chown)
+
+    def test_the_patched_keys_are_the_ones_the_bootloader_stage_reads(self):
+        """A patched key nobody consumes would silently leave UEFI off, so
+        the workflow and final/13 have to stay coupled."""
+        body = self._body()
+        assert "config['bootloader']['uefi_support'] = True" in body
+        assert "config['bootloader']['esp_size_mb'] = 512" in body
+        stage = Path("final/13-create-bootloader.sh").read_text()
+        assert 'LFS_CONFIG_BOOTLOADER_UEFI_SUPPORT' in stage
+
+    def test_a_malformed_patch_still_fails_the_step(self):
+        body = self._body()
+        assert "python3 -m json.tool config/build.conf > /dev/null" in body
+
+    def test_runs_before_the_unprivileged_builder_invocation(self):
+        workflow = self._read()
+        step_pos = workflow.index(f"- name: {self.STEP}")
+        build_pos = workflow.index("sudo -u lfs python3 builder.py")
+        assert step_pos < build_pos

@@ -339,13 +339,15 @@ jobs:
           # This creates a dedicated EFI System Partition and installs GRUB
           # for both i386-pc (BIOS) and x86_64-efi (UEFI) targets.
           cd /tmp/lfs-build
-          # The file is owned by lfs:lfs (Prepare step chown -R), but this
-          # step runs as the runner user.  Make it writable, patch it, then
-          # restore ownership so the lfs user can still read it during the
-          # build.  Nightly #85 failed here with PermissionError because the
-          # runner could not write to the lfs-owned config file.
-          sudo chmod u+w config/build.conf
-          python3 -c "
+          # The Prepare step ends with 'chown -R lfs:lfs', so config/build.conf
+          # is lfs-owned mode 0644 and this step -- which runs as the runner --
+          # only holds the 'other' read bit.  chmod u+w cannot fix that: it
+          # grants write to the owner, who already had it, so Nightly #85 and
+          # #86 both died on the same open('w') with PermissionError.  Patch
+          # the file as root, then hand it back to lfs, who must own it because
+          # the build itself runs as 'sudo -u lfs python3 builder.py' and
+          # rewrites this same config on every LFSConfig.save().
+          sudo python3 -c "
           import json
           with open('config/build.conf', 'r') as f:
               config = json.load(f)
@@ -357,7 +359,7 @@ jobs:
           "
           sudo chown lfs:lfs config/build.conf
           # Verify the change
-          python3 -m json.tool config/build.conf > /dev/null && echo "✅ build.conf is valid JSON"
+          python3 -m json.tool config/build.conf > /dev/null && echo "build.conf is valid JSON"
 
       # ------- DEBUG (optionnel) -------
       # awk consomme toute l'entree; head fermerait le pipe et ls
