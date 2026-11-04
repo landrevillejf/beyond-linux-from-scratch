@@ -481,6 +481,32 @@
 
 ### Fixed
 
+- **Both lg3d legs died in `build-kernel` with `C compiler 'gcc' not found`
+  after a base-cache restore: the cached rootfs has no `/dev`**
+  (`.github/workflows/lg3d.yml`)
+  - Nightly #90 (run 41875832304) failed both the `systemd` and `sysvinit`
+    legs in `Build release profile lg3d / * / x86_64`.  The kernel stage
+    chrooted, extracted `/sources/linux-6.16.1`, then `make olddefconfig`
+    aborted with `sh: line 1: /dev/null: No such file or directory` and
+    `scripts/Kconfig.include:40: C compiler 'gcc' not found`.
+  - gcc is present; the probe lies.  `Kconfig.include`'s `success = $(shell
+    { $(CC) ...; } 2>/dev/null ...)` redirects to `/dev/null`, and with no
+    `/dev/null` in the chroot that redirect fails, so `success` returns `n`
+    and Kconfig reports the compiler missing.  The real cause is a chroot
+    with no `/dev`.
+  - `build-base-cache.yml` tars the prefix with `--exclude=./dev
+    --exclude=./proc --exclude=./sys --exclude=./run` (they are runtime
+    mounts, not on-disk content), so the restored `build-release/` has none
+    of those mountpoints.  `lfs/08-build-kernel.sh` then runs `mount --bind
+    /dev "$LFS"/dev 2>/dev/null || true` onto a directory that does not
+    exist; the bind fails, the `|| true` swallows it, and the chroot comes up
+    without `/dev`.  build-kernel is merely the first chroot stage after the
+    restore -- every later one would fail the same way.
+  - The `Restore base prefix cache` step now recreates the empty
+    virtual-filesystem mountpoints (`dev/pts`, `dev/shm`, `proc`, `sys`,
+    `run/lock`) immediately after a successful extraction, so the resumed
+    build chroots exactly as a from-scratch build does, with or without UEFI.
+
 - **The lg3d UEFI config patch failed twice with the same `PermissionError`:
   `chmod u+w` grants write to the owner, not to the runner**
   (`.github/workflows/lg3d.yml`, `tests/test_release_workflow.py`)
