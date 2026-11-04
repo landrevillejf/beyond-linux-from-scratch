@@ -79,7 +79,9 @@ jobs:
       # from build-kernel.  Moving the boundary means editing these two
       # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
       BASE_CACHE_RESUME_STAGE: build-kernel
-      BASE_CACHE_IMAGE_STAGE: display-manager
+      # The disk-image stage is separate: it recreates the loop device/image
+      # file after the cache restore, without touching the cached rootfs.
+      BASE_CACHE_IMAGE_STAGE: disk-image
     steps:
       - uses: actions/checkout@v4
         with:
@@ -402,6 +404,12 @@ jobs:
           PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
           HIT=false
           mkdir -p /tmp/base-cache
+          # The relocate step created /tmp/base-cache as a root-owned bind
+          # mountpoint; gh release download runs as the unprivileged runner and
+          # could not write the parts there, which would silently degrade every
+          # restore to a cache miss (and a full 2h prefix rebuild). Hand the
+          # dir to the runner before downloading.
+          sudo chown "$(id -u):$(id -g)" /tmp/base-cache
           cd /tmp/base-cache
           echo "Looking for ${PREFIX} in base-cache-latest"
           if gh release download base-cache-latest \
@@ -440,11 +448,42 @@ jobs:
           echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
           echo "Base prefix cache hit: ${HIT}"
 
+      - name: Recreate disk image after cache restore
+        if: steps.base_cache.outputs.hit == 'true'
+        run: |
+          cd /tmp/lfs-build
+          if [[ "${{ matrix.arch }}" == "aarch64" ]]; then
+            PROFILE="arm64"
+          else
+            PROFILE="${{ matrix.profile }}"
+          fi
+          # host/03 umounts the loop partition when the stage exits, so
+          # re-running it hides nothing: it recreates build-release.img,
+          # which the headless-profile artifact check and the QEMU smoke
+          # test both look for, and leaves the restored rootfs untouched.
+          # Resuming and stopping on the same stage runs host/03 alone -
+          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
+          # the system is self-hosting.
+          sudo -u lfs python3 builder.py \
+            --profile "$PROFILE" \
+            --init ${{ matrix.init }} \
+            --arch ${{ matrix.arch }} \
+            --output ./build-release \
+            --verbose \
+            --resume-from "$BASE_CACHE_IMAGE_STAGE" \
+            --stop-after "$BASE_CACHE_IMAGE_STAGE" \
+            --download-timeout 600 \
+            --download-retries 5 \
+            --stage-timeout 18000
+        env:
+          LFS_BUILDER_NONINTERACTIVE: 1
+
       # ------- BUILD -------
-      # Single builder.py invocation: resume from disk-image (the first
-      # stage after the base cache cutoff) and run through live-system.
-      # This avoids the coordination issues between two separate calls
-      # that prevented ISO creation in nightly #68/#69.
+      # Two-step build after cache restore:
+      # 1. Recreate disk image (host/03) - leaves cached rootfs untouched
+      # 2. Resume from build-kernel - uses cached prefix up to display-manager
+      # This matches nightly.yml's approach and ensures the cache is actually
+      # used instead of rebuilding everything from disk-image onwards.
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
           cd /tmp/lfs-build
@@ -461,8 +500,10 @@ jobs:
           # runs the full build exactly as before.
           RESUME_ARGS=""
           if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
-            RESUME_ARGS="--resume-from disk-image"
-            echo "♻️ Base cache hit: resuming from disk-image"
+            RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
+            echo "♻️ Base cache hit: resuming from $BASE_CACHE_RESUME_STAGE"
+          else
+            echo "⚠️ Base cache miss: building from scratch (host-check)"
           fi
 
           sudo -u lfs python3 builder.py \

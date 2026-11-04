@@ -1,33 +1,14 @@
 {
-  "version": "4.3.0",
+  "_comment": "TEMPLATE - This file contains placeholder data. The --use-cache feature requires real cache entries to be published. For CI builds, nightly.yml uses --resume-from with the base prefix cache instead.",
+  "version": "0.52.4",
   "profiles": {
     "kde": {
       "systemd": {
         "x86_64": {
-          "build_date": "2026-06-27",
-          "sha256": "abc123...",
-          "url": "https://github.com/lfs-builder/lfs-builder/releases/download/v4.3.0-cache/lfs-rootfs-kde-systemd-x86_64.tar.xz",
-          "size_mb": 1024
-        }
-      }
-    },
-    "gnome": {
-      "systemd": {
-        "x86_64": {
-          "build_date": "2026-06-27",
-          "sha256": "def456...",
-          "url": "...",
-          "size_mb": 2048
-        }
-      }
-    },
-    "full": {
-      "systemd": {
-        "x86_64": {
-          "build_date": "2026-06-27",
-          "sha256": "ghi789...",
-          "url": "...",
-          "size_mb": 4096
+          "build_date": "PLACEHOLDER",
+          "sha256": "PLACEHOLDER_NEEDS_REAL_CHECKSUM",
+          "url": "https://github.com/landrevillejf/beyond-linux-from-scratch/releases/download/rootfs-cache-latest/lfs-rootfs-kde-systemd-x86_64.tar.xz",
+          "size_mb": 0
         }
       }
     }
