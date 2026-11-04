@@ -339,6 +339,12 @@ jobs:
           # This creates a dedicated EFI System Partition and installs GRUB
           # for both i386-pc (BIOS) and x86_64-efi (UEFI) targets.
           cd /tmp/lfs-build
+          # The file is owned by lfs:lfs (Prepare step chown -R), but this
+          # step runs as the runner user.  Make it writable, patch it, then
+          # restore ownership so the lfs user can still read it during the
+          # build.  Nightly #85 failed here with PermissionError because the
+          # runner could not write to the lfs-owned config file.
+          sudo chmod u+w config/build.conf
           python3 -c "
           import json
           with open('config/build.conf', 'r') as f:
@@ -349,6 +355,7 @@ jobs:
               json.dump(config, f, indent=2)
           print('UEFI support enabled in build.conf')
           "
+          sudo chown lfs:lfs config/build.conf
           # Verify the change
           python3 -m json.tool config/build.conf > /dev/null && echo "✅ build.conf is valid JSON"
 
