@@ -2248,7 +2248,7 @@ class TestLFSBuilder:
                 profile='minimal',
                 output_dir=str(tmp_path / 'build'),
                 config_file=str(config_file),
-                cache_url='https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json',
+                cache_url='https://raw.githubusercontent.com/landrevillejf/beyond-linux-from-scratch/main/cache-metadata.json',
                 download_timeout=None,
                 download_retries=None,
                 milestone=None,

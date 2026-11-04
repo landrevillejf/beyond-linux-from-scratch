@@ -1849,7 +1849,7 @@ class LFSBuilder:
         self._detected_system = self.system
         self.logger = self.setup_logging()
         self.profile_config = ProfileManager.get_profile(profile)
-        self._cache_url = cache_url or "https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json"
+        self._cache_url = cache_url or "https://raw.githubusercontent.com/landrevillejf/beyond-linux-from-scratch/main/cache-metadata.json"
         self._apply_profile_settings()
 
         timeout = download_timeout if download_timeout is not None else self.config.get('build_options.download_timeout', 300)
@@ -3654,7 +3654,7 @@ Examples:
     parser.add_argument('--cache-only', action='store_true',
                         help='Only use cache; fail if not found')
 
-    parser.add_argument('--cache-url', default='https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json',
+    parser.add_argument('--cache-url', default='https://raw.githubusercontent.com/landrevillejf/beyond-linux-from-scratch/main/cache-metadata.json',
                         help='Custom cache metadata URL')
 
     parser.add_argument('--kernel-type',

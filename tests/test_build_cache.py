@@ -183,7 +183,7 @@ class TestLFSBuilderCacheIntegration:
         return LFSBuilder(profile="minimal", output_dir=tmp_path / "output", config_file=config_file)
 
     def test_init_cache_url_default(self, builder):
-        assert builder._cache_url == "https://raw.githubusercontent.com/lfs-builder/lfs-builder/main/cache-metadata.json"
+        assert builder._cache_url == "https://raw.githubusercontent.com/landrevillejf/beyond-linux-from-scratch/main/cache-metadata.json"
 
     def test_init_cache_url_custom(self, tmp_path):
         config_file = tmp_path / "config/build.conf"
