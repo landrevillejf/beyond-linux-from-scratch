@@ -481,6 +481,37 @@
 
 ### Fixed
 
+- **The lg3d UEFI config patch failed twice with the same `PermissionError`:
+  `chmod u+w` grants write to the owner, not to the runner**
+  (`.github/workflows/lg3d.yml`, `tests/test_release_workflow.py`)
+  - Nightly #85 aborted in `Enable UEFI support for lg3d profile` with
+    `PermissionError: [Errno 13] Permission denied: 'config/build.conf'`, and
+    the dispatched run that carried its fix (#86, run 41814973768) died on both
+    legs with the byte-identical traceback on the same `open(..., 'w')`.
+  - The step patches the copied `config/build.conf` before the build starts,
+    and `Prepare lfs build directory` ends with `sudo chown -R lfs:lfs
+    /tmp/lfs-build` -- `cp -a` having preserved mode 0644 -- so the file is
+    lfs-owned and this step, running as the runner, holds only the 'other' read
+    bit.  The first fix added `sudo chmod u+w config/build.conf`, which sets
+    the write bit for the **owner** (`lfs`), who already had it: the effective
+    mode stayed 0644 and the unprivileged `open('w')` failed exactly as before.
+  - The whole read-modify-write now runs as `sudo python3 -c`, and the step
+    still ends with `sudo chown lfs:lfs config/build.conf` -- the file must go
+    back to `lfs`, because the build itself is `sudo -u lfs python3 builder.py`
+    and `LFSConfig.save()` rewrites this same config.  The step's success echo
+    also lost its `U+2705` emoji (AGENTS.md rule 8: no emoji in any file).
+  - Reproduced rather than reasoned about: in a user namespace with uid 1001 as
+    `lfs` and uid 1002 as the runner, `chmod u+w` left the mode at 644 and the
+    runner's `open('w')` raised the very same `PermissionError`, while the
+    privileged patch succeeded and `lfs` could still read and rewrite the file.
+  - Tests: new `TestLg3dUefiConfigPatch` (6 cases) pinning the privileged
+    write, the absence of any `chmod` workaround (including a world-writable
+    build.conf), the hand-back ordering to `lfs`, the coupling to the
+    `LFS_CONFIG_BOOTLOADER_UEFI_SUPPORT` consumer in
+    `final/13-create-bootloader.sh`, the JSON validation gate and the step's
+    position before the builder invocation.  The privilege and no-`chmod`
+    cases both fail against the pre-fix step.
+
 - **Every ISO died at the BIOS prompt: `Failed to load ldlinux.c32`**
   (`final/14-create-installer.sh`, `final/15-create-live-system.sh`,
   `final/12-create-initramfs.sh`, `host/02-prepare-host.sh`,
