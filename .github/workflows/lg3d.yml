@@ -430,6 +430,25 @@ jobs:
                 sudo chown lfs:lfs /tmp/lfs-build
                 sudo chown -R "$(id -u lfs):$(id -g lfs)" \
                   /tmp/lfs-build/build-release
+                # build-base-cache.yml tars the prefix with
+                # --exclude=./dev --exclude=./proc --exclude=./sys
+                # --exclude=./run, because those are runtime mounts and not
+                # on-disk content.  The resumed build therefore restores a
+                # rootfs with NO virtual-filesystem mountpoints, and every
+                # chroot stage from build-kernel onward runs
+                # 'mount --bind /dev "$LFS"/dev' onto a directory that does
+                # not exist; the bind fails, lfs/08 swallows it with '|| true',
+                # and the kernel chroot comes up without /dev/null so
+                # 'make olddefconfig' reports "C compiler 'gcc' not found"
+                # (Nightly #90, both legs).  Recreate the empty mountpoints
+                # here so the restored rootfs boots the same chroot stages a
+                # from-scratch build would, with or without UEFI.
+                sudo mkdir -p \
+                  /tmp/lfs-build/build-release/dev/pts \
+                  /tmp/lfs-build/build-release/dev/shm \
+                  /tmp/lfs-build/build-release/proc \
+                  /tmp/lfs-build/build-release/sys \
+                  /tmp/lfs-build/build-release/run/lock
                 HIT=true
               else
                 echo "Base cache extraction failed - building from scratch"

@@ -1243,3 +1243,67 @@ class TestLg3dUefiConfigPatch:
         step_pos = workflow.index(f"- name: {self.STEP}")
         build_pos = workflow.index("sudo -u lfs python3 builder.py")
         assert step_pos < build_pos
+
+
+class TestLg3dBaseCacheMountpoints:
+    """Guardrails for the base-prefix-cache restore in lg3d.yml.
+
+    build-base-cache.yml tars the prefix with `--exclude=./dev`,
+    `--exclude=./proc`, `--exclude=./sys` and `--exclude=./run` because those
+    are runtime mounts, not on-disk content.  A resumed build therefore
+    restores a rootfs with no virtual-filesystem mountpoints, and the first
+    chroot stage -- build-kernel -- runs `mount --bind /dev "$LFS"/dev 2>/dev/null
+    || true` onto a directory that does not exist; the bind fails, the `|| true`
+    swallows it, and the kernel chroot comes up without /dev/null so
+    `make olddefconfig` reports `C compiler 'gcc' not found` (Nightly #90, both
+    legs).  The restore step must recreate the empty mountpoints before the
+    build resumes.
+    """
+
+    WORKFLOW = "lg3d.yml"
+    STEP = "Restore base prefix cache"
+
+    def _read(self):
+        return Path(f".github/workflows/{self.WORKFLOW}").read_text()
+
+    def _step(self):
+        workflow = self._read()
+        marker = f"- name: {self.STEP}\n"
+        assert marker in workflow, f"step {self.STEP!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    def _body(self):
+        return "\n".join(line for line in self._step().splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def test_restore_recreates_the_virtual_fs_mountpoints(self):
+        """The regression: a restored rootfs with no /dev, /proc, /sys or /run.
+        Every chroot stage after the restore bind-mounts onto these, so all
+        four must exist as empty directories before the build resumes."""
+        body = self._body()
+        for mountpoint in ("dev/pts", "dev/shm", "proc", "sys", "run/lock"):
+            assert f"build-release/{mountpoint}" in body, mountpoint
+
+    def test_mountpoints_are_created_privileged(self):
+        """The restore runs as the runner but the rootfs is root/lfs-owned, so
+        the mkdir must be privileged to succeed."""
+        body = self._body()
+        assert "sudo mkdir -p" in body
+
+    def test_mountpoints_are_created_only_on_a_verified_cache_hit(self):
+        """The mkdir sits inside the successful-extraction branch (before
+        HIT=true), so a cache miss still builds from scratch and creates its
+        own /dev via lfs-basic."""
+        body = self._body()
+        assert body.index("build-release/dev/pts") < body.index("HIT=true")
+
+    def test_mountpoints_are_created_before_the_build_resumes(self):
+        """The recreate must precede the builder.py resume-from-build-kernel
+        invocation, or build-kernel chroots into the /dev-less rootfs again."""
+        workflow = self._read()
+        restore_pos = workflow.index(f"- name: {self.STEP}")
+        build_pos = workflow.index(
+            'RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"')
+        assert restore_pos < build_pos
