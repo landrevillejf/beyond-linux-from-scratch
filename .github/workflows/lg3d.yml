@@ -2,7 +2,13 @@ name: Nightly Project Looking Glass Builds
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    # 06:00 UTC, not 03:00.  build-base-cache.yml starts at 23:00 and its two
+    # legs now measure 4h05 (today they ran 00:43 -> 04:49), and the scheduler
+    # can also start a cron minutes-to-hours late, so the 03:00 nightly raced
+    # the publisher and lost: no cache for the current key existed yet, both
+    # legs rebuilt the whole prefix from scratch, and the 330-minute job cap
+    # killed them before a single kernel was compiled.
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -445,8 +451,34 @@ jobs:
           rm -f "${PREFIX}".tar.zst.part-* "${PREFIX}.sha256"
           df -h /tmp
           du -sh /tmp/lfs-build/build-release 2>/dev/null || true
+          # Both lines are consumed by the guard below and the resume step:
+          # a miss must name the key it looked for, because that key is what
+          # the publisher has to reproduce.
           echo "hit=${HIT}" >> "$GITHUB_OUTPUT"
-          echo "Base prefix cache hit: ${HIT}"
+          echo "key=${BASE_KEY}" >> "$GITHUB_OUTPUT"
+          echo "Base prefix cache hit: ${HIT} (key ${BASE_KEY})"
+
+      - name: Require a base prefix cache hit
+        # A miss used to fall through to the full from-scratch build, which
+        # cannot fit this job: the prefix alone is ~4h and the cap is 330
+        # minutes, so Nightly #88 spent its entire budget on host-check
+        # through display-manager and published nothing.
+        #
+        # BASE_KEY hashes builder.py, VERSION, host/, the prefix stage scripts
+        # and config/, so any commit to those paths invalidates the published
+        # cache by design -- that is the correctness guarantee keeping a
+        # nightly from restoring a rootfs built from other inputs.  The honest
+        # response to a miss is to name the key and stop, not to burn five
+        # hours on a run that can only be cancelled.
+        if: env.USE_BASE_CACHE == 'true' && steps.base_cache.outputs.hit != 'true'
+        run: |
+          KEY="${{ steps.base_cache.outputs.key }}"
+          PREFIX="base-${{ matrix.init }}-${{ matrix.arch }}-${KEY}"
+          echo "::error::No base prefix cache '${PREFIX}' in release base-cache-latest."
+          echo "The prefix costs ~4h and the job cap is 330 minutes, so this leg cannot build it from scratch."
+          echo "Republish it for the current key, then re-dispatch this workflow:"
+          echo "  gh workflow run build-base-cache.yml --repo ${{ github.repository }}"
+          exit 1
 
       - name: Recreate disk image after cache restore
         if: steps.base_cache.outputs.hit == 'true'

@@ -481,6 +481,38 @@
 
 ### Fixed
 
+- **lg3d nightly burned its whole budget rebuilding the base prefix after a
+  cache-key move: a miss now fails fast**
+  (`.github/workflows/lg3d.yml`, `tests/test_release_workflow.py`)
+  - Nightly #88 (both `lg3d` legs) logged `Base cache miss: building from
+    scratch (host-check)` and then spent the entire 330-minute job cap on the
+    prefix, so it was cancelled before `build-kernel` and published no ISO.
+    The cause is structural, not a script defect: `BASE_KEY` hashes
+    `builder.py`, `VERSION`, `host/`, the prefix stage scripts and `config/`,
+    and the commit that corrected the resume logic (`75742d8`) also edited
+    `builder.py`.  The published asset stayed
+    `base-<init>-x86_64-de18ffcf156f` (built from `c5552c5`) while `HEAD`
+    computed `6c5264eb8a79`, so both legs missed by design.
+  - A miss cannot be survived here.  `build-base-cache.yml`'s two legs measured
+    4h05 today (00:43 -> 04:49 and 00:43 -> 03:28), and `build-kernel` through
+    the live ISO still has to fit underneath that inside 330 minutes, so the
+    from-scratch fallthrough only guarantees a cancelled job.  `lg3d.yml` gains
+    a `Require a base prefix cache hit` step, placed between the restore and
+    `Recreate disk image after cache restore`, which prints the exact missing
+    asset name and the republish command and exits 1.  The restore step now
+    also exports the key it searched for (`steps.base_cache.outputs.key`) so
+    the message can name it.
+  - The schedule moved from `0 3 * * *` to `0 6 * * *` UTC.  The publisher's own
+    cron is 23:00, so a 4h build plus the scheduler's start drift lands it after
+    03:00 -- the nightly raced it and lost, which is the same hazard
+    `build-base-cache.yml` documents for #224, re-created by extending the cache
+    boundary to `display-manager`.
+  - `builder.py` and every stage script are untouched; nothing about the
+    resolved environment changes.  Tests: new `TestLg3dBaseCacheMissFailsFast`
+    (7 cases) pinning the publisher/consumer key blocks to byte-identical text,
+    the key output, the fail-fast `exit 1`, the guard's `if` condition, its
+    position before any builder step, and the new schedule.
+
 - **The lg3d UEFI config patch failed twice with the same `PermissionError`:
   `chmod u+w` grants write to the owner, not to the runner**
   (`.github/workflows/lg3d.yml`, `tests/test_release_workflow.py`)
