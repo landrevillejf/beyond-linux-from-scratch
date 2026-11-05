@@ -481,6 +481,63 @@
 
 ### Fixed
 
+- **The sysvinit live ISOs booted to a silent dead console after
+  `switch_root`: missing `rcS`, empty `/dev`, read-only live root**
+  (`bootscripts/lfs-bootscripts-20250827/lfs/init.d/rcS`,
+  `bootscripts/lfs-bootscripts-20250827/Makefile`,
+  `lfs/06a-init-system.sh`, `final/14-create-installer.sh`,
+  `final/15-create-live-system.sh`, `final/12-create-initramfs.sh`,
+  `config/kernel-config*`, `tools/qemu-boot-smoke.sh`,
+  `tests/test_acceptance_shell.py`)
+  - `lfs-0.57.4-lg3d-x86_64-sysvinit-20261105.iso` froze in VirtualBox
+    right after the initramfs printed `Live media detected, mounting
+    live.squashfs`, and a QEMU serial-console reproduction (`-cpu host`,
+    `set -x` initramfs trace) proved the handover itself worked: the
+    squashfs loop-mounted, `switch_root` exec'd `/sbin/init`, and then the
+    console went completely silent -- no S stage, no login prompt.
+  - Three independent holes combined, none of which could fail a build on
+    its own.  (1) `rcS` was absent from the vendored
+    `lfs-bootscripts-20250827` tree and had never existed in git history:
+    the Makefile installs each init script by explicit name and its
+    `links:` target still creates the `rcS.d` `S*` symlinks, but nothing
+    installed `rcS`, so `inittab`'s `sysinit:/etc/init.d/rcS` line pointed
+    at a file that did not exist and mountvirtfs/checkfs/mountfs/udev/
+    console never ran.  (2) `mksquashfs -e "dev/*"` packed an empty `/dev`,
+    so after `switch_root` there was no `/dev/console` and every message
+    was lost.  (3) the live root was the read-only squashfs with no
+    writable overlay, so even a correct `rcS` would fail on the first
+    write; the initramfs' `mount -o move /mnt /sysroot/media/live` also
+    failed onto that read-only root.
+  - `rcS` is restored as an LSB-header script that `exec`s
+    `/etc/rc.d/init.d/rc S`, and the Makefile installs it by name beside
+    the other init scripts.  `lfs/06a-init-system.sh` gains a fatal
+    post-install gate: if `/etc/init.d/rcS` is missing after
+    `lfs-bootscripts` installs, the stage fails instead of shipping an
+    image that boots to nothing.
+  - Both ISO stages (`final/14`, `final/15`) now `mknod` the static
+    `/dev` nodes (`console`, `tty`, `null`, `zero`, `random`, `urandom`)
+    before packing and no longer exclude `dev/*` from the squashfs;
+    `final/15` also unmounts a live `$LFS/dev` bind first so it never
+    packs the host's device tree.  `final/12-create-initramfs.sh` stacks
+    an overlayfs on the live squashfs (tmpfs `upper`+`work`, squashfs
+    `lower`) and moves the lower, the rw tmpfs and the boot media under
+    `/sysroot` before `switch_root`, giving the live session a writable
+    root.  `CONFIG_OVERLAY_FS=y` is enabled in the four kernel configs
+    that build a live squashfs (`kernel-config`, `-arm64`,
+    `-audio-studio`, `-gnu-free`).
+  - `tools/qemu-boot-smoke.sh` accepted the initramfs' own
+    pre-`switch_root` `Mounting root:` line as proof of userspace, which
+    is exactly why the CI gate passed on images that never ran init.  The
+    live gate now also requires a post-`switch_root` marker
+    (`Mounting virtual file systems`, `systemd[1]:` or `login:`) via a new
+    `init_took_over()` check and fails with `silent after switch_root`
+    otherwise.
+  - Tests: new `TestSysvinitLiveBootGuardrails` (6 cases) pinning the
+    vendored `rcS` and its Makefile install, the `lfs/06a` fatal gate, the
+    static `/dev` nodes and dropped `dev/*` exclusion in both ISO stages,
+    the initramfs overlay, the four `CONFIG_OVERLAY_FS=y` kernel configs
+    and the smoke gate's post-`switch_root` marker.
+
 - **Both lg3d legs died in `build-kernel` with `C compiler 'gcc' not found`
   after a base-cache restore: the cached rootfs has no `/dev`**
   (`.github/workflows/lg3d.yml`)

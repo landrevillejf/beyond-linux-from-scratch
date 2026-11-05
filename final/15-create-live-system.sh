@@ -62,19 +62,53 @@ fi
 echo "[INFO] Kernel: $KERNEL"
 echo "[INFO] Initramfs: $INITRAMFS"
 
+# ---------------------------------------------------------------------------
+# Static device nodes in the packed rootfs
+#
+# The live root switches straight from the initramfs into this tree before
+# any boot script runs: sysvinit opens /dev/console for its own logging and
+# the S-stage scripts redirect to /dev/null, so those nodes must exist in
+# the squashfs itself - devtmpfs only comes back once rcS runs mountvirtfs.
+# The 0.57.4 images excluded dev/* from mksquashfs and no stage ever created
+# the nodes, which left every sysvinit live boot silent and dead right after
+# switch_root (nightly 20261105, VirtualBox and QEMU reproductions).
+# ---------------------------------------------------------------------------
+if [ "$(id -u)" -ne 0 ]; then SUDO=sudo; else SUDO=""; fi
+if mountpoint -q "$LFS/dev"; then
+    $SUDO umount "$LFS/dev" || {
+        echo "[ERROR] $LFS/dev is a live mount; refusing to pack it" >&2
+        exit 1
+    }
+fi
+$SUDO mkdir -p "$LFS/dev"
+while read -r node type major minor mode; do
+    if [ ! -e "$LFS/dev/$node" ]; then
+        $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor"
+    fi
+done <<'NODES'
+console c 5 1 600
+tty     c 5 0 666
+null    c 1 3 666
+zero    c 1 5 666
+random  c 1 8 666
+urandom c 1 9 666
+NODES
+
 # Créer le squashfs
 echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed.  "dir/*" rather than "dir" leaves the
-# empty directory behind, which matters for /dev, /proc, /sys and /run:
-# busybox switch_root moves those four mounts into the new root and fails
-# outright when the mount points are absent.  "*.iso" is what keeps the
+# empty directory behind, which matters for /proc, /sys and /run: busybox
+# switch_root moves those mounts into the new root and fails outright when
+# the mount points are absent.  /dev is the exception: it is packed with
+# the static nodes created above, because the live root needs them before
+# any boot script runs.  "*.iso" is what keeps the
 # installer ISO final/14 wrote into $LFS – and this stage's own output on a
 # --resume-from live-system run – out of the image being built.
 mksquashfs "$LFS" "$SQUASHFS" \
     -comp "$COMPRESSION" -Xbcj x86 -b 1M \
     -wildcards \
-    -e "proc/*" "sys/*" "dev/*" "run/*" "tmp/*" "lost+found/*" \
+    -e "proc/*" "sys/*" "run/*" "tmp/*" "lost+found/*" \
     "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
     "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
     "*.iso" "*.iso.sig"

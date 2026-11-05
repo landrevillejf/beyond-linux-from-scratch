@@ -318,6 +318,15 @@ if [ "$INIT_SYSTEM" = "sysvinit" ]; then
     # Install lfs-bootscripts (LFS book: make install)
     run_build required lfs-bootscripts
 
+    # rcS drives the whole S stage (mountvirtfs, checkfs, mountfs, udev):
+    # without it inittab's sysinit line points at nothing and the system
+    # boots to a silent dead console, so a missing file must fail the
+    # stage instead of shipping (0.57.4 sysvinit ISOs, nightly 20261105).
+    if [ ! -f /etc/init.d/rcS ]; then
+        log_error "lfs-bootscripts installed but /etc/init.d/rcS is missing"
+        exit 1
+    fi
+
     # Create /etc/inittab (LFS book chapter 9.4)
     cat > /etc/inittab <<'INITTAB'
 id:3:initdefault:
