@@ -1185,8 +1185,13 @@ class TestLFSComplianceGuardrails:
         content = Path('final/12-create-initramfs.sh').read_text()
         assert 'live.squashfs' in content
         # mount -o loop automatically sets up the loop device, avoiding the
-        # need for /dev/loop0 to exist beforehand (devtmpfs may not create it).
-        assert 'mount -o loop,ro /mnt/live.squashfs /sysroot' in content
+        # need for /dev/loop0 to exist beforehand (devtmpfs may not create
+        # it).  The squashfs is the read-only overlay *lower*; a writable
+        # tmpfs upper is stacked on top so the live session has a root it
+        # can write to (the 0.57.4 images mounted the squashfs directly on
+        # /sysroot and every boot script failed on the first write).
+        assert 'mount -o loop,ro /mnt/live.squashfs /live/lower' in content
+        assert 'mount -t overlay overlay' in content
         assert 'switch_root /sysroot /sbin/init' in content
 
     def test_initramfs_unlocks_luks_and_lvm(self):
@@ -5388,9 +5393,13 @@ class TestNightly232IsoOutputGuardrails:
         """$LFS is the rootfs *and* the build's scratch directory.
 
         Excluding "dir/*" rather than "dir" is deliberate and load-bearing:
-        busybox switch_root MS_MOVEs /dev, /proc, /sys and /run into the new
-        root and fails outright when those mount points are absent, so the
-        directories have to survive empty.
+        busybox switch_root MS_MOVEs /proc, /sys and /run into the new root
+        and fails outright when those mount points are absent, so the
+        directories have to survive empty.  /dev is the exception: the
+        overlay live root unmounts the initramfs devtmpfs before
+        switch_root, so the packed rootfs must carry the static nodes
+        (console, null, ...) itself or the boot goes silent the instant
+        init takes over (0.57.4 sysvinit ISOs).
         """
         for script in (self.INSTALLER, self.LIVE):
             code = self._code(script.read_text())
@@ -5404,12 +5413,20 @@ class TestNightly232IsoOutputGuardrails:
                 assert excluded in call, \
                     f'{script} packs the build tree: {excluded} is missing'
             tokens = re.findall(r'"([^"]+)"', call.split('-e ', 1)[1])
-            for mountpoint in ('proc', 'sys', 'dev', 'run'):
+            for mountpoint in ('proc', 'sys', 'run'):
                 assert f'{mountpoint}/*' in tokens, \
                     f'{script} must empty {mountpoint}/ without removing it'
                 assert mountpoint not in tokens, \
                     f'{script} removes the {mountpoint} mount point that ' \
                     f'switch_root has to move into the new root'
+            # /dev is packed with the static nodes the stage mknod's, not
+            # excluded: excluding dev/* is exactly what left the 0.57.4
+            # images with an empty /dev and a silent console.
+            assert 'dev/*' not in tokens, \
+                f'{script} excludes dev/* and ships an empty /dev again'
+            assert 'dev' not in tokens, \
+                f'{script} removes the /dev directory the static nodes ' \
+                f'are created in'
 
     def test_arm64_installer_is_uefi_only(self):
         """The aarch64 image must carry no x86 boot structure at all.
@@ -6141,3 +6158,93 @@ class TestCalamaresBuildStageGuardrails:
                 f'shellcheck failed on the inner payload:\n{result.stdout}'
         finally:
             os.unlink(tmp_path)
+
+
+class TestSysvinitLiveBootGuardrails:
+    """The 0.57.4 sysvinit live ISOs booted to a silent dead console.
+
+    Three independent holes combined into one unbootable image, and none
+    of them could fail a build on its own:
+
+    1. rcS was missing from the vendored lfs-bootscripts tree.  The
+       Makefile installs every init script by explicit name and its
+       `links:` target still creates the rcS.d S* symlinks, but nothing
+       installed rcS itself, so inittab's `sysinit:/etc/init.d/rcS` line
+       pointed at a file that did not exist and the whole S stage
+       (mountvirtfs, checkfs, mountfs, udev, console) never ran.
+    2. mksquashfs excluded `dev/*`, so the packed rootfs had an empty
+       /dev: after switch_root there was no /dev/console and the boot
+       went completely silent.
+    3. The live root is a read-only squashfs with no writable overlay,
+       so even a correct rcS would fail on the first write.
+
+    tools/qemu-boot-smoke.sh accepted the initramfs' own pre-switch_root
+    "Mounting root:" line as proof of userspace, which is why the CI gate
+    passed on images that never ran init.  These guardrails assert the fix
+    against the stage scripts' text so the failure class cannot silently
+    return.
+    """
+
+    RCS = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/rcS')
+    MAKEFILE = Path('bootscripts/lfs-bootscripts-20250827/Makefile')
+    INIT = Path('lfs/06a-init-system.sh')
+    INSTALLER = Path('final/14-create-installer.sh')
+    LIVE = Path('final/15-create-live-system.sh')
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+    SMOKE = Path('tools/qemu-boot-smoke.sh')
+    KERNEL_CONFIGS = (
+        Path('config/kernel-config'),
+        Path('config/kernel-config-arm64'),
+        Path('config/kernel-config-audio-studio'),
+        Path('config/kernel-config-gnu-free'),
+    )
+
+    def test_vendored_bootscripts_ship_rcs(self):
+        """rcS must exist, drive the S stage, and be installed by name."""
+        assert self.RCS.exists(), 'vendored rcS is missing again'
+        rcs = self.RCS.read_text()
+        assert 'rc S' in rcs, 'rcS no longer hands the S runlevel to rc'
+        make = self.MAKEFILE.read_text()
+        assert 'lfs/init.d/rcS' in make, \
+            'Makefile does not install rcS by name'
+
+    def test_init_stage_fails_when_rcs_missing(self):
+        """A missing rcS after install must abort the stage, not ship."""
+        code = self.INIT.read_text()
+        assert 'lfs-bootscripts installed but /etc/init.d/rcS is missing' \
+            in code, 'lfs/06a lost its fatal rcS post-install gate'
+
+    def test_iso_stages_pack_static_dev_nodes(self):
+        """Both ISO stages must create /dev nodes and stop excluding them."""
+        for script in (self.INSTALLER, self.LIVE):
+            code = script.read_text()
+            assert '"dev/*"' not in code, \
+                f'{script} still excludes dev/* from the squashfs'
+            assert 'console c 5 1' in code, \
+                f'{script} does not create the /dev/console node'
+            assert 'mknod -m' in code, \
+                f'{script} no longer creates static /dev nodes'
+
+    def test_initramfs_stacks_overlay_on_live_squashfs(self):
+        """The live root must be a writable overlay, not the ro squashfs."""
+        code = self.INITRAMFS.read_text()
+        assert 'mount -t overlay overlay' in code, \
+            'initramfs no longer stacks an overlayfs on live.squashfs'
+        assert 'upperdir=/live/rw/upper' in code, \
+            'overlay has no writable upper dir'
+        assert 'move /mnt /sysroot/media/live' in code, \
+            'boot media is not moved under /sysroot before switch_root'
+
+    def test_kernel_configs_enable_overlayfs(self):
+        """overlayfs must be built in or the initramfs mount fails."""
+        for cfg in self.KERNEL_CONFIGS:
+            assert 'CONFIG_OVERLAY_FS=y' in cfg.read_text(), \
+                f'{cfg} does not enable CONFIG_OVERLAY_FS'
+
+    def test_smoke_gate_requires_post_switch_root_marker(self):
+        """The live gate must prove init ran, not just the initramfs."""
+        code = self.SMOKE.read_text()
+        assert 'init_took_over' in code, \
+            'qemu-boot-smoke lost its post-switch_root gate'
+        assert 'Mounting virtual file systems' in code, \
+            'the gate no longer matches a real sysvinit S-stage marker'

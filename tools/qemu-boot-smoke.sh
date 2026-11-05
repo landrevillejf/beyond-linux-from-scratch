@@ -161,6 +161,15 @@ live_media_mounted() {
     grep -q "Live media detected" "$LOG"
 }
 
+# Markers that can ONLY be printed after switch_root handed over to the real
+# rootfs: the sysvinit S stage opening line, systemd as PID 1, or a getty.
+# "Mounting root:" alone is printed by the initramfs *before* the handover,
+# so accepting it let the 0.57.4 sysvinit live ISOs pass this gate while
+# they booted to a silent dead console (missing rcS + empty /dev).
+init_took_over() {
+    grep -Eq "Mounting virtual file systems|systemd\[1\]:|login:" "$LOG"
+}
+
 if [ "$ARTIFACT_TYPE" = img ]; then
     # The disk image's root partition is deliberately empty: host/03 formats
     # build-release.img but umounts it before anything is installed, and the
@@ -210,10 +219,15 @@ if grep -qi "Kernel panic" "$LOG"; then
     exit 1
 fi
 
-if userspace_reached; then
-    log_pass "Artifact reached userspace"
+if ! userspace_reached; then
+    log_fail "Kernel started but userspace was never reached"
+    exit 1
+fi
+
+if init_took_over; then
+    log_pass "Artifact reached userspace and the rootfs init took over"
     exit 0
 fi
 
-log_fail "Kernel started but userspace was never reached"
+log_fail "Initramfs handed over but the rootfs init never ran (silent after switch_root)"
 exit 1

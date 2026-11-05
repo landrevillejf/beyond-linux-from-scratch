@@ -122,6 +122,7 @@ CONFIG_VFAT_FS=y
 # mounted.
 CONFIG_ISO9660_FS=y
 CONFIG_SQUASHFS=y
+CONFIG_OVERLAY_FS=y
 # Both ISO stages compress with `mksquashfs -comp xz`; the decompressor is a
 # separate symbol that defaults to n, so SQUASHFS alone mounts nothing.
 CONFIG_SQUASHFS_XZ=y

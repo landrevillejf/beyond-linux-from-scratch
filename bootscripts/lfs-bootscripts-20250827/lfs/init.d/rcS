@@ -1,0 +1,33 @@
+#!/bin/sh
+########################################################################
+# Begin rcS
+#
+# Description : Run all S scripts in /etc/rc.d/rcS.d
+#
+# Authors     : Gerard Beekmans - gerard@linuxfromscratch.org
+#
+# Version     : LFS 12.4
+#
+########################################################################
+
+### BEGIN INIT INFO
+# Provides:            rcS
+# Required-Start:
+# Should-Start:
+# Required-Stop:
+# Should-Stop:
+# Default-Start:       S
+# Default-Stop:
+# Short-Description:   Runs the S-stage boot scripts
+# Description:         Hands the S runlevel to rc so every S* link in
+#                      /etc/rc.d/rcS.d runs in order: mountvirtfs,
+#                      modules, localnet, udev, swap, checkfs, mountfs,
+#                      cleanfs, udev_retry, console, sysctl.  Without
+#                      this script inittab's sysinit line points at
+#                      nothing and none of those scripts ever runs.
+# X-LFS-Provided-By:   LFS
+### END INIT INFO
+
+exec /etc/rc.d/init.d/rc S
+
+# End rcS

@@ -259,19 +259,46 @@ cp -v "$KERNEL" "$ISO_ROOT/boot/vmlinuz"
 cp -v "$INITRAMFS" "$ISO_ROOT/boot/initramfs.img"
 
 # Créer le squashfs (taille > 4 Go)
+# ---------------------------------------------------------------------------
+# Static device nodes in the packed rootfs (see final/15 for the rationale:
+# the live root needs /dev/console and /dev/null before any boot script
+# runs, and the 0.57.4 images shipped an empty /dev because mksquashfs
+# excluded dev/*).
+# ---------------------------------------------------------------------------
+if mountpoint -q "$LFS/dev"; then
+    $SUDO umount "$LFS/dev" || {
+        echo "[ERROR] $LFS/dev is a live mount; refusing to pack it" >&2
+        exit 1
+    }
+fi
+$SUDO mkdir -p "$LFS/dev"
+while read -r node type major minor mode; do
+    if [ ! -e "$LFS/dev/$node" ]; then
+        $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor"
+    fi
+done <<'NODES'
+console c 5 1 600
+tty     c 5 0 666
+null    c 1 3 666
+zero    c 1 5 666
+random  c 1 8 666
+urandom c 1 9 666
+NODES
+
 echo "[INFO] Creating squashfs..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed – sources/ alone is a thousand tarballs,
 # and Nightly #232 spent most of this stage's 28m22s compressing them on the
 # minimal profile.  Excluding "dir/*" rather than "dir" leaves the empty
-# directory behind, which matters for /dev, /proc, /sys and /run: busybox
-# switch_root moves those four mounts into the new root and fails outright
-# when the mount points are absent.  "*.iso" keeps this stage's own output –
+# directory behind, which matters for /proc, /sys and /run: busybox
+# switch_root moves those mounts into the new root and fails outright
+# when the mount points are absent.  /dev is the exception: it is packed
+# with the static nodes created above.  "*.iso" keeps this stage's own output –
 # and that of a previous --resume-from installer run – out of the image it
 # is building.  Same list nightly.yml uses for the rootfs tarball.
 mksquashfs "$LFS" "$ISO_ROOT/live.squashfs" -comp xz -noappend \
     -wildcards \
-    -e "proc/*" "sys/*" "dev/*" "run/*" "tmp/*" "lost+found/*" \
+    -e "proc/*" "sys/*" "run/*" "tmp/*" "lost+found/*" \
     "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
     "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
     "*.iso" "*.iso.sig"

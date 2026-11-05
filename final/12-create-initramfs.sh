@@ -448,22 +448,43 @@ fi
 # ---------------------------------------------------------------------------
 # Live media support: the live ISO (final/15-create-live-system.sh) boots
 # with root=/dev/sr0, but the real root filesystem lives inside the
-# live.squashfs stored on the media, not on the media itself.
+# live.squashfs stored on the media, not on the media itself.  The squashfs
+# is read-only, so a tmpfs-backed overlayfs is stacked on top of it:
+# without an upper layer every write of the live session (X11 sockets in
+# /tmp, lightdm state in /var, lg3d temp files) fails and the desktop never
+# starts.  upper and work share one tmpfs, and the lower, the rw tmpfs and
+# the media mount are all moved under /sysroot so switch_root carries them
+# (switch_root refuses an old rootfs that still has mounts).  Moving onto
+# the bare read-only squashfs always failed, which is why the media mount
+# used to be lost; the overlay makes the target writable.
 # ---------------------------------------------------------------------------
 if [ -f /mnt/live.squashfs ]; then
     echo "Live media detected, mounting live.squashfs"
-    mkdir -p /sysroot /sysroot/media/live
+    mkdir -p /live/lower /live/rw /sysroot
     # mount -o loop automatically sets up the loop device, avoiding the
     # need for /dev/loop0 to exist beforehand (devtmpfs may not create it).
     # This is more robust than explicit losetup in a minimal initramfs.
-    if /bin/busybox mount -o loop,ro /mnt/live.squashfs /sysroot 2>/dev/null; then
-        # Move the boot media mount inside the new root so the file
-        # backing the loop device survives switch_root.
-        /bin/busybox mount -o move /mnt /sysroot/media/live 2>/dev/null || true
-    else
+    if ! /bin/busybox mount -o loop,ro /mnt/live.squashfs /live/lower 2>/dev/null; then
         echo "Failed to mount live.squashfs. Dropping to shell."
         /bin/busybox sh
     fi
+    if ! /bin/busybox mount -t tmpfs tmpfs /live/rw 2>/dev/null; then
+        echo "Failed to mount the live overlay tmpfs. Dropping to shell."
+        /bin/busybox sh
+    fi
+    mkdir -p /live/rw/upper /live/rw/work
+    if ! /bin/busybox mount -t overlay overlay \
+        -o lowerdir=/live/lower,upperdir=/live/rw/upper,workdir=/live/rw/work \
+        /sysroot 2>/dev/null; then
+        echo "Failed to stack the overlay on live.squashfs. Dropping to shell."
+        /bin/busybox sh
+    fi
+    mkdir -p /sysroot/.live /sysroot/media/live
+    /bin/busybox mount -o move /live/lower /sysroot/.live/lower 2>/dev/null || true
+    /bin/busybox mount -o move /live/rw /sysroot/.live/rw 2>/dev/null || true
+    # Move the boot media mount inside the new root so the file
+    # backing the loop device survives switch_root.
+    /bin/busybox mount -o move /mnt /sysroot/media/live 2>/dev/null || true
     /bin/busybox umount /proc
     /bin/busybox umount /sys
     /bin/busybox umount /dev
