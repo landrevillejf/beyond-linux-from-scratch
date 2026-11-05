@@ -481,6 +481,35 @@
 
 ### Fixed
 
+- **`lg3d` / sysvinit nightly #95 aborted at `init-system`: the `rcS`
+  post-install gate fired on a file the LFS design never ships**
+  (`lfs/06a-init-system.sh`,
+  `bootscripts/lfs-bootscripts-20250827/Makefile`,
+  `bootscripts/lfs-bootscripts-20250827/lfs/init.d/rcS`,
+  `tests/test_acceptance_shell.py`)
+
+  The previous sysvinit-boot fix restored an `rcS` script into the vendored
+  `bootscripts/lfs-bootscripts-20250827/` tree and made `lfs/06a` fail the
+  stage when `/etc/init.d/rcS` was absent after install.  But the build never
+  consumes that vendored tree: `run_build required lfs-bootscripts` extracts
+  the *downloaded* `lfs-bootscripts-20250827.tar.xz` from `/sources` and runs
+  its Makefile, which - like upstream and the LFS book (12.4, 9.6.2) -
+  installs no `rcS` script.  The S stage is driven by the `rc` dispatcher run
+  as `rc S` over the `rcS.d/S*` symlinks.  So the fabricated `rcS` never
+  reached the image, the new fatal gate aborted every sysvinit build that
+  actually ran `init-system` (nightly #95; the systemd leg is unaffected), and
+  the original dead-console bug stayed unfixed.
+
+  `lfs/06a` now writes the book's inittab (`si::sysinit:/etc/rc.d/init.d/rc S`,
+  plus the `l0`/`su`/`s1` lines it was missing), gates on
+  `/etc/rc.d/init.d/rc` and the `rcS.d/S00mountvirtfs` link instead of a
+  fabricated `rcS`, and points its `is_installed` lfs-bootscripts probe at the
+  `rc` dispatcher.  The vestigial vendored `rcS` file and its Makefile install
+  line are reverted so the tree matches upstream again, and
+  `TestSysvinitLiveBootGuardrails` now asserts the book `rc S` sysinit line and
+  that no `rcS` is fabricated.  The `final/12`/`final/14`/`final/15` `/dev`-node
+  and overlayfs fixes from that PR are unchanged and remain correct.
+
 - **The sysvinit live ISOs booted to a silent dead console after
   `switch_root`: missing `rcS`, empty `/dev`, read-only live root**
   (`bootscripts/lfs-bootscripts-20250827/lfs/init.d/rcS`,

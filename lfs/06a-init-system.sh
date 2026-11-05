@@ -236,7 +236,7 @@ is_installed() {
     [ -f "$(marker_for "$pkg")" ] && return 0
     case "$pkg" in
         sysvinit)      [ -x /sbin/init ] && ! readlink /sbin/init 2>/dev/null | grep -q systemd ;;
-        lfs-bootscripts) [ -f /etc/init.d/rcS ] ;;
+        lfs-bootscripts) [ -x /etc/rc.d/init.d/rc ] ;;
         libgpg-error)  have_pc gpg-error ;;
         libgcrypt)     have_pc libgcrypt ;;
         libseccomp)    have_pc libseccomp ;;
@@ -318,32 +318,45 @@ if [ "$INIT_SYSTEM" = "sysvinit" ]; then
     # Install lfs-bootscripts (LFS book: make install)
     run_build required lfs-bootscripts
 
-    # rcS drives the whole S stage (mountvirtfs, checkfs, mountfs, udev):
-    # without it inittab's sysinit line points at nothing and the system
-    # boots to a silent dead console, so a missing file must fail the
-    # stage instead of shipping (0.57.4 sysvinit ISOs, nightly 20261105).
-    if [ ! -f /etc/init.d/rcS ]; then
-        log_error "lfs-bootscripts installed but /etc/init.d/rcS is missing"
+    # The LFS book (12.4, 9.6.2) drives the whole S stage from inittab's
+    # `si::sysinit:/etc/rc.d/init.d/rc S`: the rc dispatcher upstream
+    # installs, run with the S argument over the rcS.d S* symlinks
+    # (mountvirtfs, checkfs, mountfs, udev, console, ...).  Neither the
+    # book nor upstream ships an rcS script - a previous fix fabricated
+    # one in the vendored bootscripts tree, but the build consumes the
+    # downloaded lfs-bootscripts tarball, not that tree, so rcS never
+    # reached the image and the S stage never ran (0.57.4 sysvinit ISOs
+    # booted to a silent dead console; nightly #95).  Gate on the
+    # artifacts the book design actually needs.
+    if [ ! -x /etc/rc.d/init.d/rc ]; then
+        log_error "lfs-bootscripts installed but /etc/rc.d/init.d/rc is missing"
+        exit 1
+    fi
+    if [ ! -e /etc/rc.d/rcS.d/S00mountvirtfs ]; then
+        log_error "lfs-bootscripts installed but the rcS.d S-stage links are missing"
         exit 1
     fi
 
-    # Create /etc/inittab (LFS book chapter 9.4)
+    # Create /etc/inittab (LFS book 12.4, 9.6.2)
     cat > /etc/inittab <<'INITTAB'
 id:3:initdefault:
-si::sysinit:/etc/init.d/rcS
-l1:1:wait:/etc/init.d/rc 1
-l2:2:wait:/etc/init.d/rc 2
-l3:3:wait:/etc/init.d/rc 3
-l4:4:wait:/etc/init.d/rc 4
-l5:5:wait:/etc/init.d/rc 5
-l6:6:wait:/etc/init.d/rc 6
+si::sysinit:/etc/rc.d/init.d/rc S
+l0:0:wait:/etc/rc.d/init.d/rc 0
+l1:S1:wait:/etc/rc.d/init.d/rc 1
+l2:2:wait:/etc/rc.d/init.d/rc 2
+l3:3:wait:/etc/rc.d/init.d/rc 3
+l4:4:wait:/etc/rc.d/init.d/rc 4
+l5:5:wait:/etc/rc.d/init.d/rc 5
+l6:6:wait:/etc/rc.d/init.d/rc 6
 ca:12345:ctrlaltdel:/sbin/shutdown -t1 -a -r now
+su:S06:once:/sbin/sulogin
+s1:1:respawn:/sbin/sulogin
 1:2345:respawn:/sbin/agetty --noclear tty1 9600 linux
-2:2345:respawn:/sbin/agetty --noclear tty2 9600 linux
-3:2345:respawn:/sbin/agetty --noclear tty3 9600 linux
-4:2345:respawn:/sbin/agetty --noclear tty4 9600 linux
-5:2345:respawn:/sbin/agetty --noclear tty5 9600 linux
-6:2345:respawn:/sbin/agetty --noclear tty6 9600 linux
+2:2345:respawn:/sbin/agetty tty2 9600 linux
+3:2345:respawn:/sbin/agetty tty3 9600 linux
+4:2345:respawn:/sbin/agetty tty4 9600 linux
+5:2345:respawn:/sbin/agetty tty5 9600 linux
+6:2345:respawn:/sbin/agetty tty6 9600 linux
 INITTAB
 
 # -----------------------------------------------------------------------

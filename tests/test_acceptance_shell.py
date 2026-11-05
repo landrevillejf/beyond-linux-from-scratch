@@ -6166,12 +6166,16 @@ class TestSysvinitLiveBootGuardrails:
     Three independent holes combined into one unbootable image, and none
     of them could fail a build on its own:
 
-    1. rcS was missing from the vendored lfs-bootscripts tree.  The
-       Makefile installs every init script by explicit name and its
-       `links:` target still creates the rcS.d S* symlinks, but nothing
-       installed rcS itself, so inittab's `sysinit:/etc/init.d/rcS` line
-       pointed at a file that did not exist and the whole S stage
-       (mountvirtfs, checkfs, mountfs, udev, console) never ran.
+    1. lfs/06a wrote a non-book inittab whose `sysinit:/etc/init.d/rcS`
+       line pointed at a file the LFS design never ships.  Upstream
+       lfs-bootscripts drives the S stage with `rc S` (the rc dispatcher
+       run over the rcS.d S* symlinks), not an rcS script, so the whole S
+       stage (mountvirtfs, checkfs, mountfs, udev, console) never ran.  A
+       prior fix fabricated rcS in the vendored tree, but the build
+       consumes the downloaded lfs-bootscripts tarball, not that tree, so
+       it never reached the image and the fatal rcS gate then aborted the
+       stage outright (nightly #95).  lfs/06a now writes the book's
+       `si::sysinit:/etc/rc.d/init.d/rc S` and gates on the rc dispatcher.
     2. mksquashfs excluded `dev/*`, so the packed rootfs had an empty
        /dev: after switch_root there was no /dev/console and the boot
        went completely silent.
@@ -6199,20 +6203,28 @@ class TestSysvinitLiveBootGuardrails:
         Path('config/kernel-config-gnu-free'),
     )
 
-    def test_vendored_bootscripts_ship_rcs(self):
-        """rcS must exist, drive the S stage, and be installed by name."""
-        assert self.RCS.exists(), 'vendored rcS is missing again'
-        rcs = self.RCS.read_text()
-        assert 'rc S' in rcs, 'rcS no longer hands the S runlevel to rc'
-        make = self.MAKEFILE.read_text()
-        assert 'lfs/init.d/rcS' in make, \
-            'Makefile does not install rcS by name'
+    def test_inittab_uses_book_rc_s_sysinit(self):
+        """inittab must drive the S stage via `rc S` (LFS book 12.4 9.6.2).
 
-    def test_init_stage_fails_when_rcs_missing(self):
-        """A missing rcS after install must abort the stage, not ship."""
+        Upstream lfs-bootscripts ships no rcS script; the S stage is the
+        rc dispatcher run with the S argument over the rcS.d S* symlinks.
+        The vendored tree must not fabricate an rcS the build never uses.
+        """
         code = self.INIT.read_text()
-        assert 'lfs-bootscripts installed but /etc/init.d/rcS is missing' \
-            in code, 'lfs/06a lost its fatal rcS post-install gate'
+        assert 'si::sysinit:/etc/rc.d/init.d/rc S' in code, \
+            'lfs/06a inittab no longer uses the book rc S sysinit line'
+        assert 'si::sysinit:/etc/init.d/rcS' not in code, \
+            'lfs/06a still points sysinit at a non-existent rcS'
+        assert not self.RCS.exists(), \
+            'vendored bootscripts fabricate an rcS the build never uses'
+        assert 'lfs/init.d/rcS' not in self.MAKEFILE.read_text(), \
+            'vendored Makefile still installs a fabricated rcS'
+
+    def test_init_stage_fails_when_rc_dispatcher_missing(self):
+        """A missing rc dispatcher after install must abort the stage."""
+        code = self.INIT.read_text()
+        assert 'lfs-bootscripts installed but /etc/rc.d/init.d/rc is missing' \
+            in code, 'lfs/06a lost its fatal rc-dispatcher post-install gate'
 
     def test_iso_stages_pack_static_dev_nodes(self):
         """Both ISO stages must create /dev nodes and stop excluding them."""
