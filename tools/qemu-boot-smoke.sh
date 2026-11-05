@@ -165,7 +165,7 @@ live_media_mounted() {
 # rootfs: the sysvinit S stage opening line, systemd as PID 1, or a getty.
 # "Mounting root:" alone is printed by the initramfs *before* the handover,
 # so accepting it let the 0.57.4 sysvinit live ISOs pass this gate while
-# they booted to a silent dead console (missing rcS + empty /dev).
+# they booted to a silent dead console (S stage never ran + empty /dev).
 init_took_over() {
     grep -Eq "Mounting virtual file systems|systemd\[1\]:|login:" "$LOG"
 }

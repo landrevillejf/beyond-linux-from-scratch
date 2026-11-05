@@ -39,7 +39,6 @@ files: create-dirs
 	install -m ${MODE} lfs/init.d/mountfs       ${ETCDIR}/rc.d/init.d/
 	install -m ${MODE} lfs/init.d/mountvirtfs   ${ETCDIR}/rc.d/init.d/
 	install -m ${MODE} lfs/init.d/network       ${ETCDIR}/rc.d/init.d/
-	install -m ${MODE} lfs/init.d/rcS           ${ETCDIR}/rc.d/init.d/
 	install -m ${MODE} lfs/init.d/rc            ${ETCDIR}/rc.d/init.d/
 	install -m ${MODE} lfs/init.d/reboot        ${ETCDIR}/rc.d/init.d/
 	install -m ${MODE} lfs/init.d/sendsignals   ${ETCDIR}/rc.d/init.d/
