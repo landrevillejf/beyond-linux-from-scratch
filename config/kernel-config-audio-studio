@@ -123,6 +123,16 @@ CONFIG_VFAT_FS=y
 CONFIG_NTFS_FS=y
 CONFIG_PROC_FS=y
 CONFIG_SYSFS=y
+# Live overlay writable layer: the initramfs (final/12-create-initramfs.sh)
+# stacks a tmpfs-backed overlayfs over the read-only live.squashfs, so the
+# upper and work dirs live on a tmpfs.  CONFIG_TMPFS is not named in this
+# fragment, so the built kernel had no tmpfs and the overlay's `mount -t tmpfs`
+# failed, dropping the live ISO to a shell ("Failed to mount the live overlay
+# tmpfs", nightly lg3d #95).  Like every other boot-critical symbol here it
+# must be spelled out explicitly; POSIX ACLs and xattrs match gnu-free.
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_XATTR=y
 # Live ISO boot: the initramfs (final/12-create-initramfs.sh) mounts the
 # boot media (iso9660) and the live.squashfs it holds via a loop device.
 CONFIG_ISO9660_FS=y

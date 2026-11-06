@@ -6253,6 +6253,28 @@ class TestSysvinitLiveBootGuardrails:
             assert 'CONFIG_OVERLAY_FS=y' in cfg.read_text(), \
                 f'{cfg} does not enable CONFIG_OVERLAY_FS'
 
+    def test_kernel_configs_enable_tmpfs_for_live_overlay(self):
+        """The overlay's writable upper/work layer lives on a tmpfs.
+
+        final/12 stacks a tmpfs-backed overlayfs over the read-only
+        live.squashfs, so `mount -t tmpfs` must succeed before switch_root.
+        CONFIG_OVERLAY_FS alone is not enough: CONFIG_TMPFS is a separate
+        symbol that lfs/08's `make olddefconfig` leaves unset when the
+        fragment does not name it, and only the gnu-free fragment carried it.
+        The other three live fragments enabled overlayfs without tmpfs, so
+        the built kernel had no tmpfs, the initramfs printed "Failed to
+        mount the live overlay tmpfs" and dropped to a shell -- the systemd
+        leg of nightly lg3d #95.  Every fragment that enables overlayfs for
+        the live path must enable tmpfs too.
+        """
+        for cfg in self.KERNEL_CONFIGS:
+            text = cfg.read_text()
+            assert 'CONFIG_OVERLAY_FS=y' in text, \
+                f'{cfg} does not enable CONFIG_OVERLAY_FS'
+            assert 'CONFIG_TMPFS=y' in text, \
+                f'{cfg} enables overlayfs but not CONFIG_TMPFS, so the ' \
+                f'live overlay upper/work layer cannot mount'
+
     def test_smoke_gate_requires_post_switch_root_marker(self):
         """The live gate must prove init ran, not just the initramfs."""
         code = self.SMOKE.read_text()
