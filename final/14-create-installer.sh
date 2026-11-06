@@ -328,6 +328,32 @@ for entry in "$LFS"/sys/* "$LFS"/sys/fs/*; do
     esac
 done
 
+# ---------------------------------------------------------------------------
+# Live-media fstab and /fastboot.  Same hole as final/15, same rationale over
+# there: rcS.d's S20swap, S30checkfs and S40mountfs all read /etc/fstab, which
+# still carries the installer placeholders `/dev/<xxx>` and `/dev/<yyy>` on the
+# media (only Calamares substitutes them, on the target), and checkfs cannot
+# remount a squashfs-plus-overlay root read-only.  Each one parks this boot.
+# ---------------------------------------------------------------------------
+$SUDO touch "$LFS/fastboot"
+if [ -f "$LFS/etc/fstab" ] && grep -q '^/dev/<' "$LFS/etc/fstab"; then
+    FSTAB_TMP=$(mktemp)
+    if ! sed -E 's|^(/dev/<[^>]+>[[:space:]].*)|# live media: \1|' \
+        "$LFS/etc/fstab" >"$FSTAB_TMP"; then
+        echo "[ERROR] Could not rewrite $LFS/etc/fstab for the live media." >&2
+        rm -f "$FSTAB_TMP"
+        exit 1
+    fi
+    if ! $SUDO cp "$FSTAB_TMP" "$LFS/etc/fstab"; then
+        echo "[ERROR] Could not install the rewritten $LFS/etc/fstab." >&2
+        rm -f "$FSTAB_TMP"
+        exit 1
+    fi
+    $SUDO chmod 0644 "$LFS/etc/fstab"
+    rm -f "$FSTAB_TMP"
+    echo "[INFO] Live media: installer fstab placeholders disabled"
+fi
+
 echo "[INFO] Creating squashfs..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed – sources/ alone is a thousand tarballs,
@@ -354,7 +380,7 @@ mksquashfs "$LFS" "$ISO_ROOT/live.squashfs" -comp xz -noappend \
 # matter what its wildcards pruned.
 LIVE_TREE=$(unsquashfs -no-progress -ls "$ISO_ROOT/live.squashfs" 2>/dev/null)
 for need in squashfs-root/dev/console squashfs-root/dev/null \
-    squashfs-root/sys/fs/cgroup; do
+    squashfs-root/fastboot squashfs-root/sys/fs/cgroup; do
     if ! printf '%s\n' "$LIVE_TREE" | grep -qx "$need"; then
         echo "[ERROR] The installer squashfs carries no /${need#squashfs-root}."
         echo "        The live session cannot boot without it; an -e wildcard"
@@ -362,6 +388,14 @@ for need in squashfs-root/dev/console squashfs-root/dev/null \
         exit 1
     fi
 done
+# -cat takes paths relative to the image root, unlike the -ls listing above.
+if unsquashfs -no-progress -cat "$ISO_ROOT/live.squashfs" etc/fstab \
+    2>/dev/null | grep -q '^/dev/<'; then
+    echo "[ERROR] The packed /etc/fstab still carries the installer"
+    echo "        placeholders: S20swap, S30checkfs and S40mountfs fail on a"
+    echo "        device node that does not exist and park the live boot."
+    exit 1
+fi
 echo "[INFO] Installer rootfs boot paths verified in the squashfs"
 
 # Load branding and ensure images exist

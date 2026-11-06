@@ -482,9 +482,10 @@
 ### Fixed
 
 - **The lg3d live ISOs died inside their own sysinit while CI reported a BIOS
-  PASS: the shipped kernel had no cgroup support and the packed rootfs had no
-  `/sys/fs/cgroup`** (`config/kernel-config{,-arm64,-audio-studio,-brax3,
-  -gnu-free,-pinebook}`, `lfs/08-build-kernel.sh`,
+  PASS: no cgroup support in the shipped kernel, no `/sys/fs/cgroup` in the
+  packed rootfs, and an fstab still written for an installed disk** (`config/
+  kernel-config{,-arm64,-audio-studio,-brax3,-gnu-free,-pinebook}`,
+  `lfs/08-build-kernel.sh`,
   `final/14-create-installer.sh`, `final/15-create-live-system.sh`,
   `tools/qemu-boot-smoke.sh`, `.github/workflows/lg3d.yml`,
   `.github/workflows/nightly.yml`, `tests/test_acceptance_shell.py`)
@@ -563,10 +564,31 @@
   own sysinit, and let them be downloaded from a red nightly.  `create-release`
   keeps its intentional `if: always()` (nightly #230).
 
-  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (9 cases) pinning the
+  Fixing the cgroup hole alone only moves the wall one script further, and that
+  wall is real: rcS.d also carries `S20swap`, `S30checkfs` and `S40mountfs`, and
+  all three read an /etc/fstab that on the media still holds the installer
+  placeholders `/dev/<xxx> / <fff>` and `/dev/<yyy> swap` -- only the installer
+  substitutes them, on the target.  Measured, not assumed: `mount --all
+  --test-opts no_netdev` over those lines exits 64 with `unknown filesystem type
+  '<fff>'`, and `mount -n -o remount,ro /` on a squashfs-lower plus tmpfs-upper
+  root exits 32 with `overlay: No changes allowed in reconfigure`, which is
+  precisely checkfs' `wait_for_user` + halt branch.  `final/14` and `final/15`
+  now rewrite the placeholder lines to `# live media: ...` in the tree they pack
+  (idempotent, verified against the real `lfs/07` heredoc bytes) and create
+  `/fastboot`, the book's own switch that makes checkfs exit 0 before the
+  remount and the fsck; `mountfs` deletes that file during the same boot, so an
+  installed target loses it after its first boot and keeps its file check.
+  Both stages then read the packed fstab back with `unsquashfs -no-progress
+  -cat` and fail the stage if an uncommented placeholder survives or if
+  `/fastboot` is missing from the image -- the same prove-it-after-packing
+  lesson the `-e` wildcards taught.
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (12 cases) pinning the
   fstab/`mountvirtfs` demand, the chain in every fragment, the `olddefconfig`
   survival guard, the packed mountpoint, the post-pack verification, the
-  console ordering, and both gates' abort lists plus upload ordering;
+  vendored `swap`/`checkfs`/`mountfs` sysinit contract, the live fstab rewrite
+  and `/fastboot`, the packed-fstab readback, the console ordering, and both
+  gates' abort lists plus upload ordering;
   `test_smoke_gate_requires_post_switch_root_marker` and
   `test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub` are updated to the
   honest markers.  The decisive A/B -- the same ISO booting past
