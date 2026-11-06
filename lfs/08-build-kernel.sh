@@ -113,10 +113,14 @@ log_info "Kernel hardening knobs: lockdown=$LOCKDOWN_MODE module_sig_force=$MODU
 # olddefconfig on both build paths below.  Only symbols the fragment itself
 # names are checked, so a fragment that does not ask for one is never judged
 # for it - the guard catches the silent drop, it does not impose a policy.
+# The gated set is exactly the chain the boot needs: BLFS 13.0
+# general/elogind states that "elogind strictly needs a kernel with
+# CONFIG_CGROUPS enabled at runtime", and rcS.d/S00mountvirtfs mounts
+# cgroup2 for the sysvinit side of the same book.  Nothing else belongs here;
+# an unrelated symbol must never be able to fail the kernel stage.
 CGUARD_SYMBOLS="CONFIG_CGROUPS CONFIG_CGROUP_SCHED CONFIG_FAIR_GROUP_SCHED \
     CONFIG_MEMCG CONFIG_CGROUP_PIDS CONFIG_CGROUP_DEVICE \
-    CONFIG_CGROUP_FREEZER CONFIG_NAMESPACES CONFIG_PID_NS \
-    CONFIG_POSIX_MQUEUE"
+    CONFIG_CGROUP_FREEZER CONFIG_NAMESPACES CONFIG_PID_NS"
 
 # ---------------------------------------------------------------------------
 # Locate the kernel sources.  The chroot mirror ($LFS/sources) is the
