@@ -779,36 +779,52 @@ jobs:
             exit 0
           fi
           echo "Using OVMF firmware: $OVMF_FW"
-          # Extract kernel/initrd from the ISO for direct UEFI boot test
           WORKDIR=$(mktemp -d)
           trap 'rm -rf "$WORKDIR"' EXIT
-          if ! xorriso -osirrox on -indev "$ISO_PATH" \
-              -extract /isolinux/vmlinuz "$WORKDIR/vmlinuz" \
-              -extract /isolinux/initrd.img "$WORKDIR/initrd.img" 2>/dev/null &&
-             ! xorriso -osirrox on -indev "$ISO_PATH" \
-              -extract /boot/vmlinuz "$WORKDIR/vmlinuz" \
-              -extract /boot/initramfs.img "$WORKDIR/initrd.img" 2>/dev/null; then
-            echo "::warning::Could not extract kernel from ISO for UEFI test"
-            exit 0
+          # OVMF needs a writable VARS store beside the readonly CODE; boot the
+          # ISO through the firmware with NO -kernel/-initrd.  Passing -kernel
+          # makes QEMU load the kernel via the Linux boot protocol and BYPASS
+          # firmware boot-device selection entirely, so OVMF never reads the El
+          # Torito EFI entry or efi.img -- which is exactly why the previous
+          # version of this step grepped "Linux version" and passed even for a
+          # BIOS-only ISO with no UEFI entry at all.  Booting the media as
+          # firmware does exercises the real chain: El Torito EFI -> FAT16
+          # efi.img -> \EFI\BOOT\BOOTX64.EFI -> GRUB -> kernel.
+          OVMF_VARS_SRC=""
+          for v in \
+            /usr/share/OVMF/OVMF_VARS.fd \
+            /usr/share/ovmf/OVMF_VARS.fd \
+            /usr/share/OVMF/OVMF_VARS_4M.fd; do
+            if [ -f "$v" ]; then
+              OVMF_VARS_SRC="$v"
+              break
+            fi
+          done
+          VARS_ARG=""
+          if [ -n "$OVMF_VARS_SRC" ]; then
+            cp "$OVMF_VARS_SRC" "$WORKDIR/ovmf-vars.fd"
+            VARS_ARG="-drive if=pflash,format=raw,file=$WORKDIR/ovmf-vars.fd"
           fi
-          # Boot with UEFI firmware (OVMF) and verify kernel starts
-          timeout 120 qemu-system-x86_64 \
+          timeout 240 qemu-system-x86_64 \
             -machine q35,accel=tcg \
             -cpu max \
             -m 2G -smp 2 \
             -drive if=pflash,format=raw,readonly=on,file="$OVMF_FW" \
-            -kernel "$WORKDIR/vmlinuz" \
-            -initrd "$WORKDIR/initrd.img" \
-            -append "console=ttyS0 earlyprintk=serial root=/dev/sr0 ro" \
+            $VARS_ARG \
             -cdrom "$ISO_PATH" \
-            -nographic -no-reboot > "$WORKDIR/uefi-boot.log" 2>&1 || true
-          # Verify the kernel booted under UEFI
-          if grep -q "Linux version" "$WORKDIR/uefi-boot.log"; then
-            echo "✅ UEFI boot successful: kernel started"
-            tail -n 20 "$WORKDIR/uefi-boot.log"
+            -boot order=d \
+            -display none -serial file:"$WORKDIR/uefi-boot.log" \
+            -monitor none -no-reboot || true
+          # Success = the firmware handed off to GRUB EFI (menu/version on the
+          # serial console) or the kernel it chain-loaded started.  A BIOS-only
+          # ISO shows neither and instead logs OVMF's "failed to load ... UEFI
+          # QEMU DVD-ROM ... Not Found" / "No bootable option", so it fails.
+          if grep -aqE "GRUB|LFS Live|Linux version|switch_root|login:" "$WORKDIR/uefi-boot.log"; then
+            echo "UEFI boot successful: firmware loaded GRUB EFI from the ISO"
+            grep -aoE "GRUB version [0-9.]+|LFS Live|Linux version [^ ]+" "$WORKDIR/uefi-boot.log" | sort -u | head
           else
-            echo "::error::UEFI boot failed: kernel never started"
-            tail -n 40 "$WORKDIR/uefi-boot.log"
+            echo "::error::UEFI boot failed: firmware never reached GRUB EFI or the kernel"
+            tail -n 40 "$WORKDIR/uefi-boot.log" | tr -d '\000'
             exit 1
           fi
 

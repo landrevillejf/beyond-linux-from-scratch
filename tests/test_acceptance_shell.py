@@ -5711,6 +5711,111 @@ class TestIsolinuxBiosPayloadGuardrails:
             'lg3d.yml must install the module package the ISO stage needs'
 
 
+class TestLiveIsoUefiHybridGuardrails:
+    r"""The shipped lg3d live ISO was BIOS-only for 8 months.
+
+    final/15 only ever *consumed* a prebuilt
+    $LFS/boot/efi/EFI/BOOT/BOOTX64.EFI that nothing in CI created, warned,
+    and wrote a BIOS-only image over final/14's hybrid one at the same
+    path.  The lg3d "UEFI smoke test" booted QEMU with -kernel/-initrd,
+    which bypasses firmware boot-device selection, so it grepped "Linux
+    version" and passed even for an ISO with no El Torito EFI entry at
+    all.  These guardrails pin the proven hybrid recipe so neither the
+    stage nor the smoke test can silently regress to BIOS-only again.
+
+    The recipe was validated end-to-end under OVMF with no -kernel: the
+    firmware loads the El Torito no-emulation image as a block device and
+    runs \EFI\BOOT\BOOTX64.EFI from a FAT16 on it.  FAT32 (mkfs.vfat
+    -F 32 on a small image) and a raw PE binary both fail with "UEFI QEMU
+    DVD-ROM ... Not Found".
+    """
+
+    LIVE = Path('final/15-create-live-system.sh')
+    LG3D_WF = Path('.github/workflows/lg3d.yml')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    def _uefi_smoke_step(self):
+        """The lg3d UEFI smoke-test step body, comments stripped."""
+        wf = self.LG3D_WF.read_text()
+        marker = 'Boot artifact in QEMU (smoke test - UEFI mode)'
+        assert marker in wf, 'lg3d.yml lost its UEFI smoke-test step'
+        step = wf.split(marker, 1)[1].split('\n      - name:', 1)[0]
+        return self._code(step)
+
+    def test_live_iso_builds_its_own_grub_efi_binary(self):
+        """final/15 must generate BOOTX64.EFI, not consume a phantom one."""
+        code = self._code(self.LIVE.read_text())
+        assert 'grub-mkstandalone' in code and 'grub2-mkstandalone' in code, \
+            'final/15 must resolve grub-mkstandalone (Fedora: grub2-)'
+        assert '-O x86_64-efi' in code, \
+            'final/15 must build the EFI binary for x86_64-efi'
+        assert '/usr/lib/grub/x86_64-efi/modinfo.sh' in code, \
+            'final/15 must require the x86_64-efi modules it packs from'
+        # The old consume-a-prebuilt-EFI path is what made it BIOS-only.
+        assert 'boot/efi/EFI/BOOT' not in code, \
+            'final/15 must not consume a prebuilt EFI file nobody creates'
+        assert 'EFI_OPTION' not in code and 'BIOS-only' not in code, \
+            'final/15 must not keep the silent BIOS-only fallback'
+
+    def test_live_iso_efi_boot_image_is_fat16_never_fat32(self):
+        """FAT32 on a small image is the exact trap OVMF rejects."""
+        code = self._code(self.LIVE.read_text())
+        assert 'mkfs.vfat -F 16' in code, \
+            'final/15 must pin the ESP image to FAT16'
+        assert '-F 32' not in code, \
+            'final/15 must never build a FAT32 ESP OVMF cannot boot'
+        for tool in ('mkfs.vfat', 'mmd', 'mcopy'):
+            assert tool in code, \
+                f'final/15 must build the FAT with mtools ({tool})'
+
+    def test_live_iso_adds_the_eltorito_efi_entry_and_gpt(self):
+        """The hybrid xorriso command must carry the EFI alt-boot entry."""
+        code = self._code(self.LIVE.read_text())
+        assert '-eltorito-alt-boot -e efi.img -no-emul-boot' in code, \
+            'final/15 must add the El Torito EFI boot entry'
+        assert '-isohybrid-gpt-basdat' in code, \
+            'final/15 must expose the ESP as a GPT partition for sticks'
+        assert '-isohybrid-mbr' in code, \
+            'final/15 must keep the isohybrid MBR for BIOS'
+
+    def test_live_iso_reads_the_efi_payload_back_out(self):
+        """The finished image is the only place the EFI entry is visible."""
+        code = self._code(self.LIVE.read_text())
+        assert '-extract "/efi.img"' in code, \
+            'final/15 must extract /efi.img back out of the finished ISO'
+        gate = code[code.index('VERIFY_ESP='):]
+        assert '::EFI/BOOT/BOOTX64.EFI' in gate, \
+            'final/15 must pull BOOTX64.EFI out of the ESP'
+        assert '!= "MZ"' in gate, \
+            'final/15 must reject an EFI payload that is not a PE/MZ image'
+        assert 'rm -f' in gate and 'exit 1' in gate, \
+            'final/15 must delete an ISO whose EFI payload it rejected'
+
+    def test_lg3d_uefi_smoke_test_boots_firmware_not_kernel(self):
+        """-kernel bypasses firmware, so it can never prove a UEFI boot."""
+        step = self._uefi_smoke_step()
+        assert '-cdrom' in step, \
+            'the UEFI smoke test must boot the ISO as media'
+        assert 'if=pflash' in step, \
+            'the UEFI smoke test must run real OVMF firmware'
+        assert '-kernel' not in step and '-initrd' not in step, \
+            'the UEFI smoke test must NOT bypass firmware with -kernel'
+        assert 'GRUB' in step, \
+            'the UEFI smoke test must require evidence GRUB EFI ran'
+
+    def test_lg3d_workflow_installs_the_uefi_toolchain(self):
+        """The runner needs OVMF + mtools/dosfstools to build and boot."""
+        wf = self.LG3D_WF.read_text()
+        for dep in ('ovmf', 'mtools', 'dosfstools', 'grub-efi-amd64-bin'):
+            assert dep in wf, \
+                f'lg3d.yml must install {dep} for the UEFI path'
+
+
 class TestCalamaresBuildStageGuardrails:
     """Guardrails for the opt-in 'calamares-build' stage (blfs/29).
 
