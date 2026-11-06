@@ -354,6 +354,32 @@ if [ -f "$LFS/etc/fstab" ] && grep -q '^/dev/<' "$LFS/etc/fstab"; then
     echo "[INFO] Live media: installer fstab placeholders disabled"
 fi
 
+# And one runlevel further: lfs/07 writes /etc/sysconfig/ifconfig.eth0 for
+# sysvinit with the book's example ONBOOT=yes and IFACE=eth0, init.d/network
+# runs ifup for every ifconfig.* by name, and on the media udev has renamed
+# the NIC (enp0s3), so `ip link set eth0 up` fails and rc parks runlevel 5 at
+# "Press Enter to continue...".  ONBOOT is the book's own switch (ifup line 94
+# exits 0 when booting with ONBOOT != yes); a live session must not claim a
+# hard-coded private address on the host's LAN either.
+for cfg in "$LFS"/etc/sysconfig/ifconfig.*; do
+    [ -f "$cfg" ] || continue
+    if grep -q '^ONBOOT=yes' "$cfg"; then
+        IFCFG_TMP=$(mktemp)
+        if ! sed -E 's|^ONBOOT=yes|ONBOOT=no|' "$cfg" >"$IFCFG_TMP"; then
+            echo "[ERROR] Could not rewrite $cfg for the live media." >&2
+            rm -f "$IFCFG_TMP"
+            exit 1
+        fi
+        if ! $SUDO cp "$IFCFG_TMP" "$cfg"; then
+            echo "[ERROR] Could not install the rewritten $cfg." >&2
+            rm -f "$IFCFG_TMP"
+            exit 1
+        fi
+        rm -f "$IFCFG_TMP"
+        echo "[INFO] Live media: ${cfg##*/} auto-start disabled"
+    fi
+done
+
 echo "[INFO] Creating squashfs..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed – sources/ alone is a thousand tarballs,
@@ -396,6 +422,17 @@ if unsquashfs -no-progress -cat "$ISO_ROOT/live.squashfs" etc/fstab \
     echo "        device node that does not exist and park the live boot."
     exit 1
 fi
+# And no packed interface may auto-start on the media either.
+for packed in $(printf '%s\n' "$LIVE_TREE" |
+    grep '^squashfs-root/etc/sysconfig/ifconfig\.'); do
+    if unsquashfs -no-progress -cat "$ISO_ROOT/live.squashfs" \
+        "${packed#squashfs-root/}" 2>/dev/null | grep -q '^ONBOOT=yes'; then
+        echo "[ERROR] $packed still auto-starts on the live media."
+        echo "        ifup fails on a NIC udev has renamed and rc parks"
+        echo "        runlevel 5 at 'Press Enter to continue...'."
+        exit 1
+    fi
+done
 echo "[INFO] Installer rootfs boot paths verified in the squashfs"
 
 # Load branding and ensure images exist
