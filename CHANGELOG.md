@@ -481,6 +481,61 @@
 
 ### Fixed
 
+- **The shipped lg3d live ISO was BIOS-only and never booted on UEFI: `final/15`
+  consumed an EFI file nothing created, then overwrote `final/14`'s hybrid ISO**
+  (`final/15-create-live-system.sh`, `.github/workflows/lg3d.yml`,
+  `tests/test_acceptance_shell.py`)
+
+  For 8 months no lg3d image was installable on a modern (UEFI) machine.  Three
+  independent holes combined, none of which could fail a build on its own.
+  (1) `final/15` only ever *consumed* a prebuilt
+  `$LFS/boot/efi/EFI/BOOT/BOOTX64.EFI`: nothing in CI created it (`final/13`
+  writes the different `EFI/GRUB/grubx64.efi`, and only when an ESP is mounted),
+  so the stage hit its `No EFI bootloader found - building BIOS-only ISO`
+  warning, dropped the `-eltorito-alt-boot` entry and exited 0.  (2) Both
+  `final/14` and `final/15` write `${LFS}/${ISO_NAME}`, and `builder.py`
+  schedules `installer` then `live-system`, so the BIOS-only live ISO overwrote
+  `final/14`'s hybrid installer ISO and the release published only `LFS_LIVE`.
+  (3) The lg3d "UEFI smoke test" booted QEMU with `-kernel`/`-initrd` extracted
+  from the ISO, which bypasses firmware boot-device selection entirely -- OVMF
+  never read the El Torito EFI entry -- so it grepped `Linux version` and passed
+  even for an ISO with no UEFI entry at all.
+
+  `final/15` now builds its own UEFI boot image and always writes a genuine
+  hybrid.  It resolves `grub-mkstandalone` (Fedora `grub2-mkstandalone`) and
+  requires `/usr/lib/grub/x86_64-efi/modinfo.sh`, generates a self-contained
+  `BOOTX64.EFI` embedding a serial-console `grub.cfg` that boots the same
+  kernel+initrd as the isolinux `live` label, packs it into a **FAT16** `efi.img`
+  with `mkfs.vfat -F 16` + mtools (no sudo loop mount), and adds
+  `-eltorito-alt-boot -e efi.img -no-emul-boot -isohybrid-gpt-basdat` to the
+  xorriso command.  A new readback gate extracts `/efi.img` out of the finished
+  ISO, pulls `::EFI/BOOT/BOOTX64.EFI` from it and deletes the image unless its
+  first two bytes are `MZ`.  The silent BIOS-only fallback is gone: a missing
+  toolchain now aborts the stage naming the packages to install.
+
+  FAT16 is load-bearing, not incidental.  Proven end-to-end under OVMF with no
+  `-kernel`: firmware exposes the El Torito no-emulation image as a block device
+  and runs `\EFI\BOOT\BOOTX64.EFI` from a FAT on it.  `mkfs.vfat -F 32` on a
+  small image (too few clusters) and a raw PE binary passed via
+  `-e EFI/BOOT/BOOTX64.EFI` both fail with `BdsDxe: failed to load ... UEFI QEMU
+  DVD-ROM ... Not Found`; the FAT16 tree-file form `grub-mkrescue` itself emits
+  is what boots.  (`final/14`'s x86_64 raw-PE EFI path has the same defect and
+  is tracked as a separate follow-up.)
+
+  The lg3d UEFI smoke test now boots the ISO through real firmware: OVMF CODE
+  (readonly) + a writable VARS copy, `-cdrom` + `-boot order=d`, **no**
+  `-kernel`/`-initrd`, serial captured to a log, and success requires evidence
+  the firmware handed off to GRUB EFI or the kernel it chain-loaded
+  (`GRUB|LFS Live|Linux version|switch_root|login:`).  A BIOS-only ISO logs
+  OVMF's `Not Found` and now fails the leg.
+
+  Tests: new `TestLiveIsoUefiHybridGuardrails` (6 cases) pinning the
+  grub-mkstandalone x86_64-efi build, the FAT16-not-FAT32 ESP, the El Torito
+  EFI + GPT entries, the EFI readback gate, the firmware-not-`-kernel` smoke
+  test and the workflow's OVMF/mtools/dosfstools/grub-efi-amd64-bin deps.  The
+  FAT16 and no-`-kernel` cases were A/B-proven to fail against a sabotaged
+  `-F 32` + `-kernel` regression.
+
 - **The live ISOs booted to a shell at `Failed to mount the live overlay
   tmpfs`: the overlayfs kernel configs enabled `OVERLAY_FS` but not `TMPFS`**
   (`config/kernel-config`, `config/kernel-config-arm64`,
