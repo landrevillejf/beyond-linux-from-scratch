@@ -120,6 +120,35 @@ CONFIG_EFI=y
 CONFIG_EFI_STUB=y
 CONFIG_EFI_MIXED=y
 
+# Control groups: this profile boots a live ISO (live_system: True) under
+# systemd, and systemd as PID 1 aborts outright when cgroup v2 is missing --
+# the shipped audio/lg3d kernels read "# CONFIG_CGROUPS is not set", so the
+# session logged "Failed to mount cgroup v1 hierarchy" and "Freezing
+# execution".  /etc/fstab (lfs/07-configure-lfs.sh) also declares
+# `cgroup2 /sys/fs/cgroup`, which the sysvinit rcS.d/S00mountvirtfs mounts.
+# Sub-options are named because lfs/08 runs `make olddefconfig`, which
+# resolves any symbol absent here to n.
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_MEMCG=y
+CONFIG_BLK_CGROUP=y
+CONFIG_CPUSETS=y
+CONFIG_CGROUP_PIDS=y
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_NET_PRIO=y
+CONFIG_CGROUP_NET_CLASSID=y
+# systemd service isolation (PrivateMounts/PrivateNetwork, journal socket).
+# USER_NS stays off deliberately -- not required to boot.
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_POSIX_MQUEUE=y
+
 # Input drivers
 CONFIG_KEYBOARD_ATKBD=y
 CONFIG_MOUSE_PS2=y

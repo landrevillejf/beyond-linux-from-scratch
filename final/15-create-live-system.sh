@@ -52,7 +52,9 @@ echo "[INFO] Compression: $COMPRESSION, Persistence: $PERSISTENCE_SUPPORT, Defau
 # firmware every modern machine has.  mkfs.vfat (dosfstools) + mmd/mcopy
 # (mtools) build the FAT16 ESP without a sudo loop mount, so the stage stays
 # runnable as the unprivileged builder user.
-for tool in mksquashfs xorriso mkfs.vfat mmd mcopy; do
+# unsquashfs is not only the packing tool's counterpart, it is how the stage
+# proves below that the boot-critical paths actually landed in the image.
+for tool in mksquashfs unsquashfs xorriso mkfs.vfat mmd mcopy; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "[ERROR] $tool not found. Please install it."
         echo "        Debian/Ubuntu: apt install squashfs-tools xorriso dosfstools mtools"
@@ -134,6 +136,43 @@ random  c 1 8 666
 urandom c 1 9 666
 NODES
 
+# ---------------------------------------------------------------------------
+# The cgroup v2 mountpoint in the packed rootfs
+#
+# rcS.d/S00mountvirtfs (the book script) does `mkdir -p /sys/fs/cgroup` and
+# then mounts cgroup2 there, and systemd mounts it itself as PID 1.  Both need
+# the directory to exist in the rootfs: once sysfs is mounted, mkdir inside it
+# returns EPERM, so the mountpoint cannot be created at boot time.  The
+# 0.57.4 live images packed no /sys/fs/cgroup at all -- "sys/*" was in the
+# mksquashfs exclude list, and a wildcard that matches a directory prunes its
+# whole subtree -- so sysvinit aborted with "cannot create directory
+# '/sys/fs/cgroup': Operation not permitted" plus "unknown filesystem type
+# 'cgroup2'" and systemd logged "Freezing execution" (lg3d nightly 20261106,
+# reproduced in QEMU against the published ISO, both firmware modes).
+#
+# Dropping "sys/*" from the excludes is only safe because the live-mount guard
+# below refuses to pack a mounted sysfs and the two stray checks refuse to
+# pack anything under /sys other than the empty cgroup path.
+# ---------------------------------------------------------------------------
+if mountpoint -q "$LFS/sys"; then
+    $SUDO umount "$LFS/sys" || {
+        echo "[ERROR] $LFS/sys is a live mount; refusing to pack it" >&2
+        exit 1
+    }
+fi
+$SUDO mkdir -p "$LFS/sys/fs/cgroup"
+for entry in "$LFS"/sys/* "$LFS"/sys/fs/*; do
+    [ -e "$entry" ] || continue
+    case "${entry##*/}" in
+    fs | cgroup) ;;
+    *)
+        echo "[ERROR] unexpected content under $LFS/sys: $entry" >&2
+        echo "        Only the empty sys/fs/cgroup mountpoint may be packed."
+        exit 1
+        ;;
+    esac
+done
+
 # Créer le squashfs
 echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
@@ -142,16 +181,34 @@ echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
 # switch_root moves those mounts into the new root and fails outright when
 # the mount points are absent.  /dev is the exception: it is packed with
 # the static nodes created above, because the live root needs them before
-# any boot script runs.  "*.iso" is what keeps the
+# any boot script runs.  /sys is the other exception, for the same reason:
+# only the empty sys/fs/cgroup mountpoint is there, guarded above, because
+# cgroup2 cannot be mounted without it.  "*.iso" is what keeps the
 # installer ISO final/14 wrote into $LFS – and this stage's own output on a
 # --resume-from live-system run – out of the image being built.
 mksquashfs "$LFS" "$SQUASHFS" \
     -comp "$COMPRESSION" -Xbcj x86 -b 1M \
     -wildcards \
-    -e "proc/*" "sys/*" "run/*" "tmp/*" "lost+found/*" \
+    -e "proc/*" "run/*" "tmp/*" "lost+found/*" \
     "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
     "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
     "*.iso" "*.iso.sig"
+
+# Prove the boot-critical paths landed in the image.  mksquashfs exits 0 no
+# matter what its wildcards pruned, and the smoke tests boot through paths
+# that cannot see this, so a missing node or mountpoint used to reach the
+# release silently.  One listing pass, exact-match on every required path.
+LIVE_TREE=$(unsquashfs -no-progress -ls "$SQUASHFS" 2>/dev/null)
+for need in squashfs-root/dev/console squashfs-root/dev/null \
+    squashfs-root/sys/fs/cgroup; do
+    if ! printf '%s\n' "$LIVE_TREE" | grep -qx "$need"; then
+        echo "[ERROR] $SQUASHFS carries no /${need#squashfs-root}."
+        echo "        The live session cannot boot without it; an -e wildcard"
+        echo "        here prunes the whole subtree silently."
+        exit 1
+    fi
+done
+echo "[INFO] Live rootfs boot paths verified in the squashfs"
 
 # Préparer l'arborescence ISO
 ISO_DIR="${SCRATCH_DIR}/iso-content"
@@ -221,14 +278,28 @@ if [ -z "$ISOHDPFX" ]; then
 fi
 
 # Configuration isolinux
+# Console parameters for the live kernel, shared with the grub.cfg below.
+# Two console= options on purpose, and the order is the whole point: printk
+# goes to EVERY registered console, but /dev/console - where init, the boot
+# scripts and the rc.d messages are written - is the LAST one named.  Putting
+# ttyS0 last is what makes the serial line carry the userspace stream and not
+# only the kernel log.  The CI UEFI smoke test boots through the loader below
+# and appends nothing to this cmdline, so without a serial console in it that
+# step is blind by construction: it greps a log only GRUB writes to.  Proven
+# on the 20261106 image - a QEMU BIOS boot of that ISO produced a 0-byte
+# serial log while its VGA console showed the entire boot attempt.  The screen
+# still mirrors every kernel message, and on a machine whose UART is absent or
+# not connected the ttyS0 registration simply fails and tty0 stays the
+# console, so nothing changes for a user booting the media.
+LIVE_CONSOLE="console=tty0 console=ttyS0,115200n8"
 cat >"$ISO_DIR/isolinux/isolinux.cfg" <<EOF
 default ${DEFAULT_BOOT}
 label live
   kernel vmlinuz
-  append initrd=initrd.img root=/dev/sr0 ro quiet
+  append initrd=initrd.img root=/dev/sr0 ro quiet ${LIVE_CONSOLE}
 label live-verbose
   kernel vmlinuz
-  append initrd=initrd.img root=/dev/sr0 ro
+  append initrd=initrd.img root=/dev/sr0 ro ${LIVE_CONSOLE}
 EOF
 
 # --- UEFI boot image: GRUB standalone inside a FAT16 ESP -------------------
@@ -255,11 +326,11 @@ set timeout=${LFS_CONFIG_LIVE_SYSTEM_GRUB_TIMEOUT:-10}
 set default=0
 search --file --no-floppy --set=root /isolinux/vmlinuz
 menuentry "LFS Live" {
-    linux /isolinux/vmlinuz root=/dev/sr0 ro quiet
+    linux /isolinux/vmlinuz root=/dev/sr0 ro quiet ${LIVE_CONSOLE}
     initrd /isolinux/initrd.img
 }
 menuentry "LFS Live (verbose)" {
-    linux /isolinux/vmlinuz root=/dev/sr0 ro
+    linux /isolinux/vmlinuz root=/dev/sr0 ro ${LIVE_CONSOLE}
     initrd /isolinux/initrd.img
 }
 EOF

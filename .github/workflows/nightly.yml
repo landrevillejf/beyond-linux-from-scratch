@@ -605,26 +605,6 @@ jobs:
           # names when the release is flattened. The binary repository
           # ships with stable releases only (release.yml).
 
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
-          path: |
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
-            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
-            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
-            /tmp/lfs-build/build-release/lpm-repo/packages.list*
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
-            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
-            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
-          # if-no-files-found stays 'ignore' because the per-profile payload
-          # differs: the rootfs tarball only ships for xfce and arm64, and
-          # packages.list only exists when the profile builds base packages.
-          # The ISO and its signature are expected from every leg now.
-          if-no-files-found: ignore
-
       - name: Boot artifact in QEMU (smoke test)
         if: success() && matrix.arch == 'x86_64'
         run: |
@@ -668,6 +648,32 @@ jobs:
             echo "No bootable artifact (ISO or disk image) found" >&2
             exit 1
           fi
+
+      # Release hygiene: the upload runs AFTER the boot smoke test, on purpose
+      # and exactly as in lg3d.yml.  A step inherits the job's implicit
+      # success() condition, so a leg whose artifact does not boot no longer
+      # hands create-release below something it can publish.  Uploading first
+      # is what let the 20261106 night ship ISOs that abort in their own
+      # sysinit: the run was red, and the ISOs were downloadable anyway.
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          path: |
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
+            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
+            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
+            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
+          # if-no-files-found stays 'ignore' because the per-profile payload
+          # differs: the rootfs tarball only ships for xfce and arm64, and
+          # packages.list only exists when the profile builds base packages.
+          # The ISO and its signature are expected from every leg now.
+          if-no-files-found: ignore
 
       - name: Upload logs on failure
         # Cancelled jobs must leave logs behind as well, otherwise a timeout

@@ -481,6 +481,98 @@
 
 ### Fixed
 
+- **The lg3d live ISOs died inside their own sysinit while CI reported a BIOS
+  PASS: the shipped kernel had no cgroup support and the packed rootfs had no
+  `/sys/fs/cgroup`** (`config/kernel-config{,-arm64,-audio-studio,-brax3,
+  -gnu-free,-pinebook}`, `lfs/08-build-kernel.sh`,
+  `final/14-create-installer.sh`, `final/15-create-live-system.sh`,
+  `tools/qemu-boot-smoke.sh`, `.github/workflows/lg3d.yml`,
+  `.github/workflows/nightly.yml`, `tests/test_acceptance_shell.py`)
+
+  Run `42268421602` (HEAD `da241502`) passed its BIOS smoke step while that
+  step's own log ended with the abort: the sysvinit leg printed `mkdir: cannot
+  create directory '/sys/fs/cgroup': Operation not permitted`, `mount: /sys/fs/
+  cgroup: unknown filesystem type 'cgroup2'`, `FAILURE:` and `Press Enter to
+  continue...`; the systemd leg printed `Failed to mount cgroup v1 hierarchy`
+  then `Freezing execution`.  Reproduced locally on the user's
+  `lfs-0.57.4-lg3d-x86_64-sysvinit-20261106.iso` (QEMU BIOS, serial plus
+  framebuffer): the boot parks at `S00mountvirtfs` forever, so `udev`,
+  `S70console`, LightDM and LG3D never run -- the VirtualBox hang both legs
+  shipped.
+
+  Two stacked defects, each verified in the shipped image.  (1) `boot/
+  config-6.16.1` inside `live.squashfs` reads `# CONFIG_CGROUPS is not set`:
+  no fragment named the cgroup chain and `lfs/08-build-kernel.sh` seeds
+  `.config` from the fragment then runs `make olddefconfig`, which resolves
+  every unnamed symbol to its default -- the identical mechanism behind the
+  `EFI_STUB` hole fixed below.  `lfs/07-configure-lfs.sh` writes the
+  `cgroup2 /sys/fs/cgroup cgroup2` fstab line for every profile and every init
+  system, and the book's `mountvirtfs` mkdir+mounts it, sets `failed=1` and
+  exits 1, so a kernel without `CONFIG_CGROUPS` boots nothing this repository
+  ships.  (2) `final/15` packed the squashfs with `-e ... "sys/*"`, and a
+  wildcard matching a directory prunes its whole subtree, so the image carried
+  no `/sys/fs/cgroup` mountpoint at all -- `mkdir` on a mounted sysfs returns
+  EPERM, hence "Operation not permitted".  The same stages had already learned
+  that lesson for `dev/*` and never applied it to the cgroup mountpoint.
+
+  `CONFIG_CGROUPS=y` plus its 17 dependency/sub-option symbols
+  (`CGROUP_SCHED`, `FAIR_GROUP_SCHED`, `CFS_BANDWIDTH`, `MEMCG`, `BLK_CGROUP`,
+  `CPUSETS`, `CGROUP_PIDS`, `CGROUP_DEVICE`, `CGROUP_FREEZER`,
+  `CGROUP_NET_PRIO`, `CGROUP_NET_CLASSID`, `NAMESPACES`, `UTS_NS`, `IPC_NS`,
+  `PID_NS`, `NET_NS`, `POSIX_MQUEUE`) are now spelled out in **all six** kernel
+  fragments -- a deliberate widening past the lg3d-only report, because the
+  fstab line and `mountvirtfs` are unconditional and every profile inherited
+  the same dead boot.  `CONFIG_USER_NS` stays off.  `lfs/08` gained
+  `CGUARD_SYMBOLS`, which fails both build paths when a symbol the fragment
+  asks for is missing from the resolved `.config`, so `olddefconfig` can never
+  silently overrule a boot-critical chain again.  `final/14` and `final/15`
+  create `$LFS/sys/fs/cgroup` next to the existing static-`/dev` block (guarded
+  by `mountpoint -q "$LFS/sys"`, so a live sysfs is never packed) and drop
+  `"sys/*"` from the exclusions; both then list the finished squashfs with
+  `unsquashfs -no-progress -ls` and fail the stage unless `/dev/console`,
+  `/dev/null` and `/sys/fs/cgroup` are in the image.
+
+  The UEFI gate was blind for a separate reason: it grepped `Linux version`
+  in the *serial* log while the shipped `grub.cfg`/`isolinux.cfg` cmdline passed
+  `root=/dev/sr0 ro quiet` with no `console=` at all -- proof being a 0-byte
+  `serial.log` for a BIOS run of the same media that visibly booted on the
+  framebuffer.  Kernel messages are mirrored to every registered console, but
+  the initramfs and init write only to `/dev/console`, which is the **last**
+  `console=` named, and `quiet` hides the KERN_INFO `Linux version` line even
+  then.  `final/15` now passes `console=tty0 console=ttyS0,115200n8`
+  (`final/14`: same on x86_64, `console=tty0 console=ttyAMA0,115200` on
+  aarch64) so the serial log holds the userspace traffic the gate reads.
+
+  `tools/qemu-boot-smoke.sh` replaces `init_took_over()` -- which matched
+  `Mounting virtual file systems` and `systemd[1]:`, both printed by the code
+  that dies one line later, so the gate could not fail -- with `boot_aborted()`
+  (rejects `Freezing execution`, `Press Enter to continue`, `FAILURE:`,
+  `unknown filesystem type`, `Failed to mount cgroup`, the `/sys/fs/cgroup`
+  mkdir and mount failures, `Entering emergency mode`) checked *before* any
+  pass branch, and `sysinit_completed()`, keyed on `Create symlinks in /dev
+  targeting /proc`: `mountvirtfs` exits 1 before that line whenever any virtual
+  filesystem fails, so seeing it means the cgroup2 mount succeeded.  The same
+  abort markers now fail the lg3d UEFI step, whose positive gate is likewise
+  userspace text.  The installer-ISO flavour reports aborts without failing,
+  since that rootfs was never configured to run read-only.
+
+  Release hygiene: `lg3d.yml` and `nightly.yml` now upload release artifacts
+  **after** both smoke tests.  A step inherits the job's implicit `success()`,
+  so a leg whose artifact does not boot no longer hands it over -- which is how
+  the 20261106 night replaced a green run's assets with ISOs that die in their
+  own sysinit, and let them be downloaded from a red nightly.  `create-release`
+  keeps its intentional `if: always()` (nightly #230).
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (9 cases) pinning the
+  fstab/`mountvirtfs` demand, the chain in every fragment, the `olddefconfig`
+  survival guard, the packed mountpoint, the post-pack verification, the
+  console ordering, and both gates' abort lists plus upload ordering;
+  `test_smoke_gate_requires_post_switch_root_marker` and
+  `test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub` are updated to the
+  honest markers.  The decisive A/B -- the same ISO booting past
+  `S00mountvirtfs` on the serial console -- can only be proven in CI and is
+  what this entry lands to be verified there.
+
 - **The hybrid lg3d live ISO reached GRUB but never booted the kernel on UEFI:
   `grub.cfg` looked in the ESP for `/isolinux/vmlinuz`, and the kernel had no
   EFI stub** (`final/15-create-live-system.sh`, `config/kernel-config`,

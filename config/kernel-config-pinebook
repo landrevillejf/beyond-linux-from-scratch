@@ -136,6 +136,41 @@ CONFIG_CRYPTO_AES_ARM64_CE_BLK=y
 CONFIG_CRYPTO_SHA2_ARM64_CE=y
 
 # ============================================================================
+# CONTROL GROUPS AND NAMESPACES
+# ----------------------------------------------------------------------------
+# Boot-critical, not optional: /etc/fstab (lfs/07-configure-lfs.sh) declares
+# `cgroup2 /sys/fs/cgroup' for every profile and the book's mountvirtfs mounts
+# it as the first rcS.d script.  Without CONFIG_CGROUPS that mount fails with
+# "unknown filesystem type 'cgroup2'", mountvirtfs exits 1, and the rc
+# dispatcher halts sysinit at "Press Enter to continue..." before udev or any
+# greeter runs (lg3d nightly 20261106; config/kernel-config carries the full
+# write-up).  Every sub-option is named because lfs/08-build-kernel.sh seeds
+# .config from this fragment and runs `make olddefconfig`, which resolves every
+# unnamed symbol to n -- and lfs/08 now fails the stage when a symbol named
+# here does not survive that step.
+# ============================================================================
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_MEMCG=y
+CONFIG_BLK_CGROUP=y
+CONFIG_CPUSETS=y
+CONFIG_CGROUP_PIDS=y
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_NET_PRIO=y
+CONFIG_CGROUP_NET_CLASSID=y
+# Namespaces and POSIX message queues; USER_NS stays off deliberately -- not
+# needed to boot, and unprivileged user namespaces are an attack surface.
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_POSIX_MQUEUE=y
+
+# ============================================================================
 # FILESYSTEMS
 # ============================================================================
 CONFIG_EXT4_FS=y
