@@ -69,7 +69,9 @@ echo "[INFO] Branding directory: $BRANDING_DIR"
 # Vérifier les outils.  Only the x86_64 path needs a loop-mounted FAT image
 # to run grub-install against; arm64 uses grub-mkstandalone, which writes
 # the EFI image straight out and so needs no mount and no root.
-REQUIRED_TOOLS="xorriso mksquashfs python3"
+# unsquashfs is how the stage proves below that the boot-critical paths
+# actually landed in the packed squashfs.
+REQUIRED_TOOLS="xorriso mksquashfs unsquashfs python3"
 if [ "$ARCH" = "aarch64" ]; then
     REQUIRED_TOOLS="$REQUIRED_TOOLS grub-mkstandalone"
 else
@@ -201,6 +203,21 @@ fi
 echo "[INFO] Kernel: $KERNEL"
 echo "[INFO] Initramfs: $INITRAMFS"
 
+# Console parameters handed to the live/installer kernel by both bootloaders.
+# Two console= options on purpose, and the order is the whole point: printk
+# goes to EVERY registered console but /dev/console - where init and the boot
+# scripts write - is the LAST one named, so the serial line has to come last
+# for the QEMU smoke tests to see the userspace stream and not only the kernel
+# log.  Without a serial console in the shipped cmdline those steps are blind
+# by construction: they grep a serial log only the bootloader writes to.  The
+# port differs by architecture: x86_64 has the 16550 at ttyS0, arm64 firmware
+# exposes the PL011/AMA serial as ttyAMA0.
+if [ "$ARCH" = "aarch64" ]; then
+    CONSOLE_ARGS="console=tty0 console=ttyAMA0,115200"
+else
+    CONSOLE_ARGS="console=tty0 console=ttyS0,115200n8"
+fi
+
 # --- Isolinux BIOS payload helpers --------------------------------------
 # syslinux 6.x splits its loader in two: isolinux.bin is a ~38 KiB first
 # stage whose only job is to load ldlinux.c32 - the actual core - from the
@@ -285,6 +302,32 @@ random  c 1 8 666
 urandom c 1 9 666
 NODES
 
+# ---------------------------------------------------------------------------
+# The cgroup v2 mountpoint in the packed rootfs.  Same hole as final/15: the
+# squashfs excluded "sys/*", so /sys/fs/cgroup did not exist in the image,
+# mountvirtfs' mkdir returns EPERM once sysfs is mounted, and systemd as PID 1
+# aborts with "Failed to mount cgroup v1 hierarchy / Freezing execution".  See
+# final/15-create-live-system.sh for the full write-up.
+# ---------------------------------------------------------------------------
+if mountpoint -q "$LFS/sys"; then
+    $SUDO umount "$LFS/sys" || {
+        echo "[ERROR] $LFS/sys is a live mount; refusing to pack it" >&2
+        exit 1
+    }
+fi
+$SUDO mkdir -p "$LFS/sys/fs/cgroup"
+for entry in "$LFS"/sys/* "$LFS"/sys/fs/*; do
+    [ -e "$entry" ] || continue
+    case "${entry##*/}" in
+    fs | cgroup) ;;
+    *)
+        echo "[ERROR] unexpected content under $LFS/sys: $entry" >&2
+        echo "        Only the empty sys/fs/cgroup mountpoint may be packed."
+        exit 1
+        ;;
+    esac
+done
+
 echo "[INFO] Creating squashfs..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed – sources/ alone is a thousand tarballs,
@@ -296,12 +339,30 @@ echo "[INFO] Creating squashfs..."
 # with the static nodes created above.  "*.iso" keeps this stage's own output –
 # and that of a previous --resume-from installer run – out of the image it
 # is building.  Same list nightly.yml uses for the rootfs tarball.
+# /sys keeps only the empty sys/fs/cgroup mountpoint created above; "sys/*"
+# used to be excluded here, and a wildcard matching a directory prunes its
+# whole subtree, which is how every 0.57.4 image shipped without the cgroup2
+# mountpoint.
 mksquashfs "$LFS" "$ISO_ROOT/live.squashfs" -comp xz -noappend \
     -wildcards \
-    -e "proc/*" "sys/*" "run/*" "tmp/*" "lost+found/*" \
+    -e "proc/*" "run/*" "tmp/*" "lost+found/*" \
     "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
     "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
     "*.iso" "*.iso.sig"
+
+# Prove the boot-critical paths landed in the image: mksquashfs exits 0 no
+# matter what its wildcards pruned.
+LIVE_TREE=$(unsquashfs -no-progress -ls "$ISO_ROOT/live.squashfs" 2>/dev/null)
+for need in squashfs-root/dev/console squashfs-root/dev/null \
+    squashfs-root/sys/fs/cgroup; do
+    if ! printf '%s\n' "$LIVE_TREE" | grep -qx "$need"; then
+        echo "[ERROR] The installer squashfs carries no /${need#squashfs-root}."
+        echo "        The live session cannot boot without it; an -e wildcard"
+        echo "        here prunes the whole subtree silently."
+        exit 1
+    fi
+done
+echo "[INFO] Installer rootfs boot paths verified in the squashfs"
 
 # Load branding and ensure images exist
 load_branding_config
@@ -329,7 +390,7 @@ EOF
 if [ "$ARCH" != "aarch64" ]; then
     echo "    insmod vbe" >>"$GRUB_CFG"
 fi
-cat >>"$GRUB_CFG" <<'EOF'
+cat >>"$GRUB_CFG" <<EOF
     set gfxpayload=keep
     background_image (cd)/branding/backgrounds/grub-background.png
 fi
@@ -342,11 +403,11 @@ fi
 # dropped to a shell with "Root device not found".  final/15 has always said
 # /dev/sr0.
 menuentry "LFS Linux Live" {
-    linux /boot/vmlinuz root=/dev/sr0 ro quiet
+    linux /boot/vmlinuz root=/dev/sr0 ro quiet ${CONSOLE_ARGS}
     initrd /boot/initramfs.img
 }
 menuentry "Install LFS Linux" {
-    linux /boot/vmlinuz root=/dev/sr0 ro quiet install
+    linux /boot/vmlinuz root=/dev/sr0 ro quiet install ${CONSOLE_ARGS}
     initrd /boot/initramfs.img
 }
 EOF
@@ -435,15 +496,15 @@ else
         exit 1
     fi
 
-    cat >"$ISO_ROOT/isolinux/isolinux.cfg" <<'EOF'
+    cat >"$ISO_ROOT/isolinux/isolinux.cfg" <<EOF
 default live
 timeout 10
 label live
     kernel /boot/vmlinuz
-    append initrd=/boot/initramfs.img root=/dev/sr0 ro quiet
+    append initrd=/boot/initramfs.img root=/dev/sr0 ro quiet ${CONSOLE_ARGS}
 label install
     kernel /boot/vmlinuz
-    append initrd=/boot/initramfs.img root=/dev/sr0 ro quiet install
+    append initrd=/boot/initramfs.img root=/dev/sr0 ro quiet install ${CONSOLE_ARGS}
 EOF
 fi
 

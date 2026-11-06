@@ -161,13 +161,31 @@ live_media_mounted() {
     grep -q "Live media detected" "$LOG"
 }
 
-# Markers that can ONLY be printed after switch_root handed over to the real
-# rootfs: the sysvinit S stage opening line, systemd as PID 1, or a getty.
-# "Mounting root:" alone is printed by the initramfs *before* the handover,
-# so accepting it let the 0.57.4 sysvinit live ISOs pass this gate while
-# they booted to a silent dead console (S stage never ran + empty /dev).
-init_took_over() {
-    grep -Eq "Mounting virtual file systems|systemd\[1\]:|login:" "$LOG"
+# Sysinit aborts that this gate used to call a success.  Every string here was
+# printed by an artifact the 20261106 lg3d nightly passed: the sysvinit leg
+# opened its S stage with "Mounting virtual file systems", died in
+# S00mountvirtfs on "cannot create directory '/sys/fs/cgroup'" plus "unknown
+# filesystem type 'cgroup2'", and parked on "Press Enter to continue..."; the
+# systemd leg logged "Failed to mount cgroup v1 hierarchy" and then "Freezing
+# execution".  The old gate matched "Mounting virtual file systems" and
+# "systemd[1]:" - both printed by the code that aborts one line later - so it
+# could not fail.  Any of these markers means the boot is dead, whatever
+# positive text precedes it.
+boot_aborted() {
+    grep -Eq "Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup|cannot create directory '/sys/fs/cgroup'|Failed to mount API filesystems|Entering emergency mode" "$LOG"
+}
+
+# Markers that can ONLY be emitted after the handover to the real rootfs AND
+# past S00mountvirtfs.  "Mounting root:" alone is printed by the initramfs
+# *before* the handover, and "Mounting virtual file systems" is printed by the
+# very script that then fails, so neither proves anything on its own.
+# "Create symlinks in /dev targeting /proc" is the earliest decisive sysvinit
+# marker: mountvirtfs exits 1 (bootscripts .../init.d/mountvirtfs:70-74)
+# before it whenever any virtual filesystem, /sys/fs/cgroup included, fails to
+# mount, so seeing it means the cgroup2 mount succeeded.  The remaining S-stage
+# lines, a systemd target, or a getty all work the same way further along.
+sysinit_completed() {
+    grep -Eq "Create symlinks in /dev targeting /proc|Populating /dev with device nodes|Setting up Linux console|Setting kernel runtime parameters|INIT: Entering runlevel|Reached target (Basic System|Multi-User System|Graphical Interface|User Interface)|login:" "$LOG"
 }
 
 if [ "$ARTIFACT_TYPE" = img ]; then
@@ -208,6 +226,13 @@ if [ "$ISO_FLAVOUR" = installer ]; then
         fi
         exit 1
     fi
+    # Reported, not fatal: this rootfs was never configured to run read-only,
+    # so an abort here is known and the live profiles are the ones the strict
+    # gate below protects.
+    if boot_aborted; then
+        log_info "Known installer-rootfs abort detected (rootfs is not read-only safe):"
+        grep -En "Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup|cannot create directory '/sys/fs/cgroup'" "$LOG" | head -n 5
+    fi
     log_pass "Installer ISO mounted its live media (rootfs is not read-only safe)"
     exit 0
 fi
@@ -219,15 +244,22 @@ if grep -qi "Kernel panic" "$LOG"; then
     exit 1
 fi
 
+if boot_aborted; then
+    log_fail "Sysinit aborted the boot (the init printed a fatal marker)"
+    grep -En "Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup|cannot create directory '/sys/fs/cgroup'|Failed to mount API filesystems|Entering emergency mode" "$LOG" | head -n 8
+    exit 1
+fi
+
 if ! userspace_reached; then
     log_fail "Kernel started but userspace was never reached"
     exit 1
 fi
 
-if init_took_over; then
-    log_pass "Artifact reached userspace and the rootfs init took over"
+if sysinit_completed; then
+    log_pass "Artifact reached userspace and the rootfs sysinit ran past its S stage"
     exit 0
 fi
 
-log_fail "Initramfs handed over but the rootfs init never ran (silent after switch_root)"
+log_fail "Initramfs handed over but the rootfs init never got past its S stage"
+log_fail "(no udev/console/sysctl stage, systemd target or login prompt in the log)"
 exit 1

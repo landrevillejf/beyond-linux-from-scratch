@@ -687,26 +687,6 @@ jobs:
           # names when the release is flattened. The binary repository
           # ships with stable releases only (release.yml).
 
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
-          path: |
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
-            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
-            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
-            /tmp/lfs-build/build-release/lpm-repo/packages.list*
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
-            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
-            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
-          # if-no-files-found stays 'ignore' because the per-profile payload
-          # differs: the rootfs tarball only ships for xfce and arm64, and
-          # packages.list only exists when the profile builds base packages.
-          # The ISO and its signature are expected from every leg now.
-          if-no-files-found: ignore
-
       - name: Boot artifact in QEMU (smoke test - BIOS mode)
         if: success() && matrix.arch == 'x86_64'
         run: |
@@ -805,7 +785,7 @@ jobs:
             cp "$OVMF_VARS_SRC" "$WORKDIR/ovmf-vars.fd"
             VARS_ARG="-drive if=pflash,format=raw,file=$WORKDIR/ovmf-vars.fd"
           fi
-          timeout 240 qemu-system-x86_64 \
+          timeout 420 qemu-system-x86_64 \
             -machine q35,accel=tcg \
             -cpu max \
             -m 2G -smp 2 \
@@ -815,28 +795,75 @@ jobs:
             -boot order=d \
             -display none -serial file:"$WORKDIR/uefi-boot.log" \
             -monitor none -no-reboot || true
-          # Success = the kernel GRUB chain-loaded actually started.  A GRUB
-          # banner or the "LFS Live" menu text is NOT enough: the broken
-          # 0.57.4 ISOs printed both and then died with "file
-          # `/isolinux/vmlinuz' not found" (grub.cfg never set root to the ISO
-          # volume) or "kernel DOS magic is invalid" (kernel built without
-          # CONFIG_EFI_STUB), so the old gate that accepted GRUB/LFS Live
-          # stayed green on an unbootable image.  Fail outright on those GRUB
-          # fatal errors, then require positive evidence the kernel started.
+          # Success is evidence the WHOLE chain ran: firmware -> El Torito EFI
+          # entry -> \EFI\BOOT\BOOTX64.EFI -> GRUB -> kernel -> initramfs that
+          # finds and mounts the media.  A GRUB banner or the "LFS Live" menu
+          # text is NOT enough: the broken 0.57.4 ISOs printed both and then
+          # died with "file `/isolinux/vmlinuz' not found" (grub.cfg never set
+          # root to the ISO volume) or "kernel DOS magic is invalid" (kernel
+          # built without CONFIG_EFI_STUB), so the old gate that accepted
+          # GRUB/LFS Live stayed green on an unbootable image.  This run added
+          # a second reason the step could never be honest: its positive
+          # marker was "Linux version", a KERN_INFO line on media whose
+          # shipped cmdline named no serial console at all -- the only writer
+          # to that log was GRUB, so the kernel could boot perfectly and the
+          # grep would still miss it (and with the cmdline's "quiet" it would
+          # miss it even with a serial console).  final/15 now puts
+          # console=ttyS0 last, which makes the serial line /dev/console, so
+          # the initramfs' and init's own writes land in the log below.
           LOG="$WORKDIR/uefi-boot.log"
-          if grep -aqE "DOS magic is invalid|you need to load the kernel first|Failed to boot both default and fallback" "$LOG"; then
+          if grep -aqE "DOS magic is invalid|you need to load the kernel first|Failed to boot both default and fallback|error: file .* not found" "$LOG"; then
             echo "::error::UEFI boot failed: GRUB EFI ran but could not boot the kernel"
             grep -aoE "error: .*" "$LOG" | tr -d '\000' | sort -u | head
             exit 1
           fi
-          if grep -aqE "Linux version|switch_root|Mounting virtual file systems|login:" "$LOG"; then
-            echo "UEFI boot successful: firmware -> GRUB EFI -> kernel started"
-            grep -aoE "GRUB version [0-9.]+|Linux version [^ ]+" "$LOG" | sort -u | head
+          # Sysinit aborts: the same fatal markers tools/qemu-boot-smoke.sh
+          # rejects (keep the two lists in sync; test_acceptance_shell.py
+          # pins both).  These are what the 20261106 nightly printed while its
+          # BIOS gate reported success.
+          if grep -aqE "Kernel panic|VFS: Unable to mount root fs|Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup" "$LOG"; then
+            echo "::error::UEFI boot reached the rootfs and aborted there"
+            grep -aoE "(Kernel panic.*|VFS: Unable to mount root fs.*|Freezing execution|Press Enter to continue.*|FAILURE:.*|unknown filesystem type.*|Failed to mount cgroup.*)" "$LOG" \
+              | tr -d '\000' | sort -u | head
+            exit 1
+          fi
+          if grep -aqE "Live media detected|Mounting root:|Reached target|Create symlinks in /dev targeting /proc|Setting kernel runtime parameters" "$LOG"; then
+            echo "UEFI boot successful: firmware -> GRUB EFI -> kernel -> initramfs root logic"
+            grep -aoE "GRUB version [0-9.]+|Linux version [^ ]+|Live media detected" "$LOG" | sort -u | head
           else
-            echo "::error::UEFI boot failed: firmware never reached the kernel"
+            echo "::error::UEFI boot failed: firmware never reached the initramfs root logic"
             tail -n 40 "$LOG" | tr -d '\000'
             exit 1
           fi
+
+      # Release hygiene: the upload runs AFTER both smoke tests, deliberately.
+      # A step inherits the job's implicit success() condition, so a leg whose
+      # artifact does not boot no longer puts that artifact on the run page --
+      # and create-release below therefore cannot publish it.  Uploading first
+      # is what let the 20261106 night replace the release assets of a green
+      # run with ISOs that die in their own sysinit, and let them be downloaded
+      # from a red nightly.  The kernel/rootfs payloads in the same upload are
+      # built from the same rootfs this gate just booted, so nothing that a
+      # consumer needs is lost when a red leg skips the step.
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          path: |
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
+            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
+            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
+            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
+          # if-no-files-found stays 'ignore' because the per-profile payload
+          # differs: the rootfs tarball only ships for xfce and arm64, and
+          # packages.list only exists when the profile builds base packages.
+          # The ISO and its signature are expected from every leg now.
+          if-no-files-found: ignore
 
       - name: Upload logs on failure
         # Cancelled jobs must leave logs behind as well, otherwise a timeout

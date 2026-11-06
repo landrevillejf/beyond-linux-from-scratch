@@ -109,6 +109,15 @@ resolve_hardening_cmds() {
 HARDEN_CMDS="$(resolve_hardening_cmds)"
 log_info "Kernel hardening knobs: lockdown=$LOCKDOWN_MODE module_sig_force=$MODULE_SIG_FORCE"
 
+# The cgroup/namespace chain, verified against the resolved .config after
+# olddefconfig on both build paths below.  Only symbols the fragment itself
+# names are checked, so a fragment that does not ask for one is never judged
+# for it - the guard catches the silent drop, it does not impose a policy.
+CGUARD_SYMBOLS="CONFIG_CGROUPS CONFIG_CGROUP_SCHED CONFIG_FAIR_GROUP_SCHED \
+    CONFIG_MEMCG CONFIG_CGROUP_PIDS CONFIG_CGROUP_DEVICE \
+    CONFIG_CGROUP_FREEZER CONFIG_NAMESPACES CONFIG_PID_NS \
+    CONFIG_POSIX_MQUEUE"
+
 # ---------------------------------------------------------------------------
 # Locate the kernel sources.  The chroot mirror ($LFS/sources) is the
 # canonical copy: lfs-basic populates it for every profile, whatever
@@ -162,6 +171,17 @@ if [ -n "$CROSS_COMPILE" ]; then
     log_info "Applying security hardening knobs (scripts/config)"
     eval "$HARDEN_CMDS"
     $MAKE_CMD olddefconfig
+    # `make olddefconfig' silently drops any symbol whose dependency is not
+    # named, which is how CONFIG_CGROUPS disappeared from a fragment that
+    # asked for it and shipped a kernel that cannot mount cgroup2 at all --
+    # rcS.d/S00mountvirtfs then aborts sysinit and systemd freezes as PID 1.
+    # Fail here, where it is one grep, instead of at the first real boot.
+    for sym in $CGUARD_SYMBOLS; do
+        if grep -q "^${sym}=y" "$KERNEL_CONFIG_SRC" && ! grep -q "^${sym}=y" .config; then
+            log_error "$sym=y is requested by $KERNEL_CONFIG_SRC but missing from the resolved .config"
+            exit 1
+        fi
+    done
     log_info "Compiling kernel (using -j$(nproc))"
     $MAKE_CMD -j"$(nproc)"
     log_info "Installing modules to $LFS"
@@ -234,6 +254,17 @@ echo "=== Applying security hardening knobs (lockdown=$LOCKDOWN_MODE module_sig_
 $HARDEN_CMDS
 
 make olddefconfig
+
+# Same survival check as the cross-compile path above, on the symbols named in
+# the fragment.  \${sym} is what makes the loop expand inside the chroot
+# instead of while this heredoc is written; the list itself is expanded here,
+# so both paths can never drift apart.
+for sym in ${CGUARD_SYMBOLS}; do
+    if grep -q "^\${sym}=y" /sources/.kernel-config && ! grep -q "^\${sym}=y" .config; then
+        echo "ERROR: \${sym}=y requested by the fragment is missing from the resolved .config"
+        exit 1
+    fi
+done
 
 echo "=== Compiling kernel ==="
 make -j"\$(nproc)"

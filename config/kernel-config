@@ -106,6 +106,40 @@ CONFIG_EFI=y
 CONFIG_EFI_STUB=y
 CONFIG_EFI_MIXED=y
 
+# Control groups: the live session cannot boot without them.  /etc/fstab
+# (lfs/07-configure-lfs.sh) declares `cgroup2 /sys/fs/cgroup` and the book's
+# mountvirtfs mounts it as the first rcS.d script; with CONFIG_CGROUPS absent
+# that mount dies with "mount: /sys/fs/cgroup: unknown filesystem type
+# 'cgroup2'", mountvirtfs exits 1 and the rc dispatcher halts sysinit at
+# "Press Enter to continue...", so udev, S70console and the greeter never run
+# (lg3d nightly 20261106, both firmware modes, reproduced in QEMU).  systemd
+# is stricter still: as PID 1 it logs "Failed to mount cgroup v1 hierarchy"
+# then "Freezing execution".  Every sub-option is named because lfs/08 runs
+# `make olddefconfig`, which resolves any symbol absent here to n -- the same
+# reason the EFI chain above is spelled out.
+CONFIG_CGROUPS=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_MEMCG=y
+CONFIG_BLK_CGROUP=y
+CONFIG_CPUSETS=y
+CONFIG_CGROUP_PIDS=y
+CONFIG_CGROUP_DEVICE=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CGROUP_NET_PRIO=y
+CONFIG_CGROUP_NET_CLASSID=y
+# Namespaces and POSIX message queues: systemd's service isolation
+# (PrivateMounts/PrivateNetwork, its journal socket) needs them, and it refuses
+# to manage services without them.  USER_NS stays off deliberately -- it is not
+# required to boot and unprivileged user namespaces are an attack surface.
+CONFIG_NAMESPACES=y
+CONFIG_UTS_NS=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_NET_NS=y
+CONFIG_POSIX_MQUEUE=y
+
 # Input drivers
 CONFIG_KEYBOARD_ATKBD=y
 CONFIG_MOUSE_PS2=y

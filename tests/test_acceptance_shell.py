@@ -5399,7 +5399,8 @@ class TestNightly232IsoOutputGuardrails:
         overlay live root unmounts the initramfs devtmpfs before
         switch_root, so the packed rootfs must carry the static nodes
         (console, null, ...) itself or the boot goes silent the instant
-        init takes over (0.57.4 sysvinit ISOs).
+        init takes over (0.57.4 sysvinit ISOs).  /sys is the second
+        exception, for the same reason: it has to keep sys/fs/cgroup.
         """
         for script in (self.INSTALLER, self.LIVE):
             code = self._code(script.read_text())
@@ -5413,11 +5414,22 @@ class TestNightly232IsoOutputGuardrails:
                 assert excluded in call, \
                     f'{script} packs the build tree: {excluded} is missing'
             tokens = re.findall(r'"([^"]+)"', call.split('-e ', 1)[1])
-            for mountpoint in ('proc', 'sys', 'run'):
+            # /sys is no longer emptied: a wildcard matching a directory
+            # prunes its whole subtree, and "sys/*" is what shipped an image
+            # with no /sys/fs/cgroup -- mkdir on a mounted sysfs returns EPERM,
+            # so S00mountvirtfs aborted (lg3d nightly 20261106).
+            for mountpoint in ('proc', 'run'):
                 assert f'{mountpoint}/*' in tokens, \
                     f'{script} must empty {mountpoint}/ without removing it'
                 assert mountpoint not in tokens, \
                     f'{script} removes the {mountpoint} mount point that ' \
+                    f'switch_root has to move into the new root'
+            for mountpoint in ('sys',):
+                assert f'{mountpoint}/*' not in tokens, \
+                    f'{script} excludes {mountpoint}/* and ships no '\
+                    f'/sys/fs/cgroup mountpoint'
+                assert mountpoint not in tokens, \
+                    f'{script} removes the /{mountpoint} directory that '\
                     f'switch_root has to move into the new root'
             # /dev is packed with the static nodes the stage mknod's, not
             # excluded: excluding dev/* is exactly what left the 0.57.4
@@ -5869,14 +5881,26 @@ class TestLiveIsoUefiHybridGuardrails:
         is invalid", yet a gate that accepted GRUB/LFS Live passed.  The
         smoke test must fail on those GRUB fatal errors and require evidence
         the chain-loaded kernel actually started.
+
+        Nightly 20261106 showed the other half of the problem: the positive
+        marker was "Linux version", read off the serial log, while the
+        shipped kernel cmdline named no serial console at all -- the kernel
+        writes its log to the console the loader chose, VGA here, so that log
+        only ever held GRUB's own text and the step could not see the kernel
+        whether it booted or died.  The gate now requires a marker the
+        initramfs writes to /dev/console, which final/15 routes to the serial
+        line, and rejects a sysinit that aborts after switch_root.
         """
         step = self._uefi_smoke_step()
         assert 'DOS magic is invalid' in step, \
             'the UEFI smoke test must fail on a kernel with no EFI stub'
         assert 'you need to load the kernel first' in step, \
             'the UEFI smoke test must fail when GRUB could not load the kernel'
-        assert 'Linux version' in step, \
-            'the UEFI smoke test must require the kernel to have started'
+        assert 'Live media detected' in step, \
+            'the UEFI smoke test must require the initramfs to reach its root '\
+            'logic, on a console the kernel actually writes to'
+        assert 'Press Enter to continue' in step, \
+            'the UEFI smoke test must reject a rootfs init that aborts its boot'
 
 
 class TestCalamaresBuildStageGuardrails:
@@ -6444,9 +6468,271 @@ class TestSysvinitLiveBootGuardrails:
                 f'live overlay upper/work layer cannot mount'
 
     def test_smoke_gate_requires_post_switch_root_marker(self):
-        """The live gate must prove init ran, not just the initramfs."""
+        """The live gate must prove sysinit got past the script that fails.
+
+        "Mounting virtual file systems" is the line mountvirtfs prints before
+        it tries the cgroup2 mount, and "systemd[1]:" is printed by PID 1 from
+        the very first unit onwards, so accepting either made the gate unable
+        to fail: nightly 20261106 printed the abort and the gate said PASS.
+        The gate now keys on a marker mountvirtfs only emits when every
+        virtual filesystem -- /sys/fs/cgroup included -- mounted, and it
+        rejects the abort markers outright.
+        """
         code = self.SMOKE.read_text()
-        assert 'init_took_over' in code, \
+        assert 'init_took_over' not in code, \
+            'qemu-boot-smoke still accepts the markers the aborting code prints'
+        assert 'sysinit_completed' in code, \
             'qemu-boot-smoke lost its post-switch_root gate'
-        assert 'Mounting virtual file systems' in code, \
-            'the gate no longer matches a real sysvinit S-stage marker'
+        assert 'Create symlinks in /dev targeting /proc' in code, \
+            'the gate no longer matches a marker mountvirtfs prints only on success'
+        assert 'grep -Eq "Mounting virtual file systems' not in code, \
+            'the gate still treats the pre-abort status line as proof of init'
+
+
+class TestLiveIsoCgroupSysinitGuardrails:
+    """lg3d nightly 20261106: every live image aborted inside its own sysinit.
+
+    Two stacked holes, both verified in the published squashfs, and neither
+    one visible to a build-time check:
+
+    1. The kernel had no cgroup support.  lfs/07 writes a
+       `cgroup2 /sys/fs/cgroup' line into /etc/fstab for every profile and
+       the book's mountvirtfs mounts it as the first rcS.d script, exiting 1
+       when that fails; no kernel fragment named CONFIG_CGROUPS, so lfs/08's
+       `make olddefconfig' resolved it to n and the shipped
+       boot/config-6.16.1 read "# CONFIG_CGROUPS is not set".  sysvinit then
+       stopped at "Press Enter to continue..." -- udev, S70console, LightDM
+       and LG3D never ran -- and systemd logged "Failed to mount cgroup v1
+       hierarchy" followed by "Freezing execution".
+    2. The packed rootfs had no /sys/fs/cgroup at all.  final/14 and final/15
+       excluded "sys/*" from mksquashfs, and a wildcard matching a directory
+       prunes its whole subtree, so once sysfs was mounted the mkdir in (1)
+       could only fail: mkdir inside a mounted sysfs returns EPERM, hence
+       "mkdir: cannot create directory '/sys/fs/cgroup': Operation not
+       permitted".  The same stages had already learned this lesson for
+       dev/* and never applied it to the cgroup mountpoint.
+
+    CI said PASS while it printed both lines, because
+    tools/qemu-boot-smoke.sh keyed its gate on "Mounting virtual file systems"
+    and "systemd[1]:" -- strings emitted by the code that dies one line later.
+    These guardrails pin the fix and the now-honest gates.
+    """
+
+    LIVE = Path('final/15-create-live-system.sh')
+    INSTALLER = Path('final/14-create-installer.sh')
+    KERNEL_STAGE = Path('lfs/08-build-kernel.sh')
+    SYSTEM_CONFIG = Path('lfs/07-configure-lfs.sh')
+    MOUNTVIRTFS = Path(
+        'bootscripts/lfs-bootscripts-20250827/lfs/init.d/mountvirtfs')
+    SMOKE = Path('tools/qemu-boot-smoke.sh')
+    LG3D_WF = Path('.github/workflows/lg3d.yml')
+    NIGHTLY_WF = Path('.github/workflows/nightly.yml')
+
+    KERNEL_CONFIGS = (
+        Path('config/kernel-config'),
+        Path('config/kernel-config-arm64'),
+        Path('config/kernel-config-audio-studio'),
+        Path('config/kernel-config-brax3'),
+        Path('config/kernel-config-gnu-free'),
+        Path('config/kernel-config-pinebook'),
+    )
+
+    # The chain config/kernel-config documents.  Every one is named because
+    # olddefconfig resolves an unnamed symbol to n, and lfs/08 re-checks the
+    # same list against the resolved .config.
+    CGROUP_SYMBOLS = (
+        'CONFIG_CGROUPS', 'CONFIG_CGROUP_SCHED', 'CONFIG_FAIR_GROUP_SCHED',
+        'CONFIG_CFS_BANDWIDTH', 'CONFIG_MEMCG', 'CONFIG_BLK_CGROUP',
+        'CONFIG_CPUSETS', 'CONFIG_CGROUP_PIDS', 'CONFIG_CGROUP_DEVICE',
+        'CONFIG_CGROUP_FREEZER', 'CONFIG_CGROUP_NET_PRIO',
+        'CONFIG_CGROUP_NET_CLASSID', 'CONFIG_NAMESPACES', 'CONFIG_UTS_NS',
+        'CONFIG_IPC_NS', 'CONFIG_PID_NS', 'CONFIG_NET_NS',
+        'CONFIG_POSIX_MQUEUE',
+    )
+
+    # Fatal boot markers, in the order the 20261106 logs printed them.  Both
+    # gates must reject every one of them.
+    ABORT_MARKERS = (
+        'Freezing execution',
+        'Press Enter to continue',
+        'FAILURE:',
+        'unknown filesystem type',
+        'Failed to mount cgroup',
+    )
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @classmethod
+    def _fn(cls, content, name):
+        """Body of one shell function, so a marker cannot hide in a comment."""
+        body = content.split(f'{name}() {{', 1)[1]
+        return body.split('\n}\n', 1)[0]
+
+    @classmethod
+    def _uefi_step(cls):
+        """The lg3d UEFI smoke-test step body, comments stripped."""
+        wf = cls.LG3D_WF.read_text()
+        marker = 'Boot artifact in QEMU (smoke test - UEFI mode)'
+        assert marker in wf, 'lg3d.yml lost its UEFI smoke-test step'
+        return cls._code(wf.split(marker, 1)[1].split('\n      - name:', 1)[0])
+
+    def test_cgroup2_is_demanded_by_the_shipped_boot_scripts(self):
+        """Why cgroup2 is boot-critical here, not an optional feature.
+
+        The fstab line is written for every profile whatever the init system,
+        and the book's mountvirtfs aborts the whole S stage when it cannot
+        mount it.  A kernel without CONFIG_CGROUPS therefore boots nothing this
+        repository ships, live or installed -- which is also why the fix has to
+        cover every fragment and not only the lg3d one.
+        """
+        fstab = self._code(self.SYSTEM_CONFIG.read_text())
+        # Column-aligned heredoc: the fs name is padded before the
+        # mountpoint, so match the three fields, not one exact spelling.
+        assert re.search(r'^cgroup2\s+/sys/fs/cgroup\s+cgroup2\s', fstab, re.M), \
+            'lfs/07 no longer writes the cgroup2 line mountvirtfs depends on'
+        mv = self._code(self.MOUNTVIRTFS.read_text())
+        assert 'mkdir -p /sys/fs/cgroup' in mv, \
+            'the vendored mountvirtfs no longer creates the cgroup mountpoint'
+        assert 'mount -o nosuid,noexec,nodev /sys/fs/cgroup || failed=1' in mv, \
+            'the vendored mountvirtfs no longer mounts cgroup2'
+        assert 'if [ "${failed}" = 1 ]; then' in mv, \
+            'mountvirtfs no longer aborts on a failed virtual filesystem'
+
+    def test_every_kernel_fragment_names_the_cgroup_chain(self):
+        """olddefconfig drops what the fragment does not name."""
+        for cfg in self.KERNEL_CONFIGS:
+            text = cfg.read_text()
+            for symbol in self.CGROUP_SYMBOLS:
+                assert f'{symbol}=y' in text, \
+                    f'{cfg} lacks {symbol}=y; without CONFIG_CGROUPS the '\
+                    f'cgroup2 mount fails and sysinit aborts'
+            # Unprivileged user namespaces are deliberately off everywhere:
+            # not needed to boot, and an attack surface.
+            assert 'CONFIG_USER_NS=y' not in text, \
+                f'{cfg} enables unprivileged user namespaces'
+
+    def test_kernel_stage_verifies_the_chain_survives_olddefconfig(self):
+        """A fragment that asks for cgroups must not be silently overruled.
+
+        The EFI_STUB and CONFIG_CGROUPS holes are the same mechanism: the
+        stage copies the fragment to .config, runs olddefconfig, and never
+        looks at the result.  Both build paths now compare the resolved
+        .config against the fragment and fail the stage.
+        """
+        code = self._code(self.KERNEL_STAGE.read_text())
+        assert 'CGUARD_SYMBOLS=' in code, \
+            'lfs/08 lost the cgroup survival list'
+        assert code.count('missing from the resolved .config') == 2, \
+            'both kernel build paths must fail on a dropped symbol'
+        # Cross-compile path: checked after its own olddefconfig.
+        assert code.index('$MAKE_CMD olddefconfig') \
+            < code.index('for sym in $CGUARD_SYMBOLS')
+        # Generated chroot script: checked inside the payload, not outside.
+        assert code.index('\nmake olddefconfig') \
+            < code.index('for sym in ${CGUARD_SYMBOLS}')
+        assert 'grep -q "^\\${sym}=y" /sources/.kernel-config' in code, \
+            'the chroot guard must compare against the injected fragment' \
+            ' and not expand early'
+
+    def test_iso_stages_pack_the_cgroup_mountpoint(self):
+        """The mountpoint must exist in the image; mkdir cannot create it."""
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert '"sys/*"' not in code, \
+                f'{script} still excludes sys/*, which prunes sys/fs/cgroup'
+            assert 'mkdir -p "$LFS/sys/fs/cgroup"' in code, \
+                f'{script} does not create the cgroup2 mountpoint to pack'
+            assert 'mountpoint -q "$LFS/sys"' in code, \
+                f'{script} could pack a live sysfs mount instead of an empty '\
+                f'mountpoint'
+
+    def test_iso_stages_verify_the_packed_boot_paths(self):
+        """mksquashfs exits 0 whatever its wildcards pruned, so check after.
+
+        The stage already knows /dev must be packed statically; the reason the
+        cgroup hole still reached a release is that nothing proved the packed
+        tree afterwards.  One listing pass guards both.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'unsquashfs -no-progress -ls' in code, \
+                f'{script} never inspects the squashfs it just packed'
+            assert 'squashfs-root/sys/fs/cgroup' in code, \
+                f'{script} does not require the cgroup mountpoint in the image'
+            assert 'grep -qx "$need"' in code, \
+                f'{script} checks the packed tree with a substring match'
+
+    def test_live_cmdline_puts_the_serial_console_last(self):
+        """The LAST console= names /dev/console, and the CI gates read that.
+
+        Kernel messages are mirrored to every registered console, but init,
+        the rc.d scripts and the initramfs write to /dev/console only -- so
+        with tty0 last, the serial log a gate greps holds nothing but the
+        bootloader's own text.  That is how a permanently blind UEFI step was
+        written in good faith.
+        """
+        live = self._code(self.LIVE.read_text())
+        assert 'LIVE_CONSOLE="console=tty0 console=ttyS0,115200n8"' in live, \
+            'final/15 must name the serial console last so /dev/console is it'
+        assert live.count('${LIVE_CONSOLE}') >= 4, \
+            'both isolinux labels and both grub menuentries need the console '\
+            'parameters'
+        installer = self._code(self.INSTALLER.read_text())
+        assert 'CONSOLE_ARGS="console=tty0 console=ttyS0,115200n8"' in installer, \
+            'final/14 x86_64 must name the 16550 last'
+        assert 'CONSOLE_ARGS="console=tty0 console=ttyAMA0,115200"' in installer, \
+            'final/14 aarch64 must name the PL011/AMA serial last'
+        assert installer.count('${CONSOLE_ARGS}') >= 4, \
+            'both final/14 bootloaders need the console parameters'
+
+    def test_smoke_gate_rejects_sysinit_aborts(self):
+        """A gate that only looks for positive text cannot see an abort."""
+        code = self.SMOKE.read_text()
+        aborted = self._fn(code, 'boot_aborted')
+        for marker in self.ABORT_MARKERS:
+            assert marker in aborted, \
+                f'qemu-boot-smoke no longer rejects {marker!r}'
+        completed = self._fn(code, 'sysinit_completed')
+        assert 'Create symlinks in /dev targeting /proc' in completed, \
+            'the pass marker must be one mountvirtfs only prints on success'
+        assert 'Mounting virtual file systems' not in completed, \
+            'the gate accepts the line printed before the fatal mount'
+        # The live path must reject the abort before it can pass.
+        assert code.index('if boot_aborted; then') \
+            < code.index('if sysinit_completed; then')
+
+    def test_lg3d_uefi_gate_reads_the_userspace_stream(self):
+        """The UEFI step must see the init's writes, not only GRUB's."""
+        step = self._uefi_step()
+        for marker in self.ABORT_MARKERS:
+            assert marker in step, \
+                f'the UEFI gate no longer rejects {marker!r}'
+        assert 'Create symlinks in /dev targeting /proc' in step, \
+            'the UEFI gate must accept a marker only a healthy sysinit prints'
+        assert 'error: file .* not found' in step, \
+            'the UEFI gate lost the exact GRUB error the shipped ISO showed'
+
+    def test_publishing_workflows_upload_after_their_smoke_tests(self):
+        """A red boot gate must not leave an ISO to be downloaded anyway.
+
+        create-release keeps its `if: always()' (nightly #230: requiring
+        success threw away every green leg of a partially failed matrix), so
+        the upload step is the one that has to move behind the smoke tests --
+        it inherits the job's implicit success() and a leg that cannot boot
+        then has nothing to hand over.
+        """
+        for wf_path in (self.LG3D_WF, self.NIGHTLY_WF):
+            wf = wf_path.read_text()
+            upload = wf.index('- name: Upload release artifacts')
+            for smoke in ('- name: Boot artifact in QEMU (smoke test - BIOS mode)',
+                          '- name: Boot artifact in QEMU (smoke test - UEFI mode)',
+                          '- name: Boot artifact in QEMU (smoke test)'):
+                if smoke in wf:
+                    assert upload > wf.index(smoke), \
+                        f'{wf_path} publishes artifacts before booting them'
+            assert upload < wf.index('  create-release:'), \
+                f'{wf_path} must still upload before create-release downloads'
