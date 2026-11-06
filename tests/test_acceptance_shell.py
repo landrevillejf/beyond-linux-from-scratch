@@ -6516,6 +6516,15 @@ class TestLiveIsoCgroupSysinitGuardrails:
     tools/qemu-boot-smoke.sh keyed its gate on "Mounting virtual file systems"
     and "systemd[1]:" -- strings emitted by the code that dies one line later.
     These guardrails pin the fix and the now-honest gates.
+
+    3. Fixing (1) and (2) only moves the wall one script further, to the three
+       rcS.d scripts that read /etc/fstab.  Measured, not assumed: `mount
+       --all --test-opts no_netdev` over the placeholders lfs/07 leaves there
+       exits 64 with "unknown filesystem type '<fff>'", and `mount -n -o
+       remount,ro /` on a squashfs-plus-tmpfs-overlay root exits 32 with
+       "overlay: No changes allowed in reconfigure", which is checkfs' halt
+       path.  The live tree therefore also has to disable those entries and
+       carry /fastboot.
     """
 
     LIVE = Path('final/15-create-live-system.sh')
@@ -6524,6 +6533,10 @@ class TestLiveIsoCgroupSysinitGuardrails:
     SYSTEM_CONFIG = Path('lfs/07-configure-lfs.sh')
     MOUNTVIRTFS = Path(
         'bootscripts/lfs-bootscripts-20250827/lfs/init.d/mountvirtfs')
+    CHECKFS = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/checkfs')
+    MOUNTFS = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/mountfs')
+    SWAP = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/swap')
+    BOOTSCRIPT_LINKS = Path('bootscripts/lfs-bootscripts-20250827/Makefile')
     SMOKE = Path('tools/qemu-boot-smoke.sh')
     LG3D_WF = Path('.github/workflows/lg3d.yml')
     NIGHTLY_WF = Path('.github/workflows/nightly.yml')
@@ -6559,6 +6572,13 @@ class TestLiveIsoCgroupSysinitGuardrails:
         'unknown filesystem type',
         'Failed to mount cgroup',
     )
+
+    # The exact mksquashfs call of each stage, so an ordering assertion cannot
+    # lock onto the word inside some other command.
+    PACK_CALL = {
+        LIVE: 'mksquashfs "$LFS" "$SQUASHFS"',
+        INSTALLER: 'mksquashfs "$LFS" "$ISO_ROOT/live.squashfs"',
+    }
 
     @staticmethod
     def _code(content):
@@ -6665,6 +6685,82 @@ class TestLiveIsoCgroupSysinitGuardrails:
                 f'{script} does not require the cgroup mountpoint in the image'
             assert 'grep -qx "$need"' in code, \
                 f'{script} checks the packed tree with a substring match'
+
+    def test_the_fstab_scripts_of_the_sysinit_stage_are_the_wall(self):
+        """Why /fastboot and the placeholder lines are boot-critical here.
+
+        Pinning the vendored scripts, not our own code: rcS.d really runs
+        these three, checkfs really halts when it cannot remount / read-only,
+        and mountfs really deletes /fastboot in the same boot -- which is what
+        makes shipping that file safe for an installed target.
+        """
+        links = self.BOOTSCRIPT_LINKS.read_text()
+        for script in ('S20swap', 'S30checkfs', 'S40mountfs'):
+            assert f'rc.d/rcS.d/{script}' in links, \
+                f'the vendored bootscripts no longer install {script} in rcS.d'
+        swap = self._code(self.SWAP.read_text())
+        assert 'swapon -a' in swap, \
+            'swap no longer reads /etc/fstab, the placeholder risk is gone'
+        checkfs = self._code(self.CHECKFS.read_text())
+        assert 'if [ -f /fastboot ]; then' in checkfs, \
+            'checkfs lost the /fastboot switch our live image relies on'
+        assert 'mount -n -o remount,ro /' in checkfs, \
+            'checkfs no longer remounts / read-only before fsck'
+        assert 'fsck ${options} -a -A -C -T' in checkfs, \
+            'checkfs no longer fscks every fstab entry'
+        assert checkfs.index('if [ -f /fastboot ]; then') \
+            < checkfs.index('mount -n -o remount,ro /'), \
+            'the /fastboot switch must short-circuit before the fatal remount'
+        assert 'wait_for_user' in checkfs and 'init.d/halt start' in checkfs, \
+            'checkfs no longer parks and halts on a failed remount'
+        mountfs = self._code(self.MOUNTFS.read_text())
+        assert 'mount --all --test-opts no_netdev' in mountfs, \
+            'mountfs no longer mounts every fstab entry'
+        assert 'rm -f /fastboot /forcefsck' in mountfs, \
+            'mountfs no longer clears /fastboot, so an installed target '\
+            'would skip its fsck forever'
+
+    def test_iso_stages_neutralize_the_installer_fstab_for_live_media(self):
+        """The live root must not obey an fstab written for an installed disk.
+
+        lfs/07 leaves `/dev/<xxx> / <fff>' and `/dev/<yyy> swap' as installer
+        placeholders and Calamares regenerates the file on the target, so on
+        the media those two lines are just two devices that do not exist --
+        enough for S20swap, S30checkfs and S40mountfs to fail and for rc to
+        park the boot at "Press Enter to continue...".
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert '$SUDO touch "$LFS/fastboot"' in code, \
+                f'{script} does not give the live root the /fastboot switch'
+            assert '^(/dev/<[^>]+>[[:space:]].*)|# live media: \\1|' in code, \
+                f'{script} no longer comments the installer fstab '\
+                f'placeholders out'
+            # The rewrite has to happen to the tree being packed, so it must
+            # sit between the mountpoint block and mksquashfs.
+            assert code.index('touch "$LFS/fastboot"') \
+                < code.index(self.PACK_CALL[script]), \
+                f'{script} edits the fstab after packing the rootfs'
+
+    def test_iso_stages_verify_the_packed_fstab_and_fastboot(self):
+        """The same lesson as the -e wildcards: prove it inside the image.
+
+        A stage that edits $LFS and never reads the squashfs back is how the
+        cgroup hole reached a release, so this gate checks the packed file,
+        not the tree it was built from.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'squashfs-root/fastboot' in code, \
+                f'{script} does not require /fastboot in the packed rootfs'
+            assert "grep -q '^/dev/<'" in code, \
+                f'{script} cannot fail on an image that still carries the '\
+                f'installer placeholders'
+            assert 'unsquashfs -no-progress -cat' in code, \
+                f'{script} inspects the packed fstab with no -cat call'
+            assert code.index(self.PACK_CALL[script]) \
+                < code.index('unsquashfs -no-progress -cat'), \
+                f'{script} reads the fstab before it has packed one'
 
     def test_live_cmdline_puts_the_serial_console_last(self):
         """The LAST console= names /dev/console, and the CI gates read that.
