@@ -583,12 +583,32 @@
   `/fastboot` is missing from the image -- the same prove-it-after-packing
   lesson the `-e` wildcards taught.
 
-  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (12 cases) pinning the
+  Runlevel 5 holds the third wall, and it is the same class of bug: `blfs/30`
+  puts the live image in runlevel 5, rc5.d carries `S20network`, and the book's
+  network script runs `/sbin/ifup ${interface}` for every
+  `/etc/sysconfig/ifconfig.*` file -- by name, with the `IFACE=eth0` and static
+  `192.168.1.2` that lfs/07 writes from the book's example.  udev renames the
+  NIC on any modern machine (enp0s3 under QEMU, the VirtualBox equivalent
+  applies too), so `ip link set eth0 up` fails, that status is the script's own
+  exit status (rc exports `IN_BOOT=1`, line 177), and rc parks the boot at the
+  very same prompt.  `final/14` and `final/15` now flip `ONBOOT=yes` to
+  `ONBOOT=no` for every packed interface config -- the book's own switch, which
+  `ifup` honours by exiting 0 before touching any device (line 94) -- and both
+  stages read the packed files back and fail if an `ONBOOT=yes` survives;
+  proven by A/B against a real squashfs (gate fires on the unmodified tree,
+  silent on the rewritten one).  DISCLOSURE, because $LFS is also what Calamares
+  installs: that `ONBOOT=no` rides into the target, so an installed sysvinit
+  system now comes up with its interface inert instead of parking at runlevel 5.
+  Nothing regenerates this file the way the `fstab` module regenerates fstab;
+  configuring the installed network with the interface's real name is a separate
+  decision, not something this entry silently changes in `lfs/07`.
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (13 cases) pinning the
   fstab/`mountvirtfs` demand, the chain in every fragment, the `olddefconfig`
   survival guard, the packed mountpoint, the post-pack verification, the
   vendored `swap`/`checkfs`/`mountfs` sysinit contract, the live fstab rewrite
-  and `/fastboot`, the packed-fstab readback, the console ordering, and both
-  gates' abort lists plus upload ordering;
+  and `/fastboot`, the packed-fstab readback, the rc5.d `ifup`/`ONBOOT` chain,
+  the console ordering, and both gates' abort lists plus upload ordering;
   `test_smoke_gate_requires_post_switch_root_marker` and
   `test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub` are updated to the
   honest markers.  The decisive A/B -- the same ISO booting past
