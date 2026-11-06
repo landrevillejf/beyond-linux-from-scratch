@@ -179,7 +179,30 @@ if [ -n "$CROSS_COMPILE" ]; then
     # named, which is how CONFIG_CGROUPS disappeared from a fragment that
     # asked for it and shipped a kernel that cannot mount cgroup2 at all --
     # rcS.d/S00mountvirtfs then aborts sysinit and systemd freezes as PID 1.
-    # Fail here, where it is one grep, instead of at the first real boot.
+    #
+    # Repair before judging.  A build that dies here produces no image at all,
+    # which is worse than the dead image we had: the pipeline must keep
+    # producing an artifact, so every symbol the fragment asks for and the
+    # resolution lost is re-asserted through the kernel's own `scripts/config'
+    # and resolved once more.  Only a symbol that still cannot be enabled -- a
+    # dependency that genuinely does not exist in this source -- stops the
+    # stage, because at that point the kernel cannot boot anything anyway.
+    cguard_missing=()
+    for sym in $CGUARD_SYMBOLS; do
+        if grep -q "^${sym}=y" "$KERNEL_CONFIG_SRC" && ! grep -q "^${sym}=y" .config; then
+            cguard_missing+=("${sym#CONFIG_}")
+        fi
+    done
+    if [ ${#cguard_missing[@]} -gt 0 ]; then
+        cguard_args=()
+        for sym in "${cguard_missing[@]}"; do
+            cguard_args+=(--enable "$sym")
+        done
+        cguard_msg="olddefconfig left ${#cguard_missing[@]} boot-critical symbol(s) unset:"
+        log_warning "$cguard_msg ${cguard_missing[*]}; forcing and resolving again"
+        ./scripts/config "${cguard_args[@]}"
+        $MAKE_CMD olddefconfig
+    fi
     for sym in $CGUARD_SYMBOLS; do
         if grep -q "^${sym}=y" "$KERNEL_CONFIG_SRC" && ! grep -q "^${sym}=y" .config; then
             log_error "$sym=y is requested by $KERNEL_CONFIG_SRC but missing from the resolved .config"
@@ -259,10 +282,27 @@ $HARDEN_CMDS
 
 make olddefconfig
 
-# Same survival check as the cross-compile path above, on the symbols named in
-# the fragment.  \${sym} is what makes the loop expand inside the chroot
-# instead of while this heredoc is written; the list itself is expanded here,
-# so both paths can never drift apart.
+# Same repair-then-judge rule as the cross-compile path above.  \${sym} is
+# what makes the loop expand inside the chroot instead of while this heredoc
+# is written; the list itself is expanded here, so both paths can never drift
+# apart.  Dying here would cost the whole build, so the symbols the resolution
+# lost are re-asserted through scripts/config first.
+cguard_missing=()
+for sym in ${CGUARD_SYMBOLS}; do
+    if grep -q "^\${sym}=y" /sources/.kernel-config && ! grep -q "^\${sym}=y" .config; then
+        cguard_missing+=("\${sym#CONFIG_}")
+    fi
+done
+if [ \${#cguard_missing[@]} -gt 0 ]; then
+    cguard_args=()
+    for sym in "\${cguard_missing[@]}"; do
+        cguard_args+=(--enable "\$sym")
+    done
+    cguard_msg="olddefconfig left \${#cguard_missing[@]} boot-critical symbol(s) unset:"
+    echo "WARNING: \$cguard_msg \${cguard_missing[*]}; forcing and resolving again"
+    ./scripts/config "\${cguard_args[@]}"
+    make olddefconfig
+fi
 for sym in ${CGUARD_SYMBOLS}; do
     if grep -q "^\${sym}=y" /sources/.kernel-config && ! grep -q "^\${sym}=y" .config; then
         echo "ERROR: \${sym}=y requested by the fragment is missing from the resolved .config"
