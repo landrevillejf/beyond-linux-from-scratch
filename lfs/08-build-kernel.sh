@@ -43,6 +43,11 @@ riscv64) MAKE_ARCH="riscv" ;;
 esac
 
 log_info() { echo "[INFO] $*"; }
+# The helper is defined here, with its siblings, on purpose: this stage runs
+# under `set -e', so calling a log function this script never defines is not a
+# cosmetic miss -- bash returns 127 and the kernel stage dies with it, which
+# costs the whole image.  Every log_* name used below must exist.
+log_warning() { echo "[WARNING] $*"; }
 log_error() { echo "[ERROR] $*" >&2; }
 log_success() { echo "[SUCCESS] $*"; }
 
@@ -200,8 +205,14 @@ if [ -n "$CROSS_COMPILE" ]; then
         done
         cguard_msg="olddefconfig left ${#cguard_missing[@]} boot-critical symbol(s) unset:"
         log_warning "$cguard_msg ${cguard_missing[*]}; forcing and resolving again"
-        ./scripts/config "${cguard_args[@]}"
-        $MAKE_CMD olddefconfig
+        # The repair itself may not be fatal: it runs under `set -e', and a
+        # repair tool that errored would lose the build in a new place instead
+        # of saving it.  If forcing or the second resolution fails, the config
+        # simply keeps what it has and the judge below reports it.
+        ./scripts/config "${cguard_args[@]}" ||
+            log_warning "scripts/config could not force them; letting the guard judge"
+        $MAKE_CMD olddefconfig ||
+            log_warning "the second resolution failed; letting the guard judge"
     fi
     for sym in $CGUARD_SYMBOLS; do
         if grep -q "^${sym}=y" "$KERNEL_CONFIG_SRC" && ! grep -q "^${sym}=y" .config; then
@@ -300,8 +311,10 @@ if [ \${#cguard_missing[@]} -gt 0 ]; then
     done
     cguard_msg="olddefconfig left \${#cguard_missing[@]} boot-critical symbol(s) unset:"
     echo "WARNING: \$cguard_msg \${cguard_missing[*]}; forcing and resolving again"
-    ./scripts/config "\${cguard_args[@]}"
-    make olddefconfig
+    ./scripts/config "\${cguard_args[@]}" ||
+        echo "WARNING: scripts/config could not force them; letting the guard judge"
+    make olddefconfig ||
+        echo "WARNING: the second resolution failed; letting the guard judge"
 fi
 for sym in ${CGUARD_SYMBOLS}; do
     if grep -q "^\${sym}=y" /sources/.kernel-config && ! grep -q "^\${sym}=y" .config; then
