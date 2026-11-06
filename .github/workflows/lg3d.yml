@@ -889,7 +889,15 @@ jobs:
     # no release at all.  Publish whatever completed instead.  Only a
     # cancelled run is worthless, and the all-legs-failed case is caught
     # by the guard below so it never creates an empty release.
-    if: always() && needs.build-profiles.result != 'cancelled'
+    #
+    # PROOF-BRANCH ONLY, NEVER MERGE: publishing is switched off here so this
+    # run cannot touch the shared lg3d-nightly-<date> release assets -- the
+    # date is computed at run time, so a dispatch today would overwrite
+    # tonight's slot.  Upstream condition (revert target):
+    #   if: always() && needs.build-profiles.result != 'cancelled'
+    # The build and both boot smoke gates run exactly as on main, which is the
+    # point: prove the cgroup fix reaches userspace, publish nothing.
+    if: false
     permissions:
       contents: write
       # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.
