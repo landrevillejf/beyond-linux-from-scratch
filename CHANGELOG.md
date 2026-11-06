@@ -481,6 +481,37 @@
 
 ### Fixed
 
+- **The live ISOs booted to a shell at `Failed to mount the live overlay
+  tmpfs`: the overlayfs kernel configs enabled `OVERLAY_FS` but not `TMPFS`**
+  (`config/kernel-config`, `config/kernel-config-arm64`,
+  `config/kernel-config-audio-studio`, `tests/test_acceptance_shell.py`)
+
+  The sysvinit dead-console fix stacked a tmpfs-backed overlayfs over the
+  read-only `live.squashfs` in `final/12-create-initramfs.sh` (tmpfs `upper`+
+  `work`, squashfs `lower`) and enabled `CONFIG_OVERLAY_FS=y` in the four
+  kernel configs that build a live squashfs, but it never enabled
+  `CONFIG_TMPFS`.  Only `config/kernel-config-gnu-free` carried it.  `TMPFS` is
+  a separate symbol, and `lfs/08-build-kernel.sh` seeds `.config` from the
+  fragment then runs `make olddefconfig`, so a fragment that does not name it
+  builds a kernel with no tmpfs.
+
+  The `lg3d`/`systemd` leg of nightly #95 (run 42045013412) built the ISO,
+  booted it under the QEMU smoke test, and the initramfs mounted `devtmpfs`,
+  `proc`, `sysfs`, `iso9660` and the squashfs loop fine - then hit
+  `mount -t tmpfs tmpfs /live/rw`, printed `Failed to mount the live overlay
+  tmpfs. Dropping to shell.` and never reached `switch_root`, so the tightened
+  post-`switch_root` smoke gate failed the leg.  The sysvinit leg of the same
+  run died earlier at `init-system` (fixed separately above); once that gate
+  passes it reaches the same tmpfs wall, so this affected both live legs.
+
+  `CONFIG_TMPFS=y`, `CONFIG_TMPFS_POSIX_ACL=y` and `CONFIG_TMPFS_XATTR=y` are
+  now named in `config/kernel-config`, `config/kernel-config-arm64` and
+  `config/kernel-config-audio-studio` (gnu-free already had them), matching
+  every other boot-critical symbol those fragments spell out.  A new
+  `TestSysvinitLiveBootGuardrails.test_kernel_configs_enable_tmpfs_for_live_
+  overlay` asserts that every fragment enabling `CONFIG_OVERLAY_FS=y` for the
+  live path also enables `CONFIG_TMPFS=y`, so the omission cannot return.
+
 - **`lg3d` / sysvinit nightly #95 aborted at `init-system`: the `rcS`
   post-install gate fired on a file the LFS design never ships**
   (`lfs/06a-init-system.sh`,
