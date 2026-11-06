@@ -629,7 +629,22 @@
   block turns `A` red with `the guard failed a build it could repair`, which is
   how we know the test can actually fail.
 
-  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (16 cases) pinning the
+  That first version of the repair was itself a build killer and is recorded
+  here as such: it called `log_warning`, a helper `lfs/08` never defined, and
+  the stage runs under `set -e` -- so the cross-compile path would have died
+  with 127 at the moment it tried to *save* the build, producing no ISO on the
+  ARM profiles.  `bash -n` cannot see it and the harness was supplying its own
+  `log_warning`, which is exactly how green tests hid a fatal line.  Three
+  things changed: the helper is defined with its siblings, the repair commands
+  are now tolerant (`|| log_warning ...`) so nothing inside the repair can
+  abort the stage and only the judge can, and the harness borrows the loggers
+  the shipped script really defines, so a missing or misspelled helper fails
+  locally with the same 127 the pipeline would have.  A static case asserts
+  every `log_*` the stage calls exists, and one case renders the native path's
+  here-document and `bash -n`s the generated chroot script, because escaping
+  mistakes there only surface an hour into the build.
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (19 cases) pinning the
   fstab/`mountvirtfs` demand, the chain in every fragment, the no-book-option
   ban and the guard's subset rule, the `olddefconfig`
   survival guard, the packed mountpoint, the post-pack verification, the

@@ -6715,9 +6715,37 @@ while [ "$#" -gt 1 ]; do
     [ "$1" = "--enable" ] && printf '%s\\n' "$2" >> "$PWD/forced.txt"
     shift 2
 done
+[ "${FAIL_SC:-0}" = 1 ] && exit 1
+exit 0
 """
 
-    def _run_cgroup_guard(self, tmp_path, drop, ignore_force):
+    # The log helpers, taken from the shipped script and nowhere else.  The
+    # stage runs under `set -e', so a helper it calls without defining dies
+    # with 127 -- a repair meant to save the ISO would instead lose it, and a
+    # harness that supplied its own log_warning could never see that happen.
+    LOGGER_DEFS = re.compile(r'^log_[a-z_]+\(\) \{.*\}$', re.M)
+
+    def _shipped_loggers(self, code):
+        defs = self.LOGGER_DEFS.findall(code)
+        assert defs, 'lfs/08 no longer defines its log helpers one per line'
+        return 'set -e\n' + '\n'.join(defs) + '\n'
+
+    def test_the_kernel_stage_defines_every_logger_it_calls(self):
+        """`set -e' turns a missing log helper into a lost image.
+
+        This is the exact class of bug the behavioural guard below would have
+        hidden: an undefined helper is a 127, and 127 under `set -e' ends the
+        kernel stage -- no ISO at all, which is worse than a dead one.
+        """
+        code = self.KERNEL_STAGE.read_text()
+        defined = set(re.findall(r'^(log_[a-z_]+)\(\)', code, re.M))
+        called = set(re.findall(r'^\s*(log_[a-z_]+)\s+["\$\']', code, re.M))
+        missing = sorted(called - defined)
+        assert not missing, \
+            f'lfs/08 calls {missing} but never defines them; with set -e the' \
+            f'stage dies there and the build produces no image'
+
+    def _run_cgroup_guard(self, tmp_path, drop, ignore_force, fail_sc='0'):
         """Play the shipped guard block against stubbed Kconfig tooling."""
         code = self.KERNEL_STAGE.read_text()
         match = self.GUARD_BLOCK.search(code)
@@ -6735,16 +6763,14 @@ done
         sc.write_text(self.STUB_SCRIPTS_CONFIG)
         sc.chmod(0o755)
         script = tmp_path / 'guard.sh'
-        script.write_text('log_warning() { echo "WARNING: $*"; }\n'
-                          'log_error() { echo "ERROR: $*" >&2; }\n'
-                          + match.group(0))
+        script.write_text(self._shipped_loggers(code) + match.group(0))
         script.chmod(0o755)
         env = dict(os.environ,
                    PATH=f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
                    KERNEL_CONFIG_SRC='fragment', MAKE_CMD='make',
                    CGUARD_SYMBOLS='CONFIG_CGROUPS CONFIG_MEMCG '
                                   'CONFIG_NAMESPACES CONFIG_PID_NS',
-                   DROP=drop, IGNORE_FORCE=ignore_force)
+                   DROP=drop, IGNORE_FORCE=ignore_force, FAIL_SC=fail_sc)
         done = subprocess.run(['bash', str(script)], cwd=tmp_path, env=env,
                               capture_output=True, text=True)
         return done, (tmp_path / '.config').read_text()
@@ -6781,6 +6807,67 @@ done
             'a kernel that cannot mount cgroup2 passed the guard'
         assert 'missing from the resolved .config' in done.stderr, \
             'the failure must name the symbol, not just die'
+
+    def test_a_broken_repair_tool_does_not_cost_the_iso(self, tmp_path):
+        """The repair may not add a new way to lose the build.
+
+        It runs under `set -e', so a plain `./scripts/config' or `make
+        olddefconfig' that returned non-zero would abort the stage somewhere it
+        never used to abort -- trading a dead image for no image.  Forcing is
+        therefore tolerant and the judge keeps the old, single failure path.
+        """
+        done, resolved = self._run_cgroup_guard(
+            tmp_path, 'CGROUPS', '0', fail_sc='1')
+        assert done.returncode == 0, \
+            'the repair tools failing cost the stage the build: ' + done.stderr
+        assert 'could not force them' in done.stdout, \
+            'a tolerated repair said nothing about the error'
+        assert 'CONFIG_CGROUPS=y' in resolved, \
+            'the guard lost the symbol it was supposed to recover'
+
+    def test_the_chroot_kernel_script_renders_to_valid_bash(self, tmp_path):
+        """The native path writes a script into the chroot; render and check it.
+
+        That here-document is escaped by hand, so a stray or doubled backslash
+        can produce a file that only fails once the chroot runs it -- an hour
+        into the build, with no image.  Expanding it here, with the same
+        variables the stage sets, proves the shipped text is parseable.
+        """
+        code = self.KERNEL_STAGE.read_text()
+        body = re.search(
+            r'^cat >"\$LFS/build-kernel\.sh" <<EOF\n(.*?)\n^EOF$',
+            code, re.M | re.S)
+        assert body, ('lfs/08 no longer renders the chroot script from a EOF '
+                      'here-document starting and ending at column 0')
+        wrapper = tmp_path / 'wrap.sh'
+        wrapper.write_text('cat > rendered.sh <<EOF\n' + body.group(1) +
+                           '\nEOF\n')
+        done = subprocess.run(
+            ['bash', str(wrapper)], cwd=tmp_path,
+            env=dict(os.environ, KERNEL_DIR='linux-6.16.1',
+                     KERNEL_TARBALL='linux-6.16.1.tar.xz',
+                     LOCKDOWN_MODE='none', MODULE_SIG_FORCE='0',
+                     HARDEN_CMDS=':', MAKE_ARCH='x86_64',
+                     KERNEL_VERSION='6.16.1',
+                     CGUARD_SYMBOLS='CONFIG_CGROUPS CONFIG_MEMCG '
+                                    'CONFIG_NAMESPACES CONFIG_PID_NS'),
+            capture_output=True, text=True)
+        assert done.returncode == 0, \
+            'the here-document itself could not be rendered: ' + done.stderr
+        rendered = (tmp_path / 'rendered.sh').read_text()
+        # The symbol list must survive as words, not as an escaped mess.
+        assert 'CONFIG_CGROUPS CONFIG_MEMCG CONFIG_NAMESPACES '\
+            'CONFIG_PID_NS' in rendered, \
+            'CGUARD_SYMBOLS did not expand into the generated script'
+        # A single backslash is legitimate bash continuation; a doubled one is
+        # escaping that leaked out of the here-document and into the script.
+        assert '\\\\' not in rendered, \
+            'the generated script carries doubled heredoc backslashes'
+        check = subprocess.run(['bash', '-n', str(tmp_path / 'rendered.sh')],
+                               capture_output=True, text=True)
+        assert check.returncode == 0, \
+            'the script written into the chroot is not valid bash: ' + \
+            check.stderr
 
     def test_iso_stages_pack_the_cgroup_mountpoint(self):
         """The mountpoint must exist in the image; mkdir cannot create it."""
