@@ -516,11 +516,11 @@
   EPERM, hence "Operation not permitted".  The same stages had already learned
   that lesson for `dev/*` and never applied it to the cgroup mountpoint.
 
-  `CONFIG_CGROUPS=y` plus its 17 dependency/sub-option symbols
+  `CONFIG_CGROUPS=y` plus its 16 dependency/sub-option symbols
   (`CGROUP_SCHED`, `FAIR_GROUP_SCHED`, `CFS_BANDWIDTH`, `MEMCG`, `BLK_CGROUP`,
   `CPUSETS`, `CGROUP_PIDS`, `CGROUP_DEVICE`, `CGROUP_FREEZER`,
   `CGROUP_NET_PRIO`, `CGROUP_NET_CLASSID`, `NAMESPACES`, `UTS_NS`, `IPC_NS`,
-  `PID_NS`, `NET_NS`, `POSIX_MQUEUE`) are now spelled out in **all six** kernel
+  `PID_NS`, `NET_NS`) are now spelled out in **all six** kernel
   fragments -- a deliberate widening past the lg3d-only report, because the
   fstab line and `mountvirtfs` are unconditional and every profile inherited
   the same dead boot.  `CONFIG_USER_NS` stays off.  `lfs/08` gained
@@ -603,17 +603,34 @@
   configuring the installed network with the interface's real name is a separate
   decision, not something this entry silently changes in `lfs/07`.
 
-  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (13 cases) pinning the
-  fstab/`mountvirtfs` demand, the chain in every fragment, the `olddefconfig`
+  The same fix also carried one symbol the books never asked for, and that is
+  worth stating because it was a way to break a build for nothing: the first
+  version added `CONFIG_POSIX_MQUEUE=y` to all six fragments *and* put it in
+  `CGUARD_SYMBOLS`.  POSIX message queues appear in no LFS 12.4 or BLFS 13.0
+  requirement (the LFS book's own config table names `[CGROUPS]` and `[MEMCG]`
+  and leaves `[EXPERT]` off; `general/elogind.html` is the page that makes
+  cgroups mandatory -- "elogind strictly needs a kernel with CONFIG_CGROUPS
+  enabled at runtime"), and the guard fails the kernel stage for any fragment
+  symbol that `olddefconfig` will not resolve, so an unrequested option became
+  an unneeded hostage.  `CONFIG_POSIX_MQUEUE=y` is gone from every fragment and
+  from the gate; `CGUARD_SYMBOLS` is now pinned to a subset of the boot chain,
+  so nothing outside that chain can fail this stage again.
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (14 cases) pinning the
+  fstab/`mountvirtfs` demand, the chain in every fragment, the no-book-option
+  ban and the guard's subset rule, the `olddefconfig`
   survival guard, the packed mountpoint, the post-pack verification, the
   vendored `swap`/`checkfs`/`mountfs` sysinit contract, the live fstab rewrite
   and `/fastboot`, the packed-fstab readback, the rc5.d `ifup`/`ONBOOT` chain,
   the console ordering, and both gates' abort lists plus upload ordering;
   `test_smoke_gate_requires_post_switch_root_marker` and
   `test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub` are updated to the
-  honest markers.  The decisive A/B -- the same ISO booting past
-  `S00mountvirtfs` on the serial console -- can only be proven in CI and is
-  what this entry lands to be verified there.
+  honest markers.  The defect was reproduced locally on the shipped ISO (QEMU,
+  serial log) and each wall's mechanism was measured locally (`mount --all`
+  exit 64, overlay remount exit 32, `ifup` gate A/B over a real squashfs); what
+  no local test can do is boot a *rebuilt* kernel and rootfs, because that is a
+  build, not a test -- it belongs to the pipeline, and the gates above are built
+  so a dead image can no longer print PASS.
 
 - **The hybrid lg3d live ISO reached GRUB but never booted the kernel on UEFI:
   `grub.cfg` looked in the ESP for `/isolinux/vmlinuz`, and the kernel had no

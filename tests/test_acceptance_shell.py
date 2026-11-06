@@ -6555,7 +6555,11 @@ class TestLiveIsoCgroupSysinitGuardrails:
 
     # The chain config/kernel-config documents.  Every one is named because
     # olddefconfig resolves an unnamed symbol to n, and lfs/08 re-checks the
-    # same list against the resolved .config.
+    # same list against the resolved .config.  This is the boot chain only:
+    # BLFS 13.0 general/elogind requires CONFIG_CGROUPS at runtime and
+    # rcS.d/S00mountvirtfs mounts cgroup2, so a silent drop boots nothing.
+    # Anything outside that chain has no business here -- it would fail the
+    # kernel stage for an option the books never asked for.
     CGROUP_SYMBOLS = (
         'CONFIG_CGROUPS', 'CONFIG_CGROUP_SCHED', 'CONFIG_FAIR_GROUP_SCHED',
         'CONFIG_CFS_BANDWIDTH', 'CONFIG_MEMCG', 'CONFIG_BLK_CGROUP',
@@ -6563,7 +6567,6 @@ class TestLiveIsoCgroupSysinitGuardrails:
         'CONFIG_CGROUP_FREEZER', 'CONFIG_CGROUP_NET_PRIO',
         'CONFIG_CGROUP_NET_CLASSID', 'CONFIG_NAMESPACES', 'CONFIG_UTS_NS',
         'CONFIG_IPC_NS', 'CONFIG_PID_NS', 'CONFIG_NET_NS',
-        'CONFIG_POSIX_MQUEUE',
     )
 
     # Fatal boot markers, in the order the 20261106 logs printed them.  Both
@@ -6637,6 +6640,28 @@ class TestLiveIsoCgroupSysinitGuardrails:
             # not needed to boot, and an attack surface.
             assert 'CONFIG_USER_NS=y' not in text, \
                 f'{cfg} enables unprivileged user namespaces'
+            # No book page requires POSIX message queues, yet lfs/08 used to
+            # gate them: a fragment asking for an ungated-by-the-books symbol
+            # hands the kernel stage a way to fail on nothing.
+            assert 'CONFIG_POSIX_MQUEUE=y' not in text, \
+                f'{cfg} requests CONFIG_POSIX_MQUEUE, which the LFS/BLFS '\
+                f'books never require'
+
+    def test_the_kernel_guard_only_judges_the_boot_chain(self):
+        """CGUARD_SYMBOLS must stay a subset of the chain it documents.
+
+        The guard fires per symbol the fragment requests, so a symbol outside
+        the boot chain silently turns this stage's hard failure into a lottery
+        on unrelated Kconfig dependencies.
+        """
+        code = self._code(self.KERNEL_STAGE.read_text())
+        listed = re.search(r'CGUARD_SYMBOLS="([^"]*)"', code, re.S)
+        assert listed, 'lfs/08 no longer declares CGUARD_SYMBOLS on one line'
+        guarded = set(re.findall(r'CONFIG_[A-Z0-9_]+', listed.group(1)))
+        assert guarded, 'CGUARD_SYMBOLS is empty'
+        assert guarded <= set(self.CGROUP_SYMBOLS), \
+            f'lfs/08 gates symbols outside the boot chain: ' \
+            f'{sorted(guarded - set(self.CGROUP_SYMBOLS))}'
 
     def test_kernel_stage_verifies_the_chain_survives_olddefconfig(self):
         """A fragment that asks for cgroups must not be silently overruled.
