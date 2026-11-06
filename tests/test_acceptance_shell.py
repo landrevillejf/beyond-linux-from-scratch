@@ -6535,6 +6535,9 @@ class TestLiveIsoCgroupSysinitGuardrails:
         'bootscripts/lfs-bootscripts-20250827/lfs/init.d/mountvirtfs')
     CHECKFS = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/checkfs')
     MOUNTFS = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/mountfs')
+    NETWORK = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/network')
+    IFUP = Path('bootscripts/lfs-bootscripts-20250827/lfs/sbin/ifup')
+    RC = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/rc')
     SWAP = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/swap')
     BOOTSCRIPT_LINKS = Path('bootscripts/lfs-bootscripts-20250827/Makefile')
     SMOKE = Path('tools/qemu-boot-smoke.sh')
@@ -6761,6 +6764,39 @@ class TestLiveIsoCgroupSysinitGuardrails:
             assert code.index(self.PACK_CALL[script]) \
                 < code.index('unsquashfs -no-progress -cat'), \
                 f'{script} reads the fstab before it has packed one'
+
+    def test_runlevel_five_does_not_configure_a_named_interface(self):
+        """The wall after the fstab one: rc5.d/S20network.
+
+        blfs/30 puts the live image in runlevel 5, where the book's network
+        script runs ifup for every /etc/sysconfig/ifconfig.* -- by IFACE name,
+        which lfs/07 hardcodes to eth0 while udev renames the NIC.  ifup's
+        status is the script's exit status, and rc parks on it, so the packed
+        tree has to leave every interface inert with the book's own ONBOOT
+        switch instead of a deviating script.
+        """
+        rc = self._code(self.RC.read_text())
+        assert 'export IN_BOOT=1' in rc, \
+            'rc no longer marks boot, so the ifup ONBOOT guard is dead text'
+        ifup = self._code(self.IFUP.read_text())
+        assert '${IN_BOOT}" = "1" -a "${ONBOOT}" != "yes"' in ifup, \
+            'ifup no longer guards on ONBOOT when booting'
+        assert '!= "yes" ]; then\n   exit 0' in ifup, \
+            'the ONBOOT guard must exit 0 before any device is touched'
+        network = self._code(self.NETWORK.read_text())
+        start = network.split('start)')[1].split(';;')[0]
+        assert '/sbin/ifup ${interface}' in start, \
+            'the network script no longer brings interfaces up by name'
+        after = start.split('/sbin/ifup ${interface}')[1]
+        assert 'exit' not in after and '||' not in after, \
+            'the network script must hand ifup status back to rc, not '\
+            'swallow it'
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert "sed -E 's|^ONBOOT=yes|ONBOOT=no|'" in code, \
+                f'{script} lets an interface auto-start on the live media'
+            assert 'grep -q \'^ONBOOT=yes\'' in code, \
+                f'{script} does not require an inert interface in the image'
 
     def test_live_cmdline_puts_the_serial_console_last(self):
         """The LAST console= names /dev/console, and the CI gates read that.

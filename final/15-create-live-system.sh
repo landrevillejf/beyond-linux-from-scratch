@@ -215,6 +215,35 @@ if [ -f "$LFS/etc/fstab" ] && grep -q '^/dev/<' "$LFS/etc/fstab"; then
     echo "[INFO] Live media: installer fstab placeholders disabled"
 fi
 
+# The same trap one runlevel further: /etc/sysconfig/ifconfig.eth0 is written
+# by lfs/07 for sysvinit with the book's example ONBOOT=yes, IFACE=eth0 and a
+# static 192.168.1.2.  rc exports IN_BOOT=1 (its line 177), so init.d/network
+# runs ifup for every ifconfig.* file it finds, and ifup brings $IFACE up by
+# name.  On the media the NIC is renamed by udev (enp0s3, not eth0), so `ip
+# link set eth0 up` fails, the for loop in init.d/network hands that status
+# back, and rc parks runlevel 5 at the same "Press Enter to continue...".
+# ONBOOT is the book's own switch for it (ifup line 94 exits 0 when booting
+# and ONBOOT is not yes), and a live session has no business claiming a
+# hard-coded private address on the host's LAN anyway.
+for cfg in "$LFS"/etc/sysconfig/ifconfig.*; do
+    [ -f "$cfg" ] || continue
+    if grep -q '^ONBOOT=yes' "$cfg"; then
+        IFCFG_TMP=$(mktemp)
+        if ! sed -E 's|^ONBOOT=yes|ONBOOT=no|' "$cfg" >"$IFCFG_TMP"; then
+            echo "[ERROR] Could not rewrite $cfg for the live media." >&2
+            rm -f "$IFCFG_TMP"
+            exit 1
+        fi
+        if ! $SUDO cp "$IFCFG_TMP" "$cfg"; then
+            echo "[ERROR] Could not install the rewritten $cfg." >&2
+            rm -f "$IFCFG_TMP"
+            exit 1
+        fi
+        rm -f "$IFCFG_TMP"
+        echo "[INFO] Live media: ${cfg##*/} auto-start disabled"
+    fi
+done
+
 # Créer le squashfs
 echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
@@ -258,6 +287,17 @@ if unsquashfs -no-progress -cat "$SQUASHFS" etc/fstab 2>/dev/null |
     echo "        device node that does not exist and park the live boot."
     exit 1
 fi
+# And no packed interface may auto-start on the media either.
+for packed in $(printf '%s\n' "$LIVE_TREE" |
+    grep '^squashfs-root/etc/sysconfig/ifconfig\.'); do
+    if unsquashfs -no-progress -cat "$SQUASHFS" "${packed#squashfs-root/}" \
+        2>/dev/null | grep -q '^ONBOOT=yes'; then
+        echo "[ERROR] $packed still auto-starts on the live media."
+        echo "        ifup fails on a NIC udev has renamed and rc parks"
+        echo "        runlevel 5 at 'Press Enter to continue...'."
+        exit 1
+    fi
+done
 echo "[INFO] Live rootfs boot paths verified in the squashfs"
 
 # Préparer l'arborescence ISO
