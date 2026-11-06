@@ -5733,6 +5733,15 @@ class TestLiveIsoUefiHybridGuardrails:
     LIVE = Path('final/15-create-live-system.sh')
     LG3D_WF = Path('.github/workflows/lg3d.yml')
 
+    # The x86_64 live fragments whose kernel GRUB's EFI `linux` loader boots.
+    # arm64 uses different EFI symbols and already carries CONFIG_EFI_STUB;
+    # CONFIG_EFI_MIXED is x86_64-only, so it is not asserted for arm64.
+    X86_64_LIVE_KERNEL_CONFIGS = (
+        Path('config/kernel-config'),
+        Path('config/kernel-config-audio-studio'),
+        Path('config/kernel-config-gnu-free'),
+    )
+
     @staticmethod
     def _code(content):
         """Drop comment lines so assertions only ever see real commands."""
@@ -5814,6 +5823,60 @@ class TestLiveIsoUefiHybridGuardrails:
         for dep in ('ovmf', 'mtools', 'dosfstools', 'grub-efi-amd64-bin'):
             assert dep in wf, \
                 f'lg3d.yml must install {dep} for the UEFI path'
+
+    def test_grub_cfg_sets_root_to_the_iso_volume(self):
+        """GRUB's default root is the ESP it loaded from, not the ISO9660.
+
+        The standalone BOOTX64.EFI is booted out of the FAT16 efi.img, whose
+        only file is \\EFI\\BOOT\\BOOTX64.EFI, so a bare `linux
+        /isolinux/vmlinuz` resolves against that ESP and aborts with "file
+        `/isolinux/vmlinuz' not found" then "you need to load the kernel
+        first" -- the exact failure the shipped 0.57.4 lg3d ISO showed under
+        OVMF.  The generated grub.cfg must `search` for the kernel on the
+        ISO9660 volume and set root there before the menuentries.  Verified
+        under OVMF: without the search line the real ISO cannot boot; with it
+        GRUB finds and loads the kernel.
+        """
+        code = self._code(self.LIVE.read_text())
+        assert 'search --file --no-floppy --set=root /isolinux/vmlinuz' in code, \
+            'final/15 grub.cfg must search for the kernel on the ISO volume ' \
+            'and set root, else GRUB looks in the ESP and finds no vmlinuz'
+
+    def test_x86_64_live_kernels_enable_efi_stub(self):
+        """GRUB's EFI `linux` loader needs the kernel's EFI boot stub.
+
+        Without CONFIG_EFI_STUB the bzImage carries no "MZ"/PE header at
+        offset 0 (it starts with 0xffff), so GRUB aborts with "kernel DOS
+        magic is invalid" and the UEFI menu entry cannot boot -- the ISO then
+        only boots in legacy BIOS mode.  CONFIG_EFI depends on ACPI and
+        CONFIG_EFI_MIXED depends on EFI_STUB, and lfs/08's `make olddefconfig`
+        drops any symbol whose dependency is not itself named, so the whole
+        chain must be present in every x86_64 live fragment.
+        """
+        for cfg in self.X86_64_LIVE_KERNEL_CONFIGS:
+            text = cfg.read_text()
+            for symbol in ('CONFIG_ACPI=y', 'CONFIG_EFI=y',
+                           'CONFIG_EFI_STUB=y', 'CONFIG_EFI_MIXED=y'):
+                assert symbol in text, \
+                    f'{cfg} lacks {symbol}; GRUB cannot EFI-boot a kernel ' \
+                    f'without the EFI stub (kernel DOS magic is invalid)'
+
+    def test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub(self):
+        """A GRUB banner alone is not a successful UEFI boot.
+
+        The broken 0.57.4 ISOs printed the GRUB menu and "LFS Live" and then
+        died with "file `/isolinux/vmlinuz' not found" or "kernel DOS magic
+        is invalid", yet a gate that accepted GRUB/LFS Live passed.  The
+        smoke test must fail on those GRUB fatal errors and require evidence
+        the chain-loaded kernel actually started.
+        """
+        step = self._uefi_smoke_step()
+        assert 'DOS magic is invalid' in step, \
+            'the UEFI smoke test must fail on a kernel with no EFI stub'
+        assert 'you need to load the kernel first' in step, \
+            'the UEFI smoke test must fail when GRUB could not load the kernel'
+        assert 'Linux version' in step, \
+            'the UEFI smoke test must require the kernel to have started'
 
 
 class TestCalamaresBuildStageGuardrails:

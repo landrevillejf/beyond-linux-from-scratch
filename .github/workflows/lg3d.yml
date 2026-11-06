@@ -815,16 +815,26 @@ jobs:
             -boot order=d \
             -display none -serial file:"$WORKDIR/uefi-boot.log" \
             -monitor none -no-reboot || true
-          # Success = the firmware handed off to GRUB EFI (menu/version on the
-          # serial console) or the kernel it chain-loaded started.  A BIOS-only
-          # ISO shows neither and instead logs OVMF's "failed to load ... UEFI
-          # QEMU DVD-ROM ... Not Found" / "No bootable option", so it fails.
-          if grep -aqE "GRUB|LFS Live|Linux version|switch_root|login:" "$WORKDIR/uefi-boot.log"; then
-            echo "UEFI boot successful: firmware loaded GRUB EFI from the ISO"
-            grep -aoE "GRUB version [0-9.]+|LFS Live|Linux version [^ ]+" "$WORKDIR/uefi-boot.log" | sort -u | head
+          # Success = the kernel GRUB chain-loaded actually started.  A GRUB
+          # banner or the "LFS Live" menu text is NOT enough: the broken
+          # 0.57.4 ISOs printed both and then died with "file
+          # `/isolinux/vmlinuz' not found" (grub.cfg never set root to the ISO
+          # volume) or "kernel DOS magic is invalid" (kernel built without
+          # CONFIG_EFI_STUB), so the old gate that accepted GRUB/LFS Live
+          # stayed green on an unbootable image.  Fail outright on those GRUB
+          # fatal errors, then require positive evidence the kernel started.
+          LOG="$WORKDIR/uefi-boot.log"
+          if grep -aqE "DOS magic is invalid|you need to load the kernel first|Failed to boot both default and fallback" "$LOG"; then
+            echo "::error::UEFI boot failed: GRUB EFI ran but could not boot the kernel"
+            grep -aoE "error: .*" "$LOG" | tr -d '\000' | sort -u | head
+            exit 1
+          fi
+          if grep -aqE "Linux version|switch_root|Mounting virtual file systems|login:" "$LOG"; then
+            echo "UEFI boot successful: firmware -> GRUB EFI -> kernel started"
+            grep -aoE "GRUB version [0-9.]+|Linux version [^ ]+" "$LOG" | sort -u | head
           else
-            echo "::error::UEFI boot failed: firmware never reached GRUB EFI or the kernel"
-            tail -n 40 "$WORKDIR/uefi-boot.log" | tr -d '\000'
+            echo "::error::UEFI boot failed: firmware never reached the kernel"
+            tail -n 40 "$LOG" | tr -d '\000'
             exit 1
           fi
 

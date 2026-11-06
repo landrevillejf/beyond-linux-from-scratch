@@ -481,6 +481,53 @@
 
 ### Fixed
 
+- **The hybrid lg3d live ISO reached GRUB but never booted the kernel on UEFI:
+  `grub.cfg` looked in the ESP for `/isolinux/vmlinuz`, and the kernel had no
+  EFI stub** (`final/15-create-live-system.sh`, `config/kernel-config`,
+  `config/kernel-config-audio-studio`, `config/kernel-config-gnu-free`,
+  `.github/workflows/lg3d.yml`, `tests/test_acceptance_shell.py`)
+
+  The previous entry made the ISO a genuine BIOS+UEFI hybrid and its "proven
+  end-to-end under OVMF" claim was a false green: it verified the firmware
+  loaded GRUB and the menu appeared, never that the kernel booted.  Booting the
+  real shipped `lfs-0.57.4-lg3d-x86_64-sysvinit-20261106.iso` under OVMF (no
+  `-kernel`) reproduced the user's VirtualBox failure on the serial console:
+  `error: file `/isolinux/vmlinuz' not found.` then `you need to load the
+  kernel first.` / `Failed to boot both default and fallback entries.`
+
+  Two independent holes, each proven by an A/B reproduction.  (1) The
+  standalone `BOOTX64.EFI` is booted out of the FAT16 `efi.img`, whose only
+  file is `\EFI\BOOT\BOOTX64.EFI`, so GRUB's default root is that ESP; the
+  generated `grub.cfg` ran a bare `linux /isolinux/vmlinuz` that resolved
+  against the ESP, not the ISO9660 volume holding the kernel.  Adding
+  `search --file --no-floppy --set=root /isolinux/vmlinuz` before the
+  menuentries made GRUB find and load the kernel (reproduced: the "not found"
+  error disappeared).  (2) With the root fixed, GRUB then aborted with `kernel
+  DOS magic is invalid`: the live `vmlinuz` starts with `0xffff`, not the
+  `MZ`/PE header `CONFIG_EFI_STUB` adds, so GRUB's EFI `linux` loader cannot
+  boot it and the ISO only ever worked in legacy BIOS mode.  `config/
+  kernel-config` carried only `CONFIG_EFI_PARTITION=y`; `CONFIG_ACPI=y`,
+  `CONFIG_EFI=y`, `CONFIG_EFI_STUB=y` and `CONFIG_EFI_MIXED=y` are now named in
+  the three x86_64 live fragments (arm64 already had `EFI`+`EFI_STUB`, and
+  `EFI_MIXED` is x86_64-only).  The full chain is spelled out because
+  `lfs/08-build-kernel.sh` runs `make olddefconfig`, which drops any symbol
+  whose dependency is not itself named.
+
+  The lg3d UEFI smoke test is tightened so a GRUB banner is no longer a pass:
+  it fails outright on `DOS magic is invalid`, `you need to load the kernel
+  first` or `Failed to boot both default and fallback`, and only succeeds on
+  evidence the chain-loaded kernel started (`Linux version|switch_root|
+  Mounting virtual file systems|login:`).
+
+  Tests: `TestLiveIsoUefiHybridGuardrails` gains
+  `test_grub_cfg_sets_root_to_the_iso_volume`,
+  `test_x86_64_live_kernels_enable_efi_stub` and
+  `test_lg3d_uefi_smoke_test_requires_kernel_not_just_grub`.  NOTE: the
+  `config/` change rotates the base-cache key, so `build-base-cache.yml` must
+  republish before `lg3d.yml` consumes it, or lg3d cache-misses into a full
+  rebuild; and the EFI-stub kernel boot is only provable in CI (no local
+  kernel build), so that half is validated by the tightened smoke test.
+
 - **The shipped lg3d live ISO was BIOS-only and never booted on UEFI: `final/15`
   consumed an EFI file nothing created, then overwrote `final/14`'s hybrid ISO**
   (`final/15-create-live-system.sh`, `.github/workflows/lg3d.yml`,
