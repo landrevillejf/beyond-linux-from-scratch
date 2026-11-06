@@ -173,6 +173,48 @@ for entry in "$LFS"/sys/* "$LFS"/sys/fs/*; do
     esac
 done
 
+# ---------------------------------------------------------------------------
+# The live media must not obey the installer fstab, nor fsck its own root
+#
+# rcS.d carries S20swap, S30checkfs and S40mountfs (bootscripts Makefile lines
+# 80-82) and all three read /etc/fstab: swap runs `swapon -a`, checkfs runs
+# `mount -n -o remount,ro /` then `fsck -A`, mountfs runs `mount --all`.  On
+# the live media every one of them is fatal.  lfs/07 deliberately leaves the
+# installer placeholders `/dev/<xxx> / <fff>` and `/dev/<yyy> swap` in
+# /etc/fstab - only the installer substitutes them, and blfs/22 has Calamares
+# regenerate the target's fstab - so swapon, fsck and mount all fail on a
+# device node that does not exist.  checkfs cannot even reach fsck: remounting
+# a squashfs lower plus tmpfs upper read-only fails, which sends it down its
+# "Press Enter to continue..." + halt branch, and rc parks the boot.  That is
+# the same wall the cgroup fix moved, one script later.
+#
+# Two live-media-only changes:
+#   * comment the placeholder lines out in the tree being packed;
+#   * create /fastboot, the book's own switch that makes checkfs exit 0 before
+#     the remount and the fsck.  mountfs deletes it during that same boot (its
+#     line 40), so an installed target loses it after first boot and fsck runs
+#     normally from then on, while on the live session the removal only touches
+#     the tmpfs overlay.
+# ---------------------------------------------------------------------------
+$SUDO touch "$LFS/fastboot"
+if [ -f "$LFS/etc/fstab" ] && grep -q '^/dev/<' "$LFS/etc/fstab"; then
+    FSTAB_TMP=$(mktemp)
+    if ! sed -E 's|^(/dev/<[^>]+>[[:space:]].*)|# live media: \1|' \
+        "$LFS/etc/fstab" >"$FSTAB_TMP"; then
+        echo "[ERROR] Could not rewrite $LFS/etc/fstab for the live media." >&2
+        rm -f "$FSTAB_TMP"
+        exit 1
+    fi
+    if ! $SUDO cp "$FSTAB_TMP" "$LFS/etc/fstab"; then
+        echo "[ERROR] Could not install the rewritten $LFS/etc/fstab." >&2
+        rm -f "$FSTAB_TMP"
+        exit 1
+    fi
+    $SUDO chmod 0644 "$LFS/etc/fstab"
+    rm -f "$FSTAB_TMP"
+    echo "[INFO] Live media: installer fstab placeholders disabled"
+fi
+
 # Créer le squashfs
 echo "[INFO] Creating squashfs (compression: $COMPRESSION)..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
@@ -200,7 +242,7 @@ mksquashfs "$LFS" "$SQUASHFS" \
 # release silently.  One listing pass, exact-match on every required path.
 LIVE_TREE=$(unsquashfs -no-progress -ls "$SQUASHFS" 2>/dev/null)
 for need in squashfs-root/dev/console squashfs-root/dev/null \
-    squashfs-root/sys/fs/cgroup; do
+    squashfs-root/fastboot squashfs-root/sys/fs/cgroup; do
     if ! printf '%s\n' "$LIVE_TREE" | grep -qx "$need"; then
         echo "[ERROR] $SQUASHFS carries no /${need#squashfs-root}."
         echo "        The live session cannot boot without it; an -e wildcard"
@@ -208,6 +250,14 @@ for need in squashfs-root/dev/console squashfs-root/dev/null \
         exit 1
     fi
 done
+# -cat takes paths relative to the image root, unlike the -ls listing above.
+if unsquashfs -no-progress -cat "$SQUASHFS" etc/fstab 2>/dev/null |
+    grep -q '^/dev/<'; then
+    echo "[ERROR] The packed /etc/fstab still carries the installer"
+    echo "        placeholders: S20swap, S30checkfs and S40mountfs fail on a"
+    echo "        device node that does not exist and park the live boot."
+    exit 1
+fi
 echo "[INFO] Live rootfs boot paths verified in the squashfs"
 
 # Préparer l'arborescence ISO
