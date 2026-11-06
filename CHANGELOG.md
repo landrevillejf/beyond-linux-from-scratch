@@ -616,7 +616,20 @@
   from the gate; `CGUARD_SYMBOLS` is now pinned to a subset of the boot chain,
   so nothing outside that chain can fail this stage again.
 
-  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (14 cases) pinning the
+  Repair before judging, because a build that produces nothing is a worse
+  regression than a dead image: both `lfs/08` paths now collect the boot-critical
+  symbols the fragment asked for and `olddefconfig` left unset, re-assert them
+  through the kernel's own `./scripts/config --enable`, and resolve once more.
+  The stage still fails -- naming the symbol -- only when forcing cannot make the
+  symbol exist, i.e. a dependency genuinely absent from this source, where the
+  kernel could not mount cgroup2 anyway.  Two new cases play the shipped block
+  against stubbed `make`/`scripts/config` (no kernel build): `A` drops
+  `CONFIG_CGROUPS` and the guard must bring it back and pass, `B` makes forcing
+  impossible and the guard must die.  Verified by mutation: deleting the repair
+  block turns `A` red with `the guard failed a build it could repair`, which is
+  how we know the test can actually fail.
+
+  Tests: new `TestLiveIsoCgroupSysinitGuardrails` (16 cases) pinning the
   fstab/`mountvirtfs` demand, the chain in every fragment, the no-book-option
   ban and the guard's subset rule, the `olddefconfig`
   survival guard, the packed mountpoint, the post-pack verification, the

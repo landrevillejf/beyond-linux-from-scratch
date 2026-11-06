@@ -6686,6 +6686,102 @@ class TestLiveIsoCgroupSysinitGuardrails:
             'the chroot guard must compare against the injected fragment' \
             ' and not expand early'
 
+    # The cross-compile guard: from its first olddefconfig through the two
+    # loops that repair and then judge.  Extracted from the shipped script so
+    # the test exercises the real code, not a transcription of it.
+    GUARD_BLOCK = re.compile(
+        r'^    \$MAKE_CMD olddefconfig\n(?:.*\n)*?^    done\n'
+        r'(?:.*\n)*?^    done\n', re.M)
+
+    STUB_MAKE = """#!/bin/sh
+[ "$1" = "olddefconfig" ] || exit 0
+src=.config; [ -f "$src" ] || src=fragment
+: > .config.new
+while read -r line; do
+    sym=${line#CONFIG_}; sym=${sym%%=*}
+    case " ${DROP:-} " in *" $sym "*) continue ;; esac
+    printf '%s\\n' "$line" >> .config.new
+done < "$src"
+if [ "${IGNORE_FORCE:-0}" != 1 ] && [ -f forced.txt ]; then
+    while read -r f; do
+        grep -qx "CONFIG_$f=y" .config.new || printf 'CONFIG_%s=y\\n' "$f" >> .config.new
+    done < forced.txt
+fi
+mv .config.new .config
+"""
+
+    STUB_SCRIPTS_CONFIG = """#!/bin/sh
+while [ "$#" -gt 1 ]; do
+    [ "$1" = "--enable" ] && printf '%s\\n' "$2" >> "$PWD/forced.txt"
+    shift 2
+done
+"""
+
+    def _run_cgroup_guard(self, tmp_path, drop, ignore_force):
+        """Play the shipped guard block against stubbed Kconfig tooling."""
+        code = self.KERNEL_STAGE.read_text()
+        match = self.GUARD_BLOCK.search(code)
+        assert match, 'lfs/08 no longer holds one olddefconfig + repair + '\
+            'judge block in the cross-compile path'
+        for rel in ('scripts',):
+            (tmp_path / rel).mkdir()
+        (tmp_path / 'fragment').write_text(
+            'CONFIG_CGROUPS=y\nCONFIG_MEMCG=y\nCONFIG_NAMESPACES=y\n'
+            'CONFIG_PID_NS=y\n')
+        make = tmp_path / 'make'
+        make.write_text(self.STUB_MAKE)
+        make.chmod(0o755)
+        sc = tmp_path / 'scripts' / 'config'
+        sc.write_text(self.STUB_SCRIPTS_CONFIG)
+        sc.chmod(0o755)
+        script = tmp_path / 'guard.sh'
+        script.write_text('log_warning() { echo "WARNING: $*"; }\n'
+                          'log_error() { echo "ERROR: $*" >&2; }\n'
+                          + match.group(0))
+        script.chmod(0o755)
+        env = dict(os.environ,
+                   PATH=f'{tmp_path}{os.pathsep}{os.environ["PATH"]}',
+                   KERNEL_CONFIG_SRC='fragment', MAKE_CMD='make',
+                   CGUARD_SYMBOLS='CONFIG_CGROUPS CONFIG_MEMCG '
+                                  'CONFIG_NAMESPACES CONFIG_PID_NS',
+                   DROP=drop, IGNORE_FORCE=ignore_force)
+        done = subprocess.run(['bash', str(script)], cwd=tmp_path, env=env,
+                              capture_output=True, text=True)
+        return done, (tmp_path / '.config').read_text()
+
+    def test_cgroup_guard_repairs_before_it_fails_the_build(self, tmp_path):
+        """A dropped symbol must be re-asserted, not buried -- no ISO lost.
+
+        Dying in the kernel stage produces no artifact at all, which is worse
+        than the dead ISO we had, so the guard repairs through the kernel's own
+        scripts/config and resolves again.  This plays exactly that block with a
+        make that drops CONFIG_CGROUPS: it must come back, the stage must pass,
+        and the run must say it repaired.
+        """
+        done, resolved = self._run_cgroup_guard(tmp_path, 'CGROUPS', '0')
+        assert done.returncode == 0, \
+            f'the guard failed a build it could repair: {done.stderr}'
+        assert 'forcing and resolving again' in done.stdout, \
+            'the guard did not attempt the repair'
+        assert 'CONFIG_CGROUPS=y' in resolved, \
+            'the repair did not bring cgroup2 back into the resolved config'
+        assert '1 boot-critical symbol(s)' in done.stdout, \
+            'the guard counts argument pairs instead of symbols'
+
+    def test_cgroup_guard_still_fails_when_repair_is_impossible(self, tmp_path):
+        """Repair must not become a silent pass.
+
+        When forcing cannot resolve the symbol, the kernel cannot mount cgroup2
+        and boots nothing, so this is the one case where losing the build is
+        the honest outcome.
+        """
+        drop = 'CGROUPS MEMCG NAMESPACES PID_NS'
+        done, _ = self._run_cgroup_guard(tmp_path, drop, '1')
+        assert done.returncode != 0, \
+            'a kernel that cannot mount cgroup2 passed the guard'
+        assert 'missing from the resolved .config' in done.stderr, \
+            'the failure must name the symbol, not just die'
+
     def test_iso_stages_pack_the_cgroup_mountpoint(self):
         """The mountpoint must exist in the image; mkdir cannot create it."""
         for script in (self.INSTALLER, self.LIVE):
