@@ -239,6 +239,13 @@ EOF
 # DVD-ROM ... Not Found"; (2) `mkfs.vfat -F 32` on a small image yields a
 # too-few-clusters FAT32 OVMF also rejects.  FAT16 + a tree-file efi.img (the
 # combination grub-mkrescue itself emits: `-e '/efi.img'`) is what boots.
+#
+# The generated grub.cfg MUST `search` for the kernel and set root to the
+# ISO9660 volume.  GRUB is loaded out of the FAT16 efi.img, whose only file
+# is \EFI\BOOT\BOOTX64.EFI, so its default root is that ESP -- a bare
+# `linux /isolinux/vmlinuz` then resolves against the ESP and aborts with
+# "file `/isolinux/vmlinuz' not found" / "you need to load the kernel
+# first" (the exact failure the shipped 0.57.4 lg3d ISO showed under OVMF).
 GRUB_CFG_LIVE="${SCRATCH_DIR}/grub-live.cfg"
 cat >"$GRUB_CFG_LIVE" <<EOF
 serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1
@@ -246,6 +253,7 @@ terminal_input serial console
 terminal_output serial console
 set timeout=${LFS_CONFIG_LIVE_SYSTEM_GRUB_TIMEOUT:-10}
 set default=0
+search --file --no-floppy --set=root /isolinux/vmlinuz
 menuentry "LFS Live" {
     linux /isolinux/vmlinuz root=/dev/sr0 ro quiet
     initrd /isolinux/initrd.img

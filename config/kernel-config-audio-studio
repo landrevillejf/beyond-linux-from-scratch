@@ -106,6 +106,20 @@ CONFIG_DEVTMPFS_MOUNT=y
 CONFIG_EFI_PARTITION=y
 CONFIG_MSDOS_PARTITION=y
 
+# UEFI boot of the live ISO: final/15 hands the kernel to GRUB's EFI `linux`
+# loader, which requires the kernel's EFI boot stub -- the "MZ"/PE header at
+# offset 0 that CONFIG_EFI_STUB adds.  Without it the bzImage starts with
+# 0xffff and GRUB aborts with "kernel DOS magic is invalid", so the hybrid
+# ISO only ever booted in legacy BIOS mode.  CONFIG_EFI depends on ACPI and
+# CONFIG_EFI_MIXED depends on EFI_STUB (it lets the one 64-bit kernel also
+# boot 32-bit UEFI firmware); lfs/08-build-kernel.sh runs `make olddefconfig`,
+# which drops any symbol whose dependency is not itself named here, so the
+# whole chain is spelled out.
+CONFIG_ACPI=y
+CONFIG_EFI=y
+CONFIG_EFI_STUB=y
+CONFIG_EFI_MIXED=y
+
 # Input drivers
 CONFIG_KEYBOARD_ATKBD=y
 CONFIG_MOUSE_PS2=y
