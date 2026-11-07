@@ -25,7 +25,13 @@ fi
 
 # Default values (can be overridden by custom.conf or environment)
 DEFAULT_USER="${DEFAULT_USER:-lfsuser}"
-DEFAULT_PASSWORD="${DEFAULT_PASSWORD:-lfsuser123}"
+# Generate random password if not set
+if [ -z "${DEFAULT_PASSWORD:-}" ]; then
+    DEFAULT_PASSWORD=$(openssl rand -base64 12 | tr -d '/+=' | head -c 16)
+    PASSWORD_GENERATED=true
+else
+    PASSWORD_GENERATED=false
+fi
 HOSTNAME="${HOSTNAME:-lfs-desktop}"
 
 # Try to read builder configuration from JSON (if present)
@@ -308,8 +314,14 @@ main() {
     echo "=================================================="
     echo "  User     : $DEFAULT_USER"
     echo "  Password : $DEFAULT_PASSWORD"
-    echo ""
-    echo "  Please change your password!"
+    if [ "$PASSWORD_GENERATED" = true ]; then
+        echo ""
+        echo "  WARNING: Password was auto-generated. Please change it now!"
+        echo "  Run: passwd $DEFAULT_USER"
+    else
+        echo ""
+        echo "  Please change your password!"
+    fi
     echo "=================================================="
 }
 

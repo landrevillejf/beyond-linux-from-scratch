@@ -941,11 +941,11 @@ class SourceDownloader:
         self.session = self._create_session()
 
     def _create_session(self):
-        """Create urllib session with retry logic and permissive SSL"""
+        """Create urllib session with retry logic and secure SSL"""
         import ssl
         ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        # TLS certificate verification enabled for supply-chain security
+        # All source downloads are verified against sha256 checksums in sources.lock
         
         opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx))
         opener.addheaders = [('User-Agent', f'LFS-Builder/{__version__}')]

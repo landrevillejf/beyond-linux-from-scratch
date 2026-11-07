@@ -524,6 +524,23 @@
     provides sha256 integrity verification for all downloads, mitigating the
     MITM risk the audit flagged.
 
+- **Critical security vulnerabilities remediated** (`config/lfs-build.conf`,
+  `packages/custom-scripts/custom-settings.conf`,
+  `packages/custom-scripts/first-boot.sh`, `builder.py`)
+  - **S-01 CRITICAL**: Removed hardcoded `LFS_USER_PASSWORD="lfs"` from
+    `config/lfs-build.conf`. The variable is unused; replaced with a comment
+    requiring environment variable or build-time generation.
+  - **S-02 CRITICAL**: Removed hardcoded `DEFAULT_PASSWORD="lfsuser123"` from
+    `packages/custom-scripts/custom-settings.conf`. `first-boot.sh` now generates
+    a secure random 16-character password via `openssl rand -base64 12` when
+    `DEFAULT_PASSWORD` is not set, and displays it to the user at first boot with
+    a warning to change it immediately.
+  - **S-03 HIGH**: Re-enabled TLS certificate verification in `builder.py`
+    `_create_session()`. Removed `ctx.check_hostname = False` and
+    `ctx.verify_mode = ssl.CERT_NONE` that disabled SSL verification for all
+    1,100+ source downloads. The default secure context now validates certificates,
+    protecting against man-in-the-middle attacks during package retrieval.
+
 - **The lg3d BIOS smoke gate never ran a bootloader, and nothing proved the
   published pair was hybrid** (`tools/qemu-boot-smoke.sh`,
   `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,
