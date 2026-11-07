@@ -481,8 +481,8 @@
 
 ### Fixed
 
-- **The lg3d boot gates could not read a hybrid ISO, and the published pair
-  was dead on both legs** (`tools/qemu-boot-smoke.sh`,
+- **The lg3d BIOS smoke gate never ran a bootloader, and nothing proved the
+  published pair was hybrid** (`tools/qemu-boot-smoke.sh`,
   `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,
   `tests/test_acceptance_shell.py`)
 
@@ -491,26 +491,33 @@
   The first pass at this was read off an interrupted download (393 MB of a
   1.4 GB asset) and produced a kernel panic and a truncated-squashfs story
   that were both artefacts; the digest check voided it, and every number
-  below comes from the verified copies.
+  below comes from the verified copies.  A second over-claim fell to the same
+  discipline and is corrected here: run 42332040251's own log shows `main`'
+  gate extracting and booting the ISO it shipped, so the two `tool/` changes
+  below are hardening, not the reason CI was blind.
 
-  - `tools/qemu-boot-smoke.sh` rejected them before booting anything.
-    `extract_iso_pair()` judged xorriso's exit status, and libburn returns 32
-    on an isohybrid image -- "ISO image size 730080s larger than readable
-    size 192344s", because the hybrid MBR/GPT describes the USB-sized target
-    and not the .iso file -- after restoring every requested file.  The gate
-    then died with "Could not extract kernel/initrd".  It now judges the
-    extracted files and clears them between candidate layouts.
-  - The same script's `-nographic >"$LOG" 2>&1` left the log at 0 bytes on a
-    Fedora 44 host with qemu 9.x, while the identical invocation through
-    `-display none -serial file:"$LOG"` captured 364 lines up to the
-    initramfs shell: a media that was running got reported as "Kernel never
-    produced any output".
-  - With both holes closed the gate is honest, and both 20261106 legs fail.
+  - `extract_iso_pair()` now judges the extracted files instead of xorriso's
+    exit status, and clears them between candidate layouts.  The status half
+    was a truncated-download artefact, measured away: xorriso 1.5.8 returns 0
+    on the verified image and writes both files (7 996 416 and 8 260 251
+    bytes).  What is not an artefact is the reuse: both candidates write the
+    same `$WORKDIR/vmlinuz`, so a candidate that dies midway leaves its
+    partial bytes for the next one to call a success.
+  - The console now comes from `-display none -serial file:"$LOG"` instead of
+    `-nographic >"$LOG" 2>&1`.  Head-to-head on one verified image, one host
+    (Fedora 44, qemu 10.2.2): the `-nographic` form left the log at 0 bytes
+    and the gate said "Kernel never produced any output"; the `-serial file:`
+    form captured the boot up to the fatal markers.  On the GitHub runner
+    (Ubuntu, qemu 10.2.1) the same `-nographic` line did capture output, so
+    this removes a host dependency -- it is not what made CI's verdicts.
+  - With the gate reading the media honestly, both 20261106 legs fail.
     The systemd image dies with `systemd[1]: Failed to find module 'unix'`,
     then "Failed to mount cgroup v1 hierarchy" and `Freezing execution`; the
-    sysvinit image stops at "Press Enter to continue...".  Both are the
-    CONFIG_NET/UNIX/INET absence that `config/kernel-config` fixed at 06:06
-    today, which is why the legs rebuild the kernel rather than the prefix.
+    sysvinit image stops at "Press Enter to continue...".  Both causes are
+    already repaired on `main` -- `config/kernel-config` gained
+    CONFIG_NET/UNIX/INET at 06:06 today, and the cgroup mountpoint plus the
+    `"sys/*"` exclude drop landed at 17:49 Nov 6 -- which is why the legs
+    rebuild the kernel rather than the prefix.
   - Two gates were added where the repository had only structure checks.
     "Boot the ISO through the BIOS firmware (isolinux path)" boots the media
     under SeaBIOS with no `-kernel`, so the El Torito BIOS entry and the
