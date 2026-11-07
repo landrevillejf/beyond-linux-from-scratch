@@ -458,6 +458,11 @@ build_commands_gnome_keyring() {
 }
 
 # BLFS gnome/gnome-online-accounts
+# Note: Google API credentials are not included to avoid redistributing
+# BLFS book content. Users must obtain their own credentials from
+# https://www.chromium.org/developers/how-tos/api-keys if they want
+# Google Online Accounts support. Set GOOGLE_CLIENT_ID and
+# GOOGLE_CLIENT_SECRET environment variables before building.
 build_gnome_online_accounts() { book_install gnome-online-accounts build_commands_gnome_online_accounts; }
 build_commands_gnome_online_accounts() {
     mkdir build && cd build &&
@@ -466,8 +471,8 @@ build_commands_gnome_online_accounts() {
           --buildtype=release                              \
           -D documentation=false                           \
           -D kerberos=false                                \
-          -D google_client_secret=5ntt6GbbkjnTVXx-MSxbmx5e \
-          -D google_client_id=595013732528-llk8trb03f0ldpqq6nprjp1s79596646.apps.googleusercontent.com \
+          ${GOOGLE_CLIENT_SECRET:+-D google_client_secret="$GOOGLE_CLIENT_SECRET"} \
+          ${GOOGLE_CLIENT_ID:+-D google_client_id="$GOOGLE_CLIENT_ID"} \
           .. &&
     ninja && ninja install
 }
