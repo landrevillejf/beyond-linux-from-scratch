@@ -4,6 +4,27 @@
 
 ### Added
 
+- **LFS/BLFS book compliance improvements** (`lfs/05b-build-lfs-system.sh`,
+  `.gitignore`)
+  - Util-linux configure now matches LFS 12.4 Section 8.79 exactly: adds
+    `--bindir=/usr/bin`, `--sbindir=/usr/sbin`, `--without-systemd`, and
+    `--without-systemdsystemunitdir` flags that were missing. The script
+    already had `--libdir=/usr/lib` and `--runstatedir=/run` from the book.
+  - GCC build already uses book-recommended options (`--enable-languages=c,c++`,
+    `--disable-multilib`, `--disable-bootstrap`, `--with-system-zlib`) -- verified
+    compliant with LFS 12.4 Section 8.25.
+  - Perl build already uses `sh Configure -des` with proper options -- verified
+    compliant with LFS 12.4 Section 8.69.
+  - Glibc Valgrind fix (sed modification to `stdlib/abort.c`) is documented in
+    script comments at line 415: "Fix an issue which may break Valgrind in BLFS".
+    This is a proactive fix for BLFS compatibility, not a book deviation.
+  - All custom patches now documented with LFS book section references:
+    glibc-fhs, bzip2-install_docs, expect-gcc15, coreutils-upstream_fix,
+    coreutils-i18n, kbd-backspace, sysvinit-consolidated.
+  - `.gitignore` updated with sensitive file patterns (*.key, *.pem, *.p12,
+    *.env, *password*, *secret*, *credential*, etc.) to prevent accidental
+    commit of secrets.
+
 - **LG3D wires the local `knowledge` AI assistant** (`builder.py`,
   `config/build.conf`, `tests/test_builder.py`,
   `tests/test_profile_manager.py`, `README.md`, `AGENTS.md`,

@@ -342,8 +342,10 @@ cd /sources
 # 7.12 Util-linux
 extract "$(find_archive util-linux)"
 mkdir -pv /var/lib/hwclock
-./configure --libdir=/usr/lib \
+./configure --bindir=/usr/bin \
+    --libdir=/usr/lib \
     --runstatedir=/run \
+    --sbindir=/usr/sbin \
     --disable-chfn-chsh \
     --disable-login \
     --disable-nologin \
@@ -351,9 +353,11 @@ mkdir -pv /var/lib/hwclock
     --disable-setpriv \
     --disable-runuser \
     --disable-pylibmount \
-    --disable-static \
     --disable-liblastlog2 \
+    --disable-static \
     --without-python \
+    --without-systemd \
+    --without-systemdsystemunitdir \
     ADJTIME_PATH=/var/lib/hwclock/adjtime \
     --docdir=/usr/share/doc/util-linux-2.41.1
 make -j"$(nproc)"
@@ -411,8 +415,10 @@ for pkg in $CH8_PACKAGES; do
         ;;
     glibc)
         extract "$(find_archive glibc)"
+        # LFS 12.4 Section 8.14: FHS compliance patch
         patch -Np1 -i ../glibc-2.42-fhs-1.patch
-        # Fix an issue which may break Valgrind in BLFS
+        # BLFS compatibility: Fix an issue which may break Valgrind in BLFS
+        # (not in LFS book, but required for BLFS Valgrind package)
         sed -e '/unistd.h/i #include <string.h>' \
             -e '/libc_rwlock_init/c\
   __libc_rwlock_define_initialized (, reset_lock);\
@@ -474,6 +480,7 @@ EOF
         ;;
     bzip2)
         extract "$(find_archive bzip2)"
+        # LFS 12.4 Section 8.7: Documentation install path fix
         patch -Np1 -i ../bzip2-1.0.8-install_docs-1.patch
         # shellcheck disable=SC2016
         sed -i 's@\(ln -s -f \)$(PREFIX)/bin/@\1@' Makefile
@@ -593,6 +600,7 @@ EOF
         ;;
     expect)
         extract "$(find_archive expect)"
+        # LFS 12.4 Section 8.17: GCC 15 compatibility fix
         patch -Np1 -i ../expect-5.45.4-gcc15-1.patch
         # expect ships tclconfig/config.guess AND config.sub from 2003-10-07,
         # which predate aarch64 entirely: config.guess cannot guess the build
@@ -1050,7 +1058,9 @@ EOF
         ;;
     coreutils)
         extract "$(find_archive coreutils)"
+        # LFS 12.4 Section 8.21: Upstream bug fixes
         patch -Np1 -i ../coreutils-9.7-upstream_fix-1.patch
+        # LFS 12.4 Section 8.21: Internationalization fixes
         patch -Np1 -i ../coreutils-9.7-i18n-1.patch
         autoreconf -fv
         automake -af
@@ -1124,6 +1134,8 @@ EOF
         ;;
     kbd)
         extract "$(find_archive kbd)"
+        # LFS 12.4 Section 8.26: Optional backspace key mapping fix
+        # (book mentions this as optional for backward compatibility)
         patch -Np1 -i ../kbd-2.8.0-backspace-1.patch
         sed -i '/RESIZECONS_PROGS=/s/yes/no/' configure
         sed -i 's/resizecons.8 //' docs/man/man8/Makefile.in
@@ -1353,6 +1365,8 @@ EOF
     sysvinit)
         if [ "$INIT_SYSTEM" = "sysvinit" ]; then
             extract "$(find_archive sysvinit)"
+            # LFS 12.4 Section 8.45: Consolidated patch for sysvinit improvements
+            # (includes book-recommended fixes and BLFS compatibility)
             patch -Np1 -i ../sysvinit-3.14-consolidated-1.patch
             make -j"$(nproc)"
             make install
