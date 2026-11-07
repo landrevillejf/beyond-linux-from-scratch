@@ -928,10 +928,14 @@ class TestNightly232IsoArtifacts:
             assert offenders == [], f"{name}: phantom image/ path: {offenders}"
 
     def test_rootfs_cache_producer_pins_the_architecture(self):
-        """config/build.conf ships architecture=aarch64 with cross_compile=true
-        and the xfce profile overrides neither, so a leg that does not pass
-        --arch cross-compiles an arm64 system on an x86_64 runner and
-        publishes a rootfs build-iso-from-cache.yml could never boot.
+        """The producer must state the architecture it runs on.
+
+        config/build.conf used to ship architecture=aarch64 with
+        cross_compile=true, and the xfce profile overrides neither, so a
+        leg without --arch cross-compiled an arm64 system on an x86_64
+        runner and published a rootfs build-iso-from-cache.yml could never
+        boot.  The preset is native now, but a target inherited from a file
+        is still not a pin: --arch x86_64 says what the runner is.
         """
         step = self._step(self._read("build-rootfs-cache.yml"),
                           "Build LFS root filesystem")
@@ -1179,9 +1183,11 @@ class TestLg3dUefiConfigPatch:
     0644 and Nightly #86 died with the identical
     `PermissionError: [Errno 13] Permission denied: 'config/build.conf'` on the
     open('w').  The patch must be done with the privilege that actually owns
-    the write, and the file must end up back in lfs's hands, because the build
-    runs as `sudo -u lfs python3 builder.py` and rewrites this same config on
-    every LFSConfig.save().
+    the write, and the file must end up back in lfs's hands: the build runs
+    as `sudo -u lfs python3 builder.py`.  LFSConfig.set() has been in-memory
+    only since the arm64 preset leak was fixed, so that hand-back is now
+    ownership hygiene for whoever patches the file next rather than the
+    write permission Nightly #86 was missing.
     """
 
     WORKFLOW = "lg3d.yml"
@@ -1218,8 +1224,8 @@ class TestLg3dUefiConfigPatch:
 
     def test_build_conf_is_handed_back_to_lfs_after_the_patch(self):
         """Root writing the file leaves it root-owned; the build user must own
-        it again or builder.py's own config save fails the same way one stage
-        later."""
+        it again.  builder.py no longer saves config mid-build, so this is
+        ownership hygiene rather than the one-stage-later PermissionError."""
         body = self._body()
         chown = "sudo chown lfs:lfs config/build.conf"
         assert chown in body

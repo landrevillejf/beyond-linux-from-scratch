@@ -591,9 +591,8 @@ class TestLFSBuilder:
         The first-boot autorelabel is unvalidated on a foreign-compiled
         userspace, so get_selinux_mode() reduces enforcing to permissive
         rather than risk an unbootable mislabeled rootfs.  The resolver
-        computes the value; it must NOT persist it, or constructing a
-        builder against the real config/build.conf (which ships
-        cross_compile=true) would leak 'permissive' over the committed
+        computes the value; it must NOT persist it, or a builder run for a
+        cross profile would leak 'permissive' over the committed
         'enforcing' default and break test_config's cross-source check.
         """
         from builder import ProfileManager
@@ -676,9 +675,9 @@ class TestLFSBuilder:
         the module power-on self-test, which cannot run on a foreign host,
         so get_fips_enabled() resolves False for cross-compiled arm64 even
         though build.conf authors enabled=true.  The resolver is read-only:
-        it must not persist False over the committed default (the checked-in
-        build.conf ships cross_compile=true, so a persisting gate would leak
-        -- exactly the Phase 2 config/build.conf hazard).
+        it must not persist False over the committed default, because that
+        would leak into whichever config file the builder was handed --
+        exactly the Phase 2 config/build.conf hazard.
         """
         from builder import ProfileManager
         builder.config.set('security.fips.enabled', True)

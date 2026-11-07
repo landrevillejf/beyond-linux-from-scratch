@@ -12,9 +12,19 @@ from builder import LFSBuilder, main
 @pytest.fixture
 def builder():
     output_dir = Path(tempfile.mkdtemp())
-    config_file = Path("config/build.conf")
-    config_file.parent.mkdir(parents=True, exist_ok=True)
-    if not config_file.exists():
+    # A copy, never the tracked file: LFSConfig.set() calls save() on every
+    # mutation and load() writes defaults when the file is absent, so handing
+    # this fixture `config/build.conf' made a plain test run rewrite the
+    # maintainer's working tree (`host.distro_override' flipped to "fedora"
+    # by test_detect_host_distro_with_override below, measured by md5).
+    # Reading the tracked file keeps the exact defaults these tests assert on.
+    tracked = Path("config/build.conf")
+    config_dir = output_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_file = config_dir / "build.conf"
+    if tracked.exists():
+        config_file.write_text(tracked.read_text())
+    else:
         with open(config_file, 'w') as f:
             json.dump({
                 "lfs_version": "13.0",
