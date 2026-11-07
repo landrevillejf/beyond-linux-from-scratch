@@ -49,13 +49,20 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 LOG="$WORKDIR/boot.log"
 
-# Pull one kernel/initrd pair out of the ISO.  Called from an "if", so the
-# xorriso status is the function's own and a miss simply selects the next
-# candidate layout.
+# Pull one kernel/initrd pair out of the ISO.  Judge the extracted files,
+# never the xorriso status: on an isohybrid image libburn reports "ISO image
+# size Ns larger than readable size Ms" (the hybrid MBR/GPT describes the
+# USB-sized target, not the .iso file) and returns 32 even though every
+# requested file landed, so a status test rejected the very ISOs the gate is
+# meant to boot.  Measured on lg3d-nightly-20261106 with xorriso 1.5.8.
+# Both targets are removed first so a partial earlier attempt cannot make a
+# later candidate look successful.
 extract_iso_pair() {
+    rm -f "$WORKDIR/vmlinuz" "$WORKDIR/initrd.img"
     xorriso -osirrox on -indev "$ARTIFACT" \
         -extract "$1" "$WORKDIR/vmlinuz" \
         -extract "$2" "$WORKDIR/initrd.img" >/dev/null 2>&1
+    [ -s "$WORKDIR/vmlinuz" ] && [ -s "$WORKDIR/initrd.img" ]
 }
 
 case "$ARTIFACT" in
@@ -129,6 +136,13 @@ log_info "Booting $ARTIFACT (accel=$ACCEL, memory=$BOOT_MEMORY, timeout=${BOOT_T
 # kernel panics before userspace is reached.  "-cpu max" enables every
 # CPU feature the accelerator supports (AVX/AVX2/AES/...), which is
 # what the busybox binary expects.
+# The guest console goes to $LOG through -serial file:, not through
+# -nographic: measured on a Fedora 44 host (qemu 9.x) the same invocation
+# with `-nographic >$LOG 2>&1` left the log at 0 bytes while
+# `-display none -serial file:$LOG` captured 364 lines up to the initramfs
+# shell, so the gate failed a media that was actually running with
+# "Kernel never produced any output".  QEMU's own diagnostics are appended
+# to the same file the greps below read.
 timeout "$BOOT_TIMEOUT" qemu-system-x86_64 \
     -machine q35,accel="$ACCEL" \
     -cpu max \
@@ -137,7 +151,7 @@ timeout "$BOOT_TIMEOUT" qemu-system-x86_64 \
     -initrd "$WORKDIR/initrd.img" \
     -append "$APPEND" \
     "${DRIVE_ARGS[@]}" \
-    -nographic -no-reboot >"$LOG" 2>&1 || true
+    -display none -serial file:"$LOG" -monitor none -no-reboot 2>>"$LOG" || true
 
 echo "----- last 40 lines of boot log -----"
 tail -n 40 "$LOG"

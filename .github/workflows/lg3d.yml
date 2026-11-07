@@ -1049,6 +1049,90 @@ jobs:
             exit 1
           fi
 
+      - name: Boot the ISO through the BIOS firmware (isolinux path)
+        if: success() && matrix.arch == 'x86_64'
+        run: |
+          # tools/qemu-boot-smoke.sh passes -kernel/-initrd, so it never runs
+          # the El Torito BIOS entry: the ldlinux.c32 payload defect and an
+          # isolinux.cfg that cannot boot its own label stayed green there.
+          # This boots the media the way a BIOS machine does.  isolinux writes
+          # its own text to the screen only, so a serial log that never reaches
+          # the markers below is a dead BIOS path, not an uninformative one;
+          # the kernel and sysinit do reach it because final/15 names
+          # console=ttyS0 last in both isolinux labels.
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          [ -f "$ISO_PATH" ] || {
+            echo "No ISO produced for this profile, skipping the BIOS firmware boot"
+            exit 0
+          }
+          WORKDIR=$(mktemp -d)
+          trap 'rm -rf "$WORKDIR"' EXIT
+          timeout 420 qemu-system-x86_64 \
+            -machine q35,accel=tcg \
+            -cpu max \
+            -m 2G -smp 2 \
+            -cdrom "$ISO_PATH" \
+            -boot order=d \
+            -display none -serial file:"$WORKDIR/bios-firmware.log" \
+            -monitor none -no-reboot || true
+          LOG="$WORKDIR/bios-firmware.log"
+          # Same fatal and positive lists as the UEFI step above; the two must
+          # stay in sync with tools/qemu-boot-smoke.sh.  test_acceptance_shell
+          # pins all three.
+          if grep -aqE "Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup|cannot create directory '/sys/fs/cgroup'|Failed to mount API filesystems|Entering emergency mode|Kernel panic|VFS: Unable to mount root fs" "$LOG"; then
+            echo "::error::BIOS firmware boot reached an init that aborted"
+            grep -aoE "(Kernel panic.*|VFS: Unable to mount root fs.*|Freezing execution|Press Enter to continue.*|FAILURE:.*|unknown filesystem type.*|Failed to mount cgroup.*)" "$LOG" \
+              | tr -d '\000' | sort -u | head
+            exit 1
+          fi
+          if grep -aqE "Live media detected|Mounting root:|Reached target|Create symlinks in /dev targeting /proc|Setting kernel runtime parameters" "$LOG"; then
+            echo "BIOS firmware boot successful: SeaBIOS -> El Torito -> isolinux -> kernel -> initramfs root logic"
+            grep -aoE "Linux version [^ ]+|Live media detected" "$LOG" | sort -u | head
+          else
+            echo "::error::BIOS firmware boot never reached the initramfs root logic"
+            tail -n 40 "$LOG" | tr -d '\000'
+            exit 1
+          fi
+
+      - name: Verify the ISO is BIOS+UEFI hybrid
+        if: success() && matrix.arch == 'x86_64'
+        run: |
+          # Structure, not behaviour: the smoke tests above show firmware
+          # boots the media, this shows the bytes declare a hybrid layout.
+          # Measured on lg3d-nightly-20261106: "Boot record : El Torito ,
+          # MBR isohybrid cyl-align-on GPT" plus an fdisk "ef EFI" partition.
+          ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
+          [ -f "$ISO_PATH" ] || {
+            echo "No ISO produced for this profile, skipping the hybrid check"
+            exit 0
+          }
+          if ! command -v xorriso >/dev/null; then
+            echo "::warning::xorriso absent, cannot verify hybrid structure"
+            exit 0
+          fi
+          # xorriso writes reports on stderr, hence 2>&1 inside the capture.
+          BOOT_RECORD=$(xorriso -indev "$ISO_PATH" -report_system_area as_plain 2>&1 \
+            | grep -a "Boot record" || true)
+          echo "ISO system area: ${BOOT_RECORD:-none reported}"
+          gaps=0
+          for want in "El Torito" "MBR isohybrid" "GPT"; do
+            case "$BOOT_RECORD" in
+              *"$want"* ) echo "hybrid layout carries $want" ;;
+              * ) echo "::error::Boot record carries no $want"; gaps=1 ;;
+            esac
+          done
+          if [ "$(fdisk -l "$ISO_PATH" 2>/dev/null | grep -c "ef EFI" || true)" = "0" ]; then
+            echo "::error::no EFI System Partition in the hybrid MBR"
+            gaps=1
+          else
+            echo "hybrid layout carries an ESP partition"
+          fi
+          if [ "$gaps" -ne 0 ]; then
+            echo "::error::the ISO is not a BIOS+UEFI hybrid image"
+            exit 1
+          fi
+          echo "Hybrid structure verified (El Torito + isohybrid MBR + GPT ESP)"
+
       - name: Upload logs on failure
         # Cancelled jobs must leave logs behind as well, otherwise a timeout
         # is undiagnosable (Nightly #194).  This is also the only reason

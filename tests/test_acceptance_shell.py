@@ -7107,6 +7107,124 @@ exit 0
         assert 'error: file .* not found' in step, \
             'the UEFI gate lost the exact GRUB error the shipped ISO showed'
 
+    @classmethod
+    def _step(cls, name):
+        """One lg3d.yml step body, comments stripped."""
+        wf = cls.LG3D_WF.read_text()
+        assert name in wf, f'lg3d.yml lost its {name!r} step'
+        return cls._code(wf.split(name, 1)[1].split('\n      - name:', 1)[0])
+
+    @staticmethod
+    def _abort_decisions(step_body):
+        """Only the `if grep` lines that can fail a boot gate.
+
+        A marker that survives in the step's reporting grep or in an echo
+        fails nothing, so the guard reads the decision lines alone.  Measured
+        while writing it: dropping 'Freezing execution' from the BIOS gate's
+        abort grep left a whole-step assertion green, because the same string
+        also sits in the excerpt grep that only prints.
+        """
+        lines = [ln for ln in step_body.splitlines()
+                 if ln.strip().startswith('if grep -aqE') and '"$LOG"' in ln]
+        assert lines, 'this boot gate has no abort decision line'
+        return '\n'.join(lines)
+
+    def test_lg3d_bios_firmware_gate_runs_the_shipped_bootloader(self):
+        """The BIOS media path needs a gate that executes isolinux.
+
+        tools/qemu-boot-smoke.sh passes -kernel/-initrd, which is faster and
+        more deterministic but never reads the El Torito BIOS entry: an ISO
+        whose payload cannot load its own core (the ldlinux.c32 class) or a
+        cfg that cannot boot its default label stayed green there.  This step
+        boots the media the way a BIOS machine does.
+        """
+        step = self._step('Boot the ISO through the BIOS firmware')
+        assert '-cdrom "$ISO_PATH"' in step, \
+            'the BIOS gate must boot the ISO as media'
+        assert '-kernel' not in step, \
+            'the BIOS gate bypasses the firmware with -kernel again'
+        assert '-boot order=d' in step, \
+            'the BIOS gate must select the CD as the boot device'
+        decide = self._abort_decisions(step)
+        for marker in self.ABORT_MARKERS:
+            assert marker in decide, \
+                f'the BIOS firmware gate no longer rejects {marker!r}'
+        assert 'Create symlinks in /dev targeting /proc' in step, \
+            'the BIOS firmware gate must accept a healthy-sysinit marker'
+
+    def test_the_three_boot_gates_share_one_abort_list(self):
+        """One stream, three judges, no gate weaker than the others.
+
+        The abort markers were each written from a published image that a
+        gate called success.  A list that drifts between
+        tools/qemu-boot-smoke.sh, the UEFI step and the BIOS firmware step
+        reopens exactly the class its author recorded.
+        """
+        judges = {
+            'qemu-boot-smoke': self._fn(
+                self._code(self.SMOKE.read_text()), 'boot_aborted'),
+            'uefi': self._abort_decisions(
+                self._step('Boot artifact in QEMU (smoke test - UEFI mode)')),
+            'bios-firmware': self._abort_decisions(
+                self._step('Boot the ISO through the BIOS firmware')),
+        }
+        for marker in self.ABORT_MARKERS:
+            for who, text in judges.items():
+                assert marker in text, \
+                    f'{who} no longer rejects {marker!r}'
+
+    def test_lg3d_hybrid_gate_requires_every_layout_record(self):
+        """Hybrid is a deliverable, so its structure is a gate not a report.
+
+        Measured on the published lg3d-nightly-20261106 image: xorriso
+        reports "Boot record : El Torito , MBR isohybrid cyl-align-on GPT"
+        and fdisk lists an "ef EFI" partition.  The gate therefore passes on
+        the current recipe and would have gone red on the BIOS-only image
+        this repository shipped for eight months.
+        """
+        step = self._step('Verify the ISO is BIOS+UEFI hybrid')
+        assert 'report_system_area as_plain' in step, \
+            'the hybrid gate no longer reads the system area'
+        # The requirement list, not the step's prose: 'GPT' also appears in
+        # the closing echo, so a whole-step match would stay green after the
+        # requirement itself was dropped.
+        assert 'for want in "El Torito" "MBR isohybrid" "GPT"; do' in step, \
+            'the hybrid gate no longer requires all three boot records'
+        assert '"ef EFI"' in step, \
+            'the hybrid gate no longer requires an ESP in the hybrid MBR'
+        assert 'exit 1' in step, 'the hybrid gate must fail, not warn'
+
+    def test_iso_extraction_is_judged_on_files_not_on_xorriso_status(self):
+        """An isohybrid image makes xorriso exit 32 while it restores everything.
+
+        Measured on the published lg3d-nightly-20261106 image with xorriso
+        1.5.8: libburn warns "ISO image size 730080s larger than readable
+        size 192344s" -- the hybrid MBR/GPT describes the USB-sized target,
+        not the .iso file -- and returns 32 although both requested files
+        landed.  Judging that status rejected the very images this gate
+        exists to boot, with "Could not extract kernel/initrd".
+        """
+        fn = self._fn(self._code(self.SMOKE.read_text()), 'extract_iso_pair')
+        assert '[ -s "$WORKDIR/vmlinuz" ] && [ -s "$WORKDIR/initrd.img" ]' \
+            in fn, 'the layout probe must judge the extracted files'
+        assert 'rm -f "$WORKDIR/vmlinuz" "$WORKDIR/initrd.img"' in fn, \
+            'a stale file from an earlier candidate could fake a hit'
+
+    def test_guest_console_is_captured_without_a_controlling_tty(self):
+        """-nographic wrote nothing once the gate redirected stdout to a file.
+
+        Measured on a Fedora 44 host with qemu 9.x: the same invocation with
+        `-nographic >$LOG 2>&1` left the log at 0 bytes while
+        `-display none -serial file:$LOG` captured 364 lines up to the
+        initramfs shell, so the gate failed a media that was running with
+        "Kernel never produced any output".
+        """
+        code = self._code(self.SMOKE.read_text())
+        assert '-nographic' not in code, \
+            'qemu-boot-smoke is back on -nographic, the form measured blind'
+        assert '-serial file:"$LOG"' in code, \
+            'the guest console must reach the log through -serial file:'
+
     def test_publishing_workflows_upload_before_their_smoke_tests(self):
         """No gate may ever hold the power to delete a produced ISO.
 
