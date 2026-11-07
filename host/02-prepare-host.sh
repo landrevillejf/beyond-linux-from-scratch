@@ -198,11 +198,11 @@ create_directories() {
     # Sources directory
     $USE_SUDO mkdir -pv "$LFS/sources" 2>/dev/null || true
     if [ "$IN_DOCKER" = false ]; then
-        $USE_SUDO chmod -v a+wt "$LFS/sources" 2>/dev/null || true
+        $USE_SUDO chmod -v 0755 "$LFS/sources" 2>/dev/null || true
         $USE_SUDO chown -v lfs:lfs "$LFS/sources" 2>/dev/null || true
     else
         # In Docker, we might not have lfs user, so keep as current user
-        chmod a+wt "$LFS/sources" 2>/dev/null || true
+        chmod 0755 "$LFS/sources" 2>/dev/null || true
     fi
 
     # Tools directory
