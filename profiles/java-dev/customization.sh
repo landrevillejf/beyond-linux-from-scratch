@@ -12,9 +12,9 @@ set -euo pipefail
 # Colors and logging
 # ----------------------------------------------------------------------
 C_RED='\033[0;31m' C_GREEN='\033[0;32m' C_YELLOW='\033[1;33m' C_BLUE='\033[0;34m' C_NC='\033[0m'
-log_info()    { echo -e "${C_GREEN}[INFO]${C_NC} $*"; }
+log_info() { echo -e "${C_GREEN}[INFO]${C_NC} $*"; }
 log_warning() { echo -e "${C_YELLOW}[WARNING]${C_NC} $*"; }
-log_error()   { echo -e "${C_RED}[ERROR]${C_NC} $*" >&2; }
+log_error() { echo -e "${C_RED}[ERROR]${C_NC} $*" >&2; }
 log_success() { echo -e "${C_BLUE}[SUCCESS]${C_NC} $*"; }
 
 # ----------------------------------------------------------------------
@@ -59,14 +59,21 @@ install_host_packages() {
     local distro="$1" pkgs=("${@:2}")
     log_info "Installing host packages: ${pkgs[*]}"
     case "$distro" in
-        debian|ubuntu)
-            apt-get update -qq; apt-get install -y -qq "${pkgs[@]}" ;;
-        fedora|rhel|centos|rocky)
-            if command -v dnf &>/dev/null; then dnf install -y "${pkgs[@]}";
-            else yum install -y "${pkgs[@]}"; fi ;;
-        arch|manjaro) pacman -Syu --noconfirm "${pkgs[@]}" ;;
-        alpine) apk add "${pkgs[@]}" ;;
-        *) log_error "Unsupported distro. Install manually: ${pkgs[*]}"; exit 1 ;;
+    debian | ubuntu)
+        apt-get update -qq
+        apt-get install -y -qq "${pkgs[@]}"
+        ;;
+    fedora | rhel | centos | rocky)
+        if command -v dnf &>/dev/null; then
+            dnf install -y "${pkgs[@]}"
+        else yum install -y "${pkgs[@]}"; fi
+        ;;
+    arch | manjaro) pacman -Syu --noconfirm "${pkgs[@]}" ;;
+    alpine) apk add "${pkgs[@]}" ;;
+    *)
+        log_error "Unsupported distro. Install manually: ${pkgs[*]}"
+        exit 1
+        ;;
     esac
 }
 
@@ -92,7 +99,7 @@ download() {
             return 0
         fi
     fi
-    for ((i=1; i<=retries; i++)); do
+    for ((i = 1; i <= retries; i++)); do
         log_info "Downloading $(basename "$dest") (attempt $i/$retries)..."
         if wget -q --show-progress "$url" -O "$dest"; then
             if [ -n "$sha256" ]; then
@@ -118,10 +125,10 @@ init_system() {
 
 create_service() {
     local name="$1" description="$2" exec_start="$3" exec_stop="${4:-}" \
-          user="${5:-root}" group="${6:-root}" env_vars="${7:-}" type="${8:-forking}"
+        user="${5:-root}" group="${6:-root}" env_vars="${7:-}" type="${8:-forking}"
     case "$(init_system)" in
-        systemd)
-            cat > "/etc/systemd/system/${name}.service" << EOF
+    systemd)
+        cat >"/etc/systemd/system/${name}.service" <<EOF
 [Unit]
 Description=${description}
 After=network.target
@@ -138,10 +145,10 @@ Restart=on-failure
 [Install]
 WantedBy=multi-user.target
 EOF
-            systemctl daemon-reload && systemctl enable "${name}.service" 2>/dev/null || true
-            ;;
-        sysvinit)
-            cat > "/etc/init.d/${name}" << EOF
+        systemctl daemon-reload && systemctl enable "${name}.service" 2>/dev/null || true
+        ;;
+    sysvinit)
+        cat >"/etc/init.d/${name}" <<EOF
 #!/bin/bash
 ### BEGIN INIT INFO
 # Provides:          ${name}
@@ -170,10 +177,10 @@ case "\$1" in
 esac
 exit 0
 EOF
-            chmod +x "/etc/init.d/${name}"
-            # enable in runlevels
-            update-rc.d "${name}" defaults 2>/dev/null || true
-            ;;
+        chmod +x "/etc/init.d/${name}"
+        # enable in runlevels
+        update-rc.d "${name}" defaults 2>/dev/null || true
+        ;;
     esac
 }
 
@@ -189,7 +196,7 @@ mkdir -p /sources /opt
 ensure_command wget wget
 ensure_command tar tar
 ensure_command unzip unzip
-ensure_command groupadd shadow    # usually present on LFS
+ensure_command groupadd shadow # usually present on LFS
 
 # ----------------------------------------------------------------------
 # 1. Java
@@ -205,13 +212,16 @@ install_java() {
     # Move to expected name
     mv /opt/jdk-${JAVA_VERSION}* "$JAVA_HOME" 2>/dev/null || true
     ln -sf "$JAVA_HOME" /opt/jdk-latest
-    cat > /etc/profile.d/java.sh << EOF
+    cat >/etc/profile.d/java.sh <<EOF
 export JAVA_HOME=${JAVA_HOME}
 export PATH=\$JAVA_HOME/bin:\$PATH
 EOF
     chmod 644 /etc/profile.d/java.sh
     # Verify
-    ${JAVA_HOME}/bin/java -version 2>&1 | grep -q "version" || { log_error "Java verification failed"; return 1; }
+    ${JAVA_HOME}/bin/java -version 2>&1 | grep -q "version" || {
+        log_error "Java verification failed"
+        return 1
+    }
     log_success "Java ${JAVA_VERSION} installed"
 }
 
@@ -225,8 +235,10 @@ install_maven() {
     download "$url" "$file"
     tar -xzf "$file" -C /opt
     ln -sf "/opt/apache-maven-${MAVEN_VERSION}" "$MAVEN_HOME"
-    mkdir -p /opt/maven/repository && chmod 777 /opt/maven/repository
-    cat > /etc/profile.d/maven.sh << EOF
+    mkdir -p /opt/maven/repository
+    chmod 755 /opt/maven/repository
+    chown root:root /opt/maven/repository
+    cat >/etc/profile.d/maven.sh <<EOF
 export MAVEN_HOME=${MAVEN_HOME}
 export PATH=\$MAVEN_HOME/bin:\$PATH
 EOF
@@ -244,7 +256,7 @@ install_gradle() {
     download "$url" "$file"
     unzip -q "$file" -d /opt
     ln -sf "/opt/gradle-${GRADLE_VERSION}" "$GRADLE_HOME"
-    cat > /etc/profile.d/gradle.sh << EOF
+    cat >/etc/profile.d/gradle.sh <<EOF
 export GRADLE_HOME=${GRADLE_HOME}
 export PATH=\$GRADLE_HOME/bin:\$PATH
 EOF
@@ -286,7 +298,7 @@ install_nodejs() {
     download "$url" "$file"
     tar -xJf "$file" -C /opt
     ln -sf "/opt/node-v${NODE_VERSION}-linux-x64" "$NODE_HOME"
-    cat > /etc/profile.d/node.sh << EOF
+    cat >/etc/profile.d/node.sh <<EOF
 export NODE_HOME=${NODE_HOME}
 export PATH=\$NODE_HOME/bin:\$PATH
 EOF
@@ -308,9 +320,10 @@ install_docker() {
     ln -sf /opt/docker/docker /usr/local/bin/docker
     ln -sf /opt/docker/dockerd /usr/local/bin/dockerd
     groupadd -r docker 2>/dev/null || true
+    # shellcheck disable=SC2016
     create_service "docker" "Docker Engine" \
         "/usr/local/bin/dockerd" \
-        "/bin/kill -s HUP \$(pidof dockerd)" root docker
+        '/bin/kill -s HUP $(pidof dockerd)' root docker
     log_success "Docker installed"
 }
 
@@ -358,7 +371,7 @@ install_spring_boot_cli() {
     download "$url" "$file"
     tar -xzf "$file" -C /opt
     ln -sf "/opt/spring-${SPRING_BOOT_VERSION}" /opt/spring-boot-cli
-    cat > /etc/profile.d/spring.sh << EOF
+    cat >/etc/profile.d/spring.sh <<EOF
 export SPRING_HOME=/opt/spring-boot-cli
 export PATH=\$SPRING_HOME/bin:\$PATH
 EOF
@@ -371,7 +384,7 @@ EOF
 # ----------------------------------------------------------------------
 configure_developer_env() {
     log_info "Setting up Java developer environment"
-    cat > /etc/profile.d/java-dev.sh << 'EOF'
+    cat >/etc/profile.d/java-dev.sh <<'EOF'
 # Java developer environment
 export JAVA_OPTS="-server -Xms2g -Xmx4g -XX:+UseG1GC -XX:+UseStringDeduplication"
 export MAVEN_OPTS="-Xms512m -Xmx2g -XX:MetaspaceSize=256m -XX:MaxMetaspaceSize=512m"
@@ -404,7 +417,7 @@ EOF
     # Also copy to lfsuser home if exists
     if [ -d "$LFS_USER_HOME" ]; then
         cp /etc/profile.d/java-dev.sh "$LFS_USER_HOME/.java-dev-aliases.sh" 2>/dev/null || true
-        echo "source ~/.java-dev-aliases.sh" >> "$LFS_USER_HOME/.bashrc"
+        echo "source ~/.java-dev-aliases.sh" >>"$LFS_USER_HOME/.bashrc"
         chown lfsuser:lfsuser "$LFS_USER_HOME/.java-dev-aliases.sh" "$LFS_USER_HOME/.bashrc" 2>/dev/null || true
     fi
 }
@@ -416,7 +429,7 @@ cleanup() {
     log_info "Cleaning up downloaded archives and temporary directories"
     cd /sources
     rm -rf jdk-*.tar.gz apache-maven-*.tar.gz gradle-*.zip apache-tomcat-*.tar.gz \
-           node-v*.tar.xz docker-*.tgz jenkins-*.war spring-boot-cli-*.tar.gz kubectl-*
+        node-v*.tar.xz docker-*.tgz jenkins-*.war spring-boot-cli-*.tar.gz kubectl-*
     # Remove extracted directories inside /sources if any
     find /sources -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} + 2>/dev/null || true
     log_success "Cleanup done"
