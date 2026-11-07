@@ -502,6 +502,28 @@
 
 ### Fixed
 
+- **Security and compliance audit remediation** (`profiles/java-dev/customization.sh`,
+  `AGENTS.md`, new `docs/PATCHES.md`, `docs/security-hardening.md`)
+  - `profiles/java-dev/customization.sh` no longer creates the Maven
+    repository with world-writable permissions (chmod 777).  The directory
+    is now created with 755 and owned by root:root, following CIS Control 3.3.
+  - `AGENTS.md` gains a "Build process policies" subsection documenting three
+    intentional deviations from the LFS/BLFS book: parallel builds
+    (`make -j$(nproc)` instead of sequential `make`), test suite omission
+    (0 `make check` executions), and build-as-root in chroot (no `lfs` user
+    separation).  Each deviation includes the rationale (CI time budgets,
+    ephemeral runners, chroot isolation) and instructions for reverting to
+    book-accurate behaviour when debugging.
+  - New `docs/PATCHES.md` catalogues every patch and inline modification
+    applied by the build scripts: 7 LFS book patches, 4 BLFS book patches,
+    18 glob-applied upstream-fix patches, and 9 inline sed modifications,
+    each with its book section reference and justification.
+  - HTTP package-source URLs reviewed: `mirror.dotsrc.org` and `rsync.belnet.be`
+    cannot be upgraded to HTTPS (404 over both protocols, or no HTTPS support).
+    The supply-chain lockfile (`packages/sources.lock`, Phase 6) already
+    provides sha256 integrity verification for all downloads, mitigating the
+    MITM risk the audit flagged.
+
 - **The lg3d BIOS smoke gate never ran a bootloader, and nothing proved the
   published pair was hybrid** (`tools/qemu-boot-smoke.sh`,
   `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,

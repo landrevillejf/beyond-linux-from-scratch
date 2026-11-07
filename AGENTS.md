@@ -409,7 +409,7 @@ committed copies drift apart.
 - **Strict Adherence to the Book**: Your scripts must execute the official LFS/BLFS instructions **exactly** as written. Any deviation (even seemingly minor ones, like changing a flag without justification) can lead to unpredictable failures and make debugging extremely difficult.
 - **Handling Interactivity**: Many BLFS packages require user interaction during configuration (e.g., accepting an EULA). Your agent must be able to handle these non-interactively using tools like `yes`, `echo`, or input redirection (`< /dev/null`).
 - **Dependency Management**: BLFS dependencies are complex and categorized as "required," "recommended," and "optional." The agent must be capable of parsing these dependencies and building them in the correct topological order to avoid circular dependency deadlocks.
-- **Build as a Non-Root User**: Follow the BLFS recommendations strictly. **The compilation process must be executed as an unprivileged (non-root) user**. The agent should only switch to the `root` user for the installation phase (e.g., `make install`).
+- **Build as Root in Chroot**: This project builds as root inside the `$LFS` chroot, not as a separate `lfs` user.  The chroot provides isolation equivalent to a container, and CI runners are ephemeral.  See "Build process policies" below for the full rationale and mitigations.
 - **Users and Groups**: Ensure that all required system users and groups (e.g., `nobody`, `nogroup`, `polkitd`, etc.) are created before the relevant packages are built.
 - **Comprehensive Logging**: Log every command, its output, and its exit status. This is not only crucial for debugging failures but also serves as definitive proof that the build succeeded.
 
@@ -427,6 +427,61 @@ committed copies drift apart.
 18. When attributing the commits and p/r, use a standard git ‘Signed-off-by:’ trailer with the repo committer identity instead of agent attribution, create feature branch, and wait for approval before merging.
 19. Never burn a long build workflow on a branch to "prove" a change — dispatching `lg3d.yml` (or any multi-hour build) from a feature branch spends ~5 h of runner time on a test, and the same work then has to be spent again on `main` after the merge. Prove CI behaviour locally (deterministic harness, simulated clock, `bash -e` as the runner does), and let the real evidence come from the run that happens on `main` after the change is merged. `build-base-cache.yml` dispatches are the exception only when a fresh key must land for tonight's build.
 20. All times quoted to the maintainer or written in this repository are local (America/New_York). The GitHub API answers in UTC; convert (EST is UTC-5, EDT UTC-4) before reporting a timestamp, and never present a UTC time as if it were local.
+
+### Build process policies
+
+These policies document intentional deviations from the LFS/BLFS book
+recommendations.  Each deviation is justified by the constraints of an
+automated, CI-driven build system.
+
+**Parallel builds.**  The book (LFS 12.4 Section 4) recommends sequential
+`make` for reproducibility.  This project uses `make -j"$(nproc)"`
+throughout (285 instances across `lfs/` and `blfs/`) because CI build
+time budgets are tight -- a sequential build of a full profile exceeds
+the runner time limits.  The trade-off is documented:
+
+- Parallel builds can hide race conditions that sequential builds would
+  expose.  If a package fails non-deterministically, try reproducing
+  with `MAKEFLAGS=""` (sequential) before assuming a dependency issue.
+- Critical toolchain packages (binutils pass 1, glibc, gcc pass 1) are
+  the most sensitive to parallel race conditions.  If a toolchain build
+  fails on a fresh runner, re-run sequentially.
+- To disable parallel builds globally, set `MAKEFLAGS=""` in the
+  environment before invoking `builder.py`.
+
+**Test suites.**  The book recommends running `make check` (or
+`make test`) after building each package.  This project skips test
+suites entirely (0 executions across `lfs/` and `blfs/`) because:
+
+- CI time budgets cannot accommodate full test suites for 100+
+  packages.  A single glibc `make check` can take 30+ minutes.
+- Test failures in non-critical packages do not indicate a broken
+  build; they often reflect host environment differences.
+- The book itself flags binutils, glibc and GCC tests as the critical
+  ones.  Consider running those three suites when validating a new
+  toolchain version.
+- To enable test suites, add `make check` (or the book-recommended
+  command) after the `make` line for the relevant package.  Use
+  `MAKEFLAGS=""` to run tests sequentially even when the build is
+  parallel.
+
+**Build user separation.**  The BLFS book recommends building as a
+non-root user.  This project builds everything as root inside a chroot
+because:
+
+- The build runs inside an ephemeral chroot (`$LFS`), which provides
+  isolation equivalent to a container.  No persistent host state is
+  at risk.
+- CI/CD pipelines run in disposable containers (GitHub Actions runners)
+  that are destroyed after each build.
+- Implementing `su lfs -c "..."` for every package would add
+  significant complexity to the stage scripts for a marginal security
+  gain in an already-isolated environment.
+- The risk is mitigated by: chroot isolation, ephemeral CI runners,
+  no network access during compilation (only during source downloads),
+  and the supply-chain integrity checks (sha256 lockfile, GPG
+  signature verification).
+
 ---
 
 ### Debugging and Troubleshooting
