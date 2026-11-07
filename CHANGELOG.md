@@ -541,6 +541,23 @@
     1,100+ source downloads. The default secure context now validates certificates,
     protecting against man-in-the-middle attacks during package retrieval.
 
+- **Remaining security audit findings remediated** (`config/security.conf`,
+  `config/build.conf`, `host/02-prepare-host.sh`, `profiles/server/customization.sh`,
+  `blfs/17-first-boot-service.sh`)
+  - **S-06 MEDIUM**: Aligned `SSH_KEY_ONLY="true"` in `config/security.conf` to match
+    actual hardening script behavior (key-based authentication only).
+  - **S-07 MEDIUM**: Updated `FIREWALL_BACKEND="nftables"` in `config/security.conf` to
+    match actual implementation in `blfs/15-security-hardening.sh`.
+  - **S-09 MEDIUM**: Fixed password handling in `blfs/17-first-boot-service.sh` to use
+    `chpasswd` exclusively with proper error handling, removed silent `|| true` fallbacks.
+  - **S-10 LOW**: Changed sources directory permissions from world-writable (`chmod a+wt`)
+    to owner-writable (`chmod 0755`) in `host/02-prepare-host.sh`.
+  - **S-11 LOW**: Set `PasswordAuthentication no` in `profiles/server/customization.sh` to
+    match security hardening baseline.
+  - **S-12 LOW**: Changed default `autologin` from `true` to `false` in `config/build.conf`
+    to require authentication by default; profiles that need auto-login (e.g., live ISO)
+    can explicitly enable it.
+
 - **The lg3d BIOS smoke gate never ran a bootloader, and nothing proved the
   published pair was hybrid** (`tools/qemu-boot-smoke.sh`,
   `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,

@@ -14,7 +14,8 @@ log_error() { echo -e "\033[0;31m[ERROR]\033[0m $1"; }
 # ============================================================================
 
 NUM_JOBS=${NUM_JOBS:-$(nproc)}
-SERVER_TYPE="${SERVER_TYPE:-general}"  # general, web, database, container, mail
+SERVER_TYPE="${SERVER_TYPE:-general}" # general, web, database, container, mail
+# shellcheck disable=SC2034
 PACKAGE_LIST="profiles/server/packages.list"
 
 # ============================================================================
@@ -23,7 +24,7 @@ PACKAGE_LIST="profiles/server/packages.list"
 configure_server_kernel() {
     log_info "Configuring server-optimized kernel..."
 
-    cat > /etc/sysctl.d/99-server.conf << 'EOF'
+    cat >/etc/sysctl.d/99-server.conf <<'EOF'
 # ============================================================================
 # SERVER KERNEL OPTIMIZATIONS
 # ============================================================================
@@ -85,7 +86,7 @@ EOF
 configure_system_limits() {
     log_info "Configuring system limits for server..."
 
-    cat > /etc/security/limits.d/99-server.conf << 'EOF'
+    cat >/etc/security/limits.d/99-server.conf <<'EOF'
 # Server limits
 * soft nofile 65535
 * hard nofile 65535
@@ -99,8 +100,8 @@ EOF
 
     # PAM limits
     if [ -f /etc/pam.d/common-session ]; then
-        grep -q "pam_limits.so" /etc/pam.d/common-session || \
-            echo "session required pam_limits.so" >> /etc/pam.d/common-session
+        grep -q "pam_limits.so" /etc/pam.d/common-session ||
+            echo "session required pam_limits.so" >>/etc/pam.d/common-session
     fi
 
     log_success "System limits configured"
@@ -112,7 +113,7 @@ EOF
 configure_ssh_server() {
     log_info "Configuring SSH server (hardened)..."
 
-    cat > /etc/ssh/sshd_config << 'EOF'
+    cat >/etc/ssh/sshd_config <<'EOF'
 # Server SSH Configuration
 Port 22
 Protocol 2
@@ -123,7 +124,7 @@ HostKey /etc/ssh/ssh_host_ed25519_key
 # Security
 PermitRootLogin prohibit-password
 PubkeyAuthentication yes
-PasswordAuthentication yes
+PasswordAuthentication no
 ChallengeResponseAuthentication no
 UsePAM yes
 
@@ -166,7 +167,7 @@ EOF
     fi
 
     # Restart SSH if running
-    if command -v systemctl &> /dev/null; then
+    if command -v systemctl &>/dev/null; then
         systemctl restart sshd
         systemctl enable sshd
     fi
@@ -181,8 +182,8 @@ configure_firewall() {
     log_info "Configuring server firewall..."
 
     # Ensure firewall is installed
-    if command -v nft &> /dev/null; then
-        cat > /etc/nftables.conf << 'EOF'
+    if command -v nft &>/dev/null; then
+        cat >/etc/nftables.conf <<'EOF'
 #!/usr/sbin/nft -f
 
 flush ruleset
@@ -238,9 +239,9 @@ EOF
 install_fail2ban() {
     log_info "Installing and configuring fail2ban..."
 
-    if command -v fail2ban-server &> /dev/null; then
+    if command -v fail2ban-server &>/dev/null; then
         # Configure fail2ban
-        cat > /etc/fail2ban/jail.local << 'EOF'
+        cat >/etc/fail2ban/jail.local <<'EOF'
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -290,7 +291,7 @@ configure_logging() {
     log_info "Configuring centralized logging..."
 
     # Configure rsyslog for server
-    cat > /etc/rsyslog.conf << 'EOF'
+    cat >/etc/rsyslog.conf <<'EOF'
 # rsyslog server configuration
 module(load="imuxsock")
 module(load="imklog")
@@ -335,7 +336,7 @@ EOF
     systemctl enable rsyslog
 
     # Configure logrotate
-    cat > /etc/logrotate.d/server-logs << 'EOF'
+    cat >/etc/logrotate.d/server-logs <<'EOF'
 /var/log/remote/*.log {
     daily
     missingok
@@ -361,8 +362,8 @@ configure_monitoring() {
     log_info "Configuring monitoring tools..."
 
     # Node Exporter for Prometheus
-    if command -v node_exporter &> /dev/null; then
-        cat > /etc/systemd/system/node_exporter.service << 'EOF'
+    if command -v node_exporter &>/dev/null; then
+        cat >/etc/systemd/system/node_exporter.service <<'EOF'
 [Unit]
 Description=Prometheus Node Exporter
 After=network.target
@@ -383,7 +384,7 @@ EOF
     fi
 
     # Netdata for real-time monitoring
-    if command -v netdata &> /dev/null; then
+    if command -v netdata &>/dev/null; then
         systemctl enable netdata
         systemctl start netdata
     fi
@@ -398,8 +399,8 @@ optimize_database() {
     log_info "Optimizing database settings..."
 
     # PostgreSQL optimization
-    if command -v postgres &> /dev/null; then
-        cat >> /etc/postgresql/*/main/postgresql.conf << 'EOF'
+    if command -v postgres &>/dev/null; then
+        cat >>/etc/postgresql/*/main/postgresql.conf <<'EOF'
 # Performance tuning
 shared_buffers = '2GB'
 effective_cache_size = '6GB'
@@ -412,7 +413,7 @@ EOF
 
     # MySQL/MariaDB optimization
     if [ -f /etc/mysql/my.cnf ]; then
-        cat >> /etc/mysql/my.cnf << 'EOF'
+        cat >>/etc/mysql/my.cnf <<'EOF'
 [mysqld]
 innodb_buffer_pool_size = 2G
 innodb_log_file_size = 512M
@@ -438,7 +439,7 @@ EOF
 create_backup_script() {
     log_info "Creating backup script..."
 
-    cat > /usr/local/sbin/backup-system.sh << 'EOF'
+    cat >/usr/local/sbin/backup-system.sh <<'EOF'
 #!/bin/bash
 # Automated backup script for server
 
@@ -487,7 +488,7 @@ EOF
     chmod +x /usr/local/sbin/backup-system.sh
 
     # Add to cron
-    cat > /etc/cron.daily/backup << 'EOF'
+    cat >/etc/cron.daily/backup <<'EOF'
 #!/bin/bash
 /usr/local/sbin/backup-system.sh
 EOF
@@ -502,7 +503,7 @@ EOF
 create_status_page() {
     log_info "Creating server status page..."
 
-    cat > /usr/local/sbin/status.sh << 'EOF'
+    cat >/usr/local/sbin/status.sh <<'EOF'
 #!/bin/bash
 # Server status script
 

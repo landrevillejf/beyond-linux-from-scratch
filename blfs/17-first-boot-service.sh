@@ -114,8 +114,12 @@ if $ROOT_LOCKED || ! grep -q '^root:' /etc/shadow 2>/dev/null; then
         fi
         break
     done
-    echo "root:$ROOT_PASS" | chpasswd 2>/dev/null || \
-        passwd root <<< "$ROOT_PASS" 2>/dev/null || true
+    echo "root:$ROOT_PASS" | chpasswd
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to set root password"
+        unset ROOT_PASS ROOT_PASS2
+        exit 1
+    fi
     unset ROOT_PASS ROOT_PASS2
     # Set password expiry policy for root
     if command -v chage >/dev/null 2>&1; then
@@ -190,8 +194,12 @@ if ! $REGULAR_USER_EXISTS; then
     # Create the user
     groupadd "$NEW_USER" 2>/dev/null || true
     useradd -m -g "$NEW_USER" -G wheel,audio,video,storage -s /bin/bash "$NEW_USER" 2>/dev/null || true
-    echo "$NEW_USER:$USER_PASS" | chpasswd 2>/dev/null || \
-        passwd "$NEW_USER" <<< "$USER_PASS" 2>/dev/null || true
+    echo "$NEW_USER:$USER_PASS" | chpasswd
+    if [ $? -ne 0 ]; then
+        echo "ERROR: Failed to set password for $NEW_USER"
+        unset USER_PASS USER_PASS2
+        exit 1
+    fi
     unset USER_PASS USER_PASS2
 
     # Add to sudoers
@@ -317,7 +325,7 @@ INNEREOF
 install_first_boot_script() {
     run_privileged mkdir -p "$LFS/usr/sbin"
     run_privileged mkdir -p "$LFS/var/log"
-    printf '%s\n' "$FIRST_BOOT_SCRIPT" > "$LFS/usr/sbin/first-boot.sh"
+    printf '%s\n' "$FIRST_BOOT_SCRIPT" >"$LFS/usr/sbin/first-boot.sh"
     run_privileged chmod 0755 "$LFS/usr/sbin/first-boot.sh"
 }
 
@@ -325,7 +333,7 @@ install_service_unit() {
     # systemd
     if [ -d "$LFS/usr/lib/systemd/system" ] || [ -d "$LFS/lib/systemd/system" ]; then
         run_privileged mkdir -p "$LFS/usr/lib/systemd/system"
-        cat > "$LFS/usr/lib/systemd/system/first-boot.service" <<'SERVICE'
+        cat >"$LFS/usr/lib/systemd/system/first-boot.service" <<'SERVICE'
 [Unit]
 Description=LFS First Boot Configuration
 Documentation=man:first-boot.sh(8)
@@ -349,7 +357,7 @@ SERVICE
 
     # sysvinit / openrc / runit
     if [ -d "$LFS/etc/init.d" ]; then
-        cat > "$LFS/etc/init.d/first-boot" <<'INIT'
+        cat >"$LFS/etc/init.d/first-boot" <<'INIT'
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          first-boot
@@ -383,7 +391,7 @@ INIT
     # runit
     if [ -d "$LFS/etc/sv" ] || [ -d "$LFS/service" ]; then
         run_privileged mkdir -p "$LFS/etc/sv/first-boot"
-        cat > "$LFS/etc/sv/first-boot/run" <<'RUNIT'
+        cat >"$LFS/etc/sv/first-boot/run" <<'RUNIT'
 #!/bin/sh
 if [ ! -f /var/log/first-boot-done ]; then
     /usr/sbin/first-boot.sh
