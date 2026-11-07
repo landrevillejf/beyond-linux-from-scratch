@@ -257,6 +257,86 @@ class TestTrackedConfigIsNotAWriteTarget:
             'which LFSConfig.set() then saves: ' + ' | '.join(offenders))
 
 
+class TestGeneratedPackageFilesAreNotATestCleanupTarget:
+    """No test may delete or rewrite packages/ at the repository root.
+
+    Measured on this tree: `test_download_sources_covers_missing_lines()' in
+    tests/test_builder.py unlinked `Path('packages/sources.list')' -- the
+    CWD-relative path `_update_sources_list()' writes and `download_sources()'
+    probes -- so every suite pass removed a generated artifact from the
+    maintainer's working directory, and the same pair sat twice in the file
+    that became tests/test_download_sources_edge_cases.py (never executed
+    there, because tests/pytest.ini collects only test_*.py).  Building the
+    path under tmp_path or output_dir stays legal; the defect is the bare
+    repo-relative literal used as a write target.
+    """
+
+    GENERATED = r'sources\.list|sources\.lock|md5sums'
+
+    INLINE_MUTATE = re.compile(
+        r"Path\(\s*['\"]packages/(?:" + GENERATED + r")['\"]\s*\)\s*\."
+        r"\s*(?:unlink|write_text|write_bytes|touch|open)\(")
+    OPEN_WRITE = re.compile(
+        r"open\(\s*['\"]packages/(?:" + GENERATED + r")['\"][^)]*['\"]w")
+    ASSIGN = re.compile(r"^\s*(\w+)\s*=(?!=)")
+    PATH_ASSIGN = re.compile(
+        r"^\s*(\w+)\s*=\s*Path\(\s*['\"]packages/(?:" + GENERATED + r")"
+        r"['\"]\s*\)\s*$")
+    DEREF_MUTATE = re.compile(r"\b(\w+)\s*\.\s*(?:unlink|write_text|write_bytes)\(")
+
+    def _offenders_in(self, text, label):
+        """Repo-root package files named as a write target, by line."""
+        offenders = []
+        tainted = set()
+        for number, line in enumerate(text.splitlines(), start=1):
+            if self.INLINE_MUTATE.search(line) or self.OPEN_WRITE.search(line):
+                offenders.append(f'{label}:{number}: {line.strip()}')
+            assign = self.ASSIGN.match(line)
+            if assign:
+                # A name is only dangerous while it still holds the
+                # repo-relative path; rebinding it to a scratch path clears it.
+                if self.PATH_ASSIGN.match(line):
+                    tainted.add(assign.group(1))
+                else:
+                    tainted.discard(assign.group(1))
+                continue
+            used = self.DEREF_MUTATE.search(line)
+            if used and used.group(1) in tainted:
+                offenders.append(f'{label}:{number}: {line.strip()}')
+        return offenders
+
+    def _offenders(self):
+        found = []
+        for path in sorted(Path(__file__).parent.glob('*.py')):
+            found.extend(self._offenders_in(path.read_text(), path.name))
+        return found
+
+    def test_no_test_mutates_a_repo_root_package_file(self):
+        offenders = self._offenders()
+        assert offenders == [], (
+            'these tests write or delete a generated packages/ file at the '
+            'CWD-relative path: ' + ' | '.join(offenders))
+
+    def test_detector_fires_on_the_pattern_it_sweeps_for(self):
+        """The sweep must not be green because its own check is inert."""
+        joined = "        Path('packages/" + "sources.list').unlink()"
+        assigned = ("        stale = Path('packages/" + "sources.lock')\n"
+                    "        stale.unlink()")
+        opened = "        open('packages/" + "sources.list', 'w').close()"
+        for sample in (joined, assigned, opened):
+            assert self._offenders_in(sample, 'sample'), sample
+
+    def test_detector_leaves_the_supported_forms_alone(self):
+        """tmp_path-relative and read-only uses must stay legal."""
+        scratch = ("        sources = tmp_path / 'packages' / "
+                   "'sources.list'\n        sources.unlink()")
+        read_only = ("        real = Path('packages/" + "sources.list')\n"
+                     "        assert real.exists()\n"
+                     "        lines = real.read_text().splitlines()")
+        assert self._offenders_in(scratch, 'sample') == []
+        assert self._offenders_in(read_only, 'sample') == []
+
+
 class TestTrackedConfigTargetsTheNativeArchitecture:
     """The presets must not re-target a build that never asked for a cross.
 
