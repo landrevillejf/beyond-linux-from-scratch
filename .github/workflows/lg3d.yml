@@ -34,9 +34,194 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-  build-profiles:
+  # ---------------------------------------------------------------------
+  # The base prefix cache handshake (nightly #102, second half).
+  #
+  # lg3d restores the prefix published by build-base-cache.yml and resumes
+  # at build-kernel.  The two used to meet only by cron luck: the producer
+  # fires at 23:00 and this workflow at 03:00, and when the 23:00 run was
+  # cancelled and its replacement started at 01:39, the nightly reached its
+  # restore at 03:06/03:07 while the assets carrying that very key landed at
+  # 04:17/05:50.  A miss is deliberately non-fatal, so both legs silently
+  # rebuilt the whole 2h38m prefix: the systemd job took 4h20m wall clock
+  # (03:01:51 -> 07:22:31) and the sysvinit job ran 03:01:52 -> 08:32:13, killed
+  # by the 5h30m budget at stage 27/36 with no ISO at all.
+  #
+  # This job removes the timing assumption: it computes the SAME key the
+  # restore below will ask for, and if base-cache-latest does not carry it,
+  # it dispatches the producer itself and waits for the assets to appear.
+  # On a normal night the assets are already there and this exits in seconds
+  # (measured: key 56065563397d published 04:17/05:50 while the 03:06 restore
+  # was still looking for them).
+  #
+  # It can never cost an ISO.  Every path ends in `exit 0`, the job has a
+  # bounded internal deadline well under its own timeout, and build-profiles
+  # below keeps running even if this job is red or cancelled -- so the worst
+  # this handshake can do is the behaviour that already exists today.
+  #
+  # One honest consequence: lg3d-builds is a WORKFLOW-level concurrency group
+  # with cancel-in-progress: false, so while this job waits, a fresh dispatch
+  # of lg3d.yml queues instead of starting.  That is the price of not burning
+  # the 5h30m leg budget on a prefix rebuild; the wait is bounded by
+  # DEADLINE_MIN below.
+  ensure-base-cache:
     needs: check_changes
     if: needs.check_changes.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    # A prefix build measured 2h40m-4h10m (run 42325238018: started 01:39,
+    # assets created 04:17 and 05:50).  300 keeps the job inside GitHub's
+    # 6h cap; the internal DEADLINE_MIN below stops 30 minutes earlier so the
+    # job always gets to report and exit 0.
+    timeout-minutes: 300
+    permissions:
+      contents: read
+      # workflow_dispatch of the producer needs Actions: write.
+      actions: write
+    outputs:
+      status: ${{ steps.handshake.outputs.status }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `ref: main' mirrors the build-profiles checkout below.  The key
+          # hashes file CONTENT, so the handshake must read the very tree the
+          # restore will hash: on the event SHA the two could disagree if a
+          # commit landed under the runner's feet, and the handshake would
+          # then wait for a prefix the restore never asks for.
+          ref: main
+          clean: true
+          fetch-depth: 0
+
+      - name: Wait for the base prefix cache for this commit
+        id: handshake
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          HEAD_SHA: ${{ github.sha }}
+          PRODUCER: build-base-cache.yml
+          # 270 min covers the measured worst gap of this incident: the
+          # restore looked at 03:06/03:07 while the two prefixes landed at
+          # 04:17 (71 min later) and 05:50 (164 min later).
+          DEADLINE_MIN: "270"
+          POLL_SEC: "120"
+        run: |
+          # The runner executes every run: block as `bash -e {0}' even when
+          # the script never says set -e: build-base-cache #7 lost two fully
+          # built 21G prefixes because one informational `du' exited non-zero
+          # (tests/test_release_workflow.py::TestBaseCacheRun7VerifyStep).
+          # This step only reports, so -e is turned OFF explicitly: a failed
+          # `gh' call must cost the wait, never the ISO.
+          set +e
+          status=unknown
+          finish() {
+            echo "status=${status}" >> "$GITHUB_OUTPUT"
+            echo "base-cache handshake: ${status}"
+            exit 0
+          }
+          has_asset() {
+            # Exact string match against the asset list.  grep would let the
+            # dots in the name match any character.
+            gh release view base-cache-latest --repo "$REPO" --json assets \
+              --jq '.assets[].name' 2>/dev/null \
+              | awk -v want="$1" '$0 == want { found = 1 } END { exit !found }'
+          }
+          # Byte-for-byte the list the restore step below and the producer's
+          # "Compute base cache key" step hash: a drift here is a permanent
+          # silent miss, which is the bug this whole job exists to avoid.
+          # tests/test_release_workflow.py pins all four copies of the list
+          # equal AND pins that hashing the list through a variable yields
+          # the same digest as the direct pipe the other copies use.
+          BASE_TREE=$(git ls-tree -r HEAD -- host \
+            lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
+            lfs/06a-init-system.sh lfs/06b-service-management.sh \
+            lfs/07-configure-lfs.sh \
+            blfs/08-build-blfs-base.sh blfs/08a-build-blfs-libs.sh \
+            blfs/08b-build-xorg.sh blfs/08c-build-wayland.sh \
+            blfs/08d-build-display-manager.sh \
+            config packages/sources.list packages/custom-sources.list \
+            builder.py VERSION)
+          # The emptiness test has to sit on the blob list, NOT on the digest:
+          # sha256sum of an empty stream is a perfectly good 12 hex chars
+          # (measured: an unreadable path hashes to 01ba4719c80b), so a
+          # `[ -z "$BASE_KEY" ]' guard is dead code that would happily wait
+          # for a prefix no consumer ever asks for.
+          if [ -z "$BASE_TREE" ]; then
+            echo "::warning::no base cache key; the restore below will miss"
+            echo "::warning::and build the prefix from scratch"
+            status=key-unavailable
+            finish
+          fi
+          BASE_KEY=$(printf '%s\n' "$BASE_TREE" | sha256sum | cut -c1-12)
+          echo "Base cache key for ${HEAD_SHA:0:7}: ${BASE_KEY}"
+          missing=()
+          for init in systemd sysvinit; do
+            prefix="base-${init}-x86_64-${BASE_KEY}"
+            if has_asset "${prefix}.tar.zst.part-00"; then
+              echo "ready: ${prefix}"
+            else
+              echo "missing: ${prefix}"
+              missing+=("$prefix")
+            fi
+          done
+          if [ ${#missing[@]} -eq 0 ]; then
+            status=ready
+            finish
+          fi
+          deadline=$(( $(date +%s) + DEADLINE_MIN * 60 ))
+          dispatched=false
+          while :; do
+            still_missing=()
+            for prefix in "${missing[@]}"; do
+              has_asset "${prefix}.tar.zst.part-00" || still_missing+=("$prefix")
+            done
+            if [ ${#still_missing[@]} -eq 0 ]; then
+              echo "The producer published every prefix this run needs."
+              status=republished
+              finish
+            fi
+            # Wait out a producer already working on this ref rather than
+            # queueing a duplicate behind it: build-base-cache.yml holds a
+            # per-ref concurrency group with cancel-in-progress: false, so a
+            # second dispatch would only sit in line.
+            in_flight=$(gh run list --workflow "$PRODUCER" --branch "$REF_NAME" \
+              --limit 10 --json databaseId,headSha,status \
+              --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length' \
+              2>/dev/null || echo 0)
+            if [ "$in_flight" != "0" ]; then
+              echo "Producer run in flight (${in_flight}); waiting ${POLL_SEC}s"
+            elif [ "$dispatched" = false ]; then
+              echo "No producer in flight, ${#still_missing[@]} prefix(es) missing"
+              echo "Dispatching ${PRODUCER} on ${REF_NAME}"
+              if gh workflow run "$PRODUCER" --repo "$REPO" --ref "$REF_NAME"; then
+                dispatched=true
+              else
+                echo "::warning::dispatching ${PRODUCER} failed"
+                echo "::warning::the restore below will miss and build from scratch"
+                status=dispatch-failed
+                finish
+              fi
+            else
+              echo "Own dispatch ended, still missing: ${still_missing[*]}"
+              echo "Giving up: the legs below rebuild the prefix from scratch"
+              status=incomplete
+              finish
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::warning::base prefix still absent after ${DEADLINE_MIN}m"
+              status=deadline
+              finish
+            fi
+            sleep "$POLL_SEC"
+          done
+
+  build-profiles:
+    # `!cancelled() && !failure()' over BOTH needs: the ISO build must run
+    # whether the handshake saved it time, timed out, or died outright.  A
+    # needs-only wiring would skip this job (and every artifact) whenever the
+    # handshake was not green, which is exactly the class of regression that
+    # made nightly #102 publish nothing.
+    needs: [check_changes, ensure-base-cache]
+    if: needs.check_changes.outputs.has_changes == 'true' && !cancelled() && !failure()
     # This workflow exists to publish ONLY the Project Looking Glass ISOs, so
     # the matrix is pinned to x86_64 and the runner never varies.  lg3d is
     # x86_64-only (ProfileManager pins its architecture), and an aarch64 cell
@@ -412,6 +597,10 @@ jobs:
           sudo chown "$(id -u):$(id -g)" /tmp/base-cache
           cd /tmp/base-cache
           echo "Looking for ${PREFIX} in base-cache-latest"
+          # The handshake job decided this run's starting conditions; record
+          # it next to the lookup so a nightly log shows WHY a leg missed
+          # (e.g. status=deadline) instead of leaving it to be re-derived.
+          echo "ensure-base-cache status: ${{ needs.ensure-base-cache.outputs.status }}"
           if gh release download base-cache-latest \
             --repo ${{ github.repository }} \
             --pattern "${PREFIX}.tar.zst.part-*" \
