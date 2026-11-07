@@ -585,6 +585,73 @@
   and the missing-probe assertion); restoring it returns the file to its
   earlier md5 and the cases to green.
 
+- **A suite pass could delete the generated `packages/sources.list` from the
+  maintainer's tree, the tests written for that file never ran, and nothing in
+  `.gitignore` said the list is an artifact** (`tests/abc.py`,
+  `tests/test_download_sources_edge_cases.py`, `tests/test_builder.py`,
+  `tests/test_config.py`, `.gitignore`)
+
+  Three measured facts.  (1) `tests/pytest.ini` sets
+  `python_files = test_*.py`, so `pytest tests/` collected **0** items from
+  `tests/abc.py`, which was tracked and held five tests.  It also held *two*
+  definitions of four of them --
+  `test_download_sources_sources_list_missing_with_repos` at lines 18 and 207,
+  `..._kernel_invalid_after_download` at 69 and 257,
+  `..._sources_list_missing_no_repos` at 125 and 312, and
+  `test_validate_kernel_archive_exception` at 181 and 364.  Compared as `ast`
+  dumps with docstrings dropped, each pair is byte-identical, so only the
+  later binding ever ran: four bodies were dead code.  The file is now
+  `tests/test_download_sources_edge_cases.py`, duplicates removed, and those
+  five assertions run in every pass.  (2) Both copies set up their "missing
+  sources.list" scenario by deleting the repository's own file -- an
+  `exists()` guard around `Path('packages/sources.list').unlink()`, at four
+  sites (50/51, 157/158, 239/240, 344/345) -- because
+  `download_sources()` probes that CWD-relative path, the same one
+  `_update_sources_list()` writes (`builder.py:3073`).  In `abc.py` that was
+  harmless only because nothing executed it; the identical pair sat twice in
+  `test_download_sources_covers_missing_lines()`, which every CI job runs.
+  Bisected by md5 per test file: `tests/test_builder.py` left the file
+  *absent* and `tests/test_prerequisites.py` rewrote it
+  (`91b3981d...` -> `66ecebbf...`).  That second one reads as follows: the
+  test mocks only `pathlib.Path.exists` and calls the real
+  `download_sources()`, which starts by calling the real
+  `_update_sources_list()` -- so it regenerates the list from the tracked
+  repositories.  Not changed here; it is the legitimate generator, and a
+  deterministic regeneration is invisible to an md5 diff.  The two deletion
+  sites are gone: the case now enters `tmp_path` with `monkeypatch.chdir()`,
+  the pattern `test_update_sources_list_kernel_valid_skips_download()`
+  already used in the same file.  (3) The deletion had a visible cost.  Same
+  test file, CWD with the file present: 7 passed / 1 skipped; with it absent:
+  6 passed / 2 skipped, the extra skip being
+  `sources.list not found, run builder first` at
+  `tests/test_integration_network.py:180`.  That is where one of the suite's
+  23 skips came from.
+
+  Suite counts, all measured on this tree: `fc25b69` in a fresh worktree,
+  where the untracked list does not exist yet, 1138 passed / 24 skipped; the
+  same commit in this working tree, 1139 / 23; with this change, **1148
+  passed / 22 skipped** -- five newly collected assertions, three guardrail
+  cases, and the recovered skip.  `builder.py` stays at 100%.  flake8 against
+  a `HEAD` worktree baseline: 418 findings -> 408, **five `(file, code)` keys
+  removed and none added**, all of them `tests/abc.py`'s (F811 x4, F401 x2,
+  E306 x2, E302 x1, W391 x1).
+
+  Guardrail `TestGeneratedPackageFilesAreNotATestCleanupTarget` (3 cases)
+  sweeps `tests/*.py` for a repo-relative `packages/sources.list`,
+  `packages/sources.lock` or `packages/md5sums` used as a write target -- an
+  inline mutation, an `open(..., 'w')`, or a name bound to that path and
+  later mutated, with the taint cleared when the name is rebound to anything
+  else -- while reads and `tmp_path`-relative uses stay legal.  Two cases
+  play the detector against samples so it cannot be green by absence of a
+  check.  Mutation-proved on this tree: re-adding one unlink turns the sweep
+  red with the exact file and line, neutralising the detector's own pattern
+  turns the self-check red, and both files came back to their recorded md5.
+
+  `.gitignore` now names both generated paths, so the artifact a build
+  legitimately rewrites no longer dirties `git status`: `git check-ignore -v`
+  hits line 15 for `packages/sources.list` and line 16 for
+  `packages/sources.lock`.
+
 - **The lg3d live ISOs died inside their own sysinit while CI reported a BIOS
   PASS: no cgroup support in the shipped kernel, no `/sys/fs/cgroup` in the
   packed rootfs, and an fstab still written for an installed disk** (`config/

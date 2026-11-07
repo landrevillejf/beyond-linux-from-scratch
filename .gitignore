@@ -9,3 +9,8 @@ branding/installer/backgrounds/*.png
 .DS_Store
 /docs/books/
 node_modules/
+
+# Generated at the CWD-relative path packages/sources.list by
+# _update_sources_list(), and packages/sources.lock by --write-lockfile.
+packages/sources.list
+packages/sources.lock

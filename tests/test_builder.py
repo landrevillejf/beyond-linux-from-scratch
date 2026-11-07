@@ -2712,11 +2712,16 @@ class TestLFSConfigSave:
 # Test pour couvrir les lignes 1447-1451, 1482-1487 et 1490
 # ============================================================================
 
-def test_download_sources_covers_missing_lines(tmp_path):
+def test_download_sources_covers_missing_lines(tmp_path, monkeypatch):
     import logging
     import os
     from unittest.mock import Mock, patch
     from builder import LFSBuilder, SourceDownloader
+
+    # download_sources() probes the CWD-relative Path('packages/sources.list'),
+    # so the scenario lives in a scratch directory instead of the repository:
+    # same relative path, same missing file, nothing deleted from the tree.
+    monkeypatch.chdir(tmp_path)
 
     # ---- 1. Lignes 1447-1451 : cross-compilation, kernel invalide ----
     config_data = {
@@ -2783,8 +2788,6 @@ def test_download_sources_covers_missing_lines(tmp_path):
         sources_file2 = builder2.output_dir / 'packages' / 'sources.list'
         if sources_file2.exists():
             sources_file2.unlink()
-        if Path('packages/sources.list').exists():
-            Path('packages/sources.list').unlink()
 
         builder2.downloader = Mock(spec=SourceDownloader)
         builder2.downloader.download_from_list.return_value = True
@@ -2825,8 +2828,6 @@ def test_download_sources_covers_missing_lines(tmp_path):
         sources_file3 = builder3.output_dir / 'packages' / 'sources.list'
         if sources_file3.exists():
             sources_file3.unlink()
-        if Path('packages/sources.list').exists():
-            Path('packages/sources.list').unlink()
 
         builder3.downloader = Mock(spec=SourceDownloader)
 
