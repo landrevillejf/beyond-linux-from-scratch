@@ -6,6 +6,21 @@ from unittest.mock import patch, MagicMock
 from builder import LFSBuilder
 
 
+def _tmp_config(tmp_path):
+    """Private copy of the tracked config for the tests that mutate it.
+
+    Each of the three cases below calls config.set() three times, and
+    LFSConfig.set() writes its file through save(); pointing them at the
+    tracked config/build.conf rewrote the repository on every run -- with
+    `architecture: aarch64' and `cross_compile: true', the values a local
+    build started right after would then inherit.
+    """
+    tracked = Path('config/build.conf')
+    dst = tmp_path / 'build.conf'
+    dst.write_text(tracked.read_text() if tracked.exists() else '{}')
+    return dst
+
+
 class TestKernelValidation:
 
     def test_kernel_archive_missing_arch(self, tmp_path):
@@ -13,7 +28,7 @@ class TestKernelValidation:
         builder = LFSBuilder(
             profile='arm64',
             output_dir=tmp_path,
-            config_file='config/build.conf'
+            config_file=_tmp_config(tmp_path)
         )
         builder.config.set('kernel.version', '6.16.1')
         builder.config.set('architecture', 'aarch64')
@@ -45,7 +60,7 @@ class TestKernelValidation:
         builder = LFSBuilder(
             profile='arm64',
             output_dir=tmp_path,
-            config_file='config/build.conf'
+            config_file=_tmp_config(tmp_path)
         )
         builder.config.set('kernel.version', '6.16.1')
         builder.config.set('architecture', 'aarch64')
@@ -71,7 +86,7 @@ class TestKernelValidation:
         builder = LFSBuilder(
             profile='arm64',
             output_dir=tmp_path,
-            config_file='config/build.conf'
+            config_file=_tmp_config(tmp_path)
         )
         builder.config.set('kernel.version', '6.16.1')
         builder.config.set('architecture', 'aarch64')

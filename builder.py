@@ -399,7 +399,20 @@ class LFSConfig:
         return value
 
     def set(self, key: str, value):
-        """Set configuration value by dot notation key"""
+        """Set configuration value by dot notation key.
+
+        In-memory only.  Every caller is a resolution-time override --
+        _apply_profile_settings() and main()'s flag handling -- and the
+        resolved values reach the build through _get_env(), never through
+        the file.  Persisting them here made a single `builder.py --profile
+        arm64' (or one `--arch aarch64') rewrite architecture, triplet,
+        cross_compile and bootloader.type into whichever config file it was
+        handed, and because --config defaults to the tracked
+        config/build.conf, the next native build silently inherited an arm64
+        cross-compile plan (qemu-setup plus the uboot stage, and an
+        lfs-<ver>-<profile>-aarch64-*.iso name).  Callers that genuinely
+        mean to edit the file call save() explicitly.
+        """
         keys = key.split('.')
         target = self.data
         for k in keys[:-1]:
@@ -407,7 +420,6 @@ class LFSConfig:
                 target[k] = {}
             target = target[k]
         target[keys[-1]] = value
-        self.save()
 
 
 # ============================================================================
@@ -1988,14 +2000,15 @@ class LFSBuilder:
     def get_selinux_mode(self) -> str:
         """Resolve the effective SELinux mode for the active build.
 
-        Mirrors get_init_system()/get_installer_type(): a computed value
-        that never mutates the on-disk config, so merely planning a build
-        cannot rewrite config/build.conf.  That matters here because the
-        checked-in build.conf ships cross_compile=true/aarch64 (see
-        test_release_workflow's rootfs-cache guard), so persisting the
-        resolved mode would leak 'permissive' over the committed
-        'enforcing' default whenever a builder is constructed against the
-        real file -- which is exactly what the main() entry-point tests do.
+        Mirrors get_installer_type(): a computed value that never mutates
+        the on-disk config, so merely planning a build cannot rewrite
+        config/build.conf.  That convention is what keeps a cross build's
+        answer out of the preset: a cross profile makes is_cross_compile()
+        true for that builder alone, and persisting the resolved mode would
+        put 'permissive' over the committed 'enforcing' for every later
+        build of the same file.  LFSConfig.set() is in-memory only for the
+        same reason -- see its docstring for the arm64 block it used to
+        write back.
 
         Enforcing needs the Linux SELinux LSM the kernel actually runs plus
         a first-boot autorelabel that has been exercised on the target:

@@ -304,10 +304,28 @@ exit 0
                 dest.parent.mkdir(exist_ok=True)
                 shutil.copy(src, dest)
 
-        # Exécution réelle (nécessite sudo pour chroot)
+        # Exécution réelle (nécessite sudo pour chroot).
+        #
+        # On sonde d'abord, sans jamais laisser sudo demander un mot de
+        # passe : sans -n il lit sur /dev/tty, et un pytest lance dans un
+        # groupe de processus en arriere-plan y recoit SIGTTIN -- sudo et
+        # pytest basculent alors en etat T, le timeout=5 ne se declenche
+        # jamais et la suite entiere se fige (mesure sur cet arbre : un run
+        # complet est reste gele 267 s sur `sudo chroot /tmp/.../test.sh`).
+        # Le PermissionError d'avant etait du code mort : il n'arrive que si
+        # Python ne parvient pas a lancer sudo, jamais quand sudo refuse.
+        probe = subprocess.run(
+            ['sudo', '-n', 'true'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if probe.returncode != 0:
+            pytest.skip("passwordless sudo unavailable; chroot needs real root")
+
         try:
             result = subprocess.run(
-                ['sudo', 'chroot', str(chroot_dir), '/test.sh'],
+                ['sudo', '-n', 'chroot', str(chroot_dir), '/test.sh'],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -315,8 +333,6 @@ exit 0
             print(f"Résultat chroot: {result.stdout}")
         except subprocess.TimeoutExpired:
             print("⚠️ Timeout dans chroot")
-        except PermissionError:
-            pytest.skip("Need sudo for chroot test")
 
 
 class TestIntegrationWorkflow:
@@ -7076,3 +7092,88 @@ exit 0
                         f'{wf_path} publishes artifacts before booting them'
             assert upload < wf.index('  create-release:'), \
                 f'{wf_path} must still upload before create-release downloads'
+
+
+class TestNonInteractiveSudoInTests:
+    """Garde-fou : un test ne doit jamais laisser sudo pouvoir demander un mot
+    de passe.
+
+    Mesuré sur cet arbre : `sudo chroot` sans -n a gelé la suite entière
+    pendant 267 s.  sudo lisait son mot de passe sur /dev/tty, le processus
+    de test était dans un groupe de processus en arrière-plan, donc le noyau
+    l'a arrêté avec SIGTTIN (état T) ; ni le timeout=5 de l'appel ni la
+    méthode `thread` de pytest-timeout ne peuvent réveiller ni tuer un
+    processus arrêté, alors le run ne passait ni ne échouait.
+
+    Seuls les cas d'intégration USB explicites, qui s'auto-skipent tant que
+    l'opérateur ne passe pas --usb-device, gardent le droit d'invoquer sudo
+    interactivement : un humain est alors présent pour s'authentifier, et
+    retirer -n là ferait échouer le test au lieu de demander le mot de passe.
+    """
+
+    SUDO_RUN = re.compile(
+        r"subprocess\.(?:run|call|check_output|Popen)\(\s*\[\s*'sudo'([^]]*)\]",
+        re.S)
+
+    OPT_IN_GUARD = 'usb_device'
+    SELF_MARKER = 'class TestNonInteractiveSudoInTests:'
+
+    def _sweepable(self, text):
+        """Le texte hors des échantillons du garde-fou lui-même.
+
+        Les samples plus bas sont précisément ce que le balayage doit
+        attraper : les scanner dans ce fichier reviendrait à se déclarer
+        coupable pour du texte qui n'est pas un appel.
+        """
+        head, sep, _tail = text.partition(self.SELF_MARKER)
+        return head if sep else text
+
+    @staticmethod
+    def _enclosing_def(text, pos):
+        """Le texte de la fonction contenant `pos`, ligne de `def` comprise."""
+        starts = [m.start() for m in re.finditer(r'^\s*def ', text[:pos], re.M)]
+        return text[starts[-1]:pos] if starts else ''
+
+    def _offenders(self, text, name):
+        bad = []
+        for match in self.SUDO_RUN.finditer(text):
+            if "'-n'" in match.group(1):
+                continue
+            if self.OPT_IN_GUARD in self._enclosing_def(text, match.start()):
+                continue
+            bad.append(name)
+        return bad
+
+    def test_every_sudo_call_in_a_test_is_non_interactive(self):
+        """Aucun test exécuté inconditionnellement ne peut geler sur sudo."""
+        offenders = []
+        for py in sorted(Path(__file__).parent.rglob('*.py')):
+            text = self._sweepable(py.read_text())
+            offenders += self._offenders(text, py.name)
+        assert not offenders, (
+            f"{sorted(set(offenders))}: sudo sans '-n' demande un mot de "
+            "passe sur /dev/tty et arrête le processus de test avec SIGTTIN")
+
+    def test_sweep_can_detect_an_interactive_call(self):
+        """Auto-contrôle : sans cette capacité, le garde-fou serait vert à vide."""
+        sample = (
+            "def test_x(self, temp_dir):\n"
+            "    subprocess.run(['sudo', 'chroot', '/tmp/c', '/t.sh'],\n"
+            "                   capture_output=True, timeout=5)\n")
+        assert self._offenders(sample, 'sample.py') == ['sample.py'], \
+            "le balayage ne voit pas un sudo interactif"
+        fixed = sample.replace("['sudo',", "['sudo', '-n',")
+        assert self._offenders(fixed, 'sample.py') == [], \
+            "le balayage refuse un sudo déjà non interactif"
+
+    def test_chroot_case_probes_before_using_sudo(self):
+        """Le cas qui gelait doit sonder, sauter, et passer -n au chroot."""
+        content = self._sweepable(Path(__file__).read_text())
+        assert "['sudo', '-n', 'true']" in content, \
+            "la sonde `sudo -n true` a disparu"
+        assert "if probe.returncode != 0:\n            pytest.skip(" in content, \
+            "le cas chroot ne saute plus quand sudo n'exige pas de mot de passe"
+        assert "['sudo', '-n', 'chroot'" in content, \
+            "l'appel chroot doit rester non interactif"
+        assert "'sudo', 'chroot'" not in content, \
+            "un appel `sudo chroot` interactif a été réintroduit"

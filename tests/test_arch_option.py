@@ -12,6 +12,23 @@ import pytest
 from builder import LFSBuilder, create_parser, main
 
 
+def _tmp_config(tmp_path):
+    """Private copy of the tracked config, for the tests that mutate it.
+
+    `LFSConfig.set()' calls `save()' -- an `open("w")' -- on every mutation,
+    and `load()' writes defaults when the file is missing, so a builder given
+    the real `config/build.conf' rewrites the working tree on every run.  The
+    values this file used to persist are measurable: `architecture',
+    `target_triplet', `cross_compile' and `bootloader.type'.  Reading the
+    tracked file keeps the exact defaults these tests assert on; writing must
+    stay in the pytest sandbox.
+    """
+    real = Path('config/build.conf')
+    dst = tmp_path / 'build.conf'
+    dst.write_text(real.read_text() if real.exists() else '{}')
+    return dst
+
+
 def test_arch_parser_argument():
     """Vérifie que l'argument --arch est bien présent dans le parser."""
     parser = create_parser()
@@ -38,7 +55,7 @@ def test_arch_override_in_builder(arch, expected_cross, expected_triplet, expect
     builder = LFSBuilder(
         profile='minimal',
         output_dir=tmp_path / 'output',
-        config_file=Path('config/build.conf'),  # n'existe pas, sera créé par défaut
+        config_file=_tmp_config(tmp_path),
     )
 
     # Simuler l'overwrite comme dans main()
@@ -77,7 +94,7 @@ def test_arch_override_in_main_flow(tmp_path, monkeypatch):
     args = argparse.Namespace()
     args.profile = 'minimal'
     args.output = str(tmp_path / 'output')
-    args.config = 'config/build.conf'
+    args.config = str(_tmp_config(tmp_path))
     args.arch = 'aarch64'
     args.init = None
     args.no_live = False
@@ -234,7 +251,7 @@ def test_arch_cli_override(monkeypatch, tmp_path):
     # C'est plus fiable.
 
 # Voici une version plus simple qui réutilise la logique réelle sans appel à main().
-def test_arch_cli_override_direct():
+def test_arch_cli_override_direct(tmp_path):
     """Vérifie que la logique d'override --arch fonctionne sur un builder."""
     from builder import LFSBuilder
     import argparse
@@ -244,9 +261,9 @@ def test_arch_cli_override_direct():
         profile='minimal',
         init='sysvinit',
         arch='aarch64',
-        output='./build-release',
+        output=str(tmp_path / 'build-release'),
         verbose=False,
-        config='config/build.conf',
+        config=str(_tmp_config(tmp_path)),
         cache_url='',
         download_timeout=None,
         download_retries=None,

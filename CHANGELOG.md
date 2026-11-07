@@ -481,6 +481,110 @@
 
 ### Fixed
 
+- **Native builds silently planned an aarch64 cross-compile and emitted no
+  x86_64 ISO name: `LFSConfig.set()` wrote its resolution-time overrides back
+  into the tracked `config/build.conf`, which shipped `cross_compile=true`**
+  (`builder.py`, `config/build.conf`, `tests/test_config.py`,
+  `tests/test_arch_option.py`, `tests/test_kernel_validation.py`,
+  `tests/test_prerequisites.py`, `tests/test_builder.py`,
+  `tests/test_release_workflow.py`)
+
+  Reproduced on this tree before any edit: resolving the `xfce`, `lg3d` and
+  `minimal` profiles against the tracked config each returned
+  `cross_compile=True` / `architecture=aarch64`, so `get_build_stages()`
+  scheduled `host/00-setup-qemu.sh` and the `uboot` stage instead of GRUB, and
+  the release name came out `lfs-<ver>-<profile>-aarch64-*.iso`.  Two facts
+  stack to make that the default plan.  (1) `_apply_profile_settings()` sets
+  `cross_compile`, `architecture`, `target_triplet` and `bootloader.type` when
+  a profile asks for cross and never resets them otherwise, and `main()`'s
+  `--arch` block is the only other writer (argparse gives `--arch` no
+  default) -- so the values in the file *are* the plan for every invocation
+  that omits the flag.  Audited by reconstructing each command's backslash
+  continuations: 22 of the 30 `python3 builder.py` invocations in
+  `.github/workflows/` pass no `--arch`, and all 22 read the tracked
+  `config/build.conf` (none selects another `--config`), across `release.yml`,
+  `lg3d.yml`, `nightly.yml`, `build.yml`, `weekly-full.yml`, `benchmark.yml`,
+  `release-multi-host.yml`, `xfce-live-boot-iso.yml` and both
+  `xfce-*-x86_64-build-cache.yml`.  (2) `set()` ended with `self.save()` -- an
+  `open(path, 'w')` plus `json.dump` -- so one `--profile arm64` or
+  `--arch aarch64` run rewrote those four keys into whichever file it was
+  handed.  Measured after restoring the file: constructing
+  `LFSBuilder(profile='arm64')` on a copy of the corrected config put
+  `aarch64` / `true` / `uboot` straight back into it, which is why fixing the
+  file alone would not have lasted.
+
+  The tracked file had carried that state since `94e141d` (2026-08-17), whose
+  diff on `config/build.conf` is exactly these four keys flipped from
+  `x86_64` / `x86_64-lfs-linux` / `false` / `grub`.  How the values entered
+  that commit is not established; the mechanism that re-creates them is.
+
+  Fixed at three levels.  `LFSConfig.set()` is now in-memory only, matching
+  the house pattern of the read-only resolvers (`get_installer_type()`,
+  `get_selinux_mode()`, `get_fips_enabled()`): resolved values reach a build
+  through `_get_env()`, never through the file.  The remaining writers are
+  explicit callers (`tests/test_config.py:38`, `tests/test_builder.py:2579`
+  and `:2597`) plus `load()`, which creates a config file only when it is
+  absent.  `config/build.conf` is back to `x86_64` /
+  `x86_64-lfs-linux-gnu` / `false` / `grub` -- the string `builder.py`'s own
+  default config and `main()`'s `--arch` triplet map produce; the legacy
+  `config/build.conf.json` and `config/default.json` still carry the older
+  `x86_64-lfs-linux` and were left untouched.  Re-probed after the change:
+  the native profiles resolve x86_64 with no `qemu-setup` and no `uboot`
+  stage, while `arm64`, `pinebook` and `brax3` keep cross, `qemu-setup` and
+  `uboot`.  And the everyday writer, the test suite, no longer touches the
+  tracked path: `test_arch_option.py`, `test_kernel_validation.py` and
+  `test_prerequisites.py` run against a copy under `tmp_path`.
+
+  Guardrails, each shown able to fail.
+  `TestTrackedConfigTargetsTheNativeArchitecture` (4 cases) pins the four keys
+  across the tracked presets, asserts that `set()` applies in memory *and*
+  leaves the file bytes identical, that a profile which does not ask for cross
+  stays native, and that a cross profile still resolves arm64.  Before the
+  config restore, 2 of the 4 failed; the write-through pin was mutation-proved
+  by re-adding `self.save()` (red) and removing it again (green).
+  `TestTrackedConfigIsNotAWriteTarget` sweeps `tests/*.py` for four ways of
+  naming the tracked config as a write target, with a 14-line window that
+  exempts assertions against a mocked path so the scanner cannot flag a test
+  that only patches the file.  Five prose spots that repeated the old premise
+  (`get_selinux_mode()`'s docstring, two in `test_builder.py`, two in
+  `test_release_workflow.py` including the `chown` rationale of the lg3d UEFI
+  patch) were rewritten against the mechanism as it now is.
+
+  Suite: 1137 passed / 22 skipped; `config/build.conf` kept the same md5
+  across a full run; flake8 findings no higher than the `HEAD` baseline.
+
+- **A full `pytest tests/` run could freeze forever instead of skipping: the
+  chroot acceptance case ran `sudo chroot` without `-n`, leaving sudo waiting
+  on the terminal** (`tests/test_acceptance_shell.py`)
+
+  Measured on this tree: the suite sat 267 s with `sudo chroot
+  /tmp/tmpp2xfv5qk/chroot /test.sh` in state `T` and its `pytest` parent in
+  `Tl`.  A test process started in a background process group that reads the
+  terminal receives SIGTTIN and is *stopped*, so the call's `timeout=5` never
+  fires -- and `pytest-timeout` here uses the `thread` method, which cannot
+  reap a stopped child either -- so the run freezes rather than failing.  The
+  `except PermissionError: pytest.skip(...)` below it was dead code: that
+  exception only comes from Python failing to spawn `sudo`, never from `sudo`
+  refusing to authenticate, which is why the case hung instead of taking its
+  own skip path.  The case now probes `sudo -n true` and skips when
+  passwordless sudo is unavailable, and the `chroot` call carries `-n` as
+  well, so no path can reach a prompt.  Verified on this host: the case
+  SKIPS in 0.80 s.  Where sudo needs no password (a root CI job) the probe
+  returns 0 and the chroot runs exactly as before -- read from the code, not
+  executed here.
+
+  Guardrail `TestNonInteractiveSudoInTests` (3 cases) sweeps every real
+  `subprocess.*(['sudo' ...])` literal under `tests/` and fails if it carries
+  no `-n`, excepting only the opt-in USB integration functions, which skip
+  until the operator passes `--usb-device` and are then run by a human who
+  can authenticate.  The sweep excludes this guardrail's own source region,
+  because its sample is the very text it must catch.  One case plays the
+  detector against an interactive and a fixed sample so it cannot be green by
+  absence of a check.  Mutation-proved on this file: dropping `-n` back into
+  the chroot call turns 2 cases red (`assert not ['test_acceptance_shell.py']`
+  and the missing-probe assertion); restoring it returns the file to its
+  earlier md5 and the cases to green.
+
 - **The lg3d live ISOs died inside their own sysinit while CI reported a BIOS
   PASS: no cgroup support in the shipped kernel, no `/sys/fs/cgroup` in the
   packed rootfs, and an fstab still written for an installed disk** (`config/
