@@ -14,3 +14,16 @@ node_modules/
 # _update_sources_list(), and packages/sources.lock by --write-lockfile.
 packages/sources.list
 packages/sources.lock
+
+# Sensitive files - prevent accidental commit of secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.env
+*.env.local
+*password*
+*secret*
+*credential*
+*.private
