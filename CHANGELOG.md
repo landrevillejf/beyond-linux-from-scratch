@@ -481,6 +481,54 @@
 
 ### Fixed
 
+- **The lg3d boot gates could not read a hybrid ISO, and the published pair
+  was dead on both legs** (`tools/qemu-boot-smoke.sh`,
+  `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,
+  `tests/test_acceptance_shell.py`)
+
+  Measured locally on the published `lg3d-nightly-20261106` images, whose
+  sha256 matches the release digest (1 495 203 840 and 1 490 255 872 bytes).
+  The first pass at this was read off an interrupted download (393 MB of a
+  1.4 GB asset) and produced a kernel panic and a truncated-squashfs story
+  that were both artefacts; the digest check voided it, and every number
+  below comes from the verified copies.
+
+  - `tools/qemu-boot-smoke.sh` rejected them before booting anything.
+    `extract_iso_pair()` judged xorriso's exit status, and libburn returns 32
+    on an isohybrid image -- "ISO image size 730080s larger than readable
+    size 192344s", because the hybrid MBR/GPT describes the USB-sized target
+    and not the .iso file -- after restoring every requested file.  The gate
+    then died with "Could not extract kernel/initrd".  It now judges the
+    extracted files and clears them between candidate layouts.
+  - The same script's `-nographic >"$LOG" 2>&1` left the log at 0 bytes on a
+    Fedora 44 host with qemu 9.x, while the identical invocation through
+    `-display none -serial file:"$LOG"` captured 364 lines up to the
+    initramfs shell: a media that was running got reported as "Kernel never
+    produced any output".
+  - With both holes closed the gate is honest, and both 20261106 legs fail.
+    The systemd image dies with `systemd[1]: Failed to find module 'unix'`,
+    then "Failed to mount cgroup v1 hierarchy" and `Freezing execution`; the
+    sysvinit image stops at "Press Enter to continue...".  Both are the
+    CONFIG_NET/UNIX/INET absence that `config/kernel-config` fixed at 06:06
+    today, which is why the legs rebuild the kernel rather than the prefix.
+  - Two gates were added where the repository had only structure checks.
+    "Boot the ISO through the BIOS firmware (isolinux path)" boots the media
+    under SeaBIOS with no `-kernel`, so the El Torito BIOS entry and the
+    shipped `isolinux.cfg` are finally executed -- the `-kernel` smoke never
+    runs a bootloader, which is how the `ldlinux.c32` class stayed green.
+    "Verify the ISO is BIOS+UEFI hybrid" requires the
+    `Boot record : El Torito , MBR isohybrid cyl-align-on GPT` that xorriso
+    reports for these images plus an `ef EFI` partition in the fdisk table.
+    Both run after the artifact upload, so neither can delete an ISO, and
+    `final/15` now prints the same Boot record into the stage log.
+  - Five guardrails, each mutation-checked: dropping `GPT` from the hybrid
+    requirement, removing a marker from either abort grep, restoring
+    `-nographic`, restoring the status-based extraction test and swapping the
+    BIOS gate back to `-kernel` all turn the suite red.  The shared-marker
+    guard reads the `if grep` decision lines only, because a whole-step match
+    stayed green with the marker removed from the decision and left in the
+    reporting grep beside it.
+
 - **lg3d raced the base-prefix producer: both nightly legs rebuilt 2h38m of
   cached stages because nothing made the build wait for the cache it was
   about to ask for** (`.github/workflows/lg3d.yml`,

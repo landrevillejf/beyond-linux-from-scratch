@@ -509,6 +509,13 @@ fi
 rm -f "$VERIFY_ESP" "$VERIFY_EFI"
 echo '[INFO] UEFI El Torito boot image verified (FAT16 + \EFI\BOOT\BOOTX64.EFI)'
 
+# Report (never judge) the hybrid layout so the stage log carries it:
+# xorriso writes reports on stderr.  The gate is the lg3d.yml step, which runs
+# after the artifacts are uploaded.  Measured Boot record of a published ISO:
+#   Boot record  : El Torito , MBR isohybrid cyl-align-on GPT
+xorriso -indev "$ISO_OUT" -report_system_area as_plain 2>&1 | grep -a "Boot record" \
+    || echo "[WARNING] could not report the system area of $ISO_OUT"
+
 # Nettoyage
 rm -rf "$ISO_DIR" "$SQUASHFS" "$EFI_IMG" "$EFI_DIR" "$GRUB_CFG_LIVE"
 
