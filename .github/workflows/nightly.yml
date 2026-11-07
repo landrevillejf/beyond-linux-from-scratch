@@ -605,6 +605,51 @@ jobs:
           # names when the release is flattened. The binary repository
           # ships with stable releases only (release.yml).
 
+      # Production comes before judgement, always.
+      #
+      # This upload must run BEFORE the boot smoke test below and must carry
+      # `if: always()'.  A step without a condition inherits success(), so
+      # placing it after a gate makes the gate an artifact killer: nightly
+      # #102 built the full 1.4 GB lg3d/systemd ISO, the smoke step then went
+      # red on a dead sysinit, the inherited success() skipped the upload,
+      # create-release found nothing to publish and no lg3d-nightly-20261107
+      # release existed at all -- while #105/#106, with the upload in front of
+      # the gate, shipped their ISOs.  A non-bootable image is a bad outcome;
+      # no image is the forbidden one, because the consumer of a red nightly
+      # can still read the logs and the digest of what was actually built.
+      #
+      # The gate loses nothing it had a right to withhold: it still runs after
+      # the upload, still fails the leg, and the annotation is what tells the
+      # maintainer the ISO is dead.  Only its power to delete the artifact is
+      # removed.  always() rather than '!cancelled()' because a leg killed by
+      # the job budget must still ship: proof run 42365666492 job D guarded
+      # this step `if: '!cancelled()'` behind a `sleep 300' under
+      # `timeout-minutes: 1`, the job went cancelled and no artifact landed --
+      # '!cancelled()' evaluates FALSE on a cancelled job.  Proof run
+      # 42365844687 job E shipped the artifact from the same budget kill with
+      # `if: always()' (job G confirmed the red-step case too, and job F lost
+      # it again as soon as `&& steps.build.outcome != 'cancelled'` was added).
+      - name: Upload release artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
+          path: |
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
+            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
+            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
+            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
+            /tmp/lfs-build/build-release/lpm-repo/packages.list*
+            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
+            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
+            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
+          # if-no-files-found stays 'ignore' because the per-profile payload
+          # differs: the rootfs tarball only ships for xfce and arm64, and
+          # packages.list only exists when the profile builds base packages.
+          # The ISO and its signature are expected from every leg now.
+          if-no-files-found: ignore
+
       - name: Boot artifact in QEMU (smoke test)
         if: success() && matrix.arch == 'x86_64'
         run: |
@@ -649,32 +694,6 @@ jobs:
             exit 1
           fi
 
-      # Release hygiene: the upload runs AFTER the boot smoke test, on purpose
-      # and exactly as in lg3d.yml.  A step inherits the job's implicit
-      # success() condition, so a leg whose artifact does not boot no longer
-      # hands create-release below something it can publish.  Uploading first
-      # is what let the 20261106 night ship ISOs that abort in their own
-      # sysinit: the run was red, and the ISOs were downloadable anyway.
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
-          path: |
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}
-            /tmp/lfs-build/build-release/vmlinuz-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/SHA256SUMS-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}
-            /tmp/lfs-build/build-release/build_info-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.json
-            /tmp/lfs-build/build-release/sbom-${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}.spdx.json
-            /tmp/lfs-build/build-release/lpm-repo/packages.list*
-            /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
-            /tmp/lfs-build/build-release/lfs-installer.iso.pointer
-            /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
-          # if-no-files-found stays 'ignore' because the per-profile payload
-          # differs: the rootfs tarball only ships for xfce and arm64, and
-          # packages.list only exists when the profile builds base packages.
-          # The ISO and its signature are expected from every leg now.
-          if-no-files-found: ignore
-
       - name: Upload logs on failure
         # Cancelled jobs must leave logs behind as well, otherwise a timeout
         # is undiagnosable (Nightly #194).  This is also the only reason
@@ -696,10 +715,17 @@ jobs:
     # fails, so requiring `== 'success'` threw away everything the green
     # legs had built: nightly #230 completed arm64, minimal/sysvinit,
     # minimal/systemd and server, uploaded their artifacts, and published
-    # no release at all.  Publish whatever completed instead.  Only a
-    # cancelled run is worthless, and the all-legs-failed case is caught
-    # by the guard below so it never creates an empty release.
-    if: always() && needs.build-profiles.result != 'cancelled'
+    # no release at all.  Publish whatever completed instead.
+    #
+    # Nothing here is "worthless": a leg killed by the job budget can still
+    # reach the upload step (proof run 42365844687 job E shipped its artifact
+    # from a cancelled job under `if: always()`), so a cancelled aggregate can
+    # carry a finished ISO.  Ruling cancelled runs out was therefore a second
+    # artifact killer, one step removed from the first.  Never publishing an
+    # empty release is not this condition's job: the artifact probe below
+    # finds zero files and skips the release, so the only thing loosening it
+    # can cost is a release nobody asked for.
+    if: always()
     permissions:
       contents: write
       # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.

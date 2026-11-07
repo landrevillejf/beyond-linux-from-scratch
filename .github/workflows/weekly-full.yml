@@ -513,7 +513,14 @@ jobs:
           # the weekly matrix: 83 jobs would collide on the same asset
           # names once the release is flattened.
 
+      # Production before judgement, as in lg3d.yml and nightly.yml: the
+      # upload sits in front of the boot smoke test below and carries
+      # `if: always()' so a leg that wrote its ISO and then lost the gate --
+      # or lost the job budget -- still hands it over.  '!cancelled()' was
+      # measured to be FALSE on a cancelled job (proof run 42365666492 job D
+      # shipped nothing), which is why it is not used here.
       - name: Upload release artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts-${{ matrix.profile }}-${{ matrix.init }}-${{ matrix.arch }}
@@ -582,9 +589,17 @@ jobs:
     # Same aggregate-result trap nightly.yml had until #230: one failed
     # matrix leg makes `needs.build-profiles.result` `failure`, so every
     # profile that did complete was discarded without a release.  Publish
-    # whatever finished; only a cancelled run is worthless, and the
-    # all-legs-failed case is caught by the guard below.
-    if: always() && needs.build-profiles.result != 'cancelled'
+    # whatever finished.
+    #
+    # "Only a cancelled run is worthless" is what this condition used to
+    # claim, and lg3d nightly #102 refuted it: a leg killed by the job budget
+    # can still ship its ISO (proof run 42365844687 job E uploaded from a
+    # cancelled job once this guard was `if: always()`), so a cancelled
+    # aggregate can carry a finished artifact.  Excluding it here would be the
+    # same artifact killer one step removed.  An empty release is prevented by
+    # the artifact probe below, which finds no file and skips the publish step
+    # -- that is the guard, not this condition.
+    if: always()
     permissions:
       contents: write
     steps:

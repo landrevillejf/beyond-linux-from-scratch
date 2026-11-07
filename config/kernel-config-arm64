@@ -188,6 +188,11 @@ CONFIG_EFI_STUB=y
 # ============================================================================
 # NETWORKING (ARM64)
 # ============================================================================
+# NET/UNIX/INET carry no default: unnamed, olddefconfig resolves them to n and
+# the kernel loses socket() entirely.  See config/kernel-config.
+CONFIG_NET=y
+CONFIG_UNIX=y
+CONFIG_INET=y
 CONFIG_NETFILTER=y
 
 # ============================================================================
