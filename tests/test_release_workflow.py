@@ -95,7 +95,7 @@ class TestReleasePipelineHardening:
 
     # Both matrices publish through a create-release job that used to
     # require every leg to succeed.
-    RELEASE_WORKFLOWS = ("nightly.yml", "weekly-full.yml")
+    RELEASE_WORKFLOWS = ("nightly.yml", "weekly-full.yml", "lg3d.yml")
 
     def _read(self, name):
         return Path(f".github/workflows/{name}").read_text()
@@ -138,14 +138,51 @@ class TestReleasePipelineHardening:
         so it is `failure` as soon as one leg fails.  Nightly #230 built
         arm64, minimal/sysvinit, minimal/systemd and server successfully,
         uploaded their artifacts, and published nothing because the
-        release job required every leg to pass."""
+        release job required every leg to pass.
+
+        The aggregate is also `cancelled` when one leg loses the job budget,
+        and lg3d nightly #102 measured that excluding it publishes nothing
+        either -- while an upload step written `if: always()` does run in
+        exactly that case (proof run 42365844687 job E shipped its artifact
+        from a job killed by its own timeout), so a cancelled aggregate can
+        hold a finished ISO.  Nothing here decides "worthless": the artifact
+        probe inside each create-release job is what keeps an empty release
+        from being created (test_release_jobs_are_skipped_when_nothing_was_built).
+        """
         for name in self.RELEASE_WORKFLOWS:
-            assert "if: always() && needs.build-profiles.result " \
-                "!= 'cancelled'" in self._create_release(name), name
+            release = self._create_release(name)
+            assert "if: always()" in release, name
+            assert "needs.build-profiles.result != 'cancelled'" not in release, \
+                f'{name} still throws away artifacts uploaded by a cancelled leg'
             # Re-introducing the all-or-nothing gate anywhere in either
             # workflow reproduces the same silent loss.
             assert "needs.build-profiles.result == 'success'" \
                 not in self._read(name), name
+
+    def test_release_upload_runs_before_the_boot_gate(self):
+        """An ISO a leg finished must be handed over whatever the gate says.
+
+        Nightly #102 is the measurement: the leg wrote its 1.4 GB ISO, the
+        smoke step failed, and the upload -- behind the gate, on the implicit
+        success() -- was skipped, so no release existed for that night at all.
+
+        The guard must be the unconditional `if: always()', not
+        `!cancelled()': proof run 42365666492 job D showed the latter is
+        false on a job killed by its budget, i.e. the sysvinit leg of #102
+        would still have shipped nothing.
+        """
+        for name in ("nightly.yml", "weekly-full.yml", "lg3d.yml"):
+            wf = self._read(name)
+            upload = wf.index('- name: Upload release artifacts')
+            smoke = wf.find('- name: Boot artifact in QEMU')
+            if smoke != -1:
+                assert upload < smoke, \
+                    f'{name} lets the boot gate decide whether the ISO ships'
+            step = wf[upload:].split('\n      - name:', 1)[0]
+            assert 'if: always()' in step, \
+                f'{name} uploads only on a leg where every earlier step passed'
+            assert "if: '!cancelled()'" not in step, \
+                f'{name} uploads nothing when the leg loses its time budget'
 
     def test_release_jobs_keep_failure_logs_off_the_release(self):
         """Failed legs upload release-logs-* archives; with the gate

@@ -481,6 +481,66 @@
 
 ### Fixed
 
+- **lg3d nightly #102 published no ISO at all: the boot smoke gate sat in
+  front of the artifact upload, and every kernel fragment ships a kernel with
+  no `socket()` syscall** (`.github/workflows/lg3d.yml`,
+  `.github/workflows/nightly.yml`, `.github/workflows/weekly-full.yml`,
+  `config/kernel-config*`, `lfs/08-build-kernel.sh`,
+  `tests/test_acceptance_shell.py`, `tests/test_release_workflow.py`)
+
+  Two independent defects, both measured in run 42332040251 before any edit.
+
+  1. The regression.  The `lg3d/systemd` leg ran all 36 stages, the builder
+     logged its own product (`Installer ISO:
+     /tmp/lfs-build/build-release/lfs-0.57.4-lg3d-x86_64-systemd-20261107.iso
+     (1.4 GB / 1426 MB)`), and the BIOS smoke step then failed.  Because
+     commit 350f67c had moved `Upload release artifacts` behind both smoke
+     steps, the step inherited the job's implicit `success()` and was
+     skipped; `create-release` found no `release-artifacts-*` ("release not
+     found" for `lg3d-nightly-20261107`), while `lg3d-nightly-20261105` and
+     `-20261106` -- built with the upload in front of the gate -- each carry
+     two ISOs.  The upload is back in front of both gates and now runs on
+     `if: always()`; `create-release` dropped its `result != 'cancelled'`
+     clause, which was the same artifact killer one step removed.  The
+     condition is a measurement, not a reading of the docs: throwaway proof
+     run 42365666492 job D guarded the upload `if: '!cancelled()'` in a job
+     killed by its own `timeout-minutes` and uploaded nothing --
+     `!cancelled()` is false on a cancelled job -- while proof run
+     42365844687 job E shipped the artifact from that same budget kill under
+     `if: always()` and job G confirmed the failed-step case; job F of the
+     same run lost the artifact again the moment
+     `&& steps.build.outcome != 'cancelled'` was appended, so that clause is
+     banned by the guardrail test as well.  The gate keeps its honest signal
+     -- it still runs after the upload and still fails the leg -- and loses
+     only the power to delete what the build produced.  A non-bootable image
+     is a bad outcome; no image is the forbidden one.
+  2. The boot defect the gate correctly caught, pre-existing and unrelated to
+     the reorder.  `build-kernel.log` of that same run compiled **zero** `net/`
+     objects, and the config extracted from the *published* 20261106 ISO reads
+     `# CONFIG_NET is not set`.  No fragment names `CONFIG_NET`; in 6.16 the
+     symbol carries no `default` statement in `net/Kconfig` (nor do `UNIX` and
+     `INET`), so `make olddefconfig` resolves an unnamed one to n and the
+     kernel does not register `socket()` at all: every socket call returns
+     ENOSYS.  Once
+     the cgroup hole was repaired, systemd as PID 1 therefore died one step
+     later on its uevent netlink monitor (`Failed to allocate device monitor:
+     Function not implemented`, then the `device_unset_sysfs()` assertion and
+     `Freezing execution`).  All six fragments now name `CONFIG_NET`,
+     `CONFIG_UNIX` and `CONFIG_INET`, and `CGUARD_SYMBOLS` guards them, so a
+     silently dropped socket layer is repaired through the kernel's own
+     `scripts/config` and reported instead of shipping.
+
+  Still open, measured here for the record: both legs ran all 36 stages from
+  scratch because the base prefix cache missed -- `No base cache published for
+  base-<init>-x86_64-56065563397d` at 03:06/03:07, while `build-base-cache.yml`
+  published that very key at 04:17 (sysvinit) and 05:50 (systemd).  The nightly
+  raced the producer, not a key mismatch.  Resuming from `build-kernel` would
+  return the 2h38m those stages cost (summed from this run's own stage
+  timings), which is what the `sysvinit` leg needs to stop exceeding the 5h30m
+  budget.  This change edits `config/`, so the key rotates again: dispatch
+  `build-base-cache.yml` on `main` after this lands, before judging the next
+  nightly's timing.
+
 - **Native builds silently planned an aarch64 cross-compile and emitted no
   x86_64 ISO name: `LFSConfig.set()` wrote its resolution-time overrides back
   into the tracked `config/build.conf`, which shipped `cross_compile=true`**

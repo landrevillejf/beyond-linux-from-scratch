@@ -123,9 +123,18 @@ log_info "Kernel hardening knobs: lockdown=$LOCKDOWN_MODE module_sig_force=$MODU
 # CONFIG_CGROUPS enabled at runtime", and rcS.d/S00mountvirtfs mounts
 # cgroup2 for the sysvinit side of the same book.  Nothing else belongs here;
 # an unrelated symbol must never be able to fail the kernel stage.
+#
+# CONFIG_NET is part of that set for the same reason, not as policy: with no
+# net/ built, the kernel does not register the socket() syscall at all, so
+# every socket() call returns ENOSYS.  systemd as PID 1 then cannot open its
+# uevent netlink monitor and aborts on its own assertion in
+# src/core/device.c:device_unset_sysfs() ("Freezing execution") -- lg3d
+# nightly #102, where build-kernel.log compiled zero net/ objects.  A dead
+# PID 1 is not a bootable image, whatever else the kernel does.
 CGUARD_SYMBOLS="CONFIG_CGROUPS CONFIG_CGROUP_SCHED CONFIG_FAIR_GROUP_SCHED \
     CONFIG_MEMCG CONFIG_CGROUP_PIDS CONFIG_CGROUP_DEVICE \
-    CONFIG_CGROUP_FREEZER CONFIG_NAMESPACES CONFIG_PID_NS"
+    CONFIG_CGROUP_FREEZER CONFIG_NAMESPACES CONFIG_PID_NS \
+    CONFIG_NET CONFIG_UNIX CONFIG_INET"
 
 # ---------------------------------------------------------------------------
 # Locate the kernel sources.  The chroot mirror ($LFS/sources) is the

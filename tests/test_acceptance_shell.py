@@ -6585,6 +6585,17 @@ class TestLiveIsoCgroupSysinitGuardrails:
         'CONFIG_IPC_NS', 'CONFIG_PID_NS', 'CONFIG_NET_NS',
     )
 
+    # The socket layer, named for the same mechanism and with the same
+    # consequence as the cgroup chain: NET/UNIX/INET are plain booleans with no
+    # default, so a fragment that does not name them gets NET=n out of
+    # olddefconfig -- and a kernel with no net/ does not even register the
+    # socket() syscall.  lg3d nightly #102 measured it (zero net/ objects in
+    # build-kernel.log) and paid for it with systemd as PID 1 aborting on its
+    # uevent netlink socket, i.e. an image that boots nothing.
+    NET_SYMBOLS = (
+        'CONFIG_NET', 'CONFIG_UNIX', 'CONFIG_INET',
+    )
+
     # Fatal boot markers, in the order the 20261106 logs printed them.  Both
     # gates must reject every one of them.
     ABORT_MARKERS = (
@@ -6663,6 +6674,24 @@ class TestLiveIsoCgroupSysinitGuardrails:
                 f'{cfg} requests CONFIG_POSIX_MQUEUE, which the LFS/BLFS '\
                 f'books never require'
 
+    def test_every_kernel_fragment_names_the_socket_layer(self):
+        """A fragment that never says CONFIG_NET ships a kernel with no sockets.
+
+        The mechanism is the one already proven for CONFIG_CGROUPS and
+        CONFIG_EFI_STUB: olddefconfig resolves an unnamed symbol to its
+        default, and NET/UNIX/INET have none.  Nightly #102 is the
+        measurement, not a reading of the fragment -- that run compiled zero
+        net/ objects and its systemd live ISO froze as PID 1 on the very first
+        socket() call, so this is not a networking-feature request but the
+        syscall table of a booting system.
+        """
+        for cfg in self.KERNEL_CONFIGS:
+            text = cfg.read_text()
+            for symbol in self.NET_SYMBOLS:
+                assert f'{symbol}=y' in text, \
+                    f'{cfg} lacks {symbol}=y; the kernel then has no '\
+                    f'socket() syscall and PID 1 aborts on its netlink socket'
+
     def test_the_kernel_guard_only_judges_the_boot_chain(self):
         """CGUARD_SYMBOLS must stay a subset of the chain it documents.
 
@@ -6675,9 +6704,15 @@ class TestLiveIsoCgroupSysinitGuardrails:
         assert listed, 'lfs/08 no longer declares CGUARD_SYMBOLS on one line'
         guarded = set(re.findall(r'CONFIG_[A-Z0-9_]+', listed.group(1)))
         assert guarded, 'CGUARD_SYMBOLS is empty'
-        assert guarded <= set(self.CGROUP_SYMBOLS), \
+        boot_chain = set(self.CGROUP_SYMBOLS) | set(self.NET_SYMBOLS)
+        assert guarded <= boot_chain, \
             f'lfs/08 gates symbols outside the boot chain: ' \
-            f'{sorted(guarded - set(self.CGROUP_SYMBOLS))}'
+            f'{sorted(guarded - boot_chain)}'
+        # The socket layer belongs to the guarded set, not only to the
+        # fragments: a NET silently dropped again must be repaired and then
+        # reported, exactly like a dropped CONFIG_CGROUPS.
+        assert set(self.NET_SYMBOLS) <= guarded, \
+            'lfs/08 no longer guards the socket layer it just named'
 
     def test_kernel_stage_verifies_the_chain_survives_olddefconfig(self):
         """A fragment that asks for cgroups must not be silently overruled.
@@ -7072,14 +7107,22 @@ exit 0
         assert 'error: file .* not found' in step, \
             'the UEFI gate lost the exact GRUB error the shipped ISO showed'
 
-    def test_publishing_workflows_upload_after_their_smoke_tests(self):
-        """A red boot gate must not leave an ISO to be downloaded anyway.
+    def test_publishing_workflows_upload_before_their_smoke_tests(self):
+        """No gate may ever hold the power to delete a produced ISO.
 
-        create-release keeps its `if: always()' (nightly #230: requiring
-        success threw away every green leg of a partially failed matrix), so
-        the upload step is the one that has to move behind the smoke tests --
-        it inherits the job's implicit success() and a leg that cannot boot
-        then has nothing to hand over.
+        This is the inverse of what the test asserted before lg3d nightly
+        #102, and the night is the measurement: the systemd leg ran all 36
+        stages and wrote lfs-0.57.4-lg3d-x86_64-systemd-20261107.iso (1.4 GB,
+        logged by the builder itself), the BIOS smoke step then failed on the
+        dead sysinit, and the upload -- which sat behind the gate and so
+        inherited the job's implicit success() -- was skipped.  create-release
+        found no release-artifacts-* to download and no lg3d-nightly-20261107
+        release exists, while #105 and #106 each published two ISOs.
+
+        A non-bootable image is a bad outcome; producing nothing is the
+        forbidden one, so the artifact leaves the job before anything boots
+        it.  The gate keeps its teeth where they belong: it still runs after
+        the upload and still fails the leg.
         """
         for wf_path in (self.LG3D_WF, self.NIGHTLY_WF):
             wf = wf_path.read_text()
@@ -7088,10 +7131,51 @@ exit 0
                           '- name: Boot artifact in QEMU (smoke test - UEFI mode)',
                           '- name: Boot artifact in QEMU (smoke test)'):
                 if smoke in wf:
-                    assert upload > wf.index(smoke), \
-                        f'{wf_path} publishes artifacts before booting them'
+                    assert upload < wf.index(smoke), \
+                        f'{wf_path} lets a boot gate decide whether the ISO '\
+                        f'is handed over at all'
             assert upload < wf.index('  create-release:'), \
-                f'{wf_path} must still upload before create-release downloads'
+                f'{wf_path} must upload before create-release downloads'
+
+    def test_release_upload_survives_a_failing_step_and_a_budget_kill(self):
+        """The upload step must not inherit success() from the build either.
+
+        `if: always()' is what keeps a leg that finished writing its ISO and
+        then died in a verification step from losing the artifact, and what
+        lets a job killed by the 5h30m budget still hand over the image it
+        completed.  Both halves are measured in CI, not read out of the
+        syntax reference: proof run 42365666492 job D guarded the upload
+        `if: '!cancelled()'` in a job killed by its own timeout-minutes and
+        uploaded nothing, so '!cancelled()' is FALSE on a cancelled job;
+        proof run 42365844687 job E shipped the artifact from the same budget
+        kill under `if: always()', and its job G covered the red-step case.
+        The same run's job F lost the artifact again as soon as
+        `&& steps.build.outcome != 'cancelled'` was appended, so that clause
+        is forbidden too.
+
+        Paired with create-release's unconditional `if: always()': excluding
+        cancelled runs there was the same artifact killer one step removed.
+        Publishing nothing is prevented by the artifact probe inside
+        create-release (found=false skips the release), not by these two
+        conditions, so loosening them cannot create an empty release.
+        """
+        for wf_path in (self.LG3D_WF, self.NIGHTLY_WF):
+            wf = wf_path.read_text()
+            upload_step = wf[wf.index('- name: Upload release artifacts'):]
+            upload_step = upload_step.split('\n      - name:', 1)[0]
+            assert 'if: always()' in upload_step, \
+                f'{wf_path} uploaded artifacts only on an all-green leg'
+            assert "if: '!cancelled()'" not in upload_step, \
+                f'{wf_path} guards the upload with the condition measured to '\
+                f'be false on a cancelled job (proof 42365666492 job D)'
+            assert "steps.build.outcome != 'cancelled'" not in upload_step, \
+                f'{wf_path} re-adds the build-outcome clause that lost the '\
+                f'artifact in proof 42365844687 job F'
+            release = wf[wf.index('  create-release:'):]
+            assert "if: needs.build-profiles.result != 'cancelled'" not in release, \
+                f'{wf_path} discards uploaded artifacts when a leg is cancelled'
+            assert 'if: always()' in release, \
+                f'{wf_path} no longer publishes whatever a run completed'
 
 
 class TestNonInteractiveSudoInTests:

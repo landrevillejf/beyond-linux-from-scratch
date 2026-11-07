@@ -206,6 +206,16 @@ CONFIG_PID_NS=y
 CONFIG_NET_NS=y
 
 # ============================================================================
+# NETWORKING
+# ----------------------------------------------------------------------------
+# NET/UNIX/INET carry no default: unnamed, olddefconfig resolves them to n and
+# the kernel loses socket() entirely.  See config/kernel-config.
+# ============================================================================
+CONFIG_NET=y
+CONFIG_UNIX=y
+CONFIG_INET=y
+
+# ============================================================================
 # FILESYSTEMS
 # ============================================================================
 CONFIG_EXT4_FS=y
