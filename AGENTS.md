@@ -359,13 +359,23 @@ mountpoint itself (which `rm -rf` cannot remove).
 rootfs prefix `build-base-cache.yml` publishes and resumes at `build-kernel`;
 both compute the key as `git ls-tree -r HEAD -- <the prefix inputs> | sha256sum
 | cut -c1-12`, and `config/` is hashed as a whole directory, so any kernel or
-build-config edit rotates the key. Nightly #102 lost that handshake: the
-producer ran 01:39-05:50 while the restore looked for its key at 03:06, both
+build-config edit rotates the key. Nightly #102 lost that handshake (clock
+times below are local, America/New_York; the GitHub API and cron table speak
+UTC, five hours ahead in EST): the
+producer ran 20:39-00:50 while the restore looked for its key at 22:06, both
 legs took the non-fatal miss and rebuilt 2h38m of cached stages, and the
 sysvinit leg died at its 5h30m budget with no ISO. The `ensure-base-cache` job
 now runs before `build-profiles`: it computes the same key from the same tree
 (both check out `ref: main`), and if `base-cache-latest` does not carry the two
-prefixes it dispatches the producer itself and polls up to `DEADLINE_MIN`
+prefixes it waits out a producer already in flight, and only dispatches one
+when none is running. The in-flight query must not be branch-scoped: both the
+handshake and the producer's build job hash the tree at `ref: main`, so a
+producer dispatched on any ref publishes the key this job restores -- the
+branch filter was measured dispatching a second producer for one identical
+prefix (runs 42367071203 and 42368745013, concurrent because
+`build-base-cache.yml` groups concurrency per workflow plus ref). The dispatch
+keeps the event ref, because the producer reads its key list from its own
+workflow file. The wait is capped at `DEADLINE_MIN`
 (270 min, measured from the 164-min worst publish gap). It can only ever be as
 slow as the old race, never as destructive: the step runs `set +e` (the runner
 evaluates `run:` blocks as `bash -e {0}`), has no `exit 1`, ends every path in
@@ -415,6 +425,8 @@ committed copies drift apart.
 16. If the project structure, stage order, or core configuration schema changes, update this AGENTS.md file to reflect the new reality.
 17. When the LFS/BLFS books are updated upstream, do not automatically bump the version. Check the changelog for patches that affect our build scripts, and create a feature branch to test the new version against our profiles before updating the VERSION file
 18. When attributing the commits and p/r, use a standard git ‘Signed-off-by:’ trailer with the repo committer identity instead of agent attribution, create feature branch, and wait for approval before merging.
+19. Never burn a long build workflow on a branch to "prove" a change — dispatching `lg3d.yml` (or any multi-hour build) from a feature branch spends ~5 h of runner time on a test, and the same work then has to be spent again on `main` after the merge. Prove CI behaviour locally (deterministic harness, simulated clock, `bash -e` as the runner does), and let the real evidence come from the run that happens on `main` after the change is merged. `build-base-cache.yml` dispatches are the exception only when a fresh key must land for tonight's build.
+20. All times quoted to the maintainer or written in this repository are local (America/New_York). The GitHub API answers in UTC; convert (EST is UTC-5, EDT UTC-4) before reporting a timestamp, and never present a UTC time as if it were local.
 ---
 
 ### Debugging and Troubleshooting

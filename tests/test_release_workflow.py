@@ -1360,17 +1360,21 @@ class TestLg3dBaseCacheHandshake:
     """Guardrails for the lg3d base-prefix-cache handshake.
 
     lg3d restores the prefix build-base-cache.yml publishes and resumes at
-    build-kernel, but the two only ever met by cron luck.  Nightly #102: the
-    producer started at 01:39 and its assets landed at 04:17 and 05:50, while
-    the nightly restore looked for them at 03:06/03:07.  A miss is
-    deliberately non-fatal, so BOTH legs quietly rebuilt the whole 2h38m
+    build-kernel, but the two only ever met by cron luck.  Nightly #102 (all
+    clock times local, America/New_York; the API speaks UTC, five hours
+    ahead): the producer started at 20:39 and its assets landed at 23:17 and
+    00:50, while the nightly restore looked for them at 22:06/22:07.  A miss
+    is deliberately non-fatal, so BOTH legs quietly rebuilt the whole 2h38m
     prefix: the systemd job took 4h20m of wall clock, the sysvinit job ran
     5h30m and was killed by its own budget having written no ISO.
 
     ensure-base-cache removes the timing assumption: it computes the same key
-    the restore will ask for, dispatches the producer when the assets are
-    missing, and waits.  Each assertion below protects one way that could
-    quietly stop being true - or one way the wait could cost an ISO.
+    the restore will ask for, waits out an in-flight producer or dispatches
+    one, and polls until the assets land.  Each assertion below protects one
+    way that could quietly stop being true - or one way the wait could cost
+    an ISO.  This behaviour is proven by the local stub harness (nine
+    simulated paths under bash -e), not by burning a 5 h lg3d leg on a PR
+    branch; the CI evidence is the nightly on main after the merge.
     """
 
     WORKFLOW = "lg3d.yml"
@@ -1434,7 +1438,7 @@ class TestLg3dBaseCacheHandshake:
         assert budget <= 360, budget
 
     def test_handshake_deadline_covers_the_measured_publish_gap(self):
-        """270 is not a round number: the restore looked at 03:06/03:07 and
+        """270 is not a round number: the restore looked at 22:06/22:07 and
         the two prefixes landed 71 and 164 minutes later.  A deadline under
         that gap would wait, give up, and rebuild anyway."""
         job = self._job()
@@ -1543,3 +1547,33 @@ class TestLg3dBaseCacheHandshake:
         assert "needs.ensure-base-cache.outputs.status" in restore
         assert workflow.index(f"  {self.JOB}:\n") < workflow.index(
             "- name: Restore base prefix cache")
+
+    def test_in_flight_detection_is_not_branch_scoped(self):
+        """The wait must count a producer running on ANY ref.
+
+        Both sides hash the tree at ref main - the handshake checks out main
+        and build-base-cache.yml's build job checks out main too - so a
+        producer dispatched on another ref publishes exactly the key this job
+        restores.  Filtering the query by ref was measured wrong on the first
+        live run of this job: a producer had been building on main since
+        06:10:42 local for key 36e4fb5daa6b (identical to the dispatching
+        commit's digest, which hashes no listed path), and 24 minutes later the
+        handshake saw zero in flight on its own ref and dispatched a second
+        producer for the same prefix - runs 42367071203 and 42368745013, both
+        in_progress at once because build-base-cache.yml groups concurrency
+        per workflow plus ref.
+        """
+        job = self._job()
+        code = "\n".join(line for line in job.splitlines()
+                         if not line.lstrip().startswith("#"))
+        query = [line for line in code.splitlines()
+                 if 'gh run list --workflow "$PRODUCER"' in line]
+        assert len(query) == 1, code
+        assert '--branch' not in query[0], query[0]
+        # The ref still matters where it is load-bearing: the dispatch has to
+        # carry our own workflow file so the producer hashes with our key
+        # list (a PR that edits the list must not publish the old key).
+        assert 'gh workflow run "$PRODUCER" --repo "$REPO" --ref "$REF_NAME"' \
+            in code
+        # and the in-flight count must still ignore finished runs
+        assert 'select(.status == "in_progress" or .status == "queued")' in code
