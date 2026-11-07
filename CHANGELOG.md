@@ -481,6 +481,64 @@
 
 ### Fixed
 
+- **lg3d raced the base-prefix producer: both nightly legs rebuilt 2h38m of
+  cached stages because nothing made the build wait for the cache it was
+  about to ask for** (`.github/workflows/lg3d.yml`,
+  `tests/test_release_workflow.py`)
+
+  The timing, from run 42332040251's own logs: the producer started at 01:39
+  and published `base-systemd-x86_64-56065563397d` at 05:50 and the sysvinit
+  prefix at 04:17, while the nightly restore looked at 03:06 and 03:07.  Both
+  lookups returned "No base cache published", the miss is deliberately
+  non-fatal, so each leg rebuilt the whole prefix: the systemd job took 4h20m
+  of wall clock (03:01:51 -> 07:22:31), the sysvinit job ran 03:01:52 ->
+  08:32:13 and was killed by its own 5h30m budget at stage 27/36
+  (`calamares-build`), with no ISO written.  Not a key mismatch -- the key the
+  nightly asked for is the key the producer published, 71 and 164 minutes too
+  late.
+
+  New `ensure-base-cache` job, and `build-profiles` now needs it.  It
+  computes the same 12-hex key the restore will hash, checks
+  `base-cache-latest` for both prefixes, and when either is absent dispatches
+  `build-base-cache.yml` on the same ref and polls until the assets land --
+  so a nightly either restores, or rebuilds after having genuinely waited.
+  `DEADLINE_MIN: 270` is derived from the measured gap above (164 minutes
+  worst case), not rounded; the job budget is 300 so the step always reaches
+  its report.  The handshake can only ever be as bad as today: `set +e`
+  (the runner executes `run:` blocks as `bash -e {0}`, which is what made
+  build-base-cache #7 discard two finished 21G prefixes over one `du`), no
+  `exit 1` anywhere, every path ends in `finish` -> `exit 0`, and
+  `build-profiles` keeps `!cancelled() && !failure()` so a red or killed
+  handshake still builds and still publishes.
+
+  Two defects the reproduction exposed before shipping, both now fixed and
+  pinned.  (a) The first key guard read `[ -z "$BASE_KEY" ]`, which can never
+  fire: `sha256sum` of an empty stream is a perfectly valid digest (measured:
+  `01ba4719c80b` for an unreadable path), so the guard moved to the blob list
+  (`$BASE_TREE`) and the digest is recomputed with `printf '%s\n'` -- proven
+  digest-identical to the direct pipe on the real tree, not assumed.
+  (b) The handshake checked out the event SHA while the restore checks out
+  `main`, so the two could hash different trees; both now use `ref: main`.
+
+  Seven paths exercised locally under `bash -e` with `gh`/`git`/`date`/`sleep`
+  stubbed and a simulated clock: ready (0 s), key-unavailable, dispatch-failed,
+  in-flight-then-published (240 s), own-dispatch-then-published (120 s),
+  own-dispatch-publishes-nothing (`incomplete`), deadline (16200 s of simulated
+  wait) -- each reported its status and exited 0.  Guardrail
+  `TestLg3dBaseCacheHandshake` (10 cases) pins the wiring, the deadline,
+  the no-abort property, the identical key list across all four sites (lg3d
+  handshake, lg3d restore, nightly restore, publisher) and the guard itself;
+  mutation-proved 11-for-11 -- dropping the `needs`, the `!failure()`,
+  `set +e`, `ref: main`, the printf newline, or the status log, moving a path
+  out of the key list, setting `DEADLINE_MIN` to 60 or 300, adding an `exit 1`
+  and restoring the dead `[ -z "$BASE_KEY" ]` each turn exactly the case that
+  protects them red.  `test_shell_continuations_use_the_repository_indent` now
+  covers `lg3d.yml` too.  Suite: 1161 passed / 22 skipped.
+
+  Consequence worth knowing: `lg3d-builds` is a workflow-level concurrency
+  group with `cancel-in-progress: false`, so while the handshake waits, a
+  fresh `lg3d.yml` dispatch queues rather than starting.
+
 - **lg3d nightly #102 published no ISO at all: the boot smoke gate sat in
   front of the artifact upload, and every kernel fragment ships a kernel with
   no `socket()` syscall** (`.github/workflows/lg3d.yml`,
@@ -537,9 +595,8 @@
   raced the producer, not a key mismatch.  Resuming from `build-kernel` would
   return the 2h38m those stages cost (summed from this run's own stage
   timings), which is what the `sysvinit` leg needs to stop exceeding the 5h30m
-  budget.  This change edits `config/`, so the key rotates again: dispatch
-  `build-base-cache.yml` on `main` after this lands, before judging the next
-  nightly's timing.
+  budget.  Fixed in the entry above (`ensure-base-cache`); the key this change
+  rotates is handled by that handshake, not by cron luck.
 
 - **Native builds silently planned an aarch64 cross-compile and emitted no
   x86_64 ISO name: `LFSConfig.set()` wrote its resolution-time overrides back

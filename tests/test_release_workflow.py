@@ -1,4 +1,8 @@
+import re
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 def test_release_workflow_restores_lfs_ownership_after_cache_copy():
@@ -500,7 +504,7 @@ class TestBasePrefixCache:
         and bash both accept them, so they survive every other gate.
         """
         offenders = []
-        for name in ("nightly.yml", "build-base-cache.yml"):
+        for name in ("nightly.yml", "build-base-cache.yml", "lg3d.yml"):
             for lineno, line, nxt in self._continuations(self._read(name)):
                 delta = self._indent(nxt) - self._indent(line)
                 if delta not in (0, 2):
@@ -1350,3 +1354,192 @@ class TestLg3dBaseCacheMountpoints:
         build_pos = workflow.index(
             'RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"')
         assert restore_pos < build_pos
+
+
+class TestLg3dBaseCacheHandshake:
+    """Guardrails for the lg3d base-prefix-cache handshake.
+
+    lg3d restores the prefix build-base-cache.yml publishes and resumes at
+    build-kernel, but the two only ever met by cron luck.  Nightly #102: the
+    producer started at 01:39 and its assets landed at 04:17 and 05:50, while
+    the nightly restore looked for them at 03:06/03:07.  A miss is
+    deliberately non-fatal, so BOTH legs quietly rebuilt the whole 2h38m
+    prefix: the systemd job took 4h20m of wall clock, the sysvinit job ran
+    5h30m and was killed by its own budget having written no ISO.
+
+    ensure-base-cache removes the timing assumption: it computes the same key
+    the restore will ask for, dispatches the producer when the assets are
+    missing, and waits.  Each assertion below protects one way that could
+    quietly stop being true - or one way the wait could cost an ISO.
+    """
+
+    WORKFLOW = "lg3d.yml"
+    JOB = "ensure-base-cache"
+
+    def _read(self, name=WORKFLOW):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _job(self):
+        workflow = self._read()
+        start = workflow.index(f"  {self.JOB}:\n")
+        end = workflow.index("  build-profiles:\n", start)
+        return workflow[start:end]
+
+    def _key_tokens(self, workflow, occurrence=0):
+        """The path list one `git ls-tree -r HEAD --' hashes, as tokens.
+
+        The handshake captures the list into a variable and pipes the
+        variable to sha256sum further down, so the block cannot be delimited
+        by 'cut -c1-12' the way the other three copies can; stop at the first
+        thing that ends the list instead (the '| sha256sum' pipe or the '$( )'
+        closing paren).
+        """
+        starts = [m.start() for m in
+                  re.finditer(r"git ls-tree -r HEAD --", workflow)]
+        assert starts, "no key computation found"
+        head = workflow[starts[occurrence] + len("git ls-tree -r HEAD --"):]
+        cut = head.find("| sha256sum")
+        close = head.find(")")
+        ends = [i for i in (cut, close) if i != -1]
+        body = head[:min(ends)] if ends else head
+        return body.replace(chr(92), " ").split()
+
+    def test_the_build_waits_for_the_handshake(self):
+        """The fix in one line: build-profiles must NEED the handshake job,
+        otherwise the legs start on their own schedule and the race is back.
+        """
+        workflow = self._read()
+        assert f"  {self.JOB}:\n" in workflow
+        build = workflow[workflow.index("  build-profiles:\n"):]
+        header = build.split("\n      - name:")[0]
+        assert "needs: [check_changes, ensure-base-cache]" in header
+
+    def test_a_red_or_cancelled_handshake_still_builds(self):
+        """A handshake that waits 270 minutes and then times out must not
+        skip the ISO build; a needs-only wiring would skip it, which is the
+        exact class of regression that made #102 publish nothing."""
+        workflow = self._read()
+        build = workflow[workflow.index("  build-profiles:\n"):]
+        guard = next(line for line in build.splitlines()
+                     if line.strip().startswith("if: needs.check_changes"))
+        assert "!cancelled()" in guard and "!failure()" in guard, guard
+
+    def test_handshake_deadline_is_shorter_than_its_own_job_budget(self):
+        """The step must always reach its report; a job killed by the
+        platform mid-wait leaves no status and no explanation in the log."""
+        job = self._job()
+        deadline = int(re.search(r'DEADLINE_MIN: "(\d+)"', job).group(1))
+        budget = int(re.search(r"timeout-minutes: (\d+)", job).group(1))
+        assert deadline < budget - 15, (deadline, budget)
+        assert budget <= 360, budget
+
+    def test_handshake_deadline_covers_the_measured_publish_gap(self):
+        """270 is not a round number: the restore looked at 03:06/03:07 and
+        the two prefixes landed 71 and 164 minutes later.  A deadline under
+        that gap would wait, give up, and rebuild anyway."""
+        job = self._job()
+        deadline = int(re.search(r'DEADLINE_MIN: "(\d+)"', job).group(1))
+        assert deadline >= 170, deadline
+
+    def test_no_path_through_the_handshake_can_fail_the_job(self):
+        """The step is executed by the runner as `bash -e {0}', so an
+        unguarded failing command aborts it; set +e and the absence of any
+        exit 1 are what keep a bad handshake a delay rather than a lost ISO.
+        """
+        job = self._job()
+        assert "set +e" in job
+        assert "exit 1" not in job
+        assert re.search(r"^\s*set -e\b", job, re.M) is None
+        # every reported status reaches finish(), the only place that writes
+        # the output and exits 0
+        lines = job.splitlines()
+        reported = []
+        for i, line in enumerate(lines):
+            if re.match(r"^\s+status=[a-z-]+$", line):
+                reported.append(line.strip())
+                window = "\n".join(lines[i + 1:i + 4])
+                assert "finish" in window, line.strip()
+        assert len(set(reported)) >= 6, reported
+
+    def test_handshake_reads_the_same_ref_as_the_consumer(self):
+        """The key hashes content, so a handshake on the event SHA and a
+        restore on main can ask for different prefixes.  Both check out main.
+        """
+        def ref_lines(block):
+            # comments are allowed to NAME ref: main (mine do); only the
+            # checkout mapping key counts
+            return [line.strip() for line in block.splitlines()
+                    if line.strip() in ("ref: main", "ref: ${{ github.ref }}")]
+
+        job = self._job()
+        checkout = job.split("steps:")[1].split("- name:")[0]
+        assert ref_lines(checkout) == ["ref: main"], checkout
+        workflow = self._read()
+        build = workflow.split("  build-profiles:\n")[1]
+        build_checkout = build.split("steps:")[1].split("- name:")[0]
+        assert ref_lines(build_checkout) == ["ref: main"], build_checkout
+
+    def test_all_key_lists_are_the_same_list(self):
+        """Drift between the producer, the two lg3d consumers and nightly is
+        a permanent silent miss - the very bug this job exists to catch."""
+        lg3d = self._read()
+        nightly = self._read("nightly.yml")
+        publisher = self._read("build-base-cache.yml")
+        copies = {
+            "lg3d handshake": self._key_tokens(lg3d, 0),
+            "lg3d restore": self._key_tokens(lg3d, 1),
+            "nightly restore": self._key_tokens(nightly, 0),
+            "publisher": self._key_tokens(publisher, 0),
+        }
+        for name, tokens in copies.items():
+            assert tokens, name
+            assert tokens == copies["publisher"], (
+                f"{name} hashes a different input list than the publisher: "
+                f"{set(tokens) ^ set(copies['publisher'])}")
+
+    def test_rehashing_through_a_variable_keeps_the_digest(self):
+        """The handshake hashes a captured variable, the other copies pipe
+        straight into sha256sum.  That is only equivalent while the capture
+        and the re-feed produce the same bytes - measured here on the real
+        repository tree, not argued."""
+        probe = subprocess.run(
+            ["git", "ls-tree", "-r", "HEAD", "--", "VERSION"],
+            capture_output=True, text=True)
+        if probe.returncode != 0:
+            pytest.skip("not inside a git checkout")
+        paths = self._key_tokens(self._read(), 0)
+        direct = subprocess.run(
+            f"git ls-tree -r HEAD -- {' '.join(paths)} | sha256sum | cut -c1-12",
+            shell=True, capture_output=True, text=True, check=True).stdout.strip()
+        via_var = subprocess.run(
+            'list=$(git ls-tree -r HEAD -- '
+            + ' '.join(paths)
+            + '); printf "%s\\n" "$list" | sha256sum | cut -c1-12',
+            shell=True, capture_output=True, text=True, check=True).stdout.strip()
+        assert via_var == direct, (via_var, direct)
+
+    def test_key_guard_is_not_dead_code(self):
+        """sha256sum of an empty stream is a valid 12-hex digest (measured:
+        an unreadable path hashes to 01ba4719c80b), so testing the digest for
+        emptiness can never fire.  The guard must sit on the blob list."""
+        job = self._job()
+        # comments may name the dead form to explain it; only code counts
+        code = "\n".join(line for line in job.splitlines()
+                         if not line.lstrip().startswith("#"))
+        assert '[ -z "$BASE_TREE" ]' in code
+        assert '[ -z "$BASE_KEY" ]' not in code
+        # ... and the re-feed has to be the exact form that
+        # test_rehashing_through_a_variable_keeps_the_digest just proved
+        # digest-equivalent to the direct pipe the other copies use.
+        assert """printf '%s\\n' "$BASE_TREE" | sha256sum | cut -c1-12""" in code
+
+    def test_restore_logs_the_handshake_decision(self):
+        """A nightly that rebuilds the prefix must say why in the step log;
+        re-deriving it from the workflow file after the fact is how #102 got
+        misdiagnosed as a cache-key bug instead of a timing bug."""
+        workflow = self._read()
+        restore = workflow[workflow.index("- name: Restore base prefix cache\n"):]
+        restore = restore.split("\n      - name: ")[0]
+        assert "needs.ensure-base-cache.outputs.status" in restore
+        assert workflow.index(f"  {self.JOB}:\n") < workflow.index(
+            "- name: Restore base prefix cache")

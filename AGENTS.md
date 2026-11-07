@@ -341,7 +341,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 | `xfce-live-boot-iso.yml` | manual/tag | Full live ISO release pipeline |
 | `release.yml` | tag push | Tagged release build pipeline |
 | `nightly.yml` | schedule | Matrix nightly profile builds |
-| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: the two `lg3d` legs only (systemd + sysvinit, x86_64), published to its own `lg3d-nightly-<date>` release |
+| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: the two `lg3d` legs only (systemd + sysvinit, x86_64), preceded by an `ensure-base-cache` handshake that waits for the base prefix the legs are about to restore, published to its own `lg3d-nightly-<date>` release |
 | `cross-compile.yml` | push/PR | ARM64 cross-compile verification |
 
 Every build job that writes under `/tmp/lfs-build`, `/tmp/lfs-sources` or
@@ -354,6 +354,25 @@ backing them with real disk. Any new workflow that scratches under `/tmp/lfs-*`
 must add the same step right after checkout, and must clear a scratch dir's
 *contents* (`rm -rf /tmp/lfs-build/* /tmp/lfs-build/.[!.]*`), never the bind
 mountpoint itself (which `rm -rf` cannot remove).
+
+**The base prefix cache is handed over, not raced.** `lg3d.yml` restores the
+rootfs prefix `build-base-cache.yml` publishes and resumes at `build-kernel`;
+both compute the key as `git ls-tree -r HEAD -- <the prefix inputs> | sha256sum
+| cut -c1-12`, and `config/` is hashed as a whole directory, so any kernel or
+build-config edit rotates the key. Nightly #102 lost that handshake: the
+producer ran 01:39-05:50 while the restore looked for its key at 03:06, both
+legs took the non-fatal miss and rebuilt 2h38m of cached stages, and the
+sysvinit leg died at its 5h30m budget with no ISO. The `ensure-base-cache` job
+now runs before `build-profiles`: it computes the same key from the same tree
+(both check out `ref: main`), and if `base-cache-latest` does not carry the two
+prefixes it dispatches the producer itself and polls up to `DEADLINE_MIN`
+(270 min, measured from the 164-min worst publish gap). It can only ever be as
+slow as the old race, never as destructive: the step runs `set +e` (the runner
+evaluates `run:` blocks as `bash -e {0}`), has no `exit 1`, ends every path in
+`exit 0`, and `build-profiles` keeps `!cancelled() && !failure()`. Any new
+consumer of the base cache must reuse that key list verbatim --
+`tests/test_release_workflow.py::TestLg3dBaseCacheHandshake` fails if the four
+committed copies drift apart.
 
 ---
 
