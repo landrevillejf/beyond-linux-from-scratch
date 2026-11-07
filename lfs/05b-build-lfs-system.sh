@@ -1318,6 +1318,7 @@ EOF
             --without-python \
             --without-systemd \
             --without-systemdsystemunitdir \
+            ADJTIME_PATH=/var/lib/hwclock/adjtime \
             --docdir=/usr/share/doc/util-linux-2.41.1
         make -j"$(nproc)"
         make install
