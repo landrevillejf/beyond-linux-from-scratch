@@ -558,6 +558,18 @@
     to require authentication by default; profiles that need auto-login (e.g., live ISO)
     can explicitly enable it.
 
+- **LFS/BLFS compliance audit findings remediated** (`config/build.conf`,
+  `config/lfs-build.conf`, `docs/books/`)
+  - **C-01 MAJOR**: Fixed `lfs_version` from `"13.0"` to `"12.4"` in `config/build.conf`
+    and `LFS_VERSION="12.4"` in `config/lfs-build.conf` to match actual implementation
+    (all build scripts reference LFS 12.4 sections and patches).
+  - **C-02 MAJOR**: Removed invalid 404 placeholder `docs/books/LFS-BOOK-13.0.pdf` (LFS 13.0
+    does not exist yet; current version is 12.4). The valid LFS 12.4 PDF (385 pages) remains
+    as the authoritative reference. BLFS 13.0 HTML books are present in `docs/books/` and
+    used by build scripts; PDF download from upstream returns 404.
+  - **C-03 MINOR**: Already fixed in PR #216 (S-07): `FIREWALL_BACKEND="nftables"` aligned in
+    `config/security.conf` to match `config/build.conf` and actual implementation.
+
 - **The lg3d BIOS smoke gate never ran a bootloader, and nothing proved the
   published pair was hybrid** (`tools/qemu-boot-smoke.sh`,
   `.github/workflows/lg3d.yml`, `final/15-create-live-system.sh`,
