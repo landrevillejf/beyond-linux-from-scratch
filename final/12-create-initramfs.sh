@@ -137,6 +137,13 @@ if [ "$BUSYBOX_BUILT" -eq 0 ]; then
         exit 1
     }
 
+    # Disable applets that require newer kernel headers or are not needed for initramfs
+    # CONFIG_TC (traffic control) fails to build on systems with older kernel headers
+    # and is not needed in the initramfs environment
+    for applet in CONFIG_TC CONFIG_FEATURE_TC_INGRESS CONFIG_TUNCTL CONFIG_FEATURE_TUNCTL_QUIET_FAILURE; do
+        sed -i "s/^${applet}=y/# ${applet} is not set/" .config 2>/dev/null || true
+    done
+
     # Build busybox with baseline CFLAGS for maximum compatibility
     # -march=x86-64: baseline x86_64 (no AVX, no SSE4, etc.)
     # -mtune=generic: optimize for generic CPU
