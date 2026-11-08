@@ -129,13 +129,17 @@ log_info "Booting $ARTIFACT (accel=$ACCEL, memory=$BOOT_MEMORY, timeout=${BOOT_T
 
 # timeout killing QEMU is the expected outcome: once the guest reaches a
 # login prompt it never exits on its own (-no-reboot only guards reboots).
-# -cpu max: the busybox binary in the initramfs is downloaded from
-# busybox.net as a pre-built x86_64-musl static, which is compiled with
-# AVX instructions (vmovdqu etc.).  QEMU's default "qemu64" CPU model
-# doesn't expose AVX, so busybox traps with "invalid opcode" and the
-# kernel panics before userspace is reached.  "-cpu max" enables every
-# CPU feature the accelerator supports (AVX/AVX2/AES/...), which is
-# what the busybox binary expects.
+# -cpu qemu64: the busybox binary in the initramfs is now built from source
+# with baseline CFLAGS (-march=x86-64, no AVX), so the smoke test must use
+# a baseline CPU model to catch AVX-dependent binaries.  The old `-cpu max`
+# enabled every CPU feature the accelerator supports (AVX/AVX2/AES/...),
+# which masked the lg3d nightly 20261108 failure: the pre-built busybox
+# from busybox.net required AVX (vmovdqu instruction), panicked with
+# "Attempted to kill init! exitcode=0x00000004" on systems without AVX
+# (VirtualBox default, pre-2011 CPUs), but passed CI because `-cpu max`
+# exposed AVX.  Using `-cpu qemu64` (baseline x86_64 without AVX) ensures
+# the smoke test fails on AVX-dependent binaries, matching real-world
+# hardware compatibility.
 # The guest console goes to $LOG through -serial file:, not through
 # -nographic: measured on a Fedora 44 host (qemu 9.x) the same invocation
 # with `-nographic >$LOG 2>&1` left the log at 0 bytes while
@@ -145,7 +149,7 @@ log_info "Booting $ARTIFACT (accel=$ACCEL, memory=$BOOT_MEMORY, timeout=${BOOT_T
 # to the same file the greps below read.
 timeout "$BOOT_TIMEOUT" qemu-system-x86_64 \
     -machine q35,accel="$ACCEL" \
-    -cpu max \
+    -cpu qemu64 \
     -m "$BOOT_MEMORY" -smp 2 \
     -kernel "$WORKDIR/vmlinuz" \
     -initrd "$WORKDIR/initrd.img" \

@@ -24,6 +24,22 @@ LFS="${LFS:-/output/image}"
 INITRAMFS_DIR="${LFS}/boot/initramfs-tmp"
 INITRAMFS_OUTPUT="${LFS}/boot/initramfs.img"
 
+# --------------------------------------------------------------------------
+# Logging helpers
+# --------------------------------------------------------------------------
+log_info()  { echo "[INFO] $*"; }
+log_error() { echo "[ERROR] $*" >&2; }
+log_warn()  { echo "[WARNING] $*"; }
+
+# Sources directory: the chroot mirror is the canonical copy.  builder.py
+# exports LFS as its --output directory, and every consumer of the image
+# resolves output_dir/sources – the same layout lfs/08-build-kernel.sh uses.
+SOURCES_HOST="$LFS/sources"
+if [ ! -d "$SOURCES_HOST" ]; then
+    log_error "Sources directory not found: $SOURCES_HOST"
+    exit 1
+fi
+
 # Target architecture, same convention as blfs/28-knowledge.sh.  uname -m is
 # only the last resort: on a cross-compile the host arch is not the target's,
 # and picking busybox by the host is what put an x86_64 shell into the arm64
@@ -39,69 +55,125 @@ rm -rf "$INITRAMFS_DIR"
 mkdir -pv "$INITRAMFS_DIR"/{bin,dev,etc,lib,lib64,mnt,proc,root,sbin,sys,tmp,usr,var}
 
 # --------------------------------------------------------------------------
-# Find or download busybox
+# Helper function to check if a binary is statically linked
 # --------------------------------------------------------------------------
 # The initramfs has no libc yet, so busybox must be statically linked: a
 # dynamic one is copied happily and then dies at exec with "No such file or
 # directory", which reads like a missing file rather than a missing
 # interpreter.  readelf is authoritative – a static executable carries no
-# PT_INTERP program header – and final/16 already relies on readelf being on
-# the host.
+# PT_INTERP program header.
 is_static_binary() {
     [ -f "$1" ] || return 1
     command -v readelf >/dev/null 2>&1 || return 0
     ! readelf -lW "$1" 2>/dev/null | grep -q 'INTERP'
 }
 
-BUSYBOX_SRC=""
-for candidate in "$LFS/bin/busybox" "$LFS/usr/bin/busybox" \
-    "$LFS/sbin/busybox" "$LFS/usr/sbin/busybox"; do
-    if is_static_binary "$candidate"; then
-        BUSYBOX_SRC="$candidate"
-        break
+# --------------------------------------------------------------------------
+# Build busybox from source with baseline CFLAGS
+# --------------------------------------------------------------------------
+# The initramfs has no libc yet, so busybox must be statically linked.  We
+# build it from source inside the chroot with baseline CFLAGS (-march=x86-64)
+# to ensure compatibility with all x86_64 systems, including those without
+# AVX support.  The pre-built binaries from busybox.net are compiled for
+# x86_64-v3/v4 microarchitectures and require AVX instructions (vmovdqu etc.),
+# which cause "invalid opcode" traps on systems without AVX and kernel panics
+# with "Attempted to kill init! exitcode=0x00000004" (lg3d nightly 20261108,
+# VirtualBox and QEMU with default CPU model).
+#
+# Building from source also eliminates the supply-chain risk of downloading
+# a pre-built binary without checksum verification.
+# --------------------------------------------------------------------------
+BUSYBOX_VERSION="1.36.1"
+BUSYBOX_TARBALL="busybox-${BUSYBOX_VERSION}.tar.bz2"
+BUSYBOX_URL="https://busybox.net/downloads/${BUSYBOX_TARBALL}"
+BUSYBOX_SRC_DIR="/tmp/busybox-build"
+
+# Check if we already built a static busybox in a previous run
+if [ -x "$INITRAMFS_DIR/bin/busybox" ] && is_static_binary "$INITRAMFS_DIR/bin/busybox"; then
+    log_info "Using previously built busybox from $INITRAMFS_DIR/bin/busybox"
+    BUSYBOX_BUILT=1
+else
+    BUSYBOX_BUILT=0
+fi
+
+if [ "$BUSYBOX_BUILT" -eq 0 ]; then
+    log_info "Building busybox $BUSYBOX_VERSION from source with baseline CFLAGS..."
+    
+    # Download busybox source if not already present
+    if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ]; then
+        log_info "Downloading busybox source from $BUSYBOX_URL"
+        wget -q -O "$SOURCES_HOST/$BUSYBOX_TARBALL" "$BUSYBOX_URL" || {
+            log_error "Failed to download busybox source from $BUSYBOX_URL"
+            exit 1
+        }
     fi
-done
-
-if [ -z "$BUSYBOX_SRC" ]; then
-    HOST_BUSYBOX="$(command -v busybox 2>/dev/null)"
-    if is_static_binary "$HOST_BUSYBOX"; then
-        BUSYBOX_SRC="$HOST_BUSYBOX"
-        echo "[INFO] Using host busybox: $BUSYBOX_SRC"
+    
+    # Extract and build busybox
+    rm -rf "$BUSYBOX_SRC_DIR"
+    mkdir -p "$BUSYBOX_SRC_DIR"
+    cd "$BUSYBOX_SRC_DIR"
+    
+    log_info "Extracting busybox source..."
+    tar -xf "$SOURCES_HOST/$BUSYBOX_TARBALL" || {
+        log_error "Failed to extract busybox tarball"
+        exit 1
+    }
+    cd "busybox-${BUSYBOX_VERSION}" || {
+        log_error "Busybox source directory not found"
+        exit 1
+    }
+    
+    # Configure busybox with defconfig (baseline configuration)
+    log_info "Configuring busybox (make defconfig)..."
+    make defconfig >/dev/null 2>&1 || {
+        log_error "Failed to configure busybox"
+        exit 1
+    }
+    
+    # Enable static linking in the config
+    # CONFIG_STATIC=y ensures busybox is built as a static binary
+    sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || {
+        log_error "Failed to enable CONFIG_STATIC in busybox config"
+        exit 1
+    }
+    
+    # Build busybox with baseline CFLAGS for maximum compatibility
+    # -march=x86-64: baseline x86_64 (no AVX, no SSE4, etc.)
+    # -mtune=generic: optimize for generic CPU
+    # -O2: standard optimization level
+    # -static: static linking (redundant with CONFIG_STATIC but explicit)
+    log_info "Building busybox with CFLAGS='-march=x86-64 -mtune=generic -O2 -static'..."
+    make CFLAGS="-march=x86-64 -mtune=generic -O2 -static" \
+         LDFLAGS="-static" \
+         -j"$(nproc)" >/dev/null 2>&1 || {
+        log_error "Failed to build busybox"
+        log_error "Check that gcc and make are installed in the chroot"
+        exit 1
+    }
+    
+    # Verify the built binary is static
+    if ! is_static_binary busybox; then
+        log_error "Built busybox is not a static binary"
+        log_error "This will fail in the initramfs (no libc available)"
+        exit 1
     fi
+    
+    log_info "Busybox built successfully (static binary verified)"
+    
+    # Install busybox into the initramfs
+    mkdir -p "$INITRAMFS_DIR/bin"
+    cp -v busybox "$INITRAMFS_DIR/bin/busybox" || {
+        log_error "Failed to copy busybox to initramfs"
+        exit 1
+    }
+    chmod 755 "$INITRAMFS_DIR/bin/busybox"
+    
+    # Clean up build directory
+    cd /
+    rm -rf "$BUSYBOX_SRC_DIR"
+    
+    log_info "Busybox installed to $INITRAMFS_DIR/bin/busybox"
 fi
-
-# busybox.net publishes prebuilt statics for i686 and x86_64 only – there is
-# no aarch64 musl build to fetch – so on any other target the host's
-# busybox-static is the only source.  Downloading the x86_64 binary there
-# produced an initramfs whose shell could not exec, and nothing caught it:
-# final/16 only checks that boot/initramfs* exists and no arm64 artifact was
-# ever booted.
-case "$TARGET_ARCH" in
-x86_64) BUSYBOX_TRIPLET="x86_64-linux-musl" ;;
-i686 | i386) BUSYBOX_TRIPLET="i686-linux-musl" ;;
-*) BUSYBOX_TRIPLET="" ;;
-esac
-
-if [ -z "$BUSYBOX_SRC" ] && [ -n "$BUSYBOX_TRIPLET" ]; then
-    echo "[INFO] Busybox not found. Downloading static binary..."
-    BUSYBOX_URL="https://busybox.net/downloads/binaries/1.35.0-${BUSYBOX_TRIPLET}/busybox"
-    wget -q -O /tmp/busybox "$BUSYBOX_URL"
-    chmod +x /tmp/busybox
-    BUSYBOX_SRC="/tmp/busybox"
-    echo "[INFO] Downloaded busybox to $BUSYBOX_SRC"
-fi
-
-if [ -z "$BUSYBOX_SRC" ]; then
-    echo "[ERROR] No static busybox is available for target $TARGET_ARCH."
-    echo "        busybox.net publishes statics for i686 and x86_64 only, so on"
-    echo "        this architecture either install one on the host:"
-    echo "          apt-get install busybox-static"
-    echo "        or build busybox into the target rootfs."
-    exit 1
-fi
-
-cp -a "$BUSYBOX_SRC" "$INITRAMFS_DIR/bin/busybox"
-chmod 755 "$INITRAMFS_DIR/bin/busybox"
 
 # Create symlinks, ignoring 'busybox' itself
 cd "$INITRAMFS_DIR/bin"
