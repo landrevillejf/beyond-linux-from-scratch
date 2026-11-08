@@ -5552,27 +5552,28 @@ class TestNightly232IsoOutputGuardrails:
 
         A dynamic one is copied happily and then dies at exec with "No such
         file or directory", which reads like a missing file rather than a
-        missing interpreter.  busybox.net publishes statics for i686 and
-        x86_64 only, so on aarch64 there is nothing to download and the
-        absence has to be a hard error.
+        missing interpreter.  The busybox binary is now built from source
+        with baseline CFLAGS (-march=x86-64) to ensure compatibility with
+        all x86_64 systems, including those without AVX support.  The
+        pre-built binaries from busybox.net required AVX instructions and
+        caused kernel panics on systems without AVX (lg3d nightly 20261108).
         """
         code = self._code(self.INITRAMFS.read_text())
         fn = code[code.index('is_static_binary() {'):]
         fn = fn[:fn.index('\n}\n')]
         assert 'readelf -lW' in fn and 'INTERP' in fn, \
             'PT_INTERP is the authoritative static/dynamic discriminator'
-        triplets = code[code.index('BUSYBOX_TRIPLET='):]
-        triplets = triplets[:triplets.index('if [ -z "$BUSYBOX_SRC" ]')]
-        assert 'x86_64-linux-musl' in triplets
-        assert 'i686-linux-musl' in triplets
-        assert 'aarch64' not in triplets, \
-            'there is no aarch64 static on busybox.net; the URL would 404'
-        error = code[code.index('[ERROR] No static busybox'):]
-        error = error[:error.index('cp -a "$BUSYBOX_SRC"')]
-        assert 'exit 1' in error, \
-            'a target with no static busybox must not fall through to a ' \
-            'dynamic one, which produces an initramfs that cannot exec'
-        assert 'busybox-static' in error, 'the message must name the fix'
+        # Verify busybox is built from source with baseline CFLAGS
+        assert 'BUSYBOX_VERSION=' in code, \
+            'busybox version must be pinned for reproducible builds'
+        assert 'make defconfig' in code, \
+            'busybox must be configured with defconfig'
+        assert 'CONFIG_STATIC=y' in code, \
+            'busybox must be built as a static binary'
+        assert '-march=x86-64' in code, \
+            'busybox must use baseline CFLAGS (no AVX) for universal compatibility'
+        assert 'is_static_binary busybox' in code, \
+            'the built busybox must be verified as static before installation'
 
     def test_arm64_kernel_can_mount_its_own_iso(self):
         """The arm64 ISO rootfs is an xz squashfs on ISO9660 behind a loop.
