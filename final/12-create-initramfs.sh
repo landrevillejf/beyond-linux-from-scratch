@@ -27,9 +27,9 @@ INITRAMFS_OUTPUT="${LFS}/boot/initramfs.img"
 # --------------------------------------------------------------------------
 # Logging helpers
 # --------------------------------------------------------------------------
-log_info()  { echo "[INFO] $*"; }
+log_info() { echo "[INFO] $*"; }
 log_error() { echo "[ERROR] $*" >&2; }
-log_warn()  { echo "[WARNING] $*"; }
+log_warn() { echo "[WARNING] $*"; }
 
 # Sources directory: the chroot mirror is the canonical copy.  builder.py
 # exports LFS as its --output directory, and every consumer of the image
@@ -98,7 +98,7 @@ fi
 
 if [ "$BUSYBOX_BUILT" -eq 0 ]; then
     log_info "Building busybox $BUSYBOX_VERSION from source with baseline CFLAGS..."
-    
+
     # Download busybox source if not already present
     if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ]; then
         log_info "Downloading busybox source from $BUSYBOX_URL"
@@ -107,12 +107,12 @@ if [ "$BUSYBOX_BUILT" -eq 0 ]; then
             exit 1
         }
     fi
-    
+
     # Extract and build busybox
     rm -rf "$BUSYBOX_SRC_DIR"
     mkdir -p "$BUSYBOX_SRC_DIR"
     cd "$BUSYBOX_SRC_DIR"
-    
+
     log_info "Extracting busybox source..."
     tar -xf "$SOURCES_HOST/$BUSYBOX_TARBALL" || {
         log_error "Failed to extract busybox tarball"
@@ -122,21 +122,21 @@ if [ "$BUSYBOX_BUILT" -eq 0 ]; then
         log_error "Busybox source directory not found"
         exit 1
     }
-    
+
     # Configure busybox with defconfig (baseline configuration)
     log_info "Configuring busybox (make defconfig)..."
     make defconfig >/dev/null 2>&1 || {
         log_error "Failed to configure busybox"
         exit 1
     }
-    
+
     # Enable static linking in the config
     # CONFIG_STATIC=y ensures busybox is built as a static binary
     sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || {
         log_error "Failed to enable CONFIG_STATIC in busybox config"
         exit 1
     }
-    
+
     # Build busybox with baseline CFLAGS for maximum compatibility
     # -march=x86-64: baseline x86_64 (no AVX, no SSE4, etc.)
     # -mtune=generic: optimize for generic CPU
@@ -144,22 +144,22 @@ if [ "$BUSYBOX_BUILT" -eq 0 ]; then
     # -static: static linking (redundant with CONFIG_STATIC but explicit)
     log_info "Building busybox with CFLAGS='-march=x86-64 -mtune=generic -O2 -static'..."
     make CFLAGS="-march=x86-64 -mtune=generic -O2 -static" \
-         LDFLAGS="-static" \
-         -j"$(nproc)" >/dev/null 2>&1 || {
+        LDFLAGS="-static" \
+        -j"$(nproc)" >/dev/null 2>&1 || {
         log_error "Failed to build busybox"
         log_error "Check that gcc and make are installed in the chroot"
         exit 1
     }
-    
+
     # Verify the built binary is static
     if ! is_static_binary busybox; then
         log_error "Built busybox is not a static binary"
         log_error "This will fail in the initramfs (no libc available)"
         exit 1
     fi
-    
+
     log_info "Busybox built successfully (static binary verified)"
-    
+
     # Install busybox into the initramfs
     mkdir -p "$INITRAMFS_DIR/bin"
     cp -v busybox "$INITRAMFS_DIR/bin/busybox" || {
@@ -167,11 +167,11 @@ if [ "$BUSYBOX_BUILT" -eq 0 ]; then
         exit 1
     }
     chmod 755 "$INITRAMFS_DIR/bin/busybox"
-    
+
     # Clean up build directory
     cd /
     rm -rf "$BUSYBOX_SRC_DIR"
-    
+
     log_info "Busybox installed to $INITRAMFS_DIR/bin/busybox"
 fi
 
