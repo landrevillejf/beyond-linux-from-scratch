@@ -17,72 +17,72 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-log_info()  { echo -e "${BLUE}[INFO]${NC} $*"; }
-log_ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
-log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
+log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_ok() { echo -e "${GREEN}[OK]${NC} $*"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
-log_fail()  { echo -e "${RED}[FAIL]${NC} $*" >&2; }
+log_fail() { echo -e "${RED}[FAIL]${NC} $*" >&2; }
 
 BUSYBOX_VERSION="1.36.1"
 
 verify_script_changes() {
     log_info "Verifying changes in final/12-create-initramfs.sh..."
-    
+
     local script="final/12-create-initramfs.sh"
-    
+
     if [ ! -f "$script" ]; then
         log_error "Script not found: $script"
         return 1
     fi
-    
+
     # Check for source build logic
     if ! grep -q "BUSYBOX_VERSION=\"${BUSYBOX_VERSION}\"" "$script"; then
         log_error "Busybox version not pinned to ${BUSYBOX_VERSION}"
         return 1
     fi
     log_ok "Busybox version pinned: ${BUSYBOX_VERSION}"
-    
+
     # Check for baseline CFLAGS
     if ! grep -q '\-march=x86-64' "$script"; then
         log_error "Baseline CFLAGS (-march=x86-64) not found"
         return 1
     fi
     log_ok "Baseline CFLAGS present: -march=x86-64"
-    
+
     if ! grep -q '\-mtune=generic' "$script"; then
         log_error "Generic tuning (-mtune=generic) not found"
         return 1
     fi
     log_ok "Generic tuning present: -mtune=generic"
-    
+
     # Check for static linking
     if ! grep -q 'CONFIG_STATIC=y' "$script"; then
         log_error "Static linking configuration not found"
         return 1
     fi
     log_ok "Static linking configured: CONFIG_STATIC=y"
-    
+
     # Check for readelf verification
     if ! grep -q 'is_static_binary' "$script"; then
         log_error "Static binary verification function not found"
         return 1
     fi
     log_ok "Static binary verification present"
-    
+
     # Check that problematic applets are disabled
     if ! grep -q 'CONFIG_TC' "$script"; then
         log_warn "TC applet disable not found (may cause build failures)"
     else
         log_ok "Problematic applets (TC) will be disabled"
     fi
-    
+
     # Check that old download logic is removed
     if grep -q "busybox.net/downloads/binaries" "$script"; then
         log_error "Old pre-built binary download logic still present"
         return 1
     fi
     log_ok "Old pre-built binary download logic removed"
-    
+
     # Verify script syntax
     if ! bash -n "$script" 2>/dev/null; then
         log_error "Script has syntax errors"
@@ -93,28 +93,28 @@ verify_script_changes() {
 
 verify_smoke_test_changes() {
     log_info "Verifying changes in tools/qemu-boot-smoke.sh..."
-    
+
     local script="tools/qemu-boot-smoke.sh"
-    
+
     if [ ! -f "$script" ]; then
         log_error "Script not found: $script"
         return 1
     fi
-    
+
     # Check for baseline CPU model
     if ! grep -q '\-cpu qemu64' "$script"; then
         log_error "Baseline CPU model (-cpu qemu64) not found"
         return 1
     fi
     log_ok "Baseline CPU model present: -cpu qemu64"
-    
+
     # Check that old -cpu max is removed from the actual command (not comments)
     if grep -v '^#' "$script" | grep -q '\-cpu max'; then
         log_error "Old -cpu max still present in command (should be -cpu qemu64)"
         return 1
     fi
     log_ok "Old -cpu max removed from command"
-    
+
     # Verify script syntax
     if ! bash -n "$script" 2>/dev/null; then
         log_error "Script has syntax errors"
@@ -125,21 +125,21 @@ verify_smoke_test_changes() {
 
 verify_test_changes() {
     log_info "Verifying changes in tests/test_acceptance_shell.py..."
-    
+
     local test_file="tests/test_acceptance_shell.py"
-    
+
     if [ ! -f "$test_file" ]; then
         log_error "Test file not found: $test_file"
         return 1
     fi
-    
+
     # Check that test was updated for source build
     if ! grep -q 'BUSYBOX_VERSION=' "$test_file"; then
         log_error "Test not updated for source build approach"
         return 1
     fi
     log_ok "Test updated for source build approach"
-    
+
     # Check that test verifies baseline CFLAGS
     if ! grep -q '\-march=x86-64' "$test_file"; then
         log_error "Test does not verify baseline CFLAGS"
@@ -150,21 +150,21 @@ verify_test_changes() {
 
 verify_changelog() {
     log_info "Verifying CHANGELOG.md entry..."
-    
+
     local changelog="CHANGELOG.md"
-    
+
     if [ ! -f "$changelog" ]; then
         log_error "CHANGELOG.md not found"
         return 1
     fi
-    
+
     # Check for AVX fix entry
     if ! grep -q "AVX support" "$changelog"; then
         log_error "CHANGELOG entry for AVX fix not found"
         return 1
     fi
     log_ok "CHANGELOG entry present"
-    
+
     # Check for busybox version mention
     if ! grep -q "busybox 1.36.1" "$changelog"; then
         log_warn "CHANGELOG does not mention busybox version"
@@ -175,22 +175,22 @@ verify_changelog() {
 
 check_build_dependencies() {
     log_info "Checking build dependencies (informational)..."
-    
+
     local missing=()
-    
+
     for cmd in gcc make wget tar readelf objdump; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             missing+=("$cmd")
         fi
     done
-    
+
     if [ ${#missing[@]} -gt 0 ]; then
         log_warn "Missing commands: ${missing[*]}"
         log_warn "These are needed in the chroot for busybox build"
     else
         log_ok "All build commands available"
     fi
-    
+
     # Check for static libraries (optional but recommended)
     if [ -f /usr/lib64/libc.a ] || [ -f /usr/lib/x86_64-linux-gnu/libc.a ]; then
         log_ok "Static libc available"
@@ -201,7 +201,7 @@ check_build_dependencies() {
 }
 
 generate_report() {
-    cat << EOF
+    cat <<EOF
 
 ================================================================================
                     VALIDATION REPORT
@@ -253,24 +253,24 @@ EOF
 main() {
     log_info "Starting busybox AVX fix validation..."
     echo
-    
+
     verify_script_changes || exit 1
     echo
-    
+
     verify_smoke_test_changes || exit 1
     echo
-    
+
     verify_test_changes || exit 1
     echo
-    
+
     verify_changelog || exit 1
     echo
-    
+
     check_build_dependencies
     echo
-    
+
     generate_report
-    
+
     log_ok "All validations passed!"
     log_info "The fix is correctly configured and ready for the next build."
     exit 0
