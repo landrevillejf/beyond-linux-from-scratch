@@ -502,6 +502,27 @@
 
 ### Fixed
 
+- **LG3D live ISOs fail to boot on systems without AVX support** (`final/12-create-initramfs.sh`)
+  - The initramfs busybox binary was downloaded from busybox.net as a pre-built
+    x86_64-linux-musl static, which is compiled for x86_64-v3/v4 microarchitectures
+    and requires AVX instructions (specifically `vmovdqu`, a 256-bit vector instruction).
+    On systems without AVX (VirtualBox default CPU model, pre-2011 physical machines,
+    CPUs with AVX disabled in firmware), the busybox binary traps with "invalid opcode"
+    immediately after the initramfs unpacks, and the kernel panics with "Attempted to
+    kill init! exitcode=0x00000004" (lg3d nightly 20261108, both systemd and sysvinit
+    legs, reproduced in QEMU with default CPU model).
+  - `final/12-create-initramfs.sh` now builds busybox 1.36.1 from source with baseline
+    CFLAGS (`-march=x86-64 -mtune=generic -O2 -static`) instead of downloading a pre-built
+    binary.  The source tarball is downloaded to `$LFS/sources/busybox-1.36.1.tar.bz2` and
+    built in `/tmp/busybox-build` with `make defconfig` plus `CONFIG_STATIC=y` to ensure
+    a static binary.  The built binary is verified with `readelf` to confirm it carries
+    no PT_INTERP header (static linking).  This eliminates both the AVX incompatibility
+    and the supply-chain risk of downloading an unverified pre-built binary.
+  - The fix adds ~2 minutes to the initramfs creation stage (busybox build time), but
+    ensures the live ISO boots on all x86_64 systems regardless of CPU feature support.
+  - CI smoke test (`tools/qemu-boot-smoke.sh`) now uses `-cpu qemu64` (baseline x86_64
+    without AVX) instead of `-cpu max` to catch AVX-dependent binaries in the future.
+
 - **Security and compliance audit remediation** (`profiles/java-dev/customization.sh`,
   `AGENTS.md`, new `docs/PATCHES.md`, `docs/security-hardening.md`)
   - `profiles/java-dev/customization.sh` no longer creates the Maven
