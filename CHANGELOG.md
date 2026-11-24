@@ -4,6 +4,38 @@
 
 ### Added
 
+- **Live ISO firmware target made a builder parameter: `--boot {bios,uefi,hybrid}`**
+  (`builder.py`, `config/build.conf`, `config/default.json`,
+  `final/15-create-live-system.sh`, `.github/workflows/lg3d.yml`,
+  `tests/test_builder.py`, `tests/test_acceptance_shell.py`)
+  - `builder.py` gains a `--boot` flag with the closed choice list
+    `{bios, uefi, hybrid}` that overrides the new `live_system.boot_mode`
+    config key (default `hybrid`) through the usual
+    flag -> `config.set` -> `refresh_executor` path; the key flattens to
+    `LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE` for the stage.  A typo fails fast in
+    argparse rather than writing an unrecognised image.
+  - `final/15-create-live-system.sh` reads that mode and branches its
+    construction: `bios` packs isolinux + the isohybrid MBR and skips every
+    EFI step (grub-mkstandalone, the FAT16 ESP, the El Torito alt-boot entry
+    and the GPT record), `uefi` packs the GRUB EFI ESP alone, and `hybrid` --
+    the default -- emits the exact byte-for-byte original xorriso command, so
+    no other profile's ISO changes.  An unknown value warns and falls back to
+    hybrid, keeping the "never stop producing an ISO" rule intact.
+  - `.github/workflows/lg3d.yml` is retargeted to the deliverable the profile
+    is built for: the matrix now runs the single `sysvinit` leg and passes
+    `--boot bios`, and the base-cache handshake loops over `sysvinit` only.
+    The UEFI smoke test, the "Enable UEFI support" config patch and the
+    hybrid-structure check stay present but gated on `matrix.boot != 'bios'`,
+    so a future uefi/hybrid leg re-enables them by flipping the matrix; the
+    BIOS smoke and BIOS-firmware gates stay ungated (they validate the BIOS
+    path), and the `grub-efi-amd64-bin`/`ovmf` install stays so final/14
+    preflight and the toolchain guardrail keep passing.
+  - Guardrails: `test_acceptance_shell.py` locks the mode-gated EFI branch and
+    the hybrid default in `final/15`, replacing the old `'BIOS-only' not in
+    code` blanket with the real invariant (no *silent* downgrade);
+    `test_builder.py` covers the `--boot` override, the env export, the
+    shipped hybrid default and the unknown-choice rejection.
+
 - **LFS/BLFS book compliance improvements** (`lfs/05b-build-lfs-system.sh`,
   `.gitignore`)
   - Util-linux configure now matches LFS 12.4 Section 8.79 exactly: adds

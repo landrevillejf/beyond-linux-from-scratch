@@ -40,7 +40,8 @@
     "enabled": false,
     "squashfs_compression": "xz",
     "persistence_support": true,
-    "default_boot": "live"
+    "default_boot": "live",
+    "boot_mode": "hybrid"
   },
   "installer": {
     "type": "none"

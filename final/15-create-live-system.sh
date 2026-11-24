@@ -1,6 +1,8 @@
 #!/bin/bash
 # final/15-create-live-system.sh
-# Create a live system with squashfs and hybrid ISO (BIOS+UEFI)
+# Create a live system with squashfs and a bootable ISO whose firmware target
+# is selected by live_system.boot_mode: bios (isolinux + MBR), uefi (GRUB EFI),
+# or the default hybrid (both).  See the --boot flag / LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE.
 # Author: Jean-Francois Landreville, landrevillejf@protonmail.com, 2026.
 set -e
 
@@ -28,6 +30,18 @@ SQUASHFS="${SCRATCH_DIR}/live.squashfs"
 COMPRESSION="${LFS_CONFIG_LIVE_SYSTEM_SQUASHFS_COMPRESSION:-xz}"
 PERSISTENCE_SUPPORT="${LFS_CONFIG_LIVE_SYSTEM_PERSISTENCE_SUPPORT:-true}"
 DEFAULT_BOOT="${LFS_CONFIG_LIVE_SYSTEM_DEFAULT_BOOT:-live}"
+# Firmware the ISO must boot.  hybrid is the default so every profile that does
+# not name a mode keeps the shipped behaviour unchanged; bios and uefi are
+# opt-in via --boot.  An unrecognised value falls back to hybrid rather than
+# silently producing a media nobody asked for.
+BOOT_MODE="${LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE:-hybrid}"
+case "$BOOT_MODE" in
+bios | uefi | hybrid) ;;
+*)
+    echo "[WARNING] unknown live_system.boot_mode '$BOOT_MODE'; using hybrid"
+    BOOT_MODE="hybrid"
+    ;;
+esac
 
 # This stage builds an x86 hybrid: isolinux for BIOS, an isohybrid MBR and
 # GPT, and an x86 BCJ filter for the squashfs.  No aarch64 profile enables
@@ -45,16 +59,15 @@ if [ "$ARCH" = "aarch64" ]; then
 fi
 
 echo "[INFO] Creating live system (squashfs + ISO)..."
-echo "[INFO] Compression: $COMPRESSION, Persistence: $PERSISTENCE_SUPPORT, Default boot: $DEFAULT_BOOT"
+echo "[INFO] Compression: $COMPRESSION, Persistence: $PERSISTENCE_SUPPORT, Default boot: $DEFAULT_BOOT, Boot mode: $BOOT_MODE"
 
-# Vérifier les outils nécessaires.  UEFI is mandatory, not optional: the live
-# ISO is the lg3d deliverable and a BIOS-only image cannot boot on the UEFI
-# firmware every modern machine has.  mkfs.vfat (dosfstools) + mmd/mcopy
-# (mtools) build the FAT16 ESP without a sudo loop mount, so the stage stays
-# runnable as the unprivileged builder user.
-# unsquashfs is not only the packing tool's counterpart, it is how the stage
-# proves below that the boot-critical paths actually landed in the image.
-for tool in mksquashfs unsquashfs xorriso mkfs.vfat mmd mcopy; do
+# Vérifier les outils nécessaires.  mksquashfs/unsquashfs/xorriso are needed for
+# every boot mode: unsquashfs is not only the packing tool's counterpart, it is
+# how the stage proves below that the boot-critical paths actually landed in the
+# image.  The EFI payload tools (mkfs.vfat/mmd/mcopy + grub-mkstandalone) are
+# required only when the image must carry a UEFI entry (uefi or hybrid); a
+# bios-mode image must build on a host with no EFI toolchain at all.
+for tool in mksquashfs unsquashfs xorriso; do
     if ! command -v "$tool" >/dev/null 2>&1; then
         echo "[ERROR] $tool not found. Please install it."
         echo "        Debian/Ubuntu: apt install squashfs-tools xorriso dosfstools mtools"
@@ -63,30 +76,44 @@ for tool in mksquashfs unsquashfs xorriso mkfs.vfat mmd mcopy; do
     fi
 done
 
+if [ "$BOOT_MODE" != "bios" ]; then
+    for tool in mkfs.vfat mmd mcopy; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            echo "[ERROR] $tool not found but the $BOOT_MODE image needs an EFI System Partition."
+            echo "        Debian/Ubuntu: apt install dosfstools mtools"
+            echo "        Fedora:        dnf install dosfstools mtools"
+            exit 1
+        fi
+    done
+fi
+
 # grub-mkstandalone embeds grub.cfg + all modules into one self-contained
 # BOOTX64.EFI (no prefix/module dir to go missing at boot); Fedora names it
 # grub2-mkstandalone.  Resolve either, then require the x86_64-efi modules it
 # packs from.  final/15 used to *consume* a pre-existing
 # $LFS/boot/efi/EFI/BOOT/BOOTX64.EFI that nothing ever created in CI, warn, and
 # silently ship a BIOS-only ISO -- the reason no lg3d image booted on UEFI.
-GRUB_MKSTANDALONE=""
-for cand in grub-mkstandalone grub2-mkstandalone; do
-    if command -v "$cand" >/dev/null 2>&1; then
-        GRUB_MKSTANDALONE="$cand"
-        break
+# Only required when the image carries a UEFI entry (uefi or hybrid).
+if [ "$BOOT_MODE" != "bios" ]; then
+    GRUB_MKSTANDALONE=""
+    for cand in grub-mkstandalone grub2-mkstandalone; do
+        if command -v "$cand" >/dev/null 2>&1; then
+            GRUB_MKSTANDALONE="$cand"
+            break
+        fi
+    done
+    if [ -z "$GRUB_MKSTANDALONE" ]; then
+        echo "[ERROR] grub-mkstandalone not found: cannot build the UEFI boot image."
+        echo "        Debian/Ubuntu: apt install grub-efi-amd64-bin"
+        echo "        Fedora:        dnf install grub2-tools-extra grub2-efi-x64-modules"
+        exit 1
     fi
-done
-if [ -z "$GRUB_MKSTANDALONE" ]; then
-    echo "[ERROR] grub-mkstandalone not found: cannot build the UEFI boot image."
-    echo "        Debian/Ubuntu: apt install grub-efi-amd64-bin"
-    echo "        Fedora:        dnf install grub2-tools-extra grub2-efi-x64-modules"
-    exit 1
-fi
-if [ ! -f /usr/lib/grub/x86_64-efi/modinfo.sh ]; then
-    echo "[ERROR] GRUB x86_64-efi modules are not installed."
-    echo "        Debian/Ubuntu: apt install grub-efi-amd64-bin"
-    echo "        Fedora:        dnf install grub2-efi-x64-modules"
-    exit 1
+    if [ ! -f /usr/lib/grub/x86_64-efi/modinfo.sh ]; then
+        echo "[ERROR] GRUB x86_64-efi modules are not installed."
+        echo "        Debian/Ubuntu: apt install grub-efi-amd64-bin"
+        echo "        Fedora:        dnf install grub2-efi-x64-modules"
+        exit 1
+    fi
 fi
 
 # Trouver noyau et initramfs
@@ -355,34 +382,35 @@ isolinux_payload() {
     done
 }
 
-isolinux_payload "$ISO_DIR/isolinux" || exit 1
-
-# The isohybrid MBR that makes the same image writable onto a stick.  Losing
-# it is not survivable: xorriso would abort on the missing file anyway, but
-# only after the squashfs has been packed into the image.
-ISOHDPFX=$(isolinux_file isohdpfx.bin) || ISOHDPFX=""
-if [ -z "$ISOHDPFX" ]; then
-    echo "[ERROR] isohdpfx.bin not found: no hybrid MBR can be written."
-    echo "        It ships with isolinux (Debian/Ubuntu) or syslinux."
-    exit 1
-fi
-
-# Configuration isolinux
-# Console parameters for the live kernel, shared with the grub.cfg below.
-# Two console= options on purpose, and the order is the whole point: printk
-# goes to EVERY registered console, but /dev/console - where init, the boot
-# scripts and the rc.d messages are written - is the LAST one named.  Putting
-# ttyS0 last is what makes the serial line carry the userspace stream and not
-# only the kernel log.  The CI UEFI smoke test boots through the loader below
-# and appends nothing to this cmdline, so without a serial console in it that
-# step is blind by construction: it greps a log only GRUB writes to.  Proven
-# on the 20261106 image - a QEMU BIOS boot of that ISO produced a 0-byte
-# serial log while its VGA console showed the entire boot attempt.  The screen
-# still mirrors every kernel message, and on a machine whose UART is absent or
-# not connected the ttyS0 registration simply fails and tty0 stays the
-# console, so nothing changes for a user booting the media.
+# Console parameters for the live kernel, shared by isolinux.cfg and grub.cfg
+# below.  Two console= options on purpose, and the order is the whole point:
+# printk goes to EVERY registered console, but /dev/console - where init, the
+# boot scripts and the rc.d messages are written - is the LAST one named.
+# Putting ttyS0 last is what makes the serial line carry the userspace stream
+# and not only the kernel log.  The CI boot smoke tests boot through a loader
+# and append nothing to this cmdline, so without a serial console in it they
+# are blind by construction: they grep a log only GRUB writes to.  Proven on
+# the 20261106 image - a QEMU BIOS boot of that ISO produced a 0-byte serial
+# log while its VGA console showed the entire boot attempt.  The screen still
+# mirrors every kernel message, and on a machine whose UART is absent or not
+# connected the ttyS0 registration simply fails and tty0 stays the console.
 LIVE_CONSOLE="console=tty0 console=ttyS0,115200n8"
-cat >"$ISO_DIR/isolinux/isolinux.cfg" <<EOF
+
+# --- BIOS (isolinux) payload: built for bios and hybrid, skipped for uefi ---
+if [ "$BOOT_MODE" != "uefi" ]; then
+    isolinux_payload "$ISO_DIR/isolinux" || exit 1
+
+    # The isohybrid MBR that makes the same image writable onto a stick.  Losing
+    # it is not survivable: xorriso would abort on the missing file anyway, but
+    # only after the squashfs has been packed into the image.
+    ISOHDPFX=$(isolinux_file isohdpfx.bin) || ISOHDPFX=""
+    if [ -z "$ISOHDPFX" ]; then
+        echo "[ERROR] isohdpfx.bin not found: no hybrid MBR can be written."
+        echo "        It ships with isolinux (Debian/Ubuntu) or syslinux."
+        exit 1
+    fi
+
+    cat >"$ISO_DIR/isolinux/isolinux.cfg" <<EOF
 default ${DEFAULT_BOOT}
 label live
   kernel vmlinuz
@@ -391,24 +419,27 @@ label live-verbose
   kernel vmlinuz
   append initrd=initrd.img root=/dev/sr0 ro ${LIVE_CONSOLE}
 EOF
+fi
 
 # --- UEFI boot image: GRUB standalone inside a FAT16 ESP -------------------
-# Proven end-to-end under OVMF (no -kernel): firmware loads the El Torito
-# no-emulation EFI boot image as a block device and runs \EFI\BOOT\BOOTX64.EFI
-# from a FAT on it.  Two traps this avoids: (1) a raw PE binary passed via
-# `-e EFI/BOOT/BOOTX64.EFI` is not a FAT, so firmware reports "UEFI QEMU
-# DVD-ROM ... Not Found"; (2) `mkfs.vfat -F 32` on a small image yields a
-# too-few-clusters FAT32 OVMF also rejects.  FAT16 + a tree-file efi.img (the
-# combination grub-mkrescue itself emits: `-e '/efi.img'`) is what boots.
-#
-# The generated grub.cfg MUST `search` for the kernel and set root to the
-# ISO9660 volume.  GRUB is loaded out of the FAT16 efi.img, whose only file
-# is \EFI\BOOT\BOOTX64.EFI, so its default root is that ESP -- a bare
-# `linux /isolinux/vmlinuz` then resolves against the ESP and aborts with
-# "file `/isolinux/vmlinuz' not found" / "you need to load the kernel
-# first" (the exact failure the shipped 0.57.4 lg3d ISO showed under OVMF).
-GRUB_CFG_LIVE="${SCRATCH_DIR}/grub-live.cfg"
-cat >"$GRUB_CFG_LIVE" <<EOF
+# Built for uefi and hybrid, skipped for bios.
+if [ "$BOOT_MODE" != "bios" ]; then
+    # Proven end-to-end under OVMF (no -kernel): firmware loads the El Torito
+    # no-emulation EFI boot image as a block device and runs \EFI\BOOT\BOOTX64.EFI
+    # from a FAT on it.  Two traps this avoids: (1) a raw PE binary passed via
+    # `-e EFI/BOOT/BOOTX64.EFI` is not a FAT, so firmware reports "UEFI QEMU
+    # DVD-ROM ... Not Found"; (2) `mkfs.vfat -F 32` on a small image yields a
+    # too-few-clusters FAT32 OVMF also rejects.  FAT16 + a tree-file efi.img (the
+    # combination grub-mkrescue itself emits: `-e '/efi.img'`) is what boots.
+    #
+    # The generated grub.cfg MUST `search` for the kernel and set root to the
+    # ISO9660 volume.  GRUB is loaded out of the FAT16 efi.img, whose only file
+    # is \EFI\BOOT\BOOTX64.EFI, so its default root is that ESP -- a bare
+    # `linux /isolinux/vmlinuz` then resolves against the ESP and aborts with
+    # "file `/isolinux/vmlinuz' not found" / "you need to load the kernel
+    # first" (the exact failure the shipped 0.57.4 lg3d ISO showed under OVMF).
+    GRUB_CFG_LIVE="${SCRATCH_DIR}/grub-live.cfg"
+    cat >"$GRUB_CFG_LIVE" <<EOF
 serial --speed=115200 --unit=0 --word=8 --parity=no --stop=1
 terminal_input serial console
 terminal_output serial console
@@ -425,89 +456,120 @@ menuentry "LFS Live (verbose)" {
 }
 EOF
 
-EFI_DIR="${SCRATCH_DIR}/efi-payload"
-rm -rf "$EFI_DIR"
-mkdir -p "$EFI_DIR"
-echo "[INFO] Building self-contained GRUB EFI binary ($GRUB_MKSTANDALONE x86_64-efi)..."
-"$GRUB_MKSTANDALONE" -O x86_64-efi \
-    -o "$EFI_DIR/BOOTX64.EFI" \
-    "boot/grub/grub.cfg=$GRUB_CFG_LIVE"
-if [ ! -s "$EFI_DIR/BOOTX64.EFI" ]; then
-    echo "[ERROR] $GRUB_MKSTANDALONE produced no BOOTX64.EFI"
-    exit 1
-fi
-
-# FAT16 ESP sized to hold the standalone binary plus slack.  -F 16 pins the FAT
-# type so a future size change can never flip it to the FAT32 OVMF rejects.
-# mtools writes it without a sudo loop mount.
-EFI_IMG="${SCRATCH_DIR}/efi.img"
-rm -f "$EFI_IMG"
-EFI_KB=$(($(stat -c %s "$EFI_DIR/BOOTX64.EFI") / 1024 + 4096))
-dd if=/dev/zero of="$EFI_IMG" bs=1K count="$EFI_KB" status=none
-mkfs.vfat -F 16 -n ESP "$EFI_IMG" >/dev/null
-mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT
-mcopy -i "$EFI_IMG" "$EFI_DIR/BOOTX64.EFI" ::EFI/BOOT/BOOTX64.EFI
-# The El Torito EFI entry references efi.img by its path in the ISO tree.
-cp -v "$EFI_IMG" "$ISO_DIR/efi.img"
-
-# Construction de l'ISO hybride (BIOS isolinux + UEFI GRUB), toujours.
-echo "[INFO] Building hybrid BIOS+UEFI ISO..."
-xorriso -as mkisofs \
-    -iso-level 4 \
-    -r -V "LFS_LIVE" \
-    -J -joliet-long \
-    -isohybrid-mbr "$ISOHDPFX" \
-    -b isolinux/isolinux.bin \
-    -c isolinux/boot.cat \
-    -boot-load-size 4 -boot-info-table -no-emul-boot \
-    -eltorito-alt-boot -e efi.img -no-emul-boot \
-    -isohybrid-gpt-basdat \
-    -o "$ISO_OUT" "$ISO_DIR"
-
-# Read the BIOS payload back out of the finished image.  xorriso exits 0
-# whether or not the modules it was told to pack are complete, and
-# tools/qemu-boot-smoke.sh boots with -kernel/-initrd, so it never runs
-# isolinux at all: without this gate an ISO missing ldlinux.c32 passes every
-# automated check and fails on the first real boot, as nightly #70 did.
-VERIFY_BOOT="${SCRATCH_DIR}/verify-boot-payload.bin"
-for need in isolinux.bin ldlinux.c32 libcom32.c32; do
-    rm -f "$VERIFY_BOOT"
-    if ! xorriso -osirrox on -indev "$ISO_OUT" \
-        -extract "/isolinux/$need" "$VERIFY_BOOT" >/dev/null 2>&1 ||
-        [ ! -s "$VERIFY_BOOT" ]; then
-        echo "[ERROR] $ISO_OUT carries no /isolinux/$need; it cannot boot."
-        rm -f "$VERIFY_BOOT" "$ISO_OUT"
+    EFI_DIR="${SCRATCH_DIR}/efi-payload"
+    rm -rf "$EFI_DIR"
+    mkdir -p "$EFI_DIR"
+    echo "[INFO] Building self-contained GRUB EFI binary ($GRUB_MKSTANDALONE x86_64-efi)..."
+    "$GRUB_MKSTANDALONE" -O x86_64-efi \
+        -o "$EFI_DIR/BOOTX64.EFI" \
+        "boot/grub/grub.cfg=$GRUB_CFG_LIVE"
+    if [ ! -s "$EFI_DIR/BOOTX64.EFI" ]; then
+        echo "[ERROR] $GRUB_MKSTANDALONE produced no BOOTX64.EFI"
         exit 1
     fi
-done
-rm -f "$VERIFY_BOOT"
-echo "[INFO] BIOS boot payload verified in image"
 
-# Read the UEFI El Torito boot image back out and prove it carries a real GRUB
-# EFI binary.  xorriso exits 0 even when `-e` names a file that never became a
-# valid ESP, and the BIOS-payload gate above cannot see the EFI entry, so
-# without this the BIOS-only regression that shipped for 8 months would pass
-# every stage check again.  The authoritative proof that firmware actually
-# boots it is the lg3d.yml UEFI smoke test, which runs OVMF against the
-# finished ISO with no -kernel.
-VERIFY_ESP="${SCRATCH_DIR}/verify-efi.img"
-VERIFY_EFI="${SCRATCH_DIR}/verify-BOOTX64.EFI"
-rm -f "$VERIFY_ESP" "$VERIFY_EFI"
-if ! xorriso -osirrox on -indev "$ISO_OUT" \
-    -extract "/efi.img" "$VERIFY_ESP" >/dev/null 2>&1 ||
-    [ ! -s "$VERIFY_ESP" ]; then
-    echo "[ERROR] $ISO_OUT carries no /efi.img El Torito EFI boot image."
-    rm -f "$VERIFY_ESP" "$VERIFY_EFI" "$ISO_OUT"
-    exit 1
+    # FAT16 ESP sized to hold the standalone binary plus slack.  -F 16 pins the FAT
+    # type so a future size change can never flip it to the FAT32 OVMF rejects.
+    # mtools writes it without a sudo loop mount.
+    EFI_IMG="${SCRATCH_DIR}/efi.img"
+    rm -f "$EFI_IMG"
+    EFI_KB=$(($(stat -c %s "$EFI_DIR/BOOTX64.EFI") / 1024 + 4096))
+    dd if=/dev/zero of="$EFI_IMG" bs=1K count="$EFI_KB" status=none
+    mkfs.vfat -F 16 -n ESP "$EFI_IMG" >/dev/null
+    mmd -i "$EFI_IMG" ::EFI ::EFI/BOOT
+    mcopy -i "$EFI_IMG" "$EFI_DIR/BOOTX64.EFI" ::EFI/BOOT/BOOTX64.EFI
+    # The El Torito EFI entry references efi.img by its path in the ISO tree.
+    cp -v "$EFI_IMG" "$ISO_DIR/efi.img"
 fi
-if ! mcopy -i "$VERIFY_ESP" ::EFI/BOOT/BOOTX64.EFI "$VERIFY_EFI" >/dev/null 2>&1 ||
-    [ "$(head -c 2 "$VERIFY_EFI" 2>/dev/null)" != "MZ" ]; then
-    echo "[ERROR] $ISO_OUT /efi.img has no bootable \\EFI\\BOOT\\BOOTX64.EFI (not a PE/MZ image)."
-    rm -f "$VERIFY_ESP" "$VERIFY_EFI" "$ISO_OUT"
-    exit 1
+
+# Construction de l'ISO selon le mode de demarrage demande.
+case "$BOOT_MODE" in
+bios)
+    echo "[INFO] Building BIOS-only ISO (isolinux + isohybrid MBR, no EFI)..."
+    xorriso -as mkisofs \
+        -iso-level 4 \
+        -r -V "LFS_LIVE" \
+        -J -joliet-long \
+        -isohybrid-mbr "$ISOHDPFX" \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -boot-load-size 4 -boot-info-table -no-emul-boot \
+        -o "$ISO_OUT" "$ISO_DIR"
+    ;;
+uefi)
+    echo "[INFO] Building UEFI-only ISO (GRUB EFI ESP, no isolinux)..."
+    xorriso -as mkisofs \
+        -iso-level 4 \
+        -r -V "LFS_LIVE" \
+        -J -joliet-long \
+        -e efi.img -no-emul-boot \
+        -boot-load-size 4 \
+        -o "$ISO_OUT" "$ISO_DIR"
+    ;;
+hybrid)
+    echo "[INFO] Building hybrid BIOS+UEFI ISO..."
+    xorriso -as mkisofs \
+        -iso-level 4 \
+        -r -V "LFS_LIVE" \
+        -J -joliet-long \
+        -isohybrid-mbr "$ISOHDPFX" \
+        -b isolinux/isolinux.bin \
+        -c isolinux/boot.cat \
+        -boot-load-size 4 -boot-info-table -no-emul-boot \
+        -eltorito-alt-boot -e efi.img -no-emul-boot \
+        -isohybrid-gpt-basdat \
+        -o "$ISO_OUT" "$ISO_DIR"
+    ;;
+esac
+
+if [ "$BOOT_MODE" != "uefi" ]; then
+    # Read the BIOS payload back out of the finished image.  xorriso exits 0
+    # whether or not the modules it was told to pack are complete, and
+    # tools/qemu-boot-smoke.sh boots with -kernel/-initrd, so it never runs
+    # isolinux at all: without this gate an ISO missing ldlinux.c32 passes every
+    # automated check and fails on the first real boot, as nightly #70 did.
+    VERIFY_BOOT="${SCRATCH_DIR}/verify-boot-payload.bin"
+    for need in isolinux.bin ldlinux.c32 libcom32.c32; do
+        rm -f "$VERIFY_BOOT"
+        if ! xorriso -osirrox on -indev "$ISO_OUT" \
+            -extract "/isolinux/$need" "$VERIFY_BOOT" >/dev/null 2>&1 ||
+            [ ! -s "$VERIFY_BOOT" ]; then
+            echo "[ERROR] $ISO_OUT carries no /isolinux/$need; it cannot boot."
+            rm -f "$VERIFY_BOOT" "$ISO_OUT"
+            exit 1
+        fi
+    done
+    rm -f "$VERIFY_BOOT"
+    echo "[INFO] BIOS boot payload verified in image"
 fi
-rm -f "$VERIFY_ESP" "$VERIFY_EFI"
-echo '[INFO] UEFI El Torito boot image verified (FAT16 + \EFI\BOOT\BOOTX64.EFI)'
+
+if [ "$BOOT_MODE" != "bios" ]; then
+    # Read the UEFI El Torito boot image back out and prove it carries a real GRUB
+    # EFI binary.  xorriso exits 0 even when `-e` names a file that never became a
+    # valid ESP, and the BIOS-payload gate above cannot see the EFI entry, so
+    # without this the BIOS-only regression that shipped for 8 months would pass
+    # every stage check again.  The authoritative proof that firmware actually
+    # boots it is the lg3d.yml UEFI smoke test, which runs OVMF against the
+    # finished ISO with no -kernel.
+    VERIFY_ESP="${SCRATCH_DIR}/verify-efi.img"
+    VERIFY_EFI="${SCRATCH_DIR}/verify-BOOTX64.EFI"
+    rm -f "$VERIFY_ESP" "$VERIFY_EFI"
+    if ! xorriso -osirrox on -indev "$ISO_OUT" \
+        -extract "/efi.img" "$VERIFY_ESP" >/dev/null 2>&1 ||
+        [ ! -s "$VERIFY_ESP" ]; then
+        echo "[ERROR] $ISO_OUT carries no /efi.img El Torito EFI boot image."
+        rm -f "$VERIFY_ESP" "$VERIFY_EFI" "$ISO_OUT"
+        exit 1
+    fi
+    if ! mcopy -i "$VERIFY_ESP" ::EFI/BOOT/BOOTX64.EFI "$VERIFY_EFI" >/dev/null 2>&1 ||
+        [ "$(head -c 2 "$VERIFY_EFI" 2>/dev/null)" != "MZ" ]; then
+        echo "[ERROR] $ISO_OUT /efi.img has no bootable \\EFI\\BOOT\\BOOTX64.EFI (not a PE/MZ image)."
+        rm -f "$VERIFY_ESP" "$VERIFY_EFI" "$ISO_OUT"
+        exit 1
+    fi
+    rm -f "$VERIFY_ESP" "$VERIFY_EFI"
+    echo '[INFO] UEFI El Torito boot image verified (FAT16 + \EFI\BOOT\BOOTX64.EFI)'
+fi
 
 # Report (never judge) the hybrid layout so the stage log carries it:
 # xorriso writes reports on stderr.  The gate is the lg3d.yml step, which runs
@@ -516,8 +578,10 @@ echo '[INFO] UEFI El Torito boot image verified (FAT16 + \EFI\BOOT\BOOTX64.EFI)'
 xorriso -indev "$ISO_OUT" -report_system_area as_plain 2>&1 | grep -a "Boot record" ||
     echo "[WARNING] could not report the system area of $ISO_OUT"
 
-# Nettoyage
-rm -rf "$ISO_DIR" "$SQUASHFS" "$EFI_IMG" "$EFI_DIR" "$GRUB_CFG_LIVE"
+# Nettoyage.  The EFI scratch vars exist only for uefi/hybrid; the :- guard keeps
+# a bios-mode cleanup from calling rm on an empty argument (which, under set -e,
+# would abort the stage after the image was already written).
+rm -rf "$ISO_DIR" "$SQUASHFS" "${EFI_IMG:-}" "${EFI_DIR:-}" "${GRUB_CFG_LIVE:-}"
 
 echo "[SUCCESS] Live ISO created at $ISO_OUT"
 ls -lh "$ISO_OUT"
