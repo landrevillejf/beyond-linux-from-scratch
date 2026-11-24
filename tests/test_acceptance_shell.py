@@ -5797,8 +5797,39 @@ class TestLiveIsoUefiHybridGuardrails:
         # The old consume-a-prebuilt-EFI path is what made it BIOS-only.
         assert 'boot/efi/EFI/BOOT' not in code, \
             'final/15 must not consume a prebuilt EFI file nobody creates'
-        assert 'EFI_OPTION' not in code and 'BIOS-only' not in code, \
-            'final/15 must not keep the silent BIOS-only fallback'
+        # The historical defect was a SILENT downgrade: EFI was consumed from a
+        # phantom prebuilt file, so every image came out BIOS-only with nobody
+        # asking.  BIOS is now an explicit, param-driven mode selected by
+        # live_system.boot_mode (default hybrid), so the invariant to protect
+        # is that no downgrade can happen silently -- not that the word 'bios'
+        # never appears.  EFI_OPTION was the flag that made the fallback both
+        # opt-in and silent; it must not come back.
+        assert 'EFI_OPTION' not in code, \
+            'final/15 must not keep the silent EFI-vs-BIOS fallback'
+        assert 'LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE:-hybrid' in code, \
+            'final/15 must default the live boot mode to hybrid'
+        assert 'case "$BOOT_MODE"' in code, \
+            'final/15 must build the image from an explicit boot mode'
+
+    def test_live_iso_bios_mode_is_gated_never_the_default(self):
+        """BIOS is a mode you ask for; hybrid is what you get by default.
+
+        lg3d ships BIOS-only by passing --boot bios; every other profile keeps
+        the hybrid media.  final/15 must therefore gate the EFI construction
+        behind an explicit boot mode whose default is hybrid, so a leg that
+        forgot --boot still produces the hybrid image rather than silently
+        dropping the EFI entry -- the exact silent regression this class exists
+        to forbid.
+        """
+        code = self._code(self.LIVE.read_text())
+        assert 'BOOT_MODE="${LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE:-hybrid}"' in code, \
+            'final/15 must read the boot mode and default it to hybrid'
+        # The EFI branch is skipped only when BIOS was explicitly requested.
+        assert 'if [ "$BOOT_MODE" != "bios" ]; then' in code, \
+            'final/15 must build the EFI image unless bios was selected'
+        # And the three constructions are chosen by the mode, not hardcoded.
+        for arm in ('bios)', 'uefi)', 'hybrid)'):
+            assert arm in code, f'final/15 xorriso construction lacks the {arm} arm'
 
     def test_live_iso_efi_boot_image_is_fat16_never_fat32(self):
         """FAT32 on a small image is the exact trap OVMF rejects."""

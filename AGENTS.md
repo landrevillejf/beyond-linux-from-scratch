@@ -123,6 +123,17 @@ scripts. Both `LFS_CONFIG_INSTALLER_TYPE` and
 `LFS_PROFILE_GRAPHICAL_INSTALLER` are exported through the usual
 `_flatten_config()` path, so no extra export code exists for them.
 
+`live_system.boot_mode` (`bios`, `uefi`, or the default `hybrid`) is the live
+ISO firmware target and follows the same CLI-override pattern: `--boot
+{bios,uefi,hybrid}` sets it in `main()` and refreshes the executor, and it
+flattens to `LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE`, which
+`final/15-create-live-system.sh` reads to branch its isolinux/EFI/xorriso
+construction (`bios` drops the GRUB EFI ESP, the El Torito alt-boot entry and
+the GPT record; `uefi` drops isolinux; `hybrid` emits the byte-for-byte
+original command). A profile that never passes `--boot` keeps the hybrid
+media, and final/15 falls back to hybrid on an unknown value, so the default
+can never silently stop shipping a bootable ISO.
+
 The hardening program (Phases 1-8) adds two conditional final stages and a
 resolved-baseline gate. `security`/`selinux`/`runtime-hardening` are scheduled
 on `get_security_baseline()` -- the per-profile `security_hardening` flag OR
@@ -190,9 +201,13 @@ requires so the composited 2D desktop and the X11 WM/compositor share one
 JVM; `--iso` must stay paired with `-x` or the feature silently disables.
 The stage runs on the
 JDK the `java-dev` stage installs, so it must stay ordered after it. The
-profile pins `init_system: systemd`, but `.github/workflows/lg3d.yml` builds it
-on both `systemd` and `sysvinit` via `--init` (which overrides the pinned
-value), so both session-wiring paths are exercised nightly.
+profile pins `init_system: systemd`, but `.github/workflows/lg3d.yml` now
+overrides it with `--init sysvinit` and builds that single leg, passing
+`--boot bios` so the deliverable ISO is BIOS-only (isolinux + isohybrid MBR,
+no EFI entry); the UEFI smoke test and the hybrid-structure check stay in the
+workflow but are gated `matrix.boot != 'bios'`. Both session-wiring paths
+remain implemented in the stage -- the nightly simply exercises the sysvinit
+one.
 
 The `lg3d` profile also sets `privacy_tools: True` (alongside
 `security_hardening: True`), so the `privacy` stage
@@ -341,7 +356,7 @@ All workflows live in `.github/workflows/`. Key pipelines:
 | `xfce-live-boot-iso.yml` | manual/tag | Full live ISO release pipeline |
 | `release.yml` | tag push | Tagged release build pipeline |
 | `nightly.yml` | schedule | Matrix nightly profile builds |
-| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: the two `lg3d` legs only (systemd + sysvinit, x86_64), preceded by an `ensure-base-cache` handshake that waits for the base prefix the legs are about to restore, published to its own `lg3d-nightly-<date>` release |
+| `lg3d.yml` | schedule/manual | Project Looking Glass nightly: the single `lg3d` sysvinit leg (x86_64) building a BIOS-only ISO via `--boot bios`, preceded by an `ensure-base-cache` handshake that waits for the base prefix the leg is about to restore, published to its own `lg3d-nightly-<date>` release |
 | `cross-compile.yml` | push/PR | ARM64 cross-compile verification |
 
 Every build job that writes under `/tmp/lfs-build`, `/tmp/lfs-sources` or

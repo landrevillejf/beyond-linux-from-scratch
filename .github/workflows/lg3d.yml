@@ -123,7 +123,7 @@ jobs:
           BASE_KEY=$(printf '%s\n' "$BASE_TREE" | sha256sum | cut -c1-12)
           echo "Base cache key for ${HEAD_SHA:0:7}: ${BASE_KEY}"
           missing=()
-          for init in systemd sysvinit; do
+          for init in sysvinit; do
             prefix="base-${init}-x86_64-${BASE_KEY}"
             if has_asset "${prefix}.tar.zst.part-00"; then
               echo "ready: ${prefix}"
@@ -209,16 +209,22 @@ jobs:
         # pins init_system=systemd (its lg3d-compositor.service unit is what
         # blfs/30-install-lg3d.sh writes on that path), java_dev (the JDK
         # that stage runs on) and xorg_only.  --init overrides the pinned
-        # value, and the stage also wires a sysvinit session (an
-        # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel
-        # 5), so both init flavours are built and exercised here.  These two
-        # legs are the whole point of the workflow: no minimal canary rides
-        # along (nightly.yml already re-proves the from-scratch prefix on
-        # every profile), so a red leg here is a red lg3d ISO and nothing
-        # else publishes under the lg3d-nightly tag.
+        # value; this workflow builds the sysvinit leg alone -- the
+        # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel 5.
+        # A red leg here is a red lg3d ISO and nothing else publishes under
+        # the lg3d-nightly tag (nightly.yml already re-proves the from-scratch
+        # prefix on every profile).
+        #
+        # boot is fed to builder.py --boot, which exports live_system.boot_mode
+        # so final/15 writes the media accordingly.  'bios' produces an
+        # isolinux + isohybrid-MBR ISO with no EFI entry, so the UEFI smoke
+        # test and the hybrid-structure check below are skipped by a
+        # matrix.boot != 'bios' guard; they stay in the file, ready for a
+        # future uefi/hybrid leg.
         profile: [ lg3d ]
-        init: [ systemd, sysvinit ]
+        init: [ sysvinit ]
         arch: [ x86_64 ]
+        boot: [ bios ]
     permissions:
       contents: write
     env:
@@ -490,6 +496,7 @@ jobs:
           echo "🗑️ Removed cached kernel to force fresh download for all architectures"
 
       - name: Enable UEFI support for lg3d profile
+        if: matrix.boot != 'bios'
         run: |
           # lg3d is the showcase profile for hybrid BIOS+UEFI boot: patch
           # build.conf to enable UEFI support before the build starts.
@@ -688,6 +695,7 @@ jobs:
             --profile "$PROFILE" \
             --init ${{ matrix.init }} \
             --arch ${{ matrix.arch }} \
+            --boot ${{ matrix.boot }} \
             --output ./build-release \
             --verbose \
             --nightly \
@@ -945,7 +953,7 @@ jobs:
           fi
 
       - name: Boot artifact in QEMU (smoke test - UEFI mode)
-        if: success() && matrix.arch == 'x86_64'
+        if: success() && matrix.arch == 'x86_64' && matrix.boot != 'bios'
         run: |
           # lg3d now ships hybrid BIOS+UEFI ISOs: verify the UEFI boot path
           # works by booting with OVMF firmware.  This catches missing EFI
@@ -1095,7 +1103,7 @@ jobs:
           fi
 
       - name: Verify the ISO is BIOS+UEFI hybrid
-        if: success() && matrix.arch == 'x86_64'
+        if: success() && matrix.arch == 'x86_64' && matrix.boot != 'bios'
         run: |
           # Structure, not behaviour: the smoke tests above show firmware
           # boots the media, this shows the bytes declare a hybrid layout.

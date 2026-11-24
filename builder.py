@@ -195,7 +195,8 @@ class LFSConfig:
                 "enabled": True,
                 "squashfs_compression": "xz",
                 "persistence_support": True,
-                "default_boot": "live"
+                "default_boot": "live",
+                "boot_mode": "hybrid"
             },
 
             # Graphical installer.  "none" keeps the historical behaviour
@@ -3734,6 +3735,13 @@ Examples:
                         help='Override the graphical installer (calamares builds and installs the '
                              'real Calamares chain; default: from the profile, currently none)')
 
+    parser.add_argument('--boot',
+                        choices=['bios', 'uefi', 'hybrid'],
+                        default=None,
+                        help='Live/installer ISO firmware target: bios (isolinux + MBR only), '
+                             'uefi (GRUB EFI only), or hybrid (both). Default: from config '
+                             'live_system.boot_mode, currently hybrid)')
+
     return parser
 
 def clean_build_directory(output_dir: Path, logger: logging.Logger) -> bool:
@@ -3873,6 +3881,11 @@ def main():
         builder.logger.info(f"Graphical installer overridden to: {args.installer}")
         refresh_executor = True
 
+    if args.boot:
+        builder.config.set('live_system.boot_mode', args.boot)
+        builder.logger.info(f"Live ISO boot mode overridden to: {args.boot}")
+        refresh_executor = True
+
     if refresh_executor:
         builder.refresh_executor()
 
@@ -3914,6 +3927,7 @@ def main():
     # Lignes supplémentaires (pour info)
     print(f"  Init System:    {effective_init}")
     print(f"  Live System:    {'Yes' if effective_live else 'No'}")
+    print(f"  Boot Mode:      {builder.config.get('live_system.boot_mode', 'hybrid')}")
     print(f"  Installer:      {builder.get_installer_type()}")
     print(f"  Cross-Compile:  {'Yes (' + builder.get_target_architecture() + ')' if builder.is_cross_compile() else 'No'}")
     print(f"  Output:         {args.output}")

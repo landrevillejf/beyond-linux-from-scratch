@@ -1056,6 +1056,45 @@ class TestLFSBuilder:
                 main()
         assert exc.value.code == 2
 
+    def test_boot_mode_choice_reaches_the_stage_environment(self, builder):
+        """final/15 is a pure Bash stage, so live_system.boot_mode must
+        arrive flattened as LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE for whichever
+        mode is set (this is what --boot feeds through)."""
+        builder.config.set('live_system.boot_mode', 'bios')
+        assert builder._get_env()['LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE'] == 'bios'
+        builder.config.set('live_system.boot_mode', 'hybrid')
+        assert builder._get_env()['LFS_CONFIG_LIVE_SYSTEM_BOOT_MODE'] == 'hybrid'
+
+    def test_boot_mode_default_is_hybrid_in_the_shipped_config(self):
+        """A profile that never passes --boot must keep the hybrid media.
+
+        The non-regression rests on the shipped default: config/build.conf
+        carries live_system.boot_mode = hybrid, so _flatten_config exports it
+        and final/15 falls back to hybrid too.  Reading the committed file
+        (not the tmp_path fixture, which has no live_system.boot_mode) is the
+        only place this default actually lives.
+        """
+        import json
+        conf = json.loads(Path('config/build.conf').read_text())
+        assert conf['live_system']['boot_mode'] == 'hybrid'
+
+    def test_boot_cli_rejects_an_unknown_choice(self, tmp_path):
+        """--boot is a closed choice list, so a typo fails fast in argparse
+        rather than writing an ISO with an unrecognised firmware layout."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+        test_args = [
+            'builder.py',
+            '--profile', 'lg3d',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--boot', 'coreboot',
+        ]
+        with patch('sys.argv', test_args):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 2
+
     def test_get_build_stages_cross_compile(self, builder):
         """Test build stages with cross-compilation"""
         with patch.object(builder, 'is_cross_compile', return_value=True):
@@ -2390,6 +2429,35 @@ class TestLFSBuilder:
 
             mock_instance.config.set.assert_any_call(
                 'installer.type', 'calamares')
+            mock_instance.refresh_executor.assert_called()
+
+    def test_main_boot_flag(self, tmp_path):
+        """--boot bios overrides live_system.boot_mode and refreshes the
+        executor, so final/15 writes the BIOS-only media the lg3d leg asks
+        for.  Same flag -> config.set -> refresh path as --installer."""
+        config_file = tmp_path / "build.conf"
+        config_file.write_text('{}')
+
+        test_args = [
+            'builder.py',
+            '--profile', 'lg3d',
+            '--output', str(tmp_path / 'build'),
+            '--config', str(config_file),
+            '--boot', 'bios',
+        ]
+
+        with patch('builder.LFSBuilder') as MockBuilder:
+            mock_instance = MockBuilder.return_value
+            mock_instance.download_sources.return_value = True
+            mock_instance.prepare_environment.return_value = True
+            mock_instance.check_prerequisites.return_value = True
+            mock_instance.build.return_value = True
+
+            with patch('sys.argv', test_args):
+                main()
+
+            mock_instance.config.set.assert_any_call(
+                'live_system.boot_mode', 'bios')
             mock_instance.refresh_executor.assert_called()
 
     @patch('builder.LFSBuilder._update_sources_list')
