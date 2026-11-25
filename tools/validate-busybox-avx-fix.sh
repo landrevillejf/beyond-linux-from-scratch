@@ -42,7 +42,40 @@ verify_script_changes() {
     fi
     log_ok "Busybox version pinned: ${BUSYBOX_VERSION}"
 
-    # Check for baseline CFLAGS
+    # The build MUST run inside the $LFS chroot so busybox links the target's
+    # baseline glibc.  A host build links the host glibc-static, whose
+    # unconditional init_cpu_features startup is AVX on the Ubuntu 26.04 runner
+    # and #UDs on a CPU without AVX (lg3d Nightly #125).  -march CFLAGS cannot
+    # fix this: they never touch the pre-compiled libc.a startup.
+    if ! grep -q 'chroot "[$]LFS"' "$script"; then
+        log_error 'busybox is not built inside the '"\$LFS"' chroot (links the host glibc)'
+        return 1
+    fi
+    log_ok 'busybox is built inside the '"\$LFS"' chroot (links the target glibc)'
+
+    if ! grep -q 'build-busybox.sh' "$script"; then
+        log_error "The in-chroot busybox build script is missing"
+        return 1
+    fi
+    log_ok "In-chroot build script present"
+
+    # The real, binary-level regression guard: disassemble the startup chain
+    # and fail on any VEX/AVX instruction.  This is the check the old
+    # text-only validator never performed.
+    if ! grep -q 'assert_no_startup_avx' "$script"; then
+        log_error "Binary-level startup AVX guard (assert_no_startup_avx) missing"
+        return 1
+    fi
+    log_ok "Binary-level startup AVX guard present (assert_no_startup_avx)"
+
+    if ! grep -q 'busybox_unstripped' "$script"; then
+        log_error "The guard needs busybox_unstripped (symbol table) but it is not exposed"
+        return 1
+    fi
+    log_ok "Unstripped busybox exposed for the guard's symbol table"
+
+    # Baseline CFLAGS remain, but only as an x86_64-specific arm: they tune
+    # busybox's OWN objects, they are not what removes the glibc-startup AVX.
     if ! grep -q '\-march=x86-64' "$script"; then
         log_error "Baseline CFLAGS (-march=x86-64) not found"
         return 1
@@ -133,19 +166,25 @@ verify_test_changes() {
         return 1
     fi
 
-    # Check that test was updated for source build
-    if ! grep -q 'BUSYBOX_VERSION=' "$test_file"; then
-        log_error "Test not updated for source build approach"
+    # The lg3d Nightly #125 guardrail class must assert the chroot build and
+    # the real binary-level AVX guard, not just source-text CFLAGS.
+    if ! grep -q 'TestNightlyLg3d125BusyboxChrootAvx' "$test_file"; then
+        log_error "Guardrail class TestNightlyLg3d125BusyboxChrootAvx not found"
         return 1
     fi
-    log_ok "Test updated for source build approach"
+    log_ok "Nightly #125 guardrail class present"
 
-    # Check that test verifies baseline CFLAGS
-    if ! grep -q '\-march=x86-64' "$test_file"; then
-        log_error "Test does not verify baseline CFLAGS"
+    if ! grep -q 'assert_no_startup_avx' "$test_file"; then
+        log_error "Tests do not assert the binary-level AVX guard"
         return 1
     fi
-    log_ok "Test verifies baseline CFLAGS"
+    log_ok "Tests assert the binary-level AVX guard"
+
+    if ! grep -q 'busybox_unstripped' "$test_file"; then
+        log_error "Tests do not assert the unstripped-binary guard path"
+        return 1
+    fi
+    log_ok "Tests assert the unstripped-binary guard path"
 }
 
 verify_changelog() {
@@ -209,42 +248,37 @@ generate_report() {
 
 Validation Date: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 Busybox Version: $BUSYBOX_VERSION
-Target CFLAGS: -march=x86-64 -mtune=generic -O2 -static
+Build location: inside the \$LFS chroot (links the target's baseline glibc)
+Target CFLAGS (x86_64 arm only): -march=x86-64 -mtune=generic -O2 -static
 
 Results:
-  ✅ Script changes verified (final/12-create-initramfs.sh)
-  ✅ Smoke test changes verified (tools/qemu-boot-smoke.sh)
-  ✅ Test guardrails updated (tests/test_acceptance_shell.py)
-  ✅ CHANGELOG entry present
-  ✅ Build dependencies checked
+  [OK] busybox is built inside the \$LFS chroot, not on the host
+  [OK] Binary-level startup AVX guard (assert_no_startup_avx) present
+  [OK] Unstripped busybox exposed for the guard's symbol table
+  [OK] Smoke test keeps the baseline -cpu qemu64 gate
+  [OK] Guardrail class TestNightlyLg3d125BusyboxChrootAvx present
 
-Configuration Summary:
-  - Busybox will be built from source (not downloaded)
-  - Baseline CFLAGS ensure NO AVX instructions
-  - Static linking verified with readelf
-  - Problematic applets (TC) disabled
-  - CI smoke test uses -cpu qemu64 (baseline)
+Why the chroot matters (lg3d Nightly #125):
+  A static busybox links the whole C library startup.  glibc's
+  init_cpu_features runs unconditionally before main(); when it is compiled
+  with AVX it executes vmovd/vpinsrd and raises #UD on a CPU without AVX,
+  which panics the kernel with "Attempted to kill init! exitcode=0x00000004".
+  Building on the host linked the Ubuntu 26.04 runner's glibc-static, whose
+  init_cpu_features is AVX.  -march=x86-64 CFLAGS only recompile busybox's own
+  objects and can never change the pre-compiled libc.a startup, so the earlier
+  "baseline CFLAGS ensure NO AVX" claim was false.  Building inside the chroot
+  links the target glibc (baseline, SSE2 startup), and assert_no_startup_avx
+  disassembles _start/__libc_start_main and fails the build on any VEX insn.
 
 Expected Behavior:
-  The next build will produce a busybox binary that is compatible with
-  ALL x86_64 systems, including:
-    ✅ VirtualBox (default CPU model)
-    ✅ Physical machines with pre-2011 CPUs
-    ✅ Systems with AVX disabled in firmware
-    ✅ Cloud VMs on older host hardware
-
-  No more "invalid opcode" traps or kernel panics due to AVX instructions.
-
-Build Impact:
-  ⏱️  +2 minutes to initramfs creation stage (busybox build time)
-  ⏱️  +0.7% to total ISO build time
-  📦 No change to ISO size
+  The busybox /init runs on every x86_64 system, including VirtualBox's
+  default CPU model, pre-2011 CPUs, and hosts with AVX masked in firmware -
+  no more "invalid opcode" traps or AVX kernel panics.
 
 Next Steps:
-  1. The fix is ready and will be used in the next nightly build
-  2. Monitor lg3d.yml for successful build completion
-  3. Test the resulting ISO in VirtualBox to confirm boot
-  4. Verify with: qemu-system-x86_64 -cpu qemu64 -cdrom <iso>
+  1. Merge to main; the next lg3d nightly builds busybox in the chroot
+  2. Watch the QEMU BIOS smoke step for a clean boot to the greeter
+  3. Verify locally with: qemu-system-x86_64 -cpu qemu64 -cdrom <iso>
 
 ================================================================================
 EOF

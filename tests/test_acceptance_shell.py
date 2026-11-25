@@ -2561,6 +2561,123 @@ class TestNightlyLg3d45SudoEnvRelaunch:
             'resolves SOURCES_HOST from $LFS')
 
 
+class TestNightlyLg3d125BusyboxChrootAvx:
+    """Guardrails for the lg3d Nightly #125 static-busybox AVX panic.
+
+    Nightly #125 booted its live ISO under tools/qemu-boot-smoke.sh
+    (-cpu qemu64, a baseline x86_64 with no AVX) and the kernel panicked:
+    "traps: init[1] trap invalid opcode ... in busybox", then "Attempted
+    to kill init! exitcode=0x00000004".  The faulting instruction was a
+    VEX vmovd inside glibc's init_cpu_features, the code that runs
+    unconditionally at the start of every static binary before main().
+
+    Root cause: final/12 built busybox ON THE HOST and only forced
+    -march=x86-64.  That flag recompiles busybox's own objects, but a
+    static link also pulls in the host glibc-static's pre-compiled
+    startup, and the Ubuntu 26.04 runner's libc.a compiles
+    init_cpu_features with AVX.  CFLAGS can never fix a pre-compiled
+    archive.  The target glibc lfs/05b built is baseline (its
+    init_cpu_features uses SSE2 movd/movdqa), so the fix builds busybox
+    INSIDE the $LFS chroot and adds a real binary-level guard that
+    disassembles the startup chain and fails the build on a single VEX
+    instruction.  The old tools/validate-busybox-avx-fix.sh only grepped
+    source text for '-march=x86-64' and asserted "Baseline CFLAGS ensure
+    NO AVX instructions" - a claim it never checked against a binary,
+    which is exactly why #125 shipped.
+    """
+
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+    SMOKE = Path('tools/qemu-boot-smoke.sh')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @pytest.fixture(scope='class')
+    def code(self):
+        return self._code(self.INITRAMFS.read_text())
+
+    def test_busybox_is_built_inside_the_chroot_not_on_the_host(self, code):
+        """The make must run in $LFS so busybox links the target glibc."""
+        heredoc = code.index('cat >"$LFS/build-busybox.sh"')
+        make = code.index('make CFLAGS="${BUSYBOX_CFLAGS}"')
+        chroot = code.index('chroot "$LFS"')
+        assert heredoc < make, (
+            'the busybox make must live inside the generated chroot script, '
+            'not run directly on the host')
+        assert '/bin/bash /build-busybox.sh' in code, (
+            'final/12 must execute the busybox build script through '
+            'chroot "$LFS" so it links the target\'s baseline glibc')
+        assert heredoc < chroot, (
+            'the chroot invocation must follow the script it executes')
+        # The tarball is fetched on the host (the chroot has no network)
+        # into $LFS/sources, which is /sources inside the chroot.
+        assert 'wget' in code[:heredoc], (
+            'the busybox tarball must be downloaded on the host, before '
+            'the chroot build')
+        assert '/sources/${BUSYBOX_TARBALL}' in code, (
+            'the chroot build must read the tarball from /sources')
+
+    def test_baseline_flags_are_arch_conditional(self, code):
+        """-march=x86-64 is x86-only; a foreign target gcc must not get it."""
+        cflags = code.index('BUSYBOX_CFLAGS="-march=x86-64')
+        start = code.rindex('case "$TARGET_ARCH" in', 0, cflags)
+        block = code[start:code.index('esac', start)]
+        assert 'x86_64)' in block and '-march=x86-64' in block, (
+            'x86_64 keeps the baseline -march=x86-64 -mtune=generic flags')
+        other = block[block.index('*)'):]
+        assert '-march' not in other, (
+            'a non-x86 target must not be handed an x86 -march flag')
+        assert 'CONFIG_STATIC=y' in code, (
+            'busybox must be statically linked (the initramfs has no libc)')
+
+    def test_real_binary_avx_guard_scans_the_startup_chain(self, code):
+        """The guard disassembles the startup and fails on any VEX insn."""
+        fn = code[code.index('assert_no_startup_avx() {'):]
+        fn = fn[:fn.index('\n}\n')]
+        assert 'objdump -d' in fn, (
+            'the guard must disassemble a real binary, not grep source text')
+        for sym in ('_start', '__libc_start_main', 'init_cpu_features'):
+            assert sym in fn, (
+                f'the guard must isolate the unconditional startup symbol '
+                f'{sym}, not just one that a compiler may inline away')
+        assert "'^v[a-z]'" in fn, (
+            'the guard must reject VEX/AVX mnemonics (every v-prefixed insn)')
+        assert '%ymm' in fn and '%zmm' in fn, (
+            'the guard must reject AVX-only ymm/zmm registers')
+        assert 'return 1' in fn, (
+            'the guard must fail, not warn, when the startup carries AVX')
+        assert 'x86_64' in fn, (
+            'the guard is x86_64-only (host objdump cannot read a foreign '
+            'target, and non-x86 glibc has no AVX startup)')
+
+    def test_guard_runs_on_the_unstripped_binary_before_it_ships(self, code):
+        """busybox's make strips busybox; the guard needs the symbols."""
+        assert 'busybox_unstripped' in code, (
+            'the chroot build must expose busybox_unstripped, whose symbol '
+            'table the guard needs to isolate the startup functions')
+        guard_call = code.index(
+            'assert_no_startup_avx "$BUSYBOX_UNSTRIPPED_BIN"')
+        install = code.index(
+            'cp -v "$BUSYBOX_BUILT_BIN" "$INITRAMFS_DIR/bin/busybox"')
+        assert guard_call < install, (
+            'the AVX guard must run before busybox ships into the initramfs')
+        after = code[guard_call:guard_call + 400]
+        assert 'exit 1' in after, (
+            'a failed AVX guard must abort the stage, not continue')
+
+    def test_qemu_smoke_gate_keeps_the_baseline_cpu(self):
+        """The gate that caught #125 must stay on -cpu qemu64 (no AVX)."""
+        smoke = self._code(self.SMOKE.read_text())
+        assert '-cpu qemu64' in smoke, (
+            'the boot smoke test must keep the baseline -cpu qemu64 model')
+        assert '-cpu max' not in smoke, (
+            '-cpu max re-exposes AVX and would mask the #125 regression '
+            'again, so it must never return to the smoke command')
+
+
 class TestNightly215StageGuardrails:
     """Guardrails for the Nightly #215 all-profile failure classes.
 
@@ -5552,27 +5669,23 @@ class TestNightly232IsoOutputGuardrails:
 
         A dynamic one is copied happily and then dies at exec with "No such
         file or directory", which reads like a missing file rather than a
-        missing interpreter.  The busybox binary is now built from source
-        with baseline CFLAGS (-march=x86-64) to ensure compatibility with
-        all x86_64 systems, including those without AVX support.  The
-        pre-built binaries from busybox.net required AVX instructions and
-        caused kernel panics on systems without AVX (lg3d nightly 20261108).
+        missing interpreter.  busybox is built from source INSIDE the $LFS
+        chroot so it links the target's baseline glibc (see
+        TestNightlyLg3d125BusyboxChrootAvx); the built binary is verified
+        static with readelf before it is installed into the initramfs.
         """
         code = self._code(self.INITRAMFS.read_text())
         fn = code[code.index('is_static_binary() {'):]
         fn = fn[:fn.index('\n}\n')]
         assert 'readelf -lW' in fn and 'INTERP' in fn, \
             'PT_INTERP is the authoritative static/dynamic discriminator'
-        # Verify busybox is built from source with baseline CFLAGS
         assert 'BUSYBOX_VERSION=' in code, \
             'busybox version must be pinned for reproducible builds'
         assert 'make defconfig' in code, \
             'busybox must be configured with defconfig'
         assert 'CONFIG_STATIC=y' in code, \
             'busybox must be built as a static binary'
-        assert '-march=x86-64' in code, \
-            'busybox must use baseline CFLAGS (no AVX) for universal compatibility'
-        assert 'is_static_binary busybox' in code, \
+        assert 'is_static_binary "$BUSYBOX_BUILT_BIN"' in code, \
             'the built busybox must be verified as static before installation'
 
     def test_arm64_kernel_can_mount_its_own_iso(self):

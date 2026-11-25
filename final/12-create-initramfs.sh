@@ -69,118 +69,188 @@ is_static_binary() {
 }
 
 # --------------------------------------------------------------------------
-# Build busybox from source with baseline CFLAGS
-# --------------------------------------------------------------------------
-# The initramfs has no libc yet, so busybox must be statically linked.  We
-# build it from source inside the chroot with baseline CFLAGS (-march=x86-64)
-# to ensure compatibility with all x86_64 systems, including those without
-# AVX support.  The pre-built binaries from busybox.net are compiled for
-# x86_64-v3/v4 microarchitectures and require AVX instructions (vmovdqu etc.),
-# which cause "invalid opcode" traps on systems without AVX and kernel panics
-# with "Attempted to kill init! exitcode=0x00000004" (lg3d nightly 20261108,
-# VirtualBox and QEMU with default CPU model).
+# Regression guard (lg3d Nightly #125): a static busybox must not execute AVX
+# before main().  glibc's startup (_start -> __libc_start_main, into which
+# init_cpu_features is constprop-inlined) runs unconditionally for every
+# static binary; when any of it is compiled with AVX (VEX vmovd / vpinsrd /
+# vmovq) it raises #UD on a CPU without AVX and the kernel panics with
+# "Attempted to kill init! exitcode=0x00000004".  The IFUNC-guarded *_avx*
+# memcpy/string variants are legitimate -- they are only dispatched when the
+# CPU reports AVX, and __libc_start_main merely stores their address -- so
+# this scans ONLY the unconditional startup chain and fails the build if it
+# carries a single VEX/AVX instruction.  This is the check the old text-only
+# validator never performed: it inspected a binary, not a string, so it gave
+# false confidence.
 #
-# Building from source also eliminates the supply-chain risk of downloading
-# a pre-built binary without checksum verification.
+# x86_64 only: objdump on the host cannot disassemble a foreign target, and a
+# non-x86 glibc has no AVX startup to begin with.
+# --------------------------------------------------------------------------
+assert_no_startup_avx() {
+    local bin="$1" disasm
+    if [ "$TARGET_ARCH" != "x86_64" ]; then
+        return 0
+    fi
+    if ! command -v objdump >/dev/null 2>&1; then
+        log_warn "objdump not available on the host; skipping the startup AVX guard"
+        return 0
+    fi
+    # Isolate the unconditional startup functions.  A function-header line is
+    # "<addr> <name>:"; any other header flips the flag off, so a following
+    # non-startup function is never scanned.  POSIX-awk only (the Ubuntu
+    # runner's default awk is mawk, which lacks gawk's 3-arg match()).
+    disasm="$(objdump -d --no-show-raw-insn "$bin" 2>/dev/null |
+        awk '/^[0-9a-f]+ <.*>:/ {
+                inf = ($0 ~ /<_start>:/ || $0 ~ /<__libc_start_main/ ||
+                       $0 ~ /<init_cpu_features/ || $0 ~ /<__libc_early_init/)
+                next
+             }
+             inf { print }')"
+    if [ -z "$disasm" ]; then
+        # No startup symbols: the binary handed in was stripped.  The chroot
+        # build exposes busybox_unstripped precisely so this cannot happen.
+        log_warn "no glibc startup symbols in $(basename "$bin") (stripped?); skipping the AVX guard"
+        return 0
+    fi
+    # Field 2 of each line is the mnemonic; on x86 every v-prefixed mnemonic
+    # is VEX/EVEX (AVX).  %ymm/%zmm operands are AVX-only registers.
+    if printf '%s\n' "$disasm" | awk '{ print $2 }' | grep -Eq '^v[a-z]' ||
+        printf '%s\n' "$disasm" | grep -Eq '%ymm|%zmm'; then
+        log_error "Static busybox startup (_start/__libc_start_main) contains AVX/VEX instructions:"
+        printf '%s\n' "$disasm" | grep -E '\sv[a-z]|%ymm|%zmm' | head -n 5 >&2
+        log_error "This binary #UDs on a CPU without AVX (lg3d Nightly #125 kernel panic)."
+        log_error "busybox must link the target glibc by building inside the $LFS chroot."
+        return 1
+    fi
+    log_info "Startup AVX guard passed: glibc startup chain is baseline (no VEX/AVX)"
+    return 0
+}
+
+# --------------------------------------------------------------------------
+# Build busybox from source INSIDE the $LFS chroot, against the target glibc
+# --------------------------------------------------------------------------
+# The initramfs has no libc yet, so busybox must be statically linked.  It is
+# built inside the chroot -- NOT on the host -- because a static link pulls in
+# the whole C library startup, and the host's glibc-static is out of our
+# control.  On the Ubuntu 26.04 runner the host libc.a ships an unconditional
+# init_cpu_features() compiled with AVX (VEX vmovd/vpinsrd/vmovq), so a
+# host-built static busybox executes AVX before main() and #UDs on a CPU
+# without AVX: "Attempted to kill init! exitcode=0x00000004" -> kernel panic
+# (lg3d Nightly #125, caught by tools/qemu-boot-smoke.sh on -cpu qemu64).
+# -march=x86-64 in CFLAGS cannot fix this: it only recompiles busybox's own
+# objects, never the pre-compiled libc.a startup.  The target glibc that
+# lfs/05b built is baseline (its init_cpu_features uses SSE2 movd/movdqa), so
+# linking inside the chroot is what actually removes the AVX.
+#
+# Building from source also eliminates the supply-chain risk of downloading a
+# pre-built binary without checksum verification, and avoids the busybox.net
+# x86_64-v3 prebuilts that required AVX (lg3d nightly 20261108).
 # --------------------------------------------------------------------------
 BUSYBOX_VERSION="1.36.1"
 BUSYBOX_TARBALL="busybox-${BUSYBOX_VERSION}.tar.bz2"
 BUSYBOX_URL="https://busybox.net/downloads/${BUSYBOX_TARBALL}"
-BUSYBOX_SRC_DIR="/tmp/busybox-build"
+# Where the in-chroot build leaves the binaries, as host paths.  busybox's
+# make emits busybox (stripped, the one that ships) and busybox_unstripped
+# (with the symbol table the AVX guard needs to isolate the startup chain).
+BUSYBOX_BUILT_BIN="$LFS/tmp/busybox-built"
+BUSYBOX_UNSTRIPPED_BIN="$LFS/tmp/busybox-built-unstripped"
 
-# Check if we already built a static busybox in a previous run
-if [ -x "$INITRAMFS_DIR/bin/busybox" ] && is_static_binary "$INITRAMFS_DIR/bin/busybox"; then
-    log_info "Using previously built busybox from $INITRAMFS_DIR/bin/busybox"
-    BUSYBOX_BUILT=1
+# -march=x86-64/-mtune=generic is x86-specific; handing it to a non-x86
+# target gcc aborts the build, so baseline flags are only added for x86_64.
+case "$TARGET_ARCH" in
+x86_64) BUSYBOX_CFLAGS="-march=x86-64 -mtune=generic -O2 -static" ;;
+*) BUSYBOX_CFLAGS="-O2 -static" ;;
+esac
+
+# Download the source on the HOST into $LFS/sources: the chroot has no
+# network, but $LFS/sources is /sources inside it.
+if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ]; then
+    log_info "Downloading busybox source from $BUSYBOX_URL"
+    wget -q -O "$SOURCES_HOST/$BUSYBOX_TARBALL" "$BUSYBOX_URL" || {
+        log_error "Failed to download busybox source from $BUSYBOX_URL"
+        exit 1
+    }
+fi
+
+log_info "Building busybox $BUSYBOX_VERSION inside the chroot (CFLAGS='$BUSYBOX_CFLAGS')..."
+
+# The build runs entirely inside $LFS so busybox links the target's baseline
+# glibc.  Everything it needs is passed through `env -i` because the heredoc
+# is quoted (no host expansion); $(nproc) is meant to run in-chroot.
+cat >"$LFS/build-busybox.sh" <<'BUILDEOF'
+#!/bin/bash
+set -e
+cd /tmp
+rm -rf busybox-build
+mkdir -p busybox-build
+cd busybox-build
+tar -xf "/sources/${BUSYBOX_TARBALL}"
+cd "busybox-${BUSYBOX_VERSION}"
+make defconfig >/dev/null 2>&1
+# CONFIG_STATIC=y links busybox against the target's static libc.a.
+sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
+# TC/TUNCTL applets need newer kernel headers than the initramfs requires.
+for applet in CONFIG_TC CONFIG_FEATURE_TC_INGRESS CONFIG_TUNCTL CONFIG_FEATURE_TUNCTL_QUIET_FAILURE; do
+    sed -i "s/^${applet}=y/# ${applet} is not set/" .config 2>/dev/null || true
+done
+make CFLAGS="${BUSYBOX_CFLAGS}" LDFLAGS="-static" -j"$(nproc)" >/dev/null 2>&1
+# busybox's make strips busybox down from busybox_unstripped.  Ship the
+# stripped binary but also expose the unstripped one: the host-side AVX guard
+# needs its symbol table to isolate _start/__libc_start_main.
+cp -f busybox /tmp/busybox-built
+if [ -f busybox_unstripped ]; then
+    cp -f busybox_unstripped /tmp/busybox-built-unstripped
 else
-    BUSYBOX_BUILT=0
+    cp -f busybox /tmp/busybox-built-unstripped
+fi
+BUILDEOF
+
+chmod 755 "$LFS/build-busybox.sh"
+chroot "$LFS" /usr/bin/env -i \
+    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin:/bin:/sbin \
+    BUSYBOX_VERSION="$BUSYBOX_VERSION" BUSYBOX_TARBALL="$BUSYBOX_TARBALL" \
+    BUSYBOX_CFLAGS="$BUSYBOX_CFLAGS" \
+    /bin/bash /build-busybox.sh || {
+    log_error "Failed to build busybox inside the chroot"
+    log_error "Check that gcc, make, tar and bzip2 are installed in $LFS"
+    rm -f "$LFS/build-busybox.sh"
+    exit 1
+}
+rm -f "$LFS/build-busybox.sh"
+
+if [ ! -f "$BUSYBOX_BUILT_BIN" ]; then
+    log_error "Chroot build finished but $BUSYBOX_BUILT_BIN is missing"
+    exit 1
 fi
 
-if [ "$BUSYBOX_BUILT" -eq 0 ]; then
-    log_info "Building busybox $BUSYBOX_VERSION from source with baseline CFLAGS..."
-
-    # Download busybox source if not already present
-    if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ]; then
-        log_info "Downloading busybox source from $BUSYBOX_URL"
-        wget -q -O "$SOURCES_HOST/$BUSYBOX_TARBALL" "$BUSYBOX_URL" || {
-            log_error "Failed to download busybox source from $BUSYBOX_URL"
-            exit 1
-        }
-    fi
-
-    # Extract and build busybox
-    rm -rf "$BUSYBOX_SRC_DIR"
-    mkdir -p "$BUSYBOX_SRC_DIR"
-    cd "$BUSYBOX_SRC_DIR"
-
-    log_info "Extracting busybox source..."
-    tar -xf "$SOURCES_HOST/$BUSYBOX_TARBALL" || {
-        log_error "Failed to extract busybox tarball"
-        exit 1
-    }
-    cd "busybox-${BUSYBOX_VERSION}" || {
-        log_error "Busybox source directory not found"
-        exit 1
-    }
-
-    # Configure busybox with defconfig (baseline configuration)
-    log_info "Configuring busybox (make defconfig)..."
-    make defconfig >/dev/null 2>&1 || {
-        log_error "Failed to configure busybox"
-        exit 1
-    }
-
-    # Enable static linking in the config
-    # CONFIG_STATIC=y ensures busybox is built as a static binary
-    sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config || {
-        log_error "Failed to enable CONFIG_STATIC in busybox config"
-        exit 1
-    }
-
-    # Disable applets that require newer kernel headers or are not needed for initramfs
-    # CONFIG_TC (traffic control) fails to build on systems with older kernel headers
-    # and is not needed in the initramfs environment
-    for applet in CONFIG_TC CONFIG_FEATURE_TC_INGRESS CONFIG_TUNCTL CONFIG_FEATURE_TUNCTL_QUIET_FAILURE; do
-        sed -i "s/^${applet}=y/# ${applet} is not set/" .config 2>/dev/null || true
-    done
-
-    # Build busybox with baseline CFLAGS for maximum compatibility
-    # -march=x86-64: baseline x86_64 (no AVX, no SSE4, etc.)
-    # -mtune=generic: optimize for generic CPU
-    # -O2: standard optimization level
-    # -static: static linking (redundant with CONFIG_STATIC but explicit)
-    log_info "Building busybox with CFLAGS='-march=x86-64 -mtune=generic -O2 -static'..."
-    make CFLAGS="-march=x86-64 -mtune=generic -O2 -static" \
-        LDFLAGS="-static" \
-        -j"$(nproc)" >/dev/null 2>&1 || {
-        log_error "Failed to build busybox"
-        log_error "Check that gcc and make are installed in the chroot"
-        exit 1
-    }
-
-    # Verify the built binary is static
-    if ! is_static_binary busybox; then
-        log_error "Built busybox is not a static binary"
-        log_error "This will fail in the initramfs (no libc available)"
-        exit 1
-    fi
-
-    log_info "Busybox built successfully (static binary verified)"
-
-    # Install busybox into the initramfs
-    mkdir -p "$INITRAMFS_DIR/bin"
-    cp -v busybox "$INITRAMFS_DIR/bin/busybox" || {
-        log_error "Failed to copy busybox to initramfs"
-        exit 1
-    }
-    chmod 755 "$INITRAMFS_DIR/bin/busybox"
-
-    # Clean up build directory
-    cd /
-    rm -rf "$BUSYBOX_SRC_DIR"
-
-    log_info "Busybox installed to $INITRAMFS_DIR/bin/busybox"
+# Verify the built binary is static (no PT_INTERP -> the initramfs can exec it).
+if ! is_static_binary "$BUSYBOX_BUILT_BIN"; then
+    log_error "Built busybox is not a static binary"
+    log_error "This will fail in the initramfs (no libc available)"
+    exit 1
 fi
+
+# Real, binary-level regression guard for lg3d Nightly #125: prove the
+# unconditional glibc startup path carries no AVX before the binary ships.
+# Runs against busybox_unstripped, whose symbol table the guard needs.
+if ! assert_no_startup_avx "$BUSYBOX_UNSTRIPPED_BIN"; then
+    rm -rf "$LFS/tmp/busybox-build" "$BUSYBOX_BUILT_BIN" "$BUSYBOX_UNSTRIPPED_BIN"
+    exit 1
+fi
+
+log_info "Busybox built successfully (static + baseline-startup verified)"
+
+# Install busybox into the initramfs.
+mkdir -p "$INITRAMFS_DIR/bin"
+cp -v "$BUSYBOX_BUILT_BIN" "$INITRAMFS_DIR/bin/busybox" || {
+    log_error "Failed to copy busybox to initramfs"
+    exit 1
+}
+chmod 755 "$INITRAMFS_DIR/bin/busybox"
+
+# Clean up the in-chroot build tree and the staged binaries.
+rm -rf "$LFS/tmp/busybox-build" "$BUSYBOX_BUILT_BIN" "$BUSYBOX_UNSTRIPPED_BIN"
+
+log_info "Busybox installed to $INITRAMFS_DIR/bin/busybox"
 
 # Create symlinks, ignoring 'busybox' itself
 cd "$INITRAMFS_DIR/bin"
