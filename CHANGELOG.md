@@ -534,6 +534,58 @@
 
 ### Fixed
 
+- **LG3D live ISO still panicked on a no-AVX CPU: busybox was linked against
+  the host glibc, not the target's** (`final/12-create-initramfs.sh`,
+  `tools/validate-busybox-avx-fix.sh`, `tests/test_acceptance_shell.py`)
+
+  lg3d Nightly #125 (run 45537026442) died in the QEMU BIOS smoke step with
+  `traps: init[1] trap invalid opcode ip:55822e ... in busybox` and
+  `Kernel panic - not syncing: Attempted to kill init! exitcode=0x00000004`.
+  Disassembling the shipped `/init` at that exact RIP shows
+  `55822e: vmovd %edx,%xmm1` followed by `vpinsrd`/`vmovq` writing the
+  `cpu_features` globals -- glibc's `init_cpu_features`, the code that runs
+  unconditionally at the start of every static binary before `main()`.  It is
+  VEX/AVX, so it `#UD`s on the smoke test's baseline `-cpu qemu64`.
+
+  - Root cause: the 20261108 fix ("build busybox from source with baseline
+    CFLAGS `-march=x86-64`") was necessary but not sufficient.  `final/12`
+    built busybox **on the host**, and a static link pulls in the whole
+    pre-compiled host `libc.a` startup.  `-march=x86-64` only recompiles
+    busybox's own objects -- it can never change glibc's already-compiled
+    `init_cpu_features`, and the Ubuntu 26.04 runner's `glibc-static` builds
+    that startup with AVX.  The target glibc that `lfs/05b` builds is baseline
+    (its `init_cpu_features.constprop.0` in `libc-start.o` uses SSE2
+    `movd`/`movdqa`/`punpckldq`/`movq`, 0 VEX -- measured against the #125
+    artifact's own `libc.a`).
+  - `final/12-create-initramfs.sh` now builds busybox **inside the `$LFS`
+    chroot** (`chroot "$LFS" /usr/bin/env -i ... /bin/bash /build-busybox.sh`),
+    so it links the target's baseline glibc.  The tarball is still fetched on
+    the host into `$LFS/sources` (`/sources` in-chroot; the chroot has no
+    network).  The baseline `-march=x86-64 -mtune=generic` flags are kept but
+    made an `x86_64`-only arm of a `case "$TARGET_ARCH"`, so a non-x86 target
+    gcc is never handed an x86 flag.
+  - Real binary-level regression guard `assert_no_startup_avx()`: after the
+    chroot build it disassembles `busybox_unstripped` (busybox's `make` strips
+    `busybox`, so the unstripped copy is exposed for its symbol table),
+    isolates the unconditional startup chain
+    (`_start`/`__libc_start_main`/`init_cpu_features`/`__libc_early_init`)
+    with POSIX awk, and fails the stage on a single VEX mnemonic or `%ymm`/
+    `%zmm` register.  The IFUNC-guarded `*_avx*` memcpy/string variants are
+    legitimately present and are deliberately not scanned -- they only run
+    when the CPU reports AVX.  x86_64 only.  Verified empirically: the guard
+    passes on the target's baseline `libc-start.o` (0 VEX) and fails on an
+    object whose `init_cpu_features` carries the exact #125
+    `vmovd`/`vpinsrd`/`vmovq`/`vzeroupper`.
+  - `tools/validate-busybox-avx-fix.sh` no longer asserts the false claim
+    "Baseline CFLAGS ensure NO AVX instructions" (a text-only grep that never
+    inspected a binary, and the reason #125 shipped green).  It now checks the
+    chroot build, the `assert_no_startup_avx` guard and the
+    `busybox_unstripped` path, and drops its emoji (AGENTS.md rule 8).
+  - Guardrail: `TestNightlyLg3d125BusyboxChrootAvx` in
+    `tests/test_acceptance_shell.py` locks the chroot build, the arch-
+    conditional CFLAGS, the binary-level guard, the unstripped-binary path and
+    the `-cpu qemu64` smoke gate.
+
 - **LG3D live ISOs fail to boot on systems without AVX support** (`final/12-create-initramfs.sh`)
   - The initramfs busybox binary was downloaded from busybox.net as a pre-built
     x86_64-linux-musl static, which is compiled for x86_64-v3/v4 microarchitectures
