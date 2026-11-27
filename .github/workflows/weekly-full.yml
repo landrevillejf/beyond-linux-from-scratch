@@ -513,7 +513,7 @@ jobs:
           # the weekly matrix: 83 jobs would collide on the same asset
           # names once the release is flattened.
 
-      # Production before judgement, as in lg3d.yml and nightly.yml: the
+      # Production before judgement, as in looking-glass.yml and nightly.yml: the
       # upload sits in front of the boot smoke test below and carries
       # `if: always()' so a leg that wrote its ISO and then lost the gate --
       # or lost the job budget -- still hands it over.  '!cancelled()' was

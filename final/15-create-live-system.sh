@@ -19,7 +19,7 @@ ISO_OUT="${LFS}/${ISO_NAME:-lfs-installer.iso}"
 # shipping two ISOs.  Both stages are now hybrid BIOS+UEFI, so the overwrite no
 # longer downgrades the image to BIOS-only (the reason no lg3d ISO booted on
 # UEFI for 8 months).  Do NOT rename this path: the publish steps in
-# lg3d.yml/nightly.yml/release.yml all resolve build-release/${ISO_NAME}, and a
+# looking-glass.yml/nightly.yml/release.yml all resolve build-release/${ISO_NAME}, and a
 # rename would silently drop the release asset.
 # Scratch stays outside $LFS: mksquashfs packs $LFS, so a live.squashfs or
 # an iso-content/ growing inside it would be packed into itself.
@@ -549,7 +549,7 @@ if [ "$BOOT_MODE" != "bios" ]; then
     # valid ESP, and the BIOS-payload gate above cannot see the EFI entry, so
     # without this the BIOS-only regression that shipped for 8 months would pass
     # every stage check again.  The authoritative proof that firmware actually
-    # boots it is the lg3d.yml UEFI smoke test, which runs OVMF against the
+    # boots it is the looking-glass.yml UEFI smoke test, which runs OVMF against the
     # finished ISO with no -kernel.
     VERIFY_ESP="${SCRATCH_DIR}/verify-efi.img"
     VERIFY_EFI="${SCRATCH_DIR}/verify-BOOTX64.EFI"
@@ -572,7 +572,7 @@ if [ "$BOOT_MODE" != "bios" ]; then
 fi
 
 # Report (never judge) the hybrid layout so the stage log carries it:
-# xorriso writes reports on stderr.  The gate is the lg3d.yml step, which runs
+# xorriso writes reports on stderr.  The gate is the looking-glass.yml step, which runs
 # after the artifacts are uploaded.  Measured Boot record of a published ISO:
 #   Boot record  : El Torito , MBR isohybrid cyl-align-on GPT
 xorriso -indev "$ISO_OUT" -report_system_area as_plain 2>&1 | grep -a "Boot record" ||
