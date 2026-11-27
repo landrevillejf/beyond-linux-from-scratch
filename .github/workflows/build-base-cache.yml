@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        init: [sysvinit, systemd]
+        init: [sysvinit]
         arch: [x86_64]
     steps:
       - uses: actions/checkout@v4
