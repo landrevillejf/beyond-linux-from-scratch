@@ -99,7 +99,7 @@ class TestReleasePipelineHardening:
 
     # Both matrices publish through a create-release job that used to
     # require every leg to succeed.
-    RELEASE_WORKFLOWS = ("nightly.yml", "weekly-full.yml", "lg3d.yml")
+    RELEASE_WORKFLOWS = ("nightly.yml", "weekly-full.yml", "looking-glass.yml")
 
     def _read(self, name):
         return Path(f".github/workflows/{name}").read_text()
@@ -175,7 +175,7 @@ class TestReleasePipelineHardening:
         false on a job killed by its budget, i.e. the sysvinit leg of #102
         would still have shipped nothing.
         """
-        for name in ("nightly.yml", "weekly-full.yml", "lg3d.yml"):
+        for name in ("nightly.yml", "weekly-full.yml", "looking-glass.yml"):
             wf = self._read(name)
             upload = wf.index('- name: Upload release artifacts')
             smoke = wf.find('- name: Boot artifact in QEMU')
@@ -477,11 +477,10 @@ class TestBasePrefixCache:
         assert "group: nightly-builds" in workflow
         assert "cancel-in-progress: false" in workflow
 
-    def test_publisher_covers_both_init_systems(self):
-        """lfs/05b branches on INIT_SYSTEM, so one prefix cannot serve
-        both; the matrix has to publish each separately."""
+    def test_publisher_covers_sysvinit(self):
+        """The producer currently publishes the sysvinit prefix only."""
         workflow = self._read("build-base-cache.yml")
-        assert "init: [sysvinit, systemd]" in workflow
+        assert "init: [sysvinit]" in workflow
         assert "arch: [x86_64]" in workflow
 
     @staticmethod
@@ -504,7 +503,7 @@ class TestBasePrefixCache:
         and bash both accept them, so they survive every other gate.
         """
         offenders = []
-        for name in ("nightly.yml", "build-base-cache.yml", "lg3d.yml"):
+        for name in ("nightly.yml", "build-base-cache.yml", "looking-glass.yml"):
             for lineno, line, nxt in self._continuations(self._read(name)):
                 delta = self._indent(nxt) - self._indent(line)
                 if delta not in (0, 2):
@@ -1137,7 +1136,7 @@ class TestPackagesCachePurge:
 
 class TestLg3dPrivateSourcePreDownload:
     """Guardrails for the `Pre-download private ProjectLookingGlass source`
-    step in lg3d.yml.
+    step in looking-glass.yml.
 
     ProjectLookingGlass is a private repo, so builder.py's unauthenticated
     urllib fetch of its custom-sources.list pin 404s and blfs/30 aborts on a
@@ -1150,7 +1149,7 @@ class TestLg3dPrivateSourcePreDownload:
     temp and be sudo-placed, never written directly into the lfs-owned dir.
     """
 
-    WORKFLOW = "lg3d.yml"
+    WORKFLOW = "looking-glass.yml"
     STEP = "Pre-download private ProjectLookingGlass source"
 
     def _read(self):
@@ -1231,7 +1230,7 @@ class TestLg3dUefiConfigPatch:
     write permission Nightly #86 was missing.
     """
 
-    WORKFLOW = "lg3d.yml"
+    WORKFLOW = "looking-glass.yml"
     STEP = "Enable UEFI support for lg3d profile"
 
     def _read(self):
@@ -1293,7 +1292,7 @@ class TestLg3dUefiConfigPatch:
 
 
 class TestLg3dBaseCacheMountpoints:
-    """Guardrails for the base-prefix-cache restore in lg3d.yml.
+    """Guardrails for the base-prefix-cache restore in looking-glass.yml.
 
     build-base-cache.yml tars the prefix with `--exclude=./dev`,
     `--exclude=./proc`, `--exclude=./sys` and `--exclude=./run` because those
@@ -1307,7 +1306,7 @@ class TestLg3dBaseCacheMountpoints:
     build resumes.
     """
 
-    WORKFLOW = "lg3d.yml"
+    WORKFLOW = "looking-glass.yml"
     STEP = "Restore base prefix cache"
 
     def _read(self):
@@ -1377,7 +1376,7 @@ class TestLg3dBaseCacheHandshake:
     branch; the CI evidence is the nightly on main after the merge.
     """
 
-    WORKFLOW = "lg3d.yml"
+    WORKFLOW = "looking-glass.yml"
     JOB = "ensure-base-cache"
 
     def _read(self, name=WORKFLOW):
