@@ -1,27 +1,8 @@
 name: Build Base Prefix Cache
 
-# Every nightly job rebuilds the same 4h30m prefix (host-check through
-# display-manager) before it can do anything profile-specific.  This workflow
-# builds that prefix once per (init, arch) pair and publishes it to the
-# base-cache-latest release; nightly.yml restores it and resumes from the
-# next stage.
-#
-# The prefix is genuinely shared: host/04-build-toolchain.sh, lfs/05a, lfs/05b,
-# and the BLFS display stack (blfs/08a-08d) have no profile-specific logic
-# beyond the desktop/xorg_only flags, and the xfce profile below builds the
-# full X11+Wayland stack that lg3d (xorg_only) and other desktop profiles
-# reuse.  aarch64 is deliberately absent - its lfs-system alone ran 4h04m and
-# failed, so it can neither produce nor fit inside a cache.
-
 on:
   workflow_dispatch:
   schedule:
-    # ~4 hours ahead of the nightly cron (0 3 * * *), not 90 minutes: the
-    # prefix build takes 2h45m-3h, so the old '30 1 * * *' head start let the
-    # scheduled nightly begin before the fresh cache was published and rebuild
-    # the whole prefix from scratch (#224: build-base-cache 01:47->04:33,
-    # nightly started 03:07 and missed).  Starting at 23:00 UTC finishes ~02:00,
-    # an hour clear of the matrix.
     - cron: '0 23 * * *'
 
 concurrency:
@@ -32,12 +13,6 @@ permissions:
   contents: write
 
 env:
-  # The boundary is a variable, not a hardcoded stage name: moving it further
-  # (e.g. to build-kernel) means updating these two lines plus the matching
-  # nightly resume/image stages.  display-manager was chosen because the
-  # X11/Wayland/display stack is the longest profile-independent block
-  # (~2h30m for xorg+wayland+blfs-libs) and is shared by every desktop
-  # profile and lg3d.
   BASE_STAGE: display-manager
   RESUME_STAGE: build-kernel
 
@@ -75,12 +50,6 @@ jobs:
           clean: true
 
       - name: Relocate build scratch off /tmp tmpfs
-        # ubuntu-latest moved to an Ubuntu 26 runner image whose /tmp is a
-        # ~7.9G RAM-backed tmpfs; large profiles need multiple GB under
-        # /tmp/lfs-build, which made builds die with ENOSPC. Bind the scratch
-        # dirs onto the 145G root disk so every /tmp/lfs-* path below works
-        # unchanged. Warn (never fail) if a runner cannot bind, so a runner
-        # whose /tmp is already large is unaffected.
         run: |
           sudo mkdir -p /mnt/lfs-scratch
           for d in lfs-build lfs-sources base-cache; do
@@ -113,19 +82,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # ubuntu-latest ships third-party apt sources this build never
-          # installs from - every package below comes from Ubuntu's own
-          # main/universe.  Their CDNs republish asynchronously, and when apt
-          # reads the Release file and Packages.gz from different points in
-          # that republish it aborts with exit 100: build-base-cache #17 died
-          # 57s in, both matrix jobs at once, on a "Hash Sum mismatch" from
-          # dl.google.com whose Release file was 7h newer than the Packages
-          # file it described.  Drop them so a third-party CDN can never cost
-          # a 2h prefix build.
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
-          # Retry what is left: this step gates the entire build, so a
-          # transient hiccup on Ubuntu's own mirrors must not be fatal.
           for attempt in 1 2 3; do
             if sudo apt-get update; then
               break
@@ -169,13 +127,6 @@ jobs:
       - name: Compute base cache key
         id: key
         run: |
-          # git ls-tree -r emits blob SHAs, so any edit under these paths
-          # changes the key on its own - no second hashing pass, and no way
-          # for a nightly to restore a base built from different inputs.
-          # The key now includes the BLFS display stack scripts (blfs/08a-08d)
-          # since those stages are part of the cached prefix.  Paths outside
-          # the list (blfs/09+, final/, profiles/) intentionally keep the
-          # cache valid for profile-specific work downstream.
           BASE_KEY=$(git ls-tree -r HEAD -- host \
             lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
             lfs/06a-init-system.sh lfs/06b-service-management.sh \
@@ -193,13 +144,6 @@ jobs:
       - name: Build base prefix (${{ matrix.init }} / ${{ matrix.arch }})
         run: |
           cd /tmp/lfs-build
-          # xfce builds the full X11+Wayland+display-manager stack that lg3d
-          # (xorg_only) and other desktop profiles reuse.  The prefix content
-          # up to display-manager is profile-independent: blfs/08a-08d have
-          # no profile-specific logic beyond the desktop/xorg_only flags, so
-          # the xfce-built cache is valid for every profile that needs the
-          # display stack.  minimal/desktop=none skips those stages entirely,
-          # which is why it cannot be used here.
           sudo -u lfs python3 builder.py \
             --profile xfce \
             --init ${{ matrix.init }} \
@@ -221,37 +165,15 @@ jobs:
           test -x usr/bin/gcc
           test -x bin/bash
           test -f etc/passwd
-          # lfs/05b removes /tools once the system is self-hosting, so its
-          # absence proves the last chapter of the prefix really ran.
           test ! -d tools
           ls -l usr/bin/gcc bin/bash etc/passwd
-          # du walks the whole rootfs and exits non-zero on the directories
-          # the chroot created root-only (./var/cache/ldconfig is mode 700),
-          # which failed this step even though every real check above had
-          # passed: build-base-cache #7 discarded two complete 21G prefixes
-          # that had cost 2h each to build, so no cache was ever published
-          # for the nightlies to restore.  Run it as root so the total is
-          # complete, and never let an informational size report abort the
-          # step - the test -x / test -f lines above are the real gate.
           sudo du -sh . || true
 
       - name: Pack the base prefix into split parts
         run: |
           PREFIX="${{ steps.key.outputs.prefix }}"
-          # /tmp/base-cache is a root-owned bind mountpoint (the relocate step
-          # creates it with sudo), but split/sha256sum here and the metadata
-          # sidecar step below all run as the unprivileged runner user.
-          # build-base-cache #70 died with "split: '/tmp/base-cache/...part-00':
-          # Permission denied" after a 2h16m prefix build, discarding the cache.
-          # Hand the dir to the runner so those writes land.
           sudo mkdir -p /tmp/base-cache
           sudo chown "$(id -u):$(id -g)" /tmp/base-cache
-          # Release assets are capped at 2 GB, so stream the zstd tarball
-          # into split parts - the same convention cache-packages uses.
-          # The build scaffolding shares $LFS with the rootfs and has to be
-          # excluded by name; sources/ and logs/ alone are several GB.
-          # Parts land outside the tree being read so the archive never
-          # contains itself.
           df -h /tmp
           sudo tar --numeric-owner --xattrs \
             --use-compress-program='zstd -19 -T0' \
@@ -271,13 +193,8 @@ jobs:
       - name: Write cache metadata sidecar
         run: |
           PREFIX="${{ steps.key.outputs.prefix }}"
-          # VERSION is authoritative and lives in the checkout copy, not in
-          # /tmp/base-cache, so read it by absolute path.
           BUILDER_VERSION=$(cat /tmp/lfs-build/VERSION)
           CREATED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-          # printf in a brace group rather than a heredoc: a heredoc body
-          # has to sit at the shell's own column to survive the YAML block
-          # dedent, which reads as broken indentation in the workflow file.
           {
             printf '{\n'
             printf '  "base_stage": "%s",\n' "$BASE_STAGE"
@@ -299,8 +216,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # base-cache-latest is a rolling tag: without pruning it would
-          # grow by one full prefix every time the key changes.
           KEY="${{ steps.key.outputs.base_key }}"
           STALE=$(gh release view base-cache-latest --json assets \
             -q '.assets[].name' 2>/dev/null \

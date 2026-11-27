@@ -323,7 +323,7 @@ python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/lg3d.yml'))"
 4. ONLY THEN dispatch the consumer on main (never on the branch — a premature
    branch run occupies the `lg3d-builds` concurrency group):
    ```bash
-   gh workflow run lg3d.yml --ref main
+   gh workflow run looking-glass.yml --ref main
    ```
 5. If step 3 shows base-cache not yet republished, WAIT for it before step 4,
    else lg3d cache-misses into a full multi-hour rebuild.

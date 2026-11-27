@@ -1,4 +1,4 @@
-name: Nightly Project Looking Glass Builds
+name: Project Looking Glass Builds
 
 on:
   schedule:
@@ -8,10 +8,6 @@ on:
 permissions:
   contents: read
 
-# Without a group, two overlapping dispatches push 26 jobs against the
-# 20-job limit and silently queue; the second run must wait, not cancel
-# a build that has already burned hours.  The group is lg3d-specific so this
-# workflow never serialises against (or is cancelled by) nightly.yml.
 concurrency:
   group: lg3d-builds
   cancel-in-progress: false
@@ -34,38 +30,19 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           fi
 
-  # ---------------------------------------------------------------------
-  # Base prefix cache handshake (nightly #102, second half; the measured
-  # narrative lives in CHANGELOG).  Times in this file are local,
-  # America/New_York; the API and the cron table speak UTC.
-  #
-  # Compute the key the restore below will hash; if base-cache-latest does
-  # not carry it, wait out the producer already running or dispatch one,
-  # bounded by DEADLINE_MIN.  On a normal night the assets exist and this
-  # exits in seconds.
-  #
-  # Never costs an ISO: every path ends in exit 0 and build-profiles keeps
-  # `!cancelled() && !failure()`.  Consequence: a fresh lg3d.yml dispatch
-  # queues behind this wait (workflow-level concurrency group).
   ensure-base-cache:
     needs: check_changes
     if: needs.check_changes.outputs.has_changes == 'true'
     runs-on: ubuntu-latest
-    # A prefix build measured 2h40m-4h10m (run 42325238018).  300 keeps the
-    # job inside GitHub's 6h cap; the internal DEADLINE_MIN below stops 30
-    # minutes earlier so the job always gets to report and exit 0.
     timeout-minutes: 300
     permissions:
       contents: read
-      # workflow_dispatch of the producer needs Actions: write.
       actions: write
     outputs:
       status: ${{ steps.handshake.outputs.status }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # ref main, like the build-profiles checkout below: the key hashes
-          # file content, so both must read the same tree.
           ref: main
           clean: true
           fetch-depth: 0
@@ -78,8 +55,6 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           HEAD_SHA: ${{ github.sha }}
           PRODUCER: build-base-cache.yml
-          # 270 min covers the measured worst gap of this incident: 164 min
-          # between the restore's lookup and the later prefix landing.
           DEADLINE_MIN: "270"
           POLL_SEC: "120"
         run: |
@@ -148,12 +123,6 @@ jobs:
               status=republished
               finish
             fi
-            # Count producers in flight across every ref, not just this one:
-            # both sides hash the tree at ref main, so any running producer
-            # publishes the key the restore below asks for.  The branch
-            # filter dispatched a duplicate producer for one identical prefix
-            # (runs 42367071203 and 42368745013, concurrent because this
-            # workflow's counterpart groups concurrency per ref).
             in_flight=$(gh run list --workflow "$PRODUCER" \
               --limit 10 --json databaseId,headBranch,headSha,status \
               --jq '[.[] | select(.status == "in_progress" or .status == "queued")] | length' \
@@ -162,7 +131,6 @@ jobs:
               echo "Producer run in flight (${in_flight}); waiting ${POLL_SEC}s"
             elif [ "$dispatched" = false ]; then
               echo "No producer in flight, ${#still_missing[@]} prefix(es) missing"
-              # Our own ref, so the producer hashes with this file's key list.
               echo "Dispatching ${PRODUCER} on ${REF_NAME}"
               if gh workflow run "$PRODUCER" --repo "$REPO" --ref "$REF_NAME"; then
                 dispatched=true
@@ -187,40 +155,13 @@ jobs:
           done
 
   build-profiles:
-    # The ISO build runs whether the handshake saved it time, timed out, or
-    # died: a needs-only wiring would skip this job and every artifact, which
-    # is the class of regression that made nightly #102 publish nothing.
     needs: [check_changes, ensure-base-cache]
     if: needs.check_changes.outputs.has_changes == 'true' && !cancelled() && !failure()
-    # This workflow exists to publish ONLY the Project Looking Glass ISOs, so
-    # the matrix is pinned to x86_64 and the runner never varies.  lg3d is
-    # x86_64-only (ProfileManager pins its architecture), and an aarch64 cell
-    # would build an aarch64 kernel while the boot smoke test below is gated
-    # on matrix.arch == 'x86_64' (Nightly #227).
     runs-on: ubuntu-latest
-    # 480 sits above GitHub's hard 6 h per-job cap, so a runaway job was
-    # killed by the platform rather than by us and never reached the
-    # log-upload step.  5h30m produces a clean cancelled() instead.
     timeout-minutes: 330
     strategy:
       fail-fast: false
       matrix:
-        # lg3d is the X11-only Project Looking Glass session: the profile
-        # pins init_system=systemd (its lg3d-compositor.service unit is what
-        # blfs/30-install-lg3d.sh writes on that path), java_dev (the JDK
-        # that stage runs on) and xorg_only.  --init overrides the pinned
-        # value; this workflow builds the sysvinit leg alone -- the
-        # /etc/rc.d/init.d/lg3d launcher respawned from inittab on runlevel 5.
-        # A red leg here is a red lg3d ISO and nothing else publishes under
-        # the lg3d-nightly tag (nightly.yml already re-proves the from-scratch
-        # prefix on every profile).
-        #
-        # boot is fed to builder.py --boot, which exports live_system.boot_mode
-        # so final/15 writes the media accordingly.  'bios' produces an
-        # isolinux + isohybrid-MBR ISO with no EFI entry, so the UEFI smoke
-        # test and the hybrid-structure check below are skipped by a
-        # matrix.boot != 'bios' guard; they stay in the file, ready for a
-        # future uefi/hybrid leg.
         profile: [ lg3d ]
         init: [ sysvinit ]
         arch: [ x86_64 ]
@@ -228,20 +169,9 @@ jobs:
     permissions:
       contents: write
     env:
-      # Empty-string check on a secret is allowed in expressions; the
-      # signing step below skips entirely until the repo secrets exist.
       HAVE_GPG_KEY: ${{ secrets.GPG_PRIVATE_KEY != '' }}
-      # Both lg3d legs resume from the published base prefix; this workflow
-      # keeps no uncached from-scratch canary (nightly.yml holds that role).
       USE_BASE_CACHE: "true"
-      # Where the published base prefix ends, expressed as the stage this
-      # job picks up at.  The base cache now covers through display-manager
-      # (X11/Wayland/display stack, ~4h30m of build time), so lg3d resumes
-      # from build-kernel.  Moving the boundary means editing these two
-      # lines plus BASE_STAGE/RESUME_STAGE in build-base-cache.yml.
       BASE_CACHE_RESUME_STAGE: build-kernel
-      # The disk-image stage is separate: it recreates the loop device/image
-      # file after the cache restore, without touching the cached rootfs.
       BASE_CACHE_IMAGE_STAGE: disk-image
     steps:
       - uses: actions/checkout@v4
@@ -250,29 +180,16 @@ jobs:
           clean: true
 
       - name: Relocate build scratch off /tmp tmpfs
-        # ubuntu-latest moved to an Ubuntu 26 runner image whose /tmp is a
-        # ~7.9G RAM-backed tmpfs; large profiles need multiple GB under
-        # /tmp/lfs-build, which made builds die with ENOSPC. Bind the scratch
-        # dirs onto the 145G root disk so every /tmp/lfs-* path below works
-        # unchanged. Warn (never fail) if a runner cannot bind, so a runner
-        # whose /tmp is already large is unaffected.
         run: |
           sudo mkdir -p /mnt/lfs-scratch
           for d in lfs-build lfs-sources base-cache; do
             sudo mkdir -p "/mnt/lfs-scratch/$d" "/tmp/$d"
-            # Created with sudo (root-owned), but later steps write unprivileged:
-            # the package-cache restore runs `tar -xz -C /tmp/` into
-            # /tmp/lfs-sources as the runner, which failed "Permission denied" on
-            # every file (degrading to a nightly cache MISS) while root-owned.
-            # Hand the underlying dir (seen through the bind) and the mountpoint
-            # (used if the bind fails) to the runner before mounting.
             sudo chown "$(id -u):$(id -g)" "/mnt/lfs-scratch/$d" "/tmp/$d"
             sudo mount --bind "/mnt/lfs-scratch/$d" "/tmp/$d" \
               || echo "::warning::could not bind /tmp/$d onto the root disk"
           done
           df -h /tmp /mnt/lfs-scratch
 
-      # ---------- RESTAURATION DU CACHE ----------
       - name: Restore package cache from release
         run: |
           mkdir -p /tmp/artifacts
@@ -285,9 +202,9 @@ jobs:
           mkdir -p /tmp/lfs-sources
           if ls lfs-packages-part-*.tar.gz 1>/dev/null 2>&1; then
             cat $(ls -v lfs-packages-part-*.tar.gz) | tar -xz -C /tmp/
-            echo "✅ Cache restored successfully"
+            echo "Cache restored successfully"
           else
-            echo "⚠️ No cached packages found, will download during build"
+            echo "No cached packages found, will download during build"
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -298,10 +215,10 @@ jobs:
         run: |
           if [ -d /tmp/lfs-sources ] && [ $(find /tmp/lfs-sources -type f 2>/dev/null | wc -l) -gt 0 ]; then
             echo "hit=true" >> $GITHUB_OUTPUT
-            echo "✅ Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
+            echo "Cache HIT: $(find /tmp/lfs-sources -type f | wc -l) files"
           else
             echo "hit=false" >> $GITHUB_OUTPUT
-            echo "❌ Cache MISS: Will download packages during build"
+            echo "Cache MISS: Will download packages during build"
           fi
 
       - name: Free disk space
@@ -324,11 +241,6 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Drop the third-party apt sources ubuntu-latest ships (Chrome,
-          # Microsoft) and retry the update: nothing below comes from them,
-          # and build-base-cache #17 lost both matrix jobs in 57s to a
-          # "Hash Sum mismatch" on dl.google.com mid-republish.  Full
-          # post-mortem in build-base-cache.yml's copy of this step.
           sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           sudo rm -f /etc/apt/sources.list.d/*microsoft*.list
           for attempt in 1 2 3; do
@@ -350,24 +262,6 @@ jobs:
       - name: Install ARM64 cross tools
         if: matrix.arch == 'aarch64'
         run: |
-          # builder.py sets cross_compile for any --arch other than x86_64, so
-          # host/05-build-uboot.sh still hard-requires ${CROSS_COMPILE}gcc even
-          # on the native ARM runner this cell now uses - where these two
-          # packages are the native compiler and binutils under their triplet
-          # names, and host/04 derives LFS_TGT from `uname -m` accordingly.
-          #
-          # qemu-user-static and binfmt-support are deliberately gone: with
-          # host/00-setup-qemu.sh now exiting early when `uname -m` matches the
-          # target, keeping an emulator installed would only offer a way to
-          # regress into a build ~27x slower, and its absence makes such a
-          # regression fail loudly instead.
-          #
-          # grub-efi-arm64-bin ships /usr/lib/grub/arm64-efi/, without which
-          # final/14 cannot build the UEFI ISO this cell now produces (it
-          # used to be skipped entirely for aarch64).  busybox-static is the
-          # only static busybox an arm64 target can get: busybox.net publishes
-          # prebuilt statics for i686 and x86_64 only, so final/12 has nothing
-          # to download here and would otherwise abort the initramfs stage.
           sudo apt-get install -y --no-install-recommends \
             gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu \
             grub-efi-arm64-bin busybox-static
@@ -375,16 +269,6 @@ jobs:
       - name: Install x86_64 GRUB EFI modules
         if: matrix.arch == 'x86_64'
         run: |
-          # final/14 preflights /usr/lib/grub/x86_64-efi/modinfo.sh and aborts
-          # with the package name when it is missing.  The runner image has
-          # carried it so far, but relying on that made a base-image rotation
-          # capable of failing every x86_64 leg at the last stage of a
-          # multi-hour build.  grub-efi-amd64-bin is amd64-only, so it cannot
-          # go into the shared step above.
-          #
-          # OVMF (Open Virtual Machine Firmware) provides UEFI firmware for
-          # QEMU, allowing the smoke test to verify UEFI boot capability.
-          # This is required now that lg3d ships hybrid BIOS+UEFI ISOs.
           sudo apt-get install -y --no-install-recommends grub-efi-amd64-bin ovmf
 
       - name: Install Python dependencies
@@ -432,39 +316,14 @@ jobs:
 
       - name: Pre-download private ProjectLookingGlass source
         env:
-          # A repo-scoped GITHUB_TOKEN cannot read a DIFFERENT private repo
-          # (ProjectLookingGlass), so this needs a PAT / fine-grained token
-          # with Contents:read on that repo, stored as the PLG_SOURCE_TOKEN
-          # repository secret.
           PLG_TOKEN: ${{ secrets.PLG_SOURCE_TOKEN }}
         run: |
-          # landrevillejf/ProjectLookingGlass is a private repo, so the
-          # unauthenticated urllib fetch builder.py runs for its
-          # custom-sources.list pin answers 404 (lg3d nightly #63: the lg3d
-          # stage aborted on "required source archive missing:
-          # ProjectLookingGlass-*.tar.gz").  Authenticate the API tarball
-          # endpoint -- which follows the default branch, exactly like the
-          # refs/heads/main.tar.gz URL it stands in for -- and drop the
-          # result under the name builder.py's _archive_filename() derives
-          # from that URL.  SourceDownloader then logs "Already exists" and
-          # never hits the 404.
           if [ -z "$PLG_TOKEN" ]; then
             echo "::error::secrets.PLG_SOURCE_TOKEN is not set; cannot fetch the private ProjectLookingGlass archive"
             exit 1
           fi
-          # build-release/sources is created root-then-chowned to lfs by the
-          # "Link cached packages" step above, so this unprivileged runner
-          # cannot curl straight into it: run 41298802966 died here with
-          # "curl: (23) client returned ERROR on write of 585 bytes" -- curl
-          # received the first body chunk (auth was fine) but could not open
-          # the output file in the lfs-owned dir.  Fetch into a runner-writable
-          # temp, validate it, then sudo it into place and hand the single file
-          # to lfs.
           SRC_DIR=/tmp/lfs-build/build-release/sources
           TMP_TARBALL="$(mktemp)"
-          # No -f: capture the final HTTP status ourselves so an auth/scope
-          # regression (401/403/404) prints the API's JSON message instead of
-          # a bare curl exit code.  The body never contains the token.
           HTTP_CODE=$(curl -sSL -w '%{http_code}' \
             -H "Authorization: Bearer ${PLG_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
@@ -476,8 +335,6 @@ jobs:
             rm -f "$TMP_TARBALL"
             exit 1
           fi
-          # Fail here rather than 5 hours into the build: a zero-byte or
-          # HTML/JSON error body would otherwise die in blfs/30's require_file.
           if ! gzip -t "$TMP_TARBALL"; then
             echo "::error::downloaded body is not a valid gzip archive; first bytes:"
             head -c 300 "$TMP_TARBALL"; echo
@@ -498,19 +355,7 @@ jobs:
       - name: Enable UEFI support for lg3d profile
         if: matrix.boot != 'bios'
         run: |
-          # lg3d is the showcase profile for hybrid BIOS+UEFI boot: patch
-          # build.conf to enable UEFI support before the build starts.
-          # This creates a dedicated EFI System Partition and installs GRUB
-          # for both i386-pc (BIOS) and x86_64-efi (UEFI) targets.
           cd /tmp/lfs-build
-          # The Prepare step ends with 'chown -R lfs:lfs', so config/build.conf
-          # is lfs-owned mode 0644 and this step -- which runs as the runner --
-          # only holds the 'other' read bit.  chmod u+w cannot fix that: it
-          # grants write to the owner, who already had it, so Nightly #85 and
-          # #86 both died on the same open('w') with PermissionError.  Patch
-          # the file as root, then hand it back to lfs, who must own it because
-          # the build itself runs as 'sudo -u lfs python3 builder.py' and
-          # rewrites this same config on every LFSConfig.save().
           sudo python3 -c "
           import json
           with open('config/build.conf', 'r') as f:
@@ -522,12 +367,8 @@ jobs:
           print('UEFI support enabled in build.conf')
           "
           sudo chown lfs:lfs config/build.conf
-          # Verify the change
           python3 -m json.tool config/build.conf > /dev/null && echo "build.conf is valid JSON"
 
-      # ------- DEBUG (optionnel) -------
-      # awk consomme toute l'entree; head fermerait le pipe et ls
-      # mourrait en SIGPIPE, ce qui fait echouer l'etape (pipefail).
       - name: Debug sources directory before build
         run: |
           echo "Sources directory:"
@@ -544,16 +385,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # A cache miss must degrade to today's from-scratch build, never
-          # break the job: every failure path below leaves hit=false and
-          # the step still succeeds.
           INIT="${{ matrix.init }}"
           ARCH="${{ matrix.arch }}"
-          # Same key the publisher computes: git ls-tree -r emits blob
-          # SHAs, so a nightly can never restore a base built from
-          # different inputs.  The key includes the BLFS display stack
-          # scripts (blfs/08a-08d) since those stages are now part of
-          # the cached prefix.
           BASE_KEY=$(git ls-tree -r HEAD -- host \
             lfs/05a-build-lfs-basic.sh lfs/05b-build-lfs-system.sh \
             lfs/06a-init-system.sh lfs/06b-service-management.sh \
@@ -566,49 +399,23 @@ jobs:
           PREFIX="base-${INIT}-${ARCH}-${BASE_KEY}"
           HIT=false
           mkdir -p /tmp/base-cache
-          # The relocate step created /tmp/base-cache as a root-owned bind
-          # mountpoint; gh release download runs as the unprivileged runner and
-          # could not write the parts there, which would silently degrade every
-          # restore to a cache miss (and a full 2h prefix rebuild). Hand the
-          # dir to the runner before downloading.
           sudo chown "$(id -u):$(id -g)" /tmp/base-cache
           cd /tmp/base-cache
           echo "Looking for ${PREFIX} in base-cache-latest"
-          # The handshake job decided this run's starting conditions; record
-          # it next to the lookup so a nightly log shows WHY a leg missed
-          # (e.g. status=deadline) instead of leaving it to be re-derived.
           echo "ensure-base-cache status: ${{ needs.ensure-base-cache.outputs.status }}"
           if gh release download base-cache-latest \
             --repo ${{ github.repository }} \
             --pattern "${PREFIX}.tar.zst.part-*" \
             --pattern "${PREFIX}.sha256"; then
-            # Verify before extracting.  The package-cache step above
-            # downloads SHA256SUMS and never checks it; do not repeat that.
             if sha256sum -c "${PREFIX}.sha256"; then
               df -h /tmp
               sudo mkdir -p /tmp/lfs-build/build-release
               if cat $(ls -v "${PREFIX}".tar.zst.part-*) \
                 | sudo tar --zstd --numeric-owner --xattrs \
                   -xf - -C /tmp/lfs-build/build-release; then
-                # The lfs uid is not guaranteed identical across runners,
-                # and the resumed build must be able to write anywhere in the
-                # restored rootfs, not just in the top-level scaffolding.
                 sudo chown lfs:lfs /tmp/lfs-build
                 sudo chown -R "$(id -u lfs):$(id -g lfs)" \
                   /tmp/lfs-build/build-release
-                # build-base-cache.yml tars the prefix with
-                # --exclude=./dev --exclude=./proc --exclude=./sys
-                # --exclude=./run, because those are runtime mounts and not
-                # on-disk content.  The resumed build therefore restores a
-                # rootfs with NO virtual-filesystem mountpoints, and every
-                # chroot stage from build-kernel onward runs
-                # 'mount --bind /dev "$LFS"/dev' onto a directory that does
-                # not exist; the bind fails, lfs/08 swallows it with '|| true',
-                # and the kernel chroot comes up without /dev/null so
-                # 'make olddefconfig' reports "C compiler 'gcc' not found"
-                # (Nightly #90, both legs).  Recreate the empty mountpoints
-                # here so the restored rootfs boots the same chroot stages a
-                # from-scratch build would, with or without UEFI.
                 sudo mkdir -p \
                   /tmp/lfs-build/build-release/dev/pts \
                   /tmp/lfs-build/build-release/dev/shm \
@@ -625,8 +432,6 @@ jobs:
           else
             echo "No base cache published for ${PREFIX} - building from scratch"
           fi
-          # The parts are several GB and the runner disk is tight; they are
-          # useless once extracted.
           rm -f "${PREFIX}".tar.zst.part-* "${PREFIX}.sha256"
           df -h /tmp
           du -sh /tmp/lfs-build/build-release 2>/dev/null || true
@@ -642,13 +447,6 @@ jobs:
           else
             PROFILE="${{ matrix.profile }}"
           fi
-          # host/03 umounts the loop partition when the stage exits, so
-          # re-running it hides nothing: it recreates build-release.img,
-          # which the headless-profile artifact check and the QEMU smoke
-          # test both look for, and leaves the restored rootfs untouched.
-          # Resuming and stopping on the same stage runs host/03 alone -
-          # host/02 would rebuild $LFS/tools, which lfs/05b removes once
-          # the system is self-hosting.
           sudo -u lfs python3 builder.py \
             --profile "$PROFILE" \
             --init ${{ matrix.init }} \
@@ -664,11 +462,6 @@ jobs:
           LFS_BUILDER_NONINTERACTIVE: 1
 
       # ------- BUILD -------
-      # Two-step build after cache restore:
-      # 1. Recreate disk image (host/03) - leaves cached rootfs untouched
-      # 2. Resume from build-kernel - uses cached prefix up to display-manager
-      # This matches nightly.yml's approach and ensures the cache is actually
-      # used instead of rebuilding everything from disk-image onwards.
       - name: Build release profile ${{ matrix.profile }} / ${{ matrix.init }} / ${{ matrix.arch }}
         run: |
           cd /tmp/lfs-build
@@ -681,8 +474,6 @@ jobs:
             PROFILE="${{ matrix.profile }}"
           fi
 
-          # Only a verified cache hit may skip the prefix; anything else
-          # runs the full build exactly as before.
           RESUME_ARGS=""
           if [ "${{ steps.base_cache.outputs.hit }}" == "true" ]; then
             RESUME_ARGS="--resume-from $BASE_CACHE_RESUME_STAGE"
@@ -721,23 +512,14 @@ jobs:
           DATE=$(date +%Y%m%d)
           ISO_NAME="lfs-${BUILDER_VERSION}-${PROFILE}-${ARCH}-${{ matrix.init }}-${DATE}.iso"
           echo "iso_name=$ISO_NAME" >> $GITHUB_OUTPUT
-          echo "📀 ISO name: $ISO_NAME"
+          echo "ISO name: $ISO_NAME"
 
       - name: Verify kernel and boot artifact
         run: |
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
           ISO="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
-          # builder.py sets LFS to the resolved output directory, so the
-          # rootfs *is* build-release/ and every stage script installs the
-          # kernel into $LFS/boot.  build-release/image/ is created empty
-          # by prepare_environment() and populated by nothing.
           KERNEL_SRC=$(find /tmp/lfs-build/build-release/boot -name "vmlinuz*" | head -n1)
           test -n "$KERNEL_SRC"
-          # Every profile now ships an ISO: final/14 writes it into $LFS
-          # (== build-release/) for both x86_64 and aarch64.  The disk image
-          # stays as the fallback so a stage that failed to produce one is
-          # still reported against something bootable rather than silently
-          # passing with no artifact at all.
           if [ -f "$ISO" ]; then
             test -s "$ISO"
             ARTIFACT="$ISO"
@@ -745,16 +527,6 @@ jobs:
             ARTIFACT="/tmp/lfs-build/build-release.img"
             test -s "$ARTIFACT"
           fi
-          # Give the kernel a per-profile name so release assets from
-          # different matrix jobs never collide.
-          #
-          # Every write from here to the artifact upload needs sudo.
-          # builder.py runs as lfs but the stage scripts install inside a
-          # chroot, so build-release/ and most of what it holds are
-          # root-owned and the runner user cannot create a file there.
-          # Nightly #221 threw away three profiles (minimal x2 and
-          # arm64/x86_64) that had completed the entire build, on
-          # "cp: cannot create regular file ... Permission denied".
           sudo cp "$KERNEL_SRC" "/tmp/lfs-build/build-release/vmlinuz-${SUFFIX}"
           cd /tmp/lfs-build/build-release || exit 1
           sudo sha256sum "$ARTIFACT" "vmlinuz-${SUFFIX}" | sudo tee "SHA256SUMS-${SUFFIX}" >/dev/null
@@ -768,9 +540,7 @@ jobs:
           sudo chmod 700 "$GNUPGHOME"
           echo "${{ secrets.GPG_PRIVATE_KEY }}" | base64 -d | sudo -u lfs env GNUPGHOME="$GNUPGHOME" gpg --batch --import
           ISO="${{ steps.iso_name.outputs.iso_name }}"
-          # No ISO means final/14 never ran or failed: nothing to sign.
           [ -f "/tmp/lfs-build/build-release/$ISO" ] || { echo "No ISO for this profile, skipping"; sudo rm -rf "$GNUPGHOME"; exit 0; }
-          # Passphrase travels through the environment, not the argv.
           sudo -u lfs env GNUPGHOME="$GNUPGHOME" GPG_PASS='${{ secrets.GPG_PASSPHRASE }}' bash -c '
             gpg --batch --yes --pinentry-mode loopback --passphrase "$GPG_PASS" \
               --local-user "${{ vars.GPG_KEY_ID }}" \
@@ -785,16 +555,10 @@ jobs:
         run: |
           cd /tmp/lfs-build/build-release || exit 1
           ISO="${{ steps.iso_name.outputs.iso_name }}"
-          # A missing ISO here means final/14 never produced one, which the
-          # guard above already turned into a failed build; this stays
-          # tolerant so the pointer step never masks the real error.
           if [ ! -f "$ISO" ]; then
             echo "No ISO for this profile, skipping pointer"
             exit 0
           fi
-          # Release assets cannot be symlinks and copying the ISO would
-          # duplicate gigabytes, so publish a tiny pointer that resolves
-          # the backward-compatible lfs-installer.iso name.
           SHA=$(sudo sha256sum "$ISO" | awk '{print $1}')
           {
             echo "iso_name=$ISO"
@@ -806,15 +570,6 @@ jobs:
         if: matrix.profile == 'xfce' || matrix.profile == 'arm64'
         run: |
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
-          # Release assets are capped at 2 GB: stream the zstd tarball
-          # straight into split parts, same convention as cache-packages.
-          #
-          # Tar build-release/ itself, not build-release/image/: $LFS is
-          # build-release/, image/ is created empty and never populated, so
-          # the old export shipped a zero-byte archive.  The build
-          # scaffolding and the release artifacts share that directory and
-          # are excluded by name.  Parts are written to the parent while tar
-          # reads, then moved in, so the archive never contains itself.
           sudo tar --zstd -cf - -C /tmp/lfs-build/build-release \
             --exclude=./sources --exclude=./logs --exclude=./cache \
             --exclude=./backups --exclude=./live --exclude=./image \
@@ -829,8 +584,6 @@ jobs:
           sudo mv /tmp/lfs-build/rootfs-${SUFFIX}.tar.zst.part-* /tmp/lfs-build/build-release/
           cd /tmp/lfs-build/build-release || exit 1
           sudo chown lfs:lfs rootfs-${SUFFIX}.tar.zst.part-*
-          # Appending needs sudo: SHA256SUMS was created root-owned by the
-          # kernel verification step above.
           sha256sum rootfs-${SUFFIX}.tar.zst.part-* | sudo tee -a "SHA256SUMS-${SUFFIX}" >/dev/null
           du -h rootfs-${SUFFIX}.tar.zst.part-*
 
@@ -838,8 +591,6 @@ jobs:
         run: |
           cd /tmp/lfs-build/build-release || exit 1
           SUFFIX="${{ matrix.profile }}-${{ matrix.arch }}-${{ matrix.init }}"
-          # Renaming needs write permission on the containing directory,
-          # which the runner user does not have (see the kernel step).
           sudo mv build_info.json "build_info-${SUFFIX}.json"
           if [ -f sbom.spdx.json ]; then
             sudo mv sbom.spdx.json "sbom-${SUFFIX}.spdx.json"
@@ -849,44 +600,7 @@ jobs:
               sudo mv "$f" "lpm-repo/$(basename "$f")-${SUFFIX}"
             done
           fi
-          # Base binary package tarballs are deliberately not uploaded
-          # on nightlies: matrix jobs would collide on the same asset
-          # names when the release is flattened. The binary repository
-          # ships with stable releases only (release.yml).
 
-      # Production comes before judgement, always.
-      #
-      # This upload must run BEFORE both boot smoke tests below and must
-      # carry `if: always()'.  A step without a condition inherits success(),
-      # so placing it after a gate turns the gate into an artifact killer:
-      # nightly #102 ran all 36 stages, wrote
-      # lfs-0.57.4-lg3d-x86_64-systemd-20261107.iso (1.4 GB), the BIOS smoke
-      # step then went red on the dead sysinit, the inherited success()
-      # skipped this step, create-release's artifact probe found nothing and
-      # no lg3d-nightly-20261107 release exists -- while #105 and #106, with
-      # the upload in front of the gate, each published two ISOs.
-      #
-      # A non-bootable image is a bad outcome; no image at all is the
-      # forbidden one.  The gate keeps its honest signal (it still runs, still
-      # fails the leg, still annotates the run) and loses only the power to
-      # delete what the build produced.
-      #
-      # always(), not '!cancelled()', because '!cancelled()' is FALSE on a
-      # cancelled job -- measured, not read from the docs.  Proof run
-      # 42365666492 job D put this step behind a `sleep 300' with
-      # `timeout-minutes: 1' and guarded it `if: '!cancelled()'`: the job went
-      # cancelled and shipped nothing.  Proof run 42365844687 job E repeated
-      # that exact budget kill with `if: always()' and the artifact landed;
-      # job G confirmed always() also covers a plain red step.  Job F of the
-      # same run added `&& steps.build.outcome != 'cancelled'` and lost the
-      # artifact again, so that clause must not come back either.
-      #
-      # #102's sysvinit leg itself had no ISO to ship -- its build.log stops
-      # at '[27/36] Processing stage: calamares-build', so the budget killed
-      # it long before final/15 wrote anything.  The window always() covers is
-      # the next one over: a leg whose build step finished writing the media
-      # and is then cancelled during the resolve-name / verify / rename steps
-      # above this one.  always() can never ship less than '!cancelled()'.
       - name: Upload release artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -902,20 +616,11 @@ jobs:
             /tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}.sig
             /tmp/lfs-build/build-release/lfs-installer.iso.pointer
             /tmp/lfs-build/build-release/rootfs-*.tar.zst.part-*
-          # if-no-files-found stays 'ignore' because the per-profile payload
-          # differs: the rootfs tarball only ships for xfce and arm64, and
-          # packages.list only exists when the profile builds base packages.
-          # The ISO and its signature are expected from every leg now.
           if-no-files-found: ignore
 
       - name: Boot artifact in QEMU (smoke test - BIOS mode)
         if: success() && matrix.arch == 'x86_64'
         run: |
-          # Same third-party CDN hazard as the Install dependencies step,
-          # but far more expensive here: this runs after a multi-hour build,
-          # so one bad Packages.gz from dl.google.com would discard the
-          # whole job's work.  The sources were already removed earlier in
-          # the job, so only the retry is needed.
           for attempt in 1 2 3; do
             if sudo apt-get update; then
               break
@@ -928,23 +633,12 @@ jobs:
           done
           sudo apt-get install -y qemu-system-x86
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
-          # QEMU attaches a raw disk image with -drive file=...,format=raw,
-          # which it opens read-write, but host/03 creates build-release.img
-          # under sudo and this step runs as the runner user while the build
-          # ran as lfs.  Nightly #223 lost minimal/sysvinit here on "Could
-          # not open build-release.img: Permission denied" after the whole
-          # build had succeeded.  Loosen the mode instead of elevating the
-          # script: running it as root would also flip its /dev/kvm probe
-          # and silently move the smoke test onto an untested accel path.
           if [ -f /tmp/lfs-build/build-release.img ]; then
             sudo chmod a+rw /tmp/lfs-build/build-release.img
           fi
           if [ -f "$ISO_PATH" ]; then
             bash tools/qemu-boot-smoke.sh "$ISO_PATH"
           elif [ -f /tmp/lfs-build/build-release.img ]; then
-            # The image is formatted but empty - host/03 umounts the loop
-            # partition when the stage exits - so the kernel and initramfs
-            # come from the rootfs tree, which is build-release/ itself.
             bash tools/qemu-boot-smoke.sh /tmp/lfs-build/build-release.img \
               /tmp/lfs-build/build-release
           else
@@ -955,16 +649,11 @@ jobs:
       - name: Boot artifact in QEMU (smoke test - UEFI mode)
         if: success() && matrix.arch == 'x86_64' && matrix.boot != 'bios'
         run: |
-          # lg3d now ships hybrid BIOS+UEFI ISOs: verify the UEFI boot path
-          # works by booting with OVMF firmware.  This catches missing EFI
-          # bootloader files or misconfigured GRUB EFI entries that the BIOS
-          # smoke test above would not detect.
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           [ -f "$ISO_PATH" ] || {
             echo "No ISO produced for this profile, skipping UEFI smoke test"
             exit 0
           }
-          # OVMF firmware location varies by distribution; probe common paths
           OVMF_FW=""
           for candidate in \
             /usr/share/OVMF/OVMF_CODE.fd \
@@ -982,15 +671,6 @@ jobs:
           echo "Using OVMF firmware: $OVMF_FW"
           WORKDIR=$(mktemp -d)
           trap 'rm -rf "$WORKDIR"' EXIT
-          # OVMF needs a writable VARS store beside the readonly CODE; boot the
-          # ISO through the firmware with NO -kernel/-initrd.  Passing -kernel
-          # makes QEMU load the kernel via the Linux boot protocol and BYPASS
-          # firmware boot-device selection entirely, so OVMF never reads the El
-          # Torito EFI entry or efi.img -- which is exactly why the previous
-          # version of this step grepped "Linux version" and passed even for a
-          # BIOS-only ISO with no UEFI entry at all.  Booting the media as
-          # firmware does exercises the real chain: El Torito EFI -> FAT16
-          # efi.img -> \EFI\BOOT\BOOTX64.EFI -> GRUB -> kernel.
           OVMF_VARS_SRC=""
           for v in \
             /usr/share/OVMF/OVMF_VARS.fd \
@@ -1016,32 +696,12 @@ jobs:
             -boot order=d \
             -display none -serial file:"$WORKDIR/uefi-boot.log" \
             -monitor none -no-reboot || true
-          # Success is evidence the WHOLE chain ran: firmware -> El Torito EFI
-          # entry -> \EFI\BOOT\BOOTX64.EFI -> GRUB -> kernel -> initramfs that
-          # finds and mounts the media.  A GRUB banner or the "LFS Live" menu
-          # text is NOT enough: the broken 0.57.4 ISOs printed both and then
-          # died with "file `/isolinux/vmlinuz' not found" (grub.cfg never set
-          # root to the ISO volume) or "kernel DOS magic is invalid" (kernel
-          # built without CONFIG_EFI_STUB), so the old gate that accepted
-          # GRUB/LFS Live stayed green on an unbootable image.  This run added
-          # a second reason the step could never be honest: its positive
-          # marker was "Linux version", a KERN_INFO line on media whose
-          # shipped cmdline named no serial console at all -- the only writer
-          # to that log was GRUB, so the kernel could boot perfectly and the
-          # grep would still miss it (and with the cmdline's "quiet" it would
-          # miss it even with a serial console).  final/15 now puts
-          # console=ttyS0 last, which makes the serial line /dev/console, so
-          # the initramfs' and init's own writes land in the log below.
           LOG="$WORKDIR/uefi-boot.log"
           if grep -aqE "DOS magic is invalid|you need to load the kernel first|Failed to boot both default and fallback|error: file .* not found" "$LOG"; then
             echo "::error::UEFI boot failed: GRUB EFI ran but could not boot the kernel"
             grep -aoE "error: .*" "$LOG" | tr -d '\000' | sort -u | head
             exit 1
           fi
-          # Sysinit aborts: the same fatal markers tools/qemu-boot-smoke.sh
-          # rejects (keep the two lists in sync; test_acceptance_shell.py
-          # pins both).  These are what the 20261106 nightly printed while its
-          # BIOS gate reported success.
           if grep -aqE "Kernel panic|VFS: Unable to mount root fs|Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup" "$LOG"; then
             echo "::error::UEFI boot reached the rootfs and aborted there"
             grep -aoE "(Kernel panic.*|VFS: Unable to mount root fs.*|Freezing execution|Press Enter to continue.*|FAILURE:.*|unknown filesystem type.*|Failed to mount cgroup.*)" "$LOG" \
@@ -1060,14 +720,6 @@ jobs:
       - name: Boot the ISO through the BIOS firmware (isolinux path)
         if: success() && matrix.arch == 'x86_64'
         run: |
-          # tools/qemu-boot-smoke.sh passes -kernel/-initrd, so it never runs
-          # the El Torito BIOS entry: the ldlinux.c32 payload defect and an
-          # isolinux.cfg that cannot boot its own label stayed green there.
-          # This boots the media the way a BIOS machine does.  isolinux writes
-          # its own text to the screen only, so a serial log that never reaches
-          # the markers below is a dead BIOS path, not an uninformative one;
-          # the kernel and sysinit do reach it because final/15 names
-          # console=ttyS0 last in both isolinux labels.
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           [ -f "$ISO_PATH" ] || {
             echo "No ISO produced for this profile, skipping the BIOS firmware boot"
@@ -1084,9 +736,6 @@ jobs:
             -display none -serial file:"$WORKDIR/bios-firmware.log" \
             -monitor none -no-reboot || true
           LOG="$WORKDIR/bios-firmware.log"
-          # Same fatal and positive lists as the UEFI step above; the two must
-          # stay in sync with tools/qemu-boot-smoke.sh.  test_acceptance_shell
-          # pins all three.
           if grep -aqE "Freezing execution|Press Enter to continue|FAILURE:|unknown filesystem type|Failed to mount cgroup|cannot create directory '/sys/fs/cgroup'|Failed to mount API filesystems|Entering emergency mode|Kernel panic|VFS: Unable to mount root fs" "$LOG"; then
             echo "::error::BIOS firmware boot reached an init that aborted"
             grep -aoE "(Kernel panic.*|VFS: Unable to mount root fs.*|Freezing execution|Press Enter to continue.*|FAILURE:.*|unknown filesystem type.*|Failed to mount cgroup.*)" "$LOG" \
@@ -1105,10 +754,6 @@ jobs:
       - name: Verify the ISO is BIOS+UEFI hybrid
         if: success() && matrix.arch == 'x86_64' && matrix.boot != 'bios'
         run: |
-          # Structure, not behaviour: the smoke tests above show firmware
-          # boots the media, this shows the bytes declare a hybrid layout.
-          # Measured on lg3d-nightly-20261106: "Boot record : El Torito ,
-          # MBR isohybrid cyl-align-on GPT" plus an fdisk "ef EFI" partition.
           ISO_PATH="/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}"
           [ -f "$ISO_PATH" ] || {
             echo "No ISO produced for this profile, skipping the hybrid check"
@@ -1118,7 +763,6 @@ jobs:
             echo "::warning::xorriso absent, cannot verify hybrid structure"
             exit 0
           fi
-          # xorriso writes reports on stderr, hence 2>&1 inside the capture.
           BOOT_RECORD=$(xorriso -indev "$ISO_PATH" -report_system_area as_plain 2>&1 \
             | grep -a "Boot record" || true)
           echo "ISO system area: ${BOOT_RECORD:-none reported}"
@@ -1142,12 +786,6 @@ jobs:
           echo "Hybrid structure verified (El Torito + isohybrid MBR + GPT ESP)"
 
       - name: Upload logs on failure
-        # Cancelled jobs must leave logs behind as well, otherwise a timeout
-        # is undiagnosable (Nightly #194).  This is also the only reason
-        # nightly #221's aarch64 overrun was measurable at all: the job was
-        # cancelled at the 5h30m workflow budget, and the uploaded stage log
-        # is what showed it had built 14 of the 86 packages x86_64 finishes
-        # in 59m33s rather than having hung.
         if: failure() || cancelled()
         uses: actions/upload-artifact@v4
         with:
@@ -1158,24 +796,9 @@ jobs:
   create-release:
     needs: build-profiles
     runs-on: ubuntu-latest
-    # A matrix job's aggregate result is `failure` as soon as one leg
-    # fails, so requiring `== 'success'` threw away everything the green
-    # legs had built: nightly #230 completed arm64, minimal/sysvinit,
-    # minimal/systemd and server, uploaded their artifacts, and published
-    # no release at all.  Publish whatever completed instead.
-    #
-    # Nightly #102 then showed that excluding `cancelled` was itself an
-    # artifact killer: a leg killed by the job budget can still reach the
-    # upload step (proof run 42365844687 job E shipped its artifact from a
-    # cancelled job once the guard was `if: always()`), so a cancelled
-    # aggregate can carry a finished ISO.  Whether anything is worth
-    # publishing is decided by the artifact probe below, which finds zero
-    # files and skips the release -- that is the guard that keeps an empty
-    # release from ever being created, not this condition.
     if: always()
     permissions:
       contents: write
-      # Keyless (OIDC) cosign signing of the per-profile SHA256SUMS below.
       id-token: write
     steps:
       - name: Compute nightly date
@@ -1185,12 +808,6 @@ jobs:
       - name: Download release artifacts
         uses: actions/download-artifact@v4
         with:
-          # Failed legs upload release-logs-* archives.  Those belong to
-          # the run page, not to the release assets, so the download is
-          # scoped to the per-profile payloads.  A pattern that matches
-          # nothing is not an error for this action -- it reports "Total
-          # of 0 artifact(s) downloaded" and succeeds -- which is what
-          # lets the next step decide whether a release is warranted.
           pattern: release-artifacts-*
           path: artifacts
 
@@ -1209,16 +826,10 @@ jobs:
         if: steps.artifacts.outputs.found == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          # Unique dated tag so each Project Looking Glass nightly gets its
-          # own release instead of overwriting nightly.yml's nightly-<date>
-          # release (or a release tagged with the branch name).
           tag_name: lg3d-nightly-${{ steps.date.outputs.date }}
           name: Project Looking Glass Nightly Build ${{ steps.date.outputs.date }}
           files: artifacts/**/*
           generate_release_notes: true
-          # Nightly releases are prereleases: GitHub's "latest" pointer
-          # skips them, so `lpm update-db` (releases/latest/download)
-          # keeps serving the stable repository manifest.
           prerelease: true
           make_latest: false
 
@@ -1234,9 +845,6 @@ jobs:
           COSIGN_YES: "true"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Sign the integrity manifests each leg produced; bundles are
-          # attached to the dated lg3d nightly release.  continue-on-error
-          # keeps the published artifacts intact if signing is unavailable.
           mapfile -t manifests < <(find artifacts -type f -name 'SHA256SUMS-*')
           [ ${#manifests[@]} -gt 0 ] || exit 0
           bundles=()
