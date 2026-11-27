@@ -440,14 +440,30 @@ set -e
 mountpoint -q /sys/fs/selinux 2>/dev/null || \
     mount -t selinuxfs selinuxfs /sys/fs/selinux 2>/dev/null || true
 if [ -f /.autorelabel ]; then
-    rm -f /.autorelabel
-    if command -v fixfiles >/dev/null 2>&1; then
-        fixfiles -F relabel 2>/dev/null || true
-    elif command -v restorecon >/dev/null 2>&1; then
-        restorecon -rF / 2>/dev/null || true
+    # The live ISO (final/15) stacks a tmpfs overlayfs on the read-only
+    # squashfs and the initramfs drops a /.live marker before switch_root.
+    # Relabeling there is pointless (the squashfs lower is labeled at build
+    # time) and destructive: restorecon would copy the whole tree up into the
+    # tmpfs upper on every boot.  /.autorelabel lives in the read-only lower
+    # layer, so removing it only whiteouts it for this session -- skip the
+    # relabel entirely on live media.
+    if [ -d /.live ]; then
+        rm -f /.autorelabel 2>/dev/null || true
+    else
+        rm -f /.autorelabel
+        # fixfiles' relabel() prompts "Do you wish to clean out the /tmp
+        # directory [N]?" and blocks on `read` unless fullFlag is set, which
+        # only lowercase -f does (capital -F sets FORCEFLAG, not fullFlag).
+        # An unattended boot has no console to answer, so feed EOF: `read`
+        # returns empty, the prompt is skipped and restorecon runs directly.
+        if command -v fixfiles >/dev/null 2>&1; then
+            fixfiles -F relabel </dev/null 2>/dev/null || true
+        elif command -v restorecon >/dev/null 2>&1; then
+            restorecon -rF / 2>/dev/null || true
+        fi
+        # Relabeling / requires a clean remount before the policy loads.
+        sync
     fi
-    # Relabeling / requires a clean remount before the policy loads.
-    sync
 fi
 if command -v load_policy >/dev/null 2>&1; then
     load_policy -i 2>/dev/null || true

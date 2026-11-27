@@ -534,6 +534,40 @@
 
 ### Fixed
 
+- **LG3D live ISO hung at runlevel S on an interactive SELinux `/tmp` relabel
+  prompt** (`blfs/31-build-selinux.sh`, `tests/test_acceptance_shell.py`)
+
+  Booting the published `lfs-0.57.4-lg3d-x86_64-sysvinit-20261125.iso` under
+  KVM with `-cpu host` on the same AMD Ryzen 7 4700U the maintainer tests on
+  (BIOS/SeaBIOS, AVX present, so the separate no-AVX busybox `#UD` does not
+  fire) reaches sysvinit, mounts the live overlayfs, then stops dead at:
+  `Do you wish to clean out the /tmp directory [N]?`.  The console was
+  captured from the real media, not inferred.
+
+  - Root cause: `selinux-firstboot` (wired as `rcS.d/S02selinux` for sysvinit)
+    ran `fixfiles -F relabel`.  In policycoreutils' `fixfiles`, `relabel()`
+    only takes the non-interactive `fullrelabel` path when `fullFlag == 1`,
+    and `fullFlag` is set **only by lowercase `-f`**; capital `-F` sets
+    `FORCEFLAG` (full file set), not `fullFlag`.  So execution fell through to
+    the `read answer` prompt and blocked -- an unattended boot has no console
+    to answer it.
+  - It fired on *every* live boot because `blfs/31` drops `/.autorelabel` into
+    the rootfs, which `final/15` packs into the read-only `live.squashfs`;
+    `rm -f /.autorelabel` only whiteouts it in the tmpfs overlay upper, so the
+    lower-layer file reappears each boot.  Even answering the prompt then ran
+    `restorecon` over the whole overlay, copying the entire squashfs up into
+    tmpfs on every boot.
+  - `selinux-firstboot` now feeds EOF to fixfiles (`fixfiles -F relabel
+    </dev/null`), so `read` returns empty and the relabel proceeds
+    non-interactively, and skips the relabel entirely on live media via the
+    initramfs `/.live` marker (`[ -d /.live ]`), which `final/15`'s overlay
+    path creates before `switch_root /sysroot`.  An installed (read-write)
+    system still relabels once on first boot, then `/.autorelabel` is gone for
+    good.
+  - Guardrail: `test_selinux_stage_builds_userspace_and_targeted_policy` now
+    asserts both `fixfiles -F relabel </dev/null` and `[ -d /.live ]`, so a
+    revert to the interactive capital-`-F`-only call turns the suite red.
+
 - **LG3D live ISO still panicked on a no-AVX CPU: busybox was linked against
   the host glibc, not the target's** (`final/12-create-initramfs.sh`,
   `tools/validate-busybox-avx-fix.sh`, `tests/test_acceptance_shell.py`)

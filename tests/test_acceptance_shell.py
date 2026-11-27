@@ -1498,6 +1498,15 @@ class TestLFSComplianceGuardrails:
         assert 'selinux-firstboot.service' in content
         assert '/etc/rc.d/init.d/selinux' in content
         assert 'load_policy' in content  # in the first-boot helper only
+        # The first-boot relabel must never block an unattended boot.  fixfiles'
+        # relabel() prompts "Do you wish to clean out the /tmp directory [N]?"
+        # and blocks on `read` unless fullFlag is set, which only lowercase -f
+        # does (capital -F sets FORCEFLAG, not fullFlag); and /.autorelabel
+        # ships inside the read-only live squashfs, so the prompt fired on
+        # every live boot and the lg3d ISO hung at runlevel S.  The helper must
+        # feed EOF to fixfiles and skip the relabel on live media (/.live).
+        assert 'fixfiles -F relabel </dev/null' in content
+        assert '[ -d /.live ]' in content
         # Capability-gated skip.
         assert 'SELINUX_MODE = "disabled"' not in content
         assert 'mode is disabled' in content
