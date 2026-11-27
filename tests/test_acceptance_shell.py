@@ -791,9 +791,9 @@ class TestLFSComplianceGuardrails:
     def test_lg3d_stage_wires_both_init_systems(self):
         """The lg3d stage must wire a session for systemd AND sysvinit.
 
-        The lg3d profile pins init_system=systemd, but the lg3d.yml nightly
-        matrix builds the profile on both systemd and sysvinit via --init,
-        which overrides the pinned value.  blfs/30-install-lg3d.sh therefore
+        The lg3d profile pins init_system=systemd, but the looking-glass.yml
+        nightly overrides it to sysvinit via --init.  blfs/30-install-lg3d.sh
+        therefore
         has to branch on INIT_SYSTEM: keep the systemd graphical.target unit
         and, on the sysvinit path, write the BLFS-style init.d launcher plus
         the runlevel-5 inittab respawn entry so the session actually starts at
@@ -5739,7 +5739,7 @@ class TestIsolinuxBiosPayloadGuardrails:
     LIVE = Path('final/15-create-live-system.sh')
     INITRAMFS = Path('final/12-create-initramfs.sh')
     HOST = Path('host/02-prepare-host.sh')
-    LG3D_WF = Path('.github/workflows/lg3d.yml')
+    LG3D_WF = Path('.github/workflows/looking-glass.yml')
 
     # The payload isolinux needs beside it.  menu.c32/vesamenu.c32 are not
     # among them because neither cfg uses `ui`, and libutil.c32 is included
@@ -5859,7 +5859,7 @@ class TestIsolinuxBiosPayloadGuardrails:
             'host/02 must install the Debian/Ubuntu module package'
         wf = self.LG3D_WF.read_text()
         assert 'syslinux-common' in wf, \
-            'lg3d.yml must install the module package the ISO stage needs'
+            'looking-glass.yml must install the module package the ISO stage needs'
 
 
 class TestLiveIsoUefiHybridGuardrails:
@@ -5882,7 +5882,7 @@ class TestLiveIsoUefiHybridGuardrails:
     """
 
     LIVE = Path('final/15-create-live-system.sh')
-    LG3D_WF = Path('.github/workflows/lg3d.yml')
+    LG3D_WF = Path('.github/workflows/looking-glass.yml')
 
     # The x86_64 live fragments whose kernel GRUB's EFI `linux` loader boots.
     # arm64 uses different EFI symbols and already carries CONFIG_EFI_STUB;
@@ -5903,7 +5903,7 @@ class TestLiveIsoUefiHybridGuardrails:
         """The lg3d UEFI smoke-test step body, comments stripped."""
         wf = self.LG3D_WF.read_text()
         marker = 'Boot artifact in QEMU (smoke test - UEFI mode)'
-        assert marker in wf, 'lg3d.yml lost its UEFI smoke-test step'
+        assert marker in wf, 'looking-glass.yml lost its UEFI smoke-test step'
         step = wf.split(marker, 1)[1].split('\n      - name:', 1)[0]
         return self._code(step)
 
@@ -6004,7 +6004,7 @@ class TestLiveIsoUefiHybridGuardrails:
         wf = self.LG3D_WF.read_text()
         for dep in ('ovmf', 'mtools', 'dosfstools', 'grub-efi-amd64-bin'):
             assert dep in wf, \
-                f'lg3d.yml must install {dep} for the UEFI path'
+                f'looking-glass.yml must install {dep} for the UEFI path'
 
     def test_grub_cfg_sets_root_to_the_iso_volume(self):
         """GRUB's default root is the ESP it loaded from, not the ISO9660.
@@ -6711,7 +6711,7 @@ class TestLiveIsoCgroupSysinitGuardrails:
     SWAP = Path('bootscripts/lfs-bootscripts-20250827/lfs/init.d/swap')
     BOOTSCRIPT_LINKS = Path('bootscripts/lfs-bootscripts-20250827/Makefile')
     SMOKE = Path('tools/qemu-boot-smoke.sh')
-    LG3D_WF = Path('.github/workflows/lg3d.yml')
+    LG3D_WF = Path('.github/workflows/looking-glass.yml')
     NIGHTLY_WF = Path('.github/workflows/nightly.yml')
 
     KERNEL_CONFIGS = (
@@ -6784,7 +6784,7 @@ class TestLiveIsoCgroupSysinitGuardrails:
         """The lg3d UEFI smoke-test step body, comments stripped."""
         wf = cls.LG3D_WF.read_text()
         marker = 'Boot artifact in QEMU (smoke test - UEFI mode)'
-        assert marker in wf, 'lg3d.yml lost its UEFI smoke-test step'
+        assert marker in wf, 'looking-glass.yml lost its UEFI smoke-test step'
         return cls._code(wf.split(marker, 1)[1].split('\n      - name:', 1)[0])
 
     def test_cgroup2_is_demanded_by_the_shipped_boot_scripts(self):
@@ -7263,9 +7263,9 @@ exit 0
 
     @classmethod
     def _step(cls, name):
-        """One lg3d.yml step body, comments stripped."""
+        """One looking-glass.yml step body, comments stripped."""
         wf = cls.LG3D_WF.read_text()
-        assert name in wf, f'lg3d.yml lost its {name!r} step'
+        assert name in wf, f'looking-glass.yml lost its {name!r} step'
         return cls._code(wf.split(name, 1)[1].split('\n      - name:', 1)[0])
 
     @staticmethod
