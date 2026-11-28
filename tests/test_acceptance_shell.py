@@ -1491,7 +1491,15 @@ class TestLFSComplianceGuardrails:
             "the chroot mkdir must not create /sys/fs/selinux (EPERM on sysfs)"
         # Config, first-boot relabel and PAM integration.
         assert 'LFS_CONFIG_SECURITY_SELINUX_MODE' in content
-        assert 'SELINUX=${SELINUX_MODE}' in content
+        # The mode written is the *resolved* one.  Enforcing needs a way to
+        # label the rootfs, and the published image shipped none (unsquashfs -s
+        # prints "Number of xattr ids 0" and no file_contexts exists), so an
+        # enforcing boot denies the boot path itself.  SELINUX_EFFECTIVE carries
+        # the requested mode unless that precondition is unmet, and the config
+        # records both so the gap stays auditable.
+        assert 'SELINUX_EFFECTIVE="$SELINUX_MODE"' in content
+        assert 'SELINUX=${SELINUX_EFFECTIVE}' in content
+        assert 'effective=${SELINUX_EFFECTIVE}' in content
         assert ': >/.autorelabel' in content
         assert 'pam_selinux.so' in content
         # Early-boot wiring exists for both init systems.
@@ -3968,8 +3976,15 @@ class TestProfilePromiseGuardrails:
         assert 'useradd -m -G wheel,autologin -s /bin/bash live' in body
         assert 'passwd -d live' in body, "the live user must be passwordless"
         # The function is actually invoked in native mode (def + one call).
-        assert content.count('create_live_user') == 2, \
-            "create_live_user must be defined once and called once"
+        # Counted on the two code forms rather than on the bare name: the name
+        # also appears in the prose comment explaining the group membership, and
+        # a plain substring count failed there while the wiring this guard
+        # protects was exactly what it should be.
+        assert content.count('create_live_user() {') == 1, \
+            "create_live_user must be defined exactly once"
+        calls = [ln.strip() for ln in content.splitlines()]
+        assert calls.count('create_live_user') == 1, \
+            "create_live_user must be called exactly once, on its own line"
 
     def test_calamares_stage_injects_lg3d_install_wblfs_menu_entry(self):
         """blfs/22 must inject an idempotent 'Install WBLFS' LG3D menu item.
@@ -7793,3 +7808,709 @@ class TestNonInteractiveSudoInTests:
             "l'appel chroot doit rester non interactif"
         assert "'sudo', 'chroot'" not in content, \
             "un appel `sudo chroot` interactif a été réintroduit"
+
+
+class TestCachedPrefixBootReadinessGuardrails:
+    """lg3d nightly #125: the image booted, and nothing in it could be used.
+
+    Four defects, all measured on the published
+    lfs-0.57.4-lg3d-x86_64-sysvinit-20261125.iso (unsquashfs over its
+    live.squashfs, 1464352768 bytes), and none of them visible to a build-time
+    check because the base prefix cache brings them in, not a stage:
+
+    1. /dev/null was a regular file (`-rw-r--r-- root/root 0 ...
+       squashfs-root/dev/null` next to five real character devices), so every
+       redirect in the live session copied it up into the overlay instead of
+       discarding the write.  blfs/28 ran `getent ... >/dev/null` inside the
+       chroot of a tree whose /dev the cache had excluded.
+    2. /etc/lightdm/lightdm.conf was the xfce one (`user-session=xfce`,
+       `session-wrapper=/usr/bin/startxfce4`, `autologin-user=lfsuser`):
+       blfs/08d is scheduled before build-kernel, so a cached build never runs
+       it -- and the image ships no xfce.desktop for the autologin to find.
+    3. /etc/init.d/lightdm execed `start-stop-daemon`, which ships with dpkg
+       (0 occurrences among the 125641 entries) at /usr/sbin/lightdm, which
+       does not exist (the package installs /usr/bin/lightdm).  rc5 ran a
+       launcher that failed at once, so no greeter ever came up.
+    4. 1094 of the 1660 files directly under /usr/bin and /usr/sbin were uid
+       1002 -- the build user, who has no account in the image -- against 566
+       root-owned ones, /etc/passwd was uid 1002, and
+       /usr/bin/{su,passwd,pkexec} with /usr/sbin/unix_chkpwd were plain 0755.
+       The cache is untarred as root and then chowned recursively
+       (looking-glass.yml, "Restore base prefix cache"), and chown clears
+       setuid: no account could authenticate and `pkexec calamares`, the only
+       route to the installer (sudo is absent), could not escalate.
+
+    Five more sat behind that screen, measured on the same listing once the
+    greeter was reachable: no JVM on the session's PATH and no writable lg3d
+    tree (5 and 6), two PAM rules naming modules the image does not ship (7 and
+    8), and an SELinux configuration that could only deny (9).  The counts here
+    are numeric ids: `unsquashfs -ll` resolves uids through the passwd of the
+    host running it, and on the Fedora box that produced this listing uid 1001
+    and 1002 are unrelated accounts, so the names it prints mean nothing.
+
+    Everything pinned here repairs rather than refuses.  An added check is a
+    hostage -- it can stop an image that used to ship -- so three of these tests
+    execute the shipped blocks and assert the pack is still reached.
+    """
+
+    LIVE = Path('final/15-create-live-system.sh')
+    INSTALLER = Path('final/14-create-installer.sh')
+    DM_STAGE = Path('blfs/08d-build-display-manager.sh')
+    LG3D_STAGE = Path('blfs/30-install-lg3d.sh')
+    KNOWLEDGE_STAGE = Path('blfs/28-knowledge.sh')
+    SELINUX_STAGE = Path('blfs/31-build-selinux.sh')
+    HARDENING_STAGE = Path('blfs/15-security-hardening.sh')
+    STAGE_DIRS = (Path('lfs'), Path('blfs'), Path('final'), Path('host'))
+
+    # The exact mksquashfs call of each stage, so an ordering assertion cannot
+    # lock onto the word inside some other command.
+    PACK_CALL = {
+        LIVE: 'mksquashfs "$LFS" "$SQUASHFS"',
+        INSTALLER: 'mksquashfs "$LFS" "$ISO_ROOT/live.squashfs"',
+    }
+
+    # Where each stage's repair block ends: the line that starts its pack.
+    REPAIR_END = {
+        LIVE: 'echo "[INFO] Creating squashfs (compression:',
+        INSTALLER: 'echo "[INFO] Creating squashfs..."',
+    }
+
+    # The two halves of the launcher the three files must agree on.
+    RESOLVE_LOOP = 'for cand in /usr/bin/lightdm /usr/sbin/lightdm; do'
+    LAUNCHER_TAIL = 'PIDFILE=/run/lightdm.pid'
+
+    # Scaffolding the pack excludes, so the ownership sweep must leave it to
+    # the build user: chowning it to root would break the running build for a
+    # path that never rides into the image.
+    SCAFFOLDING = ('sources', 'logs', 'cache', 'backups', 'live', 'image',
+                   'tools', 'packages', 'lpm-repo', 'sysroot')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @classmethod
+    def _pack_call(cls, script):
+        """One stage's mksquashfs invocation, continuations included."""
+        code = cls._code(script.read_text())
+        lines = code[code.index(cls.PACK_CALL[script]):].splitlines()
+        call = [lines[0]]
+        for line in lines[1:]:
+            call.append(line)
+            if not line.rstrip().endswith('\\'):
+                break
+        return '\n'.join(call)
+
+    @classmethod
+    def _repair_block(cls, script):
+        """The pack-time repair, exactly as shipped, heredoc included."""
+        code = cls._code(script.read_text())
+        start = code.index('BUILD_UID=$(id -u)')
+        return code[start:code.index(cls.REPAIR_END[script], start)]
+
+    # Where the pack-time PAM repair of each stage starts and stops.
+    PAM_START = 'PAM_REFERENCED=""'
+
+    @classmethod
+    def _pam_block(cls, script):
+        """The shipped PAM downgrade loop, from its first assignment to the pack."""
+        code = cls._code(script.read_text())
+        start = code.index(cls.PAM_START)
+        return code[start:code.index(cls.REPAIR_END[script], start)]
+
+    @classmethod
+    def _launcher(cls, script, tag):
+        """One shipped init-script here-document, from PIDFILE to esac."""
+        text = script.read_text()
+        body = text[text.index(f"<<'{tag}'"):]
+        body = body[:body.index(f'\n{tag}\n')]
+        return body[body.index(cls.LAUNCHER_TAIL):]
+
+    def test_a_node_the_tree_cannot_hold_is_packed_as_a_pseudo_file(self):
+        """An unprivileged stage can still ship a real node: -p needs no root.
+
+        The on-disk repair is the preferred fix, but the cached tree's /dev is
+        owned by another uid and the runner may have no sudo, so a node that
+        cannot be created on disk has to be created in the archive.  Order is
+        load-bearing and measured: a -p given after the -e list never reaches
+        the archive at all (-e takes the rest of the command line as
+        patterns), and a -p without the matching -e is ignored because the
+        stale path still exists in the source tree.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'NODE_PSEUDO=()' in code and 'NODE_EXCLUDE=()' in code, \
+                f'{script} has no pseudo-node fallback to fall back on'
+            assert code.index('NODE_PSEUDO=()') \
+                < code.index('while read -r node type major minor mode'), \
+                f'{script} fills the arrays before declaring them'
+            assert ('NODE_PSEUDO+=(-p "dev/$node $type $mode 0 0 $major '
+                    '$minor")') in code, \
+                f'{script} does not name the node it could not create on disk'
+            assert 'NODE_EXCLUDE+=("dev/$node")' in code, \
+                f'{script} packs a pseudo file over a path it never '\
+                f'excludes, which mksquashfs answers by keeping the '\
+                f'placeholder'
+            assert ('$SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" '
+                    '"$major" "$minor" || true') in code, \
+                f'{script} still lets a refused mknod abort the stage '\
+                f'under `set -e`, the hostage the fallback exists to remove'
+            call = self._pack_call(script)
+            assert call.index('${NODE_PSEUDO[@]}') < call.index('-wildcards'), \
+                f'{script} passes -p after the wildcard switch, where the '\
+                f'-e list swallows it and the node vanishes from the image'
+            assert call.index('-e ') < call.index('${NODE_EXCLUDE[@]}'), \
+                f'{script} excludes the stale node outside the -e list'
+
+    def test_the_pseudo_node_lands_in_the_archive(self, tmp_path):
+        """Play the shipped loop on a dev/ that cannot be changed, and read it back.
+
+        squashfs-tools 4.6.1, run as an ordinary user, over a tree whose dev/
+        is 0555 and whose dev/null is a stale regular file: the archive must
+        carry six character devices owned by root, and the control pack -- the
+        same -p without the -e -- must still carry the placeholder.  The
+        control is what makes the assertion mean something: without it a -p
+        that mksquashfs silently ignored could not be told apart from one that
+        worked.
+        """
+        if shutil.which('mksquashfs') is None or \
+                shutil.which('unsquashfs') is None:
+            pytest.skip('squashfs-tools not installed on this host')
+        if os.geteuid() == 0:
+            pytest.skip('the read-only dev/ premise needs a non-root run')
+        code = self._code(self.LIVE.read_text())
+        loop = ('NODE_PSEUDO=()\nNODE_EXCLUDE=()\n'
+                + code.split('NODE_EXCLUDE=()\n', 1)[1]
+                .split('\nNODES\n', 1)[0] + '\nNODES\n')
+        lfs = tmp_path / 'lfs'
+        (lfs / 'dev').mkdir(parents=True)
+        (lfs / 'dev' / 'null').write_text('stale placeholder\n')
+        (lfs / 'hello.txt').write_text('hello\n')
+        os.chmod(lfs / 'dev', 0o555)
+
+        def pack(dest, extra):
+            wrapper = tmp_path / f'pack-{dest.stem}.sh'
+            wrapper.write_text(
+                'set -e\n'
+                f'LFS="{lfs}"\nSUDO=""\n{loop}\n'
+                f'mksquashfs "$LFS" "{dest}" -noappend "${{NODE_PSEUDO[@]}}" '
+                f'-wildcards -e "hello.txt"{extra}\n')
+            return subprocess.run(['bash', str(wrapper)],
+                                  capture_output=True, text=True)
+
+        archive = tmp_path / 'with.squashfs'
+        done = pack(archive, ' "${NODE_EXCLUDE[@]}"')
+        assert done.returncode == 0, \
+            f'the fallback failed the stage instead of packing: {done.stderr}'
+        nodes = {line.rsplit(' ', 1)[-1]: line
+                 for line in self._listing(archive, 'dev')}
+        for name in ('console', 'tty', 'null', 'zero', 'random', 'urandom'):
+            key = f'squashfs-root/dev/{name}'
+            assert key in nodes, f'{name} did not reach the archive: {nodes}'
+            assert nodes[key].startswith('c'), \
+                f'{key} is not a character device: {nodes[key]}'
+            assert 'root/root' in nodes[key], \
+                f'{key} is not owned by root: {nodes[key]}'
+        null = nodes['squashfs-root/dev/null']
+        assert re.search(r'\b1,\s*3\b', null), \
+            f'dev/null does not carry its major/minor: {null}'
+
+        control = tmp_path / 'without.squashfs'
+        stale = pack(control, '')
+        assert stale.returncode == 0, 'the control pack should not fail'
+        lines = self._listing(control, 'dev')
+        assert any('Pseudo file' in line for line in
+                   (stale.stdout, stale.stderr)), \
+            'mksquashfs stopped saying anything about the ignored pseudo file'
+        assert not any(line.rsplit(' ', 1)[-1] == 'squashfs-root/dev/null'
+                       and line.startswith('c') for line in lines), \
+            'the -e list is not what makes the pseudo file win, so the '\
+            'ordering this stage depends on is unproven'
+
+    @staticmethod
+    def _listing(archive, target):
+        """`unsquashfs -ll` lines for one subtree of a packed archive."""
+        done = subprocess.run(
+            ['unsquashfs', '-no-progress', '-ll', str(archive), target],
+            capture_output=True, text=True)
+        return [line for line in done.stdout.splitlines()
+                if line.startswith(('-', 'c', 'd', 'l', 's'))
+                and 'squashfs-root/' in line]
+
+    def test_the_cache_chown_is_repaired_at_pack_time(self):
+        """Ownership the cache destroyed has to come back before the pack.
+
+        The sweep is keyed on the build uid, so a tree built privileged is
+        walked and left alone, and it prunes exactly what the pack excludes.
+        Measured on 20261125 without it: 1100 uid-1002 files against 566
+        root-owned ones under /usr/bin and /usr/sbin, /etc/passwd itself uid
+        1002.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'BUILD_UID=$(id -u)' in code, \
+                f'{script} no longer knows whose uid it is undoing'
+            assert 'if [ "$BUILD_UID" != "0" ]; then' in code, \
+                f'{script} sweeps a tree that was built as root for nothing'
+            assert '-uid "$BUILD_UID" -exec chown -h 0:0' in code, \
+                f'{script} does not key the reset on the build uid, or '\
+                f'loses the symlink case with a dereferencing chown'
+            assert '-xdev' in code, \
+                f'{script} could follow a bind mount out of the rootfs'
+            assert code.index('BUILD_UID=$(id -u)') \
+                < code.index(self.PACK_CALL[script]), \
+                f'{script} repairs after packing, which fixes nothing'
+
+    def test_the_setuid_sweep_names_the_programs_the_image_needs(self):
+        """chown clears S_ISUID, and four of those programs are the login path.
+
+        su, passwd and unix_chkpwd (the book installs it `chmod -v 4755`) for
+        any authentication, pkexec for the `pkexec calamares` launcher blfs/22
+        wires -- sudo is not in the image, so pkexec is the only route to the
+        installer.  Xorg stays off the list on purpose: the display manager
+        already starts it as root, so making it setuid only widens the surface.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            for path in ('usr/bin/passwd=4755', 'usr/bin/su=4755',
+                         'usr/bin/pkexec=4755', 'usr/sbin/unix_chkpwd=4755',
+                         'usr/bin/sudo=4755'):
+                assert path in code, \
+                    f'{script} no longer restores {path.split("=")[0]}'
+            assert 'usr/bin/Xorg=' not in code, \
+                f'{script} makes Xorg setuid, which the DM already runs as root'
+            assert '[ -e "$LFS/$path" ] || continue' in code, \
+                f'{script} dies on a profile that does not ship the package'
+            assert '$SUDO chmod "$mode" "$LFS/$path" 2>/dev/null || true' \
+                in code, \
+                f'{script} lets a refused chmod abort the stage under `set -e`'
+
+    def test_the_sweep_leaves_the_build_scaffolding_alone(self):
+        """What the pack excludes must stay the build user's to write in.
+
+        The prune list and the mksquashfs exclude list are the same set on
+        purpose; dev/ is pruned too, because the node loop above owns it and a
+        chown there would be applied to a live bind mount on the unmounted
+        path.  The accounts get their homes back from the image's own passwd
+        afterwards, which is why /home is not on the prune list.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            call = self._pack_call(script)
+            for name in self.SCAFFOLDING:
+                assert f'-path "$LFS/{name}"' in code, \
+                    f'{script} chowns {name}/, which the build still writes to'
+                assert f'"{name}/*"' in call, \
+                    f'{script} excludes {name}/ from the image without '\
+                    f'pruning it out of the sweep'
+            assert '-path "$LFS/dev"' in code, \
+                f'{script} sweeps the /dev the node loop just built'
+            assert '$SUDO chown -R "$huid:$hgid" "$LFS$hdir"' in code, \
+                f'{script} hands every account home to root'
+            assert "awk -F: '$3 >= 1000" in code, \
+                f'{script} no longer reads the homes back from the image passwd'
+            assert 'var/lib/lightdm' in code and 'var/cache/lightdm' in code, \
+                f'{script} leaves the greeter state owned by the build uid'
+
+    def test_the_repair_cannot_abort_the_pack(self, tmp_path):
+        """Run the shipped block against a tree it cannot fully fix.
+
+        A repair that dies is worse than the bug it repairs: the stage would
+        produce no image at all.  This plays it with SUDO empty over a tree
+        with no sudo, no setuid privileges and a launcher that must come back,
+        and requires the block to reach its end (bash is run with -e, like the
+        runner does).
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            lfs = tmp_path / script.stem / 'lfs'
+            (lfs / 'etc' / 'init.d').mkdir(parents=True)
+            (lfs / 'usr' / 'bin').mkdir(parents=True)
+            (lfs / 'home' / 'live').mkdir(parents=True)
+            (lfs / 'var' / 'lib' / 'lightdm').mkdir(parents=True)
+            (lfs / 'etc' / 'passwd').write_text(
+                'live:x:1000:1000::/home/live:/bin/bash\n'
+                'lightdm:x:109:116::/var/lib/lightdm:/sbin/nologin\n')
+            daemon = lfs / 'usr' / 'bin' / 'lightdm'
+            daemon.write_text('#!/bin/sh\n')
+            daemon.chmod(0o755)
+            launcher = lfs / 'etc' / 'init.d' / 'lightdm'
+            launcher.write_text('#!/bin/sh\nDAEMON=/usr/sbin/lightdm\n'
+                                'start-stop-daemon -S -b -m -p "$PIDFILE" '
+                                '-x "$DAEMON"\n')
+            wrapper = tmp_path / f'{script.stem}-repair.sh'
+            wrapper.write_text('set -e\n'
+                               f'LFS="{lfs}"\nSUDO=""\n'
+                               + self._repair_block(script) +
+                               '\necho REPAIR-REACHED-THE-PACK\n')
+            done = subprocess.run(['bash', str(wrapper)],
+                                  capture_output=True, text=True)
+            assert done.returncode == 0, \
+                f'{script} aborted at its own repair: {done.stderr}'
+            assert 'REPAIR-REACHED-THE-PACK' in done.stdout, \
+                f'{script} never returned from the repair block'
+            text = launcher.read_text()
+            assert 'start-stop-daemon' not in text or \
+                'Could not rewrite' in done.stdout, \
+                f'{script} rewrote the launcher and reported a failure, or '\
+                f'left a launcher that cannot run and said nothing'
+
+    def test_the_lightdm_launcher_needs_no_dpkg_tool(self):
+        """start-stop-daemon is not on an LFS system, and /usr/sbin/lightdm is not either.
+
+        The launcher resolves the daemon at run time, so a package built with
+        another prefix still starts, and it refuses loudly when no daemon
+        exists at all instead of failing inside a tool the rootfs never had.
+        """
+        dm = self._code(self.DM_STAGE.read_text())
+        assert 'start-stop-daemon' not in dm, \
+            'blfs/08d went back to the dpkg tool no LFS system ships'
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert self.RESOLVE_LOOP in code, \
+                f'{script} no longer resolves the lightdm binary'
+            # The repair may only rewrite a launcher that is actually broken,
+            # and only when there is a daemon to point it at.
+            assert 'grep -q start-stop-daemon "$LIGHTDM_INIT"' in code, \
+                f'{script} would overwrite a launcher it did not need to fix'
+            assert 'if [ -n "$LIGHTDM_BIN" ] && [ -f "$LIGHTDM_INIT" ]' in code, \
+                f'{script} rewrites the launcher of a tree with no daemon'
+            assert 'Could not rewrite $LIGHTDM_INIT' in code, \
+                f'{script} has no honest warning for a launcher it cannot fix'
+
+    def test_the_three_launchers_are_the_same_launcher(self):
+        """08d is the source of truth, the final stages repair its cached copy.
+
+        blfs/08d runs before the resume point, so a cached build keeps the file
+        the cache shipped.  The two paths may not drift: an image whose
+        launcher differs from the one the stage writes is an image nobody
+        tested.  Compared from PIDFILE to esac, which is the behaviour.
+        """
+        reference = self._launcher(self.DM_STAGE, 'SYSV')
+        assert self.LAUNCHER_TAIL in reference
+        for script, tag in ((self.LIVE, 'LDMINIT'),
+                            (self.INSTALLER, 'LDMINIT')):
+            shipped = self._launcher(script, tag)
+            assert shipped == reference, \
+                f'{script} repaired launcher differs from blfs/08d:\n' \
+                f'{shipped[:200]}\n---\n{reference[:200]}'
+
+    def test_a_cached_greeter_conf_is_repinned_after_the_resume_point(self):
+        """blfs/30 runs on both the cold and the cached path; 08d does not.
+
+        The cached image carried the xfce configuration beside the five
+        lg3d.xsessions entries -- mtime 12:51 against 22:21, the two sides of
+        the resume point.  The rewrite is the same content 08d writes for an
+        xorg_only profile, so cold and cached builds converge, and a failure
+        warns instead of dying.
+        """
+        content = self.LG3D_STAGE.read_text()
+        gate = ('if [ "$DM_OWNS_DISPLAY" = "true" ]; then\n'
+                '    run_privileged mkdir -p "$LFS/etc/lightdm"')
+        assert gate in content, \
+            'blfs/30 no longer rewrites the greeter configuration'
+        block = content[content.index(gate):]
+        block = block[:block.index('\nfi\n')]
+        assert 'user-session=lg3d-${LG3D_MODE}' in block, \
+            'the rewritten conf must name the session the profile selected'
+        assert 'greeter-session=lightdm-gtk-greeter' in block
+        assert 'session-wrapper' not in block, \
+            'the rewritten conf would hand LightDM a startxfce4 that is absent'
+        assert 'autologin' not in block, \
+            'the rewritten conf autologins past the mode picker'
+        assert 'Could not write $LFS/etc/lightdm/lightdm.conf' in block, \
+            'a conf it cannot write has to warn, not cost the image'
+        # Same keys 08d writes for an xorg_only profile, so the pair is
+        # idempotent whichever path the build took.
+        dm = self.DM_STAGE.read_text()
+        guard = dm.index('if [ "${LG3D_GREETER:-false}" = "true" ]; then')
+        branch = dm[guard:dm.index('\nelse\n', guard)]
+        for key in ('greeter-session=lightdm-gtk-greeter',
+                    'run-directory=/run/lightdm'):
+            assert key in branch and key in block, \
+                f'the two lightdm.conf writers no longer agree on {key}'
+
+    def test_the_live_account_can_authenticate_at_the_greeter(self):
+        """No /etc/shadow, a blank live password, and pam_unix without nullok.
+
+        pam_unix(8) does not permit a blank official password unless the rule
+        says `nullok`, and no PAM file in this repository says it, so the
+        passwordless account blfs/30 creates could not log in even once the
+        greeter was up.  The exemption is scoped to that one account and every
+        other user still falls through to system-auth; blfs/22 deletes `live`
+        on the installed target, which leaves the rule inert there.
+        """
+        content = self.LG3D_STAGE.read_text()
+        gate = 'if [ "$LIVE_SYSTEM" = "true" ] && '\
+               '[ "$DM_OWNS_DISPLAY" = "true" ]; then'
+        assert gate in content, \
+            'blfs/30 no longer scopes the live authentication fix'
+        block = content[content.index(gate):]
+        block = block[:block.index('\nfi\n')]
+        assert '[success=done default=ignore] pam_succeed_if.so user = live' \
+            in block, 'the live account still has no way past pam_unix'
+        for line in ('auth        include     system-auth',
+                     'account     include     system-auth',
+                     'password    include     system-auth',
+                     'session     include     system-auth'):
+            assert line in block, \
+                f'the rewritten PAM file drops {line!r}, which blfs/08d ships'
+            assert line in content, \
+                'blfs/30 must stay a superset of blfs/08d /etc/pam.d/lightdm'
+        assert 'Could not write $LFS/etc/pam.d/lightdm' in block, \
+            'a PAM file it cannot write has to warn, not cost the image'
+
+    def test_no_probe_discards_output_through_an_unmounted_dev(self):
+        """`>/dev/null` in a chroot command string is how /dev/null was born.
+
+        The stage runs inside the chroot, so the redirect is resolved against
+        the tree being packed, not the host: bash creates a regular file in an
+        empty dev/ and the probe still returns the status it was asked for.  A
+        stage that bind-mounts /dev first is safe, so the guard allows it there
+        and forbids it everywhere else.  blfs/28 mounts nothing, which is why
+        its two probes now read their status instead of throwing stdout away.
+        """
+        inner = re.compile(r'-c\s+"[^"]*/dev/null')
+        offenders = []
+        for directory in self.STAGE_DIRS:
+            for script in sorted(directory.glob('*.sh')):
+                text = script.read_text()
+                lines = [line for line in self._code(text).splitlines()
+                         if inner.search(line)]
+                if lines and 'mount --bind /dev' not in text:
+                    offenders.append(script)
+        assert not offenders, \
+            f'{offenders}: a chroot probe writing to /dev/null in a tree '\
+            f'with no /dev mounts a regular file where the image needs a '\
+            f'device'
+        knowledge = self._code(self.KNOWLEDGE_STAGE.read_text())
+        assert not re.search(r"run_chroot '[^']*/dev/", knowledge), \
+            'blfs/28 chroots a command that touches /dev and never mounts it'
+        assert "run_chroot 'getent group ollama'" in knowledge
+        assert "run_chroot 'getent passwd ollama'" in knowledge
+
+    def test_a_rule_naming_a_missing_pam_module_is_downgraded(self, tmp_path):
+        """`session required pam_selinux.so' with no module is a refused login.
+
+        Linux-PAM turns a dlopen failure inside a `required' or `requisite' rule
+        into PAM_MODULE_UNKNOWN and fails the whole stack -- the greeter
+        authenticates and then cannot open the session.  Measured on
+        lg3d-nightly-20261125: /etc/pam.d references 14 modules and two are
+        absent from the image, pam_selinux.so twice as `session required' in
+        system-auth (which /etc/pam.d/lightdm pulls with `session include
+        system-auth') and pam_pwquality.so as `password requisite' in
+        system-password.  The shipped block runs here over a synthetic tree: the
+        dangling module must come back optional, the installed one untouched,
+        use_authtok dropped with it, and the block must return under
+        `set -euo pipefail', the shell both packing stages run in.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            lfs = tmp_path / script.stem / 'lfs'
+            pamd = lfs / 'etc' / 'pam.d'
+            mods = lfs / 'usr' / 'lib' / 'security'
+            pamd.mkdir(parents=True)
+            mods.mkdir(parents=True)
+            (pamd / 'system-auth').write_text(
+                'auth     required  pam_unix.so\n'
+                'session  required  pam_selinux.so close\n'
+                'session  required  pam_selinux.so open\n')
+            (pamd / 'system-password').write_text(
+                'password requisite pam_pwquality.so retry=3\n'
+                'password required  pam_unix.so sha512 shadow '
+                'use_authtok rounds=65536\n')
+            (mods / 'pam_unix.so').write_text('a fixture, not an elf\n')
+            wrapper = tmp_path / f'{script.stem}-pam.sh'
+            wrapper.write_text('set -euo pipefail\n'
+                               f'LFS="{lfs}"\nSUDO=""\n'
+                               + self._pam_block(script) +
+                               '\necho PAM-REPAIR-DONE\n')
+            done = subprocess.run(['bash', str(wrapper)],
+                                  capture_output=True, text=True)
+            assert done.returncode == 0, \
+                f'{script} aborted at its own PAM repair: {done.stderr}'
+            assert 'PAM-REPAIR-DONE' in done.stdout, \
+                f'{script} never returned from the PAM repair'
+            auth = (pamd / 'system-auth').read_text()
+            assert 'session  required  pam_selinux.so' not in auth, \
+                f'{script} left a required rule naming a module that is not there'
+            assert auth.count('session  optional  pam_selinux.so') == 2, \
+                f'both rules must come back optional: {auth}'
+            assert 'auth     required  pam_unix.so' in auth, \
+                f'{script} rewrote a rule for a module the tree ships'
+            pw = (pamd / 'system-password').read_text()
+            assert 'password optional pam_pwquality.so retry=3' in pw, \
+                f'{script} left the password stack gated on a missing module'
+            assert 'use_authtok' not in pw, \
+                'pam_unix refuses with no token stored by an earlier module, '\
+                'so a login that works would still break passwd'
+            assert 'sha512' in pw and 'rounds=65536' in pw, \
+                'only the keyword and the flag that depended on it may change'
+            for named in ('pam_selinux.so', 'pam_pwquality.so'):
+                assert f'needs {named}' in done.stdout, \
+                    f'{script} hid the gap it repaired: {named}'
+            assert 'needs pam_unix.so' not in done.stdout, \
+                f'{script} warned about a module the tree does ship'
+
+    def test_both_pack_stages_carry_the_same_pam_repair(self):
+        """Whichever stage packs the rootfs has to repair it the same way.
+
+        final/15 builds the live media and final/14 the installer image, and a
+        profile takes one path or the other; two repairs that drift mean an
+        image nobody measured.  Compared as shipped code, comments dropped, and
+        both must sit before their mksquashfs call -- after it the bytes are
+        frozen and a repair only changes the next build.
+        """
+        installer = self._pam_block(self.INSTALLER)
+        assert installer == self._pam_block(self.LIVE), \
+            f'the two pack-time PAM repairs no longer match:\n'\
+            f'{installer[:200]}\n---\n{self._pam_block(self.LIVE)[:200]}'
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert code.index(self.PAM_START) < code.index(self.PACK_CALL[script]), \
+                f'{script} repairs the PAM stacks after packing the image'
+
+    def test_the_session_finds_a_jvm_on_its_path(self):
+        """run-lg3d.sh probes four places for a JDK and the image answered none.
+
+        Read out of lg3d-nightly-20261125, the probe order is an inherited
+        JAVA_HOME, /home/fedora/.jdks/jdk-21.0.12.1+1, the macOS
+        /usr/libexec/java_home, then `command -v java'.  All four are dead ends
+        in that listing (/home/fedora 0 hits, /usr/libexec/java_home 0 hits),
+        and a display-manager session runs the chosen .desktop Exec with the
+        greeter's environment rather than a login shell, so /etc/profile.d/
+        java.sh -- the only thing exporting JAVA_HOME here -- never runs either.
+        The session died on "ERROR: no JDK 21 found" before gradle was ever
+        reached, while /usr/lib/java/jdk/bin/java sat in the image root/root
+        0755.  One pair of symlinks on the default PATH resolves the fourth
+        probe, and it is guarded because a profile without java-dev has no JDK.
+        """
+        content = self.LG3D_STAGE.read_text()
+        gate = 'if [ -x /usr/lib/java/jdk/bin/java ]; then'
+        assert gate in content, \
+            'blfs/30 no longer puts a JVM on the session PATH'
+        block = content[content.index(gate):]
+        block = block[:block.index('\nfi\n')]
+        assert 'ln -sf /usr/lib/java/jdk/bin/java /usr/bin/java' in block, \
+            'the fourth probe of run-lg3d.sh needs java on PATH'
+        assert 'ln -sf /usr/lib/java/jdk/bin/javac /usr/bin/javac' in block, \
+            'lg3d compiles against javac, not a jre'
+        assert 'no JVM on PATH' in block and 'log_warning' in block, \
+            'a JDK-less tree has to say so and keep building, not abort'
+
+    def test_the_session_can_build_in_the_lg3d_tree(self):
+        """./gradlew writes .gradle/ and build/ under a tree that was 0755 root.
+
+        Measured in the same listing: /opt/lg3d drwxr-xr-x root/root and
+        lg3d-core drwxrwxr-x root/root -- group root, which the live account
+        (uid/gid 1001) is not in -- with no directory under it writable by
+        other.  Nothing can be run in place instead: the image holds no compiled
+        output, only the 90 files of lg3d-core/build-tools/ that come from the
+        source archive.  The tree goes to wheel, the group create_live_user
+        gives `live' and blfs/22's users.conf gives the first installed user,
+        with setgid on the directories so whatever the launch builds inherits
+        it.  World-writable was rejected on purpose: this is a tree every user
+        runs from.
+        """
+        content = self.LG3D_STAGE.read_text()
+        gate = 'if getent group wheel >/dev/null; then'
+        assert gate in content, \
+            'blfs/30 no longer hands /opt/lg3d to the admin group'
+        block = content[content.index(gate):]
+        block = block[:block.index('\nfi\n')]
+        assert 'chgrp -R wheel /opt/lg3d ||\n        log_warning' in block, \
+            'an unguarded chgrp aborts the chroot script under `set -e'\
+            ' the moment the group is missing'
+        assert 'chmod -R g+w /opt/lg3d || true' in block
+        assert "find /opt/lg3d -type d -exec chmod g+s {} + || true" in block, \
+            'without setgid, what the build creates stops being writable'
+        assert 'chmod -R o+w' not in block and 'chmod -R 0777' not in block, \
+            'the tree went world-writable to fix one account'
+        assert 'no wheel group in the image' in block, \
+            'the case this cannot fix has to be reported, not silent'
+
+    def test_selinux_does_not_enforce_an_unlabeled_image(self):
+        """A policy with nothing to label the tree with denies every path.
+
+        Measured on lg3d-nightly-20261125: config/kernel-config carries
+        CONFIG_SECURITY_SELINUX=y, /etc/selinux/config says SELINUX=enforcing,
+        rcS.d/S02selinux runs selinux-firstboot -- and the image ships no
+        file_contexts database at that path (only file_contexts.subs_dist and
+        media), while `unsquashfs -s' reports "Number of xattr ids 0", so not
+        one file in the packed rootfs carries a label.  Loading a policy over
+        that makes everything unlabeled_t and an enforcing kernel denies init,
+        the display manager and PAM itself.  The stage now recovers the compiled
+        database from the refpolicy build tree before deleting it, writes
+        permissive when it is still missing, and skips the policy load on live
+        media, where the read-only lower layer can never be relabeled.  final/16
+        reports the mode as a compliance gap (WARN, not FAIL), so none of this
+        can cost the ISO.
+        """
+        content = self.SELINUX_STAGE.read_text()
+        assert 'SELINUX_EFFECTIVE="$SELINUX_MODE"' in content
+        assert 'SELINUX=${SELINUX_EFFECTIVE}' in content, \
+            'the config has to be written from the resolved mode'
+        assert 'SELINUX=${SELINUX_MODE}' not in content, \
+            'the config went back to promising an enforcing boot it cannot deliver'
+        assert 'SELINUX_EFFECTIVE=permissive' in content, \
+            'a missing labeling database must downgrade the mode, not ship it'
+        assert 'contexts/files" 2>/dev/null &&' in content, \
+            'the file_contexts recovery died with its install chain unguarded'
+        assert 'log_warning "found $fc but could not install it as file_contexts"' \
+            in content, 'a database it found but could not place has to be reported'
+        fc = content.index('for fc in build/"${SELINUX_TYPE:-targeted}"')
+        assert fc < content.index('popd >/dev/null; rm -rf "$dir"', fc), \
+            'the build tree is deleted before the database is read out of it'
+        live = content.index('if [ -d /.live ]; then')
+        assert live < content.index('load_policy -i', live), \
+            'live media still loads a policy over an unlabeled squashfs'
+        assert live < content.index('fixfiles -F relabel', live), \
+            'the live branch would copy the whole tree into the overlay'
+        assert 'Number of xattr ids 0' in content, \
+            'the measurement that justifies the live skip belongs beside it'
+        assert 'make -C pam PREFIX=/usr LIBDIR=/usr/lib' in content, \
+            'libselinux builds pam_selinux on its own; the stage stopped asking'
+        assert 'if install -m 0755 pam/pam_selinux.so /usr/lib/security/ '\
+            '2>/dev/null; then' in content, \
+            'an install that cannot write has to warn, not abort the stage'
+        append = content.index(
+            'if [ -f /usr/lib/security/pam_selinux.so ] || '
+            '[ -f /lib/security/pam_selinux.so ]; then')
+        assert append < content.index(
+            'echo "session  required  pam_selinux.so  close"'), \
+            'the required rules went back to being written unconditionally'
+
+    def test_system_password_names_only_modules_the_image_ships(self):
+        """`password requisite pam_pwquality.so' with no libpwquality behind it.
+
+        libpwquality-1.4.5.tar.bz2 is in packages/sources.list and no stage
+        builds it, so pam_pwquality.so appears 0 times among the 125641 entries
+        of the published image while system-password demanded it as requisite:
+        every password change -- including the one blfs/17 asks for on first
+        boot -- died with PAM_MODULE_UNKNOWN before pam_unix was reached.  The
+        fallback keeps sha512 and the rounds and drops use_authtok, which
+        pam_unix only accepts once a module before it stored a token, and the
+        stage says out loud that quality is not enforced.  The gate runs
+        host-side against $LFS, and /etc/security/pwquality.conf is still
+        written, so the day libpwquality gets built is a flag change away.
+        """
+        content = self.HARDENING_STAGE.read_text()
+        gate = 'if [ -e "$LFS/usr/lib/security/pam_pwquality.so" ] ||'
+        assert gate in content, \
+            'blfs/15 went back to requiring a module no stage installs'
+        head = content[content.index(gate):]
+        head = head[:head.index('\nfi\n')]
+        assert head.count("<<'PAMPW'") == 2, \
+            'the stack must be written by exactly one of the two branches'
+        assert 'PASSWORD_QUALITY=enforced' in head
+        assert 'PASSWORD_QUALITY="not enforced (module absent)"' in head, \
+            'the fallback has to be recorded, not just warned once'
+        fallback = head[head.rindex("<<'PAMPW'"):]
+        assert 'pam_pwquality.so' not in fallback, \
+            'the fallback still names the module that broke passwd'
+        assert 'use_authtok' not in fallback, \
+            'pam_unix with use_authtok and no stored token refuses the change'
+        assert 'sha512' in fallback and 'rounds=65536' in fallback, \
+            'the fallback lost the hashing policy it was meant to keep'
+        assert 'pwquality ${PASSWORD_QUALITY}' in content, \
+            'the stage summary claims a control it may not have applied'

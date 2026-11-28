@@ -289,6 +289,27 @@ if mountpoint -q "$LFS/dev"; then
     }
 fi
 $SUDO mkdir -p "$LFS/dev"
+# A node the on-disk repair cannot deliver is packed as a squashfs pseudo file
+# instead: -p writes a real character node into the archive and needs no
+# privilege at all, which is the only way to ship a correct /dev/null when
+# $LFS/dev belongs to another uid and the runner has no sudo.  Measured on
+# squashfs-tools 4.6.1, unprivileged, against a tree whose dev/null is a stale
+# regular file in a read-only dev/:
+#   -p "dev/null c 666 0 0 1 3" with -e "dev/null" gives back
+#       crw-rw-rw- root/root  1, 3 squashfs-root/dev/null
+#   the same -p without the -e gives
+#       Pseudo file "dev/null" exists in source filesystem "lfs/dev/null".
+#       Ignoring, exclude it (-e/-ef) to override.
+#   and the placeholder ships;
+#   a -p written after the -e list lands nothing at all, because -e takes the
+#       rest of the command line as patterns.
+# So the spec is relative to the source root (an absolute -e aborts with
+# "FATAL ERROR: /, ./ and ../ prefixed excludes not supported with -wildcards
+# or -regex options") and it precedes -wildcards/-e.  Without this fallback a
+# wrong-type node that cannot be removed would reach the gate below and cost
+# the build an image it is able to produce.
+NODE_PSEUDO=()
+NODE_EXCLUDE=()
 while read -r node type major minor mode; do
     # `[ ! -e ]` is an existence test, not a node test: a stage that chrooted
     # into a tree with an empty /dev answers `>/dev/null` by creating a
@@ -301,7 +322,12 @@ while read -r node type major minor mode; do
         $SUDO rm -f "$LFS/dev/$node" || true
     fi
     if [ ! -e "$LFS/dev/$node" ]; then
-        $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor"
+        $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor" || true
+    fi
+    if [ ! -c "$LFS/dev/$node" ]; then
+        echo "[WARN] $LFS/dev/$node unusable on disk; packing a pseudo file"
+        NODE_PSEUDO+=(-p "dev/$node $type $mode 0 0 $major $minor")
+        NODE_EXCLUDE+=("dev/$node")
     fi
 done <<'NODES'
 console c 5 1 600
@@ -390,6 +416,200 @@ for cfg in "$LFS"/etc/sysconfig/ifconfig.*; do
     fi
 done
 
+# ---------------------------------------------------------------------------
+# Privilege and launcher repair, immediately before the pack.  Same hole, same
+# repair as final/15, where the measurements are written up: the base-prefix
+# cache is chowned to the unprivileged build user after a root extraction, which
+# leaves the packed tree owned by an uid no account has and strips every setuid
+# bit (20261125: /usr/bin/{su,passwd,pkexec} and /usr/sbin/unix_chkpwd are
+# 0755), and blfs/08d's sysvinit launcher execs start-stop-daemon, a dpkg tool
+# no LFS system ships, at a /usr/sbin/lightdm that does not exist.  Tolerant
+# throughout: nothing here may cost the build an image it can produce.
+# ---------------------------------------------------------------------------
+BUILD_UID=$(id -u)
+if [ "$BUILD_UID" != "0" ]; then
+    $SUDO find "$LFS" -xdev \
+        \( -path "$LFS/logs" -o -path "$LFS/sources" -o -path "$LFS/tmp" \
+        -o -path "$LFS/run" -o -path "$LFS/dev" -o -path "$LFS/proc" \
+        -o -path "$LFS/sys" -o -path "$LFS/cache" -o -path "$LFS/image" \
+        -o -path "$LFS/live" -o -path "$LFS/backups" -o -path "$LFS/tools" \
+        -o -path "$LFS/packages" -o -path "$LFS/lpm-repo" \
+        -o -path "$LFS/sysroot" \) \
+        -prune -o -uid "$BUILD_UID" -exec chown -h 0:0 '{}' + 2>/dev/null ||
+        true
+    echo "[INFO] Cached paths still owned by uid $BUILD_UID reset to root"
+fi
+
+for entry in usr/bin/passwd=4755 usr/bin/su=4755 usr/bin/gpasswd=4755 \
+    usr/bin/chfn=4755 usr/bin/chsh=4755 usr/bin/newgrp=4755 \
+    usr/bin/pkexec=4755 usr/bin/sudo=4755 usr/bin/ntfs-3g=4755 \
+    usr/sbin/unix_chkpwd=4755; do
+    path="${entry%%=*}"
+    mode="${entry##*=}"
+    [ -e "$LFS/$path" ] || continue
+    $SUDO chown 0:0 "$LFS/$path" 2>/dev/null || true
+    $SUDO chmod "$mode" "$LFS/$path" 2>/dev/null || true
+done
+
+if [ -f "$LFS/etc/passwd" ]; then
+    while IFS=: read -r hdir huid hgid; do
+        [ -n "$hdir" ] && [ -d "$LFS$hdir" ] || continue
+        $SUDO chown -R "$huid:$hgid" "$LFS$hdir" 2>/dev/null || true
+    done < <(awk -F: '$3 >= 1000 && $6 ~ "^/" { print $6 ":" $3 ":" $4 }' \
+        "$LFS/etc/passwd")
+    LDM_IDS=$(awk -F: '$1 == "lightdm" { print $3 ":" $4; exit }' \
+        "$LFS/etc/passwd") || LDM_IDS=""
+    if [ -n "$LDM_IDS" ]; then
+        for d in var/lib/lightdm var/cache/lightdm; do
+            [ -e "$LFS/$d" ] || continue
+            $SUDO chown -R "$LDM_IDS" "$LFS/$d" 2>/dev/null || true
+        done
+    fi
+fi
+
+LIGHTDM_BIN=""
+for cand in usr/bin/lightdm usr/sbin/lightdm; do
+    if [ -x "$LFS/$cand" ]; then
+        LIGHTDM_BIN="/$cand"
+        break
+    fi
+done
+LIGHTDM_INIT="$LFS/etc/init.d/lightdm"
+if [ -n "$LIGHTDM_BIN" ] && [ -f "$LIGHTDM_INIT" ] &&
+    grep -q start-stop-daemon "$LIGHTDM_INIT"; then
+    echo "[WARN] $LIGHTDM_INIT execs start-stop-daemon, which no LFS system"
+    echo "       ships; replacing it with a plain launcher for $LIGHTDM_BIN"
+    if $SUDO tee "$LIGHTDM_INIT" >/dev/null <<'LDMINIT'
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          lightdm
+# Required-Start:    $local_fs $remote_fs $network
+# Required-Stop:     $local_fs $remote_fs $network
+# Default-Start:     5
+# Default-Stop:      0 1 2 6
+# Short-Description: Light Display Manager
+### END INIT INFO
+# Resolve the daemon at run time: the path depends on the prefix the package was
+# built with, and the copy shipped in 20261125 named one that does not exist.
+DAEMON=""
+for cand in /usr/bin/lightdm /usr/sbin/lightdm; do
+    if [ -x "$cand" ]; then
+        DAEMON="$cand"
+        break
+    fi
+done
+PIDFILE=/run/lightdm.pid
+case "$1" in
+    start)
+        if [ -z "$DAEMON" ]; then
+            echo "lightdm: no daemon in /usr/bin or /usr/sbin" >&2
+            exit 1
+        fi
+        mkdir -p /run/lightdm
+        nohup "$DAEMON" >/var/log/lightdm.log 2>&1 &
+        echo $! >"$PIDFILE"
+        ;;
+    stop)
+        if [ -f "$PIDFILE" ]; then
+            kill "$(cat "$PIDFILE")" 2>/dev/null || true
+            rm -f "$PIDFILE"
+        fi
+        pkill -x lightdm 2>/dev/null || true
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    status)
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+            echo "lightdm is running."
+        else
+            echo "lightdm is not running."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+LDMINIT
+    then
+        $SUDO chmod 0755 "$LIGHTDM_INIT" 2>/dev/null || true
+    else
+        echo "[WARNING] Could not rewrite $LIGHTDM_INIT; the installed system"
+        echo "          will have no display manager on rc5"
+    fi
+fi
+
+# --- PAM rules naming a module the image does not ship ----------------------
+# Linux-PAM fails the whole stack when a `required` or `requisite` rule names a
+# module it cannot dlopen: the call returns PAM_MODULE_UNKNOWN and the user
+# cannot log in, with nothing on the console but a greeter that re-presents the
+# password prompt.  Measured on the published lg3d-nightly-20261125
+# live.squashfs: /etc/pam.d references 14 modules and two of them are absent
+# from the image -- pam_selinux.so (`session required`, twice, in system-auth,
+# which /etc/pam.d/lightdm pulls through `session include system-auth`) and
+# pam_pwquality.so (`password requisite` in system-password; libpwquality is in
+# the source list but no stage builds it).  blfs/31 and blfs/15 now write those
+# rules only when the module exists, but a build resumed from the base prefix
+# cache restores a tree whose /etc/pam.d was written before that, and this is
+# the last point every path passes through before the bytes are frozen.
+#
+# Downgrade, never delete: PAM skips an `optional` rule whose module cannot be
+# loaded and runs the rest of the stack, so the login works and the lost control
+# stays a reported gap instead of a bricked session.  Only the keyword of the
+# offending rule is rewritten.  use_authtok has to go with it on the password
+# facility -- pam_unix refuses with "no new authtok set" when no earlier module
+# stored one, so leaving the flag would trade a broken login for a broken
+# passwd.  Nothing here can abort: every write is guarded.
+# This block is byte-identical to the one in final/15; a pinned test compares
+# them, so an edit to one has to be made in both.
+PAM_REFERENCED=""
+if [ -d "$LFS/etc/pam.d" ]; then
+    PAM_REFERENCED=$(grep -rhoE 'pam_[a-z0-9_]+\.so' "$LFS/etc/pam.d" 2>/dev/null | sort -u || true)
+    for pam_module in $PAM_REFERENCED; do
+        pam_present=false
+        for pam_dir in "$LFS/usr/lib/security" "$LFS/lib/security" "$LFS/usr/lib64/security"; do
+            if [ -e "$pam_dir/$pam_module" ]; then
+                pam_present=true
+                break
+            fi
+        done
+        if [ "$pam_present" = true ]; then
+            continue
+        fi
+        echo "[WARN] /etc/pam.d needs ${pam_module}, which this image does not"
+        echo "       ship; downgrading its required/requisite rules to optional"
+        echo "       so a missing module cannot fail the stack"
+        # The s delimiter is `#', not the usual `|': the rule below ends its match
+        # with the alternation ([[:space:]]|$), and a `|'-delimited s command reads
+        # that pipe as its own closing delimiter and dies with "unknown option to
+        # `s'" -- measured, and every dangling rule stayed in place.  Built in two
+        # parts because the whole thing will not fit one line.
+        pam_rule="s#^([[:space:]]*-?[a-z]+[[:space:]]+)(required|requisite)"
+        pam_rule="${pam_rule}([[:space:]]+${pam_module}([[:space:]]|\$))#\1optional\3#"
+        for pam_file in "$LFS"/etc/pam.d/*; do
+            [ -f "$pam_file" ] || continue
+            grep -q "$pam_module" "$pam_file" || continue
+            if ! $SUDO sed -i -E "$pam_rule" "$pam_file" 2>/dev/null; then
+                echo "[WARNING] Could not rewrite the ${pam_module} rules in"
+                echo "          $pam_file; a stack naming it may still fail"
+                continue
+            fi
+            if grep -qE "^[[:space:]]*password[[:space:]]+[a-z]+[[:space:]]+${pam_module}" \
+                "$pam_file" 2>/dev/null; then
+                if ! $SUDO sed -i -E \
+                    "/^[[:space:]]*password[[:space:]]/s/[[:space:]]+use_authtok//g" \
+                    "$pam_file" 2>/dev/null; then
+                    echo "[WARNING] Could not drop use_authtok from $pam_file"
+                fi
+            fi
+        done
+    done
+fi
+
 echo "[INFO] Creating squashfs..."
 # $LFS is the rootfs *and* the build's output directory, so the scaffolding
 # has to be named or it gets packed – sources/ alone is a thousand tarballs,
@@ -406,10 +626,12 @@ echo "[INFO] Creating squashfs..."
 # whole subtree, which is how every 0.57.4 image shipped without the cgroup2
 # mountpoint.
 mksquashfs "$LFS" "$ISO_ROOT/live.squashfs" -comp xz -noappend \
+    "${NODE_PSEUDO[@]}" \
     -wildcards \
     -e "proc/*" "run/*" "tmp/*" "lost+found/*" \
     "sources/*" "logs/*" "cache/*" "backups/*" "live/*" "image/*" \
     "tools/*" "packages/*" "lpm-repo/*" "sysroot/*" \
+    "${NODE_EXCLUDE[@]}" \
     "*.iso" "*.iso.sig"
 
 # Prove the boot-critical paths landed in the image: mksquashfs exits 0 no
