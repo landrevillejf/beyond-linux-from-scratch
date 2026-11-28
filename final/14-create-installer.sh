@@ -441,7 +441,7 @@ else
             grep -qE "^c.* squashfs-root/dev/${need}\$"; then
             echo "[ERROR] The installer squashfs carries no character device at"
             echo "        /dev/${need}.  A regular file there makes every"
-            echo '        `>/dev/null` in the installed system copy up into the'
+            echo "        >/dev/null in the installed system copy up into the"
             echo "        overlay, and init writes its log to /dev/console before"
             echo "        devtmpfs is back, so neither may be a placeholder."
             exit 1
