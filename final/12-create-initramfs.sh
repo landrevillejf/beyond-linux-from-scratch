@@ -163,36 +163,141 @@ esac
 
 # Download the source on the HOST into $LFS/sources: the chroot has no
 # network, but $LFS/sources is /sources inside it.
+#
+# wget's defaults (20 tries, 900 s timeouts, waitretry growing from 10 s) let
+# one stalling mirror own the stage for hours: the initramfs stage measured
+# 1h48m40s on 2026-11-26 and 1h48m23s on 2026-11-28 before it died, and
+# nothing in the log said how that time split between the download and the
+# build.  A read timeout only fires on a silent socket, so bounding it never
+# cuts off a slow-but-steady transfer; it just stops a dead one from eating
+# the runner budget.  Reuse a copy the builder's downloader already staged in
+# the sibling sources dir, verify the archive, and time both phases.
+BUSYBOX_SIBLING_SOURCES="$(dirname "$LFS")/sources"
+if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ] &&
+    [ -f "$BUSYBOX_SIBLING_SOURCES/$BUSYBOX_TARBALL" ]; then
+    log_info "Reusing $BUSYBOX_TARBALL already staged in $BUSYBOX_SIBLING_SOURCES"
+    cp -f "$BUSYBOX_SIBLING_SOURCES/$BUSYBOX_TARBALL" \
+        "$SOURCES_HOST/$BUSYBOX_TARBALL"
+fi
 if [ ! -f "$SOURCES_HOST/$BUSYBOX_TARBALL" ]; then
     log_info "Downloading busybox source from $BUSYBOX_URL"
-    wget -q -O "$SOURCES_HOST/$BUSYBOX_TARBALL" "$BUSYBOX_URL" || {
+    _dl_start="$(date +%s)"
+    wget -q --tries=5 --timeout=120 --waitretry=10 \
+        -O "$SOURCES_HOST/$BUSYBOX_TARBALL" "$BUSYBOX_URL" || {
+        _dl_end="$(date +%s)"
         log_error "Failed to download busybox source from $BUSYBOX_URL"
+        log_error "wget gave up after $((_dl_end - _dl_start)) s"
+        rm -f "$SOURCES_HOST/$BUSYBOX_TARBALL"
         exit 1
     }
+    _dl_end="$(date +%s)"
+    _dl_size="$(stat -c %s "$SOURCES_HOST/$BUSYBOX_TARBALL")"
+    log_info "busybox source downloaded in $((_dl_end - _dl_start)) s (${_dl_size} bytes)"
 fi
+# `wget -O` creates the file before it knows whether the body is an archive,
+# so a truncated transfer or an HTML error page passes the `[ -f ]` check and
+# only reappears as an opaque tar failure inside the chroot.
+if ! bzip2 -t "$SOURCES_HOST/$BUSYBOX_TARBALL"; then
+    log_error "$BUSYBOX_TARBALL is not a complete bzip2 archive; removing it"
+    rm -f "$SOURCES_HOST/$BUSYBOX_TARBALL"
+    exit 1
+fi
+
+# --------------------------------------------------------------------------
+# Chroot virtual filesystems for the build
+# --------------------------------------------------------------------------
+# Every other stage that compiles inside $LFS binds /dev and mounts proc,
+# sys and run first (blfs/08*, blfs/21, blfs/31, lfs/08 all share the
+# mount_chroot_fs idiom); final/12 chrooted into whatever the tree happened
+# to hold.  The base prefix cache is packed with --exclude=./dev (and proc,
+# sys, run), so on a cache-restored build $LFS/dev is an EMPTY directory and
+# bash answers the build script's `>/dev/null` redirects by CREATING a
+# regular file at $LFS/dev/null, which then ships inside the rootfs
+# (reproduced locally in a user-namespace chroot).  Bind the host /dev, mount
+# the rest, and tear down exactly what this stage mounted.
+BUSYBOX_MOUNTED=()
+
+mount_busybox_chroot_fs() {
+    local mp
+    mkdir -p "$LFS/dev/pts" "$LFS/proc" "$LFS/sys" "$LFS/run"
+    for mp in dev proc sys run; do
+        if mountpoint -q "$LFS/$mp"; then
+            continue
+        fi
+        # A refused mount must warn, never abort: `set -e` would otherwise turn
+        # a missing /dev into a dead stage, which is exactly the "compiler not
+        # found" style misdirection the mount_chroot_fs idiom exists to avoid.
+        case "$mp" in
+        dev) mount --bind /dev "$LFS/$mp" || true ;;
+        proc) mount -t proc proc "$LFS/$mp" || true ;;
+        sys) mount -t sysfs sysfs "$LFS/$mp" || true ;;
+        run) mount -t tmpfs tmpfs "$LFS/$mp" || true ;;
+        esac
+        if mountpoint -q "$LFS/$mp"; then
+            BUSYBOX_MOUNTED+=("$LFS/$mp")
+        else
+            log_warn "Could not mount $LFS/$mp; the build continues without it"
+        fi
+    done
+    if ! mountpoint -q "$LFS/dev/pts"; then
+        mount -t devpts devpts "$LFS/dev/pts" || true
+        if mountpoint -q "$LFS/dev/pts"; then
+            BUSYBOX_MOUNTED+=("$LFS/dev/pts")
+        fi
+    fi
+}
+
+umount_busybox_chroot_fs() {
+    local i mp
+    for ((i = ${#BUSYBOX_MOUNTED[@]} - 1; i >= 0; i--)); do
+        mp="${BUSYBOX_MOUNTED[i]}"
+        umount "$mp" 2>/dev/null || log_warn "Could not unmount $mp"
+    done
+    BUSYBOX_MOUNTED=()
+}
+
+trap umount_busybox_chroot_fs EXIT
+mount_busybox_chroot_fs
 
 log_info "Building busybox $BUSYBOX_VERSION inside the chroot (CFLAGS='$BUSYBOX_CFLAGS')..."
 
 # The build runs entirely inside $LFS so busybox links the target's baseline
 # glibc.  Everything it needs is passed through `env -i` because the heredoc
 # is quoted (no host expansion); $(nproc) is meant to run in-chroot.
+#
+# No command in here may throw its output away.  Both failed legs of the
+# 2026-11-26/28 nightlies reported only "Failed to build busybox inside the
+# chroot" followed by a guess about which tool might be missing, because
+# `make >/dev/null 2>&1` discarded the one thing that named the real error.
+# The whole build now lands in $LFS/logs/busybox-build.log, which the
+# workflow uploads as release-logs-* on failure, and its tail is echoed into
+# the stage log so build.log alone is enough to diagnose the next one.
 cat >"$LFS/build-busybox.sh" <<'BUILDEOF'
 #!/bin/bash
 set -e
+# Name a missing tool instead of letting the first `tar` or `make` die with
+# an exit status that reads like a compile error.
+for tool in bash bzip2 cp gcc make sed tar; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "[ERROR] $tool is not installed inside the chroot (PATH=$PATH)" >&2
+        exit 1
+    fi
+done
+echo "[INFO] chroot toolchain: $(gcc --version | head -1)"
 cd /tmp
 rm -rf busybox-build
 mkdir -p busybox-build
 cd busybox-build
 tar -xf "/sources/${BUSYBOX_TARBALL}"
 cd "busybox-${BUSYBOX_VERSION}"
-make defconfig >/dev/null 2>&1
+make defconfig
 # CONFIG_STATIC=y links busybox against the target's static libc.a.
 sed -i 's/# CONFIG_STATIC is not set/CONFIG_STATIC=y/' .config
 # TC/TUNCTL applets need newer kernel headers than the initramfs requires.
 for applet in CONFIG_TC CONFIG_FEATURE_TC_INGRESS CONFIG_TUNCTL CONFIG_FEATURE_TUNCTL_QUIET_FAILURE; do
     sed -i "s/^${applet}=y/# ${applet} is not set/" .config 2>/dev/null || true
 done
-make CFLAGS="${BUSYBOX_CFLAGS}" LDFLAGS="-static" -j"$(nproc)" >/dev/null 2>&1
+make CFLAGS="${BUSYBOX_CFLAGS}" LDFLAGS="-static" -j"$(nproc)"
 # busybox's make strips busybox down from busybox_unstripped.  Ship the
 # stripped binary but also expose the unstripped one: the host-side AVX guard
 # needs its symbol table to isolate _start/__libc_start_main.
@@ -205,17 +310,67 @@ fi
 BUILDEOF
 
 chmod 755 "$LFS/build-busybox.sh"
-chroot "$LFS" /usr/bin/env -i \
-    HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin:/bin:/sbin \
-    BUSYBOX_VERSION="$BUSYBOX_VERSION" BUSYBOX_TARBALL="$BUSYBOX_TARBALL" \
-    BUSYBOX_CFLAGS="$BUSYBOX_CFLAGS" \
-    /bin/bash /build-busybox.sh || {
-    log_error "Failed to build busybox inside the chroot"
-    log_error "Check that gcc, make, tar and bzip2 are installed in $LFS"
-    rm -f "$LFS/build-busybox.sh"
-    exit 1
+mkdir -p "$LFS/logs"
+BUSYBOX_BUILD_LOG="$LFS/logs/busybox-build.log"
+
+# run_busybox_chroot_build <cflags> <logfile>
+# One attempt at the in-chroot build.  Nothing may throw its output away:
+# the log is kept, timed, and its tail is echoed into the stage log so
+# build.log alone is enough to diagnose a failure.
+run_busybox_chroot_build() {
+    local cflags="$1" logfile="$2" rc=0 start end
+    : >"$logfile"
+    start="$(date +%s)"
+    chroot "$LFS" /usr/bin/env -i \
+        HOME=/root TERM="${TERM:-linux}" PATH=/usr/bin:/usr/sbin:/bin:/sbin \
+        BUSYBOX_VERSION="$BUSYBOX_VERSION" BUSYBOX_TARBALL="$BUSYBOX_TARBALL" \
+        BUSYBOX_CFLAGS="$cflags" \
+        /bin/bash /build-busybox.sh >"$logfile" 2>&1 || rc=$?
+    end="$(date +%s)"
+    log_info "In-chroot busybox build finished in $((end - start)) s (exit ${rc}, log ${logfile})"
+    if [ "$rc" -ne 0 ]; then
+        log_error "Last 60 lines of $logfile:"
+        tail -n 60 "$logfile" >&2 || true
+    fi
+    return "$rc"
 }
+
+# One attempt, with the pinned CFLAGS and no speculative override.
+#
+# A `-std=gnu17` retry used to sit here on the theory that gcc 15's C23
+# default broke busybox.  That theory has now been measured, and it is false:
+# busybox 1.36.1 configured exactly as below compiles with zero compile
+# errors under gcc 16.2.1's default dialect (605 objects, 19 s on 8 cores),
+# and adding -std=gnu17 changes the outcome not at all.  The host build only
+# ever fails at the link step, on `cannot find -lm` / `-lresolv`, because the
+# host has no glibc-static -- and the target rootfs does carry libc.a,
+# libm.a, libmvec.a and libresolv.a beside gcc 15.2.0.  Retrying with
+# different flags could therefore only have masked the real error, and it
+# carries its own hazard: had the first attempt failed transiently -- a
+# parallel-make race, which AGENTS.md warns about explicitly -- the retry
+# would have shipped a busybox built with CFLAGS nobody pinned, straight into
+# the AVX guard below.
+#
+# What actually killed the 2026-11-28 run is NOT established, and this comment
+# refuses to guess: both make invocations ended in `>/dev/null 2>&1`, so the
+# one piece of evidence that would name the error was thrown away.  The log
+# capture above is the instrument that ends that.  What is established is that
+# the chroot ran with no virtual filesystems at all, which is both a departure
+# from the book (LFS 12.4 7.3.1-7.3.2) and a real failure class: bash resolves
+# `>/dev/null` at redirect time, so with $LFS/dev absent the redirect dies
+# before any compiler runs (measured: "dev/null: No such file or directory",
+# exit 1), and with it present but empty the redirect silently CREATES a
+# regular-file placeholder -- the mechanism, reproduced locally, that matches
+# the `-rw-r--r-- 0 dev/null` packed into the 20261125 live image.  Mounting
+# the book's filesystems closes that class whatever its share of the failure.
+if ! run_busybox_chroot_build "$BUSYBOX_CFLAGS" "$BUSYBOX_BUILD_LOG"; then
+    log_error "Failed to build busybox inside the chroot"
+    rm -f "$LFS/build-busybox.sh"
+    umount_busybox_chroot_fs
+    exit 1
+fi
 rm -f "$LFS/build-busybox.sh"
+umount_busybox_chroot_fs
 
 if [ ! -f "$BUSYBOX_BUILT_BIN" ]; then
     log_error "Chroot build finished but $BUSYBOX_BUILT_BIN is missing"

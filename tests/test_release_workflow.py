@@ -235,6 +235,89 @@ class TestReleasePipelineHardening:
             "/releases/download/${GITHUB_REF_NAME}/$ISO" in workflow
 
 
+class TestResolveIsoNamePrecedesTheBuild:
+    """Guardrails for the empty-iso_name artifact collapse.
+
+    Project Looking Glass Builds #1 failed in the initramfs stage, and the
+    only annotation on the run was
+    `EACCES: permission denied, scandir '/tmp/lfs-build/build-release/etc/audit/plugins.d'`
+    from actions/upload-artifact@v4.  The upload step runs `if: always()`, but
+    `- name: Resolve ISO name` sat AFTER the build step with no condition, so
+    on a failed build it was skipped and its output was empty: the first path
+    entry `/tmp/lfs-build/build-release/${{ steps.iso_name.outputs.iso_name }}`
+    collapsed to the bare rootfs directory, upload-artifact scandir'd the whole
+    tree and died on the first root-owned 0750 directory audit-userspace
+    installs in blfs/31.  The real failure was buried under it.
+    """
+
+    # The three matrix publishers whose upload step carries `if: always()`;
+    # arm64-xfce.yml, release.yml and xfce-live-boot-iso.yml upload on the
+    # implicit success(), so their upload never runs after a failed build.
+    WORKFLOWS = ("looking-glass.yml", "nightly.yml", "weekly-full.yml")
+    RESOLVE = "Resolve ISO name"
+    BUILD = "Build release profile"
+    UPLOAD = "Upload release artifacts"
+
+    def _read(self, name):
+        return Path(f".github/workflows/{name}").read_text()
+
+    def _step(self, workflow, name):
+        marker = f"- name: {name}"
+        assert marker in workflow, f"step {name!r} not found"
+        start = workflow.index(marker)
+        end = workflow.find("\n      - name: ", start + len(marker))
+        return workflow[start:] if end == -1 else workflow[start:end]
+
+    @staticmethod
+    def _commands(text):
+        return "\n".join(line for line in text.splitlines()
+                         if line.strip() and not line.strip().startswith("#"))
+
+    def test_the_name_is_resolved_before_the_build_runs(self):
+        for name in self.WORKFLOWS:
+            workflow = self._read(name)
+            assert workflow.index(f"- name: {self.RESOLVE}") < \
+                workflow.index(f"- name: {self.BUILD}"), \
+                f'{name} resolves the ISO name only on a leg that built one'
+
+    def test_the_resolve_step_survives_an_earlier_failure(self):
+        """A leg that failed before it must still upload its logs and any
+        partial artifact under a real path, not a collapsed one."""
+        for name in self.WORKFLOWS:
+            step = self._step(self._read(name), self.RESOLVE)
+            assert "if: always()" in step, name
+
+    def test_the_resolve_step_can_never_cost_the_leg_its_iso(self):
+        """It now precedes the build step, which has no `if: always()`, so an
+        abort here would skip the build entirely: a diagnostic step must not
+        become an artifact killer."""
+        for name in self.WORKFLOWS:
+            body = self._commands(self._step(self._read(name), self.RESOLVE))
+            assert "set +e" in body, \
+                f'{name}: the runner evaluates run: blocks as `bash -e`'
+            assert "exit 1" not in body, \
+                f'{name}: the resolve step must not be able to fail the leg'
+            assert body.rstrip().endswith("exit 0"), \
+                f'{name}: every path through the step must end in exit 0'
+            # builder.py's _get_version() falls back to "dev" when VERSION is
+            # unreadable; the step must never emit an empty name.
+            assert "cat VERSION" in body, name
+            assert 'BUILDER_VERSION="dev"' in body, name
+
+    def test_the_upload_path_never_points_at_the_bare_rootfs(self):
+        for name in self.WORKFLOWS:
+            step = self._step(self._read(name), self.UPLOAD)
+            assert "steps.iso_name.outputs.iso_name" in step, name
+            assert "if-no-files-found: ignore" in step, name
+            paths = step.split("path: |")[1].split("if-no-files-found")[0]
+            offenders = [line.strip() for line in paths.splitlines()
+                         if line.strip() in ("/tmp/lfs-build/build-release",
+                                             "/tmp/lfs-build/build-release/")]
+            assert offenders == [], (
+                f'{name}: a bare rootfs path makes upload-artifact scandir '
+                'the whole tree and die on the first root-owned directory')
+
+
 class TestNightlyCoverageAndBootSmoke:
     """Guardrails for audit gaps G3/G4 and the QEMU boot smoke test.
 
