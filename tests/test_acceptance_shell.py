@@ -2687,6 +2687,188 @@ class TestNightlyLg3d125BusyboxChrootAvx:
             'again, so it must never return to the smoke command')
 
 
+class TestLookingGlass1InitramfsDiagnosable:
+    """Guardrails for the Project Looking Glass Builds #1 initramfs failure.
+
+    Run #1 (2026-11-28, job build-profiles lg3d/sysvinit/x86_64/bios) died in
+    the initramfs stage after 1h48m23s with the whole diagnostic being:
+
+        [ERROR] Failed to build busybox inside the chroot
+        [ERROR] Check that gcc, make, tar and bzip2 are installed in ...
+
+    because both make invocations in the generated chroot script ended in
+    `>/dev/null 2>&1`.  The same leg failed identically on 2026-11-26, and the
+    2026-11-27 run reported "success" only because build-profiles was skipped,
+    so the chroot build introduced for Nightly #125 has never succeeded and
+    nobody could tell why.  Four defects are pinned here.
+
+    Measured against the real lg3d rootfs (unsquashfs of the 20261125 live
+    ISO, chrooted in a user namespace): gcc 15.2.0, GNU Make 4.4.1, tar 1.35,
+    bzip2 1.0.8, /usr/bin/env, nproc and bash are all present, and
+    `gcc -march=x86-64 -mtune=generic -O2 -static` compiles and links a static
+    binary in 0.067 s that runs - with $LFS/dev EMPTY and no /proc.  So the
+    missing-tool guess in the old message was wrong, and that same probe
+    measured the target's default dialect as __STDC_VERSION__ 202311L (C23).
+    """
+
+    INITRAMFS = Path('final/12-create-initramfs.sh')
+
+    @staticmethod
+    def _code(content):
+        """Drop comment lines so assertions only ever see real commands."""
+        return '\n'.join(line for line in content.splitlines()
+                         if not line.strip().startswith('#'))
+
+    @pytest.fixture(scope='class')
+    def code(self):
+        return self._code(self.INITRAMFS.read_text())
+
+    @staticmethod
+    def _slice(code, start_marker, end_marker):
+        start = code.index(start_marker)
+        return code[start:code.index(end_marker, start)]
+
+    def test_the_in_chroot_build_output_is_captured_not_discarded(self, code):
+        """A discarded make log is why two nightlies were undiagnosable."""
+        heredoc = self._slice(
+            code, 'cat >"$LFS/build-busybox.sh" <<\'BUILDEOF\'',
+            '\nBUILDEOF\n')
+        make_lines = [line for line in heredoc.splitlines()
+                      if line.strip().startswith('make')]
+        assert make_lines, 'the chroot script must still drive make'
+        for line in make_lines:
+            assert '/dev/null' not in line, (
+                'a make whose output is thrown away cannot be diagnosed: '
+                f'{line.strip()}')
+        assert 'BUSYBOX_BUILD_LOG="$LFS/logs/busybox-build.log"' in code, (
+            'the build must land in $LFS/logs, which the workflow already '
+            'uploads as release-logs-* on failure')
+        assert '/bin/bash /build-busybox.sh >"$logfile" 2>&1' in code, (
+            'the chroot invocation must redirect into the captured log')
+        assert 'tail -n 60 "$logfile" >&2' in code, (
+            'the tail must reach the stage log so build.log alone names the '
+            'error, without downloading an artifact')
+
+    def test_the_chroot_names_a_missing_tool_instead_of_guessing(self, code):
+        """The old message guessed; the script must check and name it."""
+        heredoc = self._slice(
+            code, 'cat >"$LFS/build-busybox.sh" <<\'BUILDEOF\'',
+            '\nBUILDEOF\n')
+        assert 'for tool in bash bzip2 cp gcc make sed tar; do' in heredoc
+        assert 'command -v "$tool"' in heredoc, (
+            'the pre-flight must resolve each tool through PATH')
+        assert 'is not installed inside the chroot' in heredoc, (
+            'the failure must name the missing tool, not list four suspects')
+        assert 'Check that gcc, make, tar and bzip2 are installed' not in code, (
+            'the guess that sent two nightlies down the wrong path must go')
+
+    def test_the_chroot_build_mounts_the_virtual_filesystems(self, code):
+        """final/12 was the only compiling stage that chrooted bare.
+
+        The base prefix cache is packed with --exclude=./dev, so a
+        cache-restored $LFS/dev is EMPTY and bash answers the build script's
+        redirects by creating a REGULAR file at $LFS/dev/null, which then
+        ships inside the rootfs (reproduced locally in a namespace chroot).
+        """
+        fn = self._slice(code, 'mount_busybox_chroot_fs() {', '\n}\n')
+        assert 'mount --bind /dev "$LFS/$mp"' in fn
+        assert 'mount -t proc proc "$LFS/$mp"' in fn
+        assert 'mount -t sysfs sysfs "$LFS/$mp"' in fn
+        assert 'mount -t tmpfs tmpfs "$LFS/$mp"' in fn
+        assert 'mount -t devpts devpts "$LFS/dev/pts"' in fn
+        assert 'trap umount_busybox_chroot_fs EXIT' in code, (
+            'the stage must tear its own mounts down on every exit path')
+        mount_call = code.index('\nmount_busybox_chroot_fs\n')
+        assert mount_call < code.index('chroot "$LFS"'), (
+            'the virtual filesystems must be up before the chroot runs')
+        assert 'BUSYBOX_MOUNTED+=("$LFS/$mp")' in fn, (
+            'only what this stage mounted may be unmounted: a mount it '
+            'inherited from another stage must survive')
+
+    def test_a_refused_mount_warns_and_never_aborts_the_stage(self, code):
+        """`set -e` plus a bare mount call turned a missing /dev into a dead
+        stage - measured locally as exit 32 with zero diagnostics."""
+        fn = self._slice(code, 'mount_busybox_chroot_fs() {', '\n}\n')
+        mount_lines = [line for line in fn.splitlines()
+                       if line.strip().startswith(('dev)', 'proc)', 'sys)',
+                                                   'run)'))
+                       or 'mount -t devpts' in line]
+        assert len(mount_lines) == 5, f'unexpected mounts: {mount_lines}'
+        for line in mount_lines:
+            assert line.rstrip().endswith(';;') or line.rstrip().endswith(
+                'true'), f'unbounded mount under set -e: {line.strip()}'
+            assert '|| true' in line, (
+                f'a refused mount must warn, never abort: {line.strip()}')
+        assert 'the build continues without it' in fn, (
+            'the operator must be told which mount was refused')
+
+    def test_the_chroot_build_makes_one_attempt_with_the_pinned_cflags(self, code):
+        """No speculative CFLAGS: the `-std=gnu17` retry this pins the absence
+        of rested on a theory that was then measured, and the theory is false.
+
+        busybox 1.36.1, configured exactly as this stage configures it
+        (defconfig, CONFIG_STATIC=y, the four TC/TUNCTL applets off), was built
+        on this host with gcc 16.2.1 in its default dialect -- which is C23,
+        `__STDC_VERSION__ 202311L`, a newer and stricter compiler than the
+        target's 15.2.0.  Result: 605 object files, zero compile errors, 19 s
+        on 8 cores.  Re-running with `-std=gnu17` added produced the identical
+        single failure, and that failure is the link step (`cannot find -lm` /
+        `-lresolv`) because the host has no glibc-static; the target rootfs
+        carries libc.a, libm.a, libmvec.a and libresolv.a.
+
+        So the retry could never have repaired anything.  It could only have
+        masked the real error, and it had a hazard of its own: if the first
+        attempt ever failed transiently -- a parallel-make race, which
+        AGENTS.md warns about explicitly -- the retry would have shipped a
+        busybox built with CFLAGS nobody pinned, straight into the AVX guard.
+        What the 2026-11-28 failure actually was remains unestablished, and
+        the captured log is the instrument that settles it next run.
+        """
+        attempt = 'run_busybox_chroot_build "$BUSYBOX_CFLAGS" ' \
+                  '"$BUSYBOX_BUILD_LOG"'
+        assert attempt in code, (
+            'the stage must build busybox once, with the pinned CFLAGS')
+        executable = [line for line in code.splitlines()
+                      if line.strip() and not line.strip().startswith('#')]
+        calls = [line for line in executable
+                 if 'run_busybox_chroot_build "$BUSYBOX_CFLAGS' in line]
+        assert len(calls) == 1, (
+            f'expected exactly one build attempt with the pinned CFLAGS, '
+            f'got {len(calls)}: a second one rebuilds busybox with flags '
+            f'nobody pinned')
+        for line in executable:
+            assert '-std=gnu17' not in line, (
+                f'a speculative dialect override is back, measured to change '
+                f'nothing and to hide the real error: {line.strip()}')
+            assert 'BUSYBOX_RETRY_LOG' not in line, (
+                f'the retry log variable outlived the retry it belonged to: '
+                f'{line.strip()}')
+        build = code.index(attempt)
+        assert 'assert_no_startup_avx "$BUSYBOX_UNSTRIPPED_BIN"' in code[
+            build:], (
+            'the Nightly #125 AVX guard must still judge the built binary')
+        assert 'log_error "Failed to build busybox inside the chroot"' in code[
+            build:], 'a failed build must still be reported and abort'
+
+    def test_wget_cannot_own_the_stage_for_hours(self, code):
+        """wget's defaults are 20 tries with 900 s timeouts, and `wget -q`
+        hides every retry: the stage burned 1h48m23s (2026-11-28) and
+        1h48m40s (2026-11-26) with no line saying where the time went."""
+        assert 'wget -q --tries=5 --timeout=120 --waitretry=10' in code
+        assert '_dl_start="$(date +%s)"' in code, (
+            'the download phase must be timed separately from the build')
+        assert 'busybox source downloaded in $((_dl_end - _dl_start)) s' in code
+        assert 'bzip2 -t "$SOURCES_HOST/$BUSYBOX_TARBALL"' in code, (
+            '`wget -O` creates the file before it knows whether the body is '
+            'an archive, so an HTML error page passes a [ -f ] check and only '
+            'reappears as an opaque tar failure inside the chroot')
+        for marker in ('wget gave up after', 'not a complete bzip2 archive'):
+            assert marker in code, f'the {marker!r} diagnostic is missing'
+        assert code.count('rm -f "$SOURCES_HOST/$BUSYBOX_TARBALL"') >= 2, (
+            'a truncated download must be removed so the next run re-fetches '
+            'instead of tripping the same integrity check')
+
+
 class TestNightly215StageGuardrails:
     """Guardrails for the Nightly #215 all-profile failure classes.
 
@@ -7101,6 +7283,84 @@ exit 0
                 f'{script} does not require the cgroup mountpoint in the image'
             assert 'grep -qx "$need"' in code, \
                 f'{script} checks the packed tree with a substring match'
+
+    def test_a_wrong_type_dev_node_is_replaced_not_skipped(self):
+        """`[ ! -e ]` is an existence test, and it shipped a placeholder node.
+
+        Measured on the published lfs-0.57.4-lg3d-x86_64-sysvinit-20261125
+        image (`unsquashfs -ll` on live.squashfs, the archive metadata, which
+        is the only view a non-root unpack cannot distort):
+
+            -rw-r--r-- root/root      0 2026-11-24 23:23 squashfs-root/dev/null
+            crw------- root/root  5,  1 2026-11-25 00:12 squashfs-root/dev/console
+
+        A stage that chroots into a tree with an empty /dev -- the base prefix
+        cache is packed --exclude=./dev -- answers its own `>/dev/null`
+        redirect by creating a regular file there, `-e` is then true, and the
+        mknod that would have replaced it is skipped.  In the live root every
+        `>/dev/null` copies that file up into the overlay's tmpfs instead of
+        discarding the write.  The repair must stay tolerant: under `set -e` a
+        failed `rm` would abort the stage, and losing the image is worse than
+        shipping a degraded one.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'if [ -e "$LFS/dev/$node" ] && ' \
+                   '[ ! -c "$LFS/dev/$node" ]; then' in code, \
+                f'{script} still decides on existence alone, so a regular '\
+                f'file at /dev/null is never replaced'
+            assert '$SUDO rm -f "$LFS/dev/$node" || true' in code, \
+                f'{script} removes the placeholder without tolerating a '\
+                f'failed rm, which `set -e` would turn into a dead stage'
+            assert code.index('rm -f "$LFS/dev/$node"') \
+                < code.index('mknod -m "$mode"'), \
+                f'{script} must clear the placeholder before it re-mknods'
+            assert 'if [ ! -e "$LFS/dev/$node" ]; then' in code, \
+                f'{script} lost the guard that keeps a healthy /dev untouched'
+
+    def test_the_packed_dev_nodes_are_checked_by_type_not_only_by_name(self):
+        """The name gate passed the 20261125 image whose /dev/null was a file.
+
+        `-ls` prints names only, so `grep -qx squashfs-root/dev/null` is
+        satisfied by a regular 0-byte file.  The gate has to read the archive
+        metadata (`-ll`), which is also the one view that survives an unpack
+        by a non-root user: a plain extraction cannot create device nodes at
+        all, so `test -c` against an unpacked tree proves nothing.  Verified
+        end to end against real archives -- the new gate exits 1 on the
+        published image the old gate accepted, and exits 0 on an image whose
+        six nodes are genuine character devices.
+
+        The gate must also stay fail-soft.  An added `exit 1` is a hostage:
+        it can stop an image that used to ship.  So an `unsquashfs -ll` that
+        says nothing at all warns and defers to the name gate instead -- and
+        the `|| true` on the assignment is load-bearing, because under
+        `set -e` a failed command substitution aborts at the assignment and
+        would leave the warning branch as unreachable dead code.  Measured:
+        without `|| true` the fail-soft path exits 1.
+        """
+        for script in (self.INSTALLER, self.LIVE):
+            code = self._code(script.read_text())
+            assert 'unsquashfs -no-progress -ll' in code, \
+                f'{script} never reads the packed node types back'
+            assert 'for need in console null; do' in code, \
+                f'{script} no longer type-checks the two boot-critical nodes'
+            assert 'grep -qE "^c.* squashfs-root/dev/${need}\\$"' in code, \
+                f'{script} does not require a character device at the node'
+            assert 'carries no character device at' in code, \
+                f'{script} fails the type check without naming the reason'
+            assert code.index(self.PACK_CALL[script]) \
+                < code.index('unsquashfs -no-progress -ll'), \
+                f'{script} reads the node types before it has packed one'
+            ll_lines = [line for line in code.splitlines()
+                        if line.startswith('LIVE_NODES=$(unsquashfs')]
+            assert ll_lines, f'{script} never captures the -ll listing'
+            assert ll_lines[0].rstrip().endswith('|| true'), \
+                f'{script} assigns LIVE_NODES without `|| true`, so `set -e` ' \
+                f'aborts at the assignment and an unsquashfs that said ' \
+                f'nothing becomes a failed build instead of a warning'
+            assert 'if [ -z "$LIVE_NODES" ]; then' in code, \
+                f'{script} has no fail-soft branch, so the type gate is a ' \
+                f'hostage that can stop shipping a working image'
 
     def test_the_fstab_scripts_of_the_sysinit_stage_are_the_wall(self):
         """Why /fastboot and the placeholder lines are boot-critical here.

@@ -151,6 +151,26 @@ if mountpoint -q "$LFS/dev"; then
 fi
 $SUDO mkdir -p "$LFS/dev"
 while read -r node type major minor mode; do
+    # `[ ! -e ]` is an existence test, not a node test.  A stage that chroots
+    # into a tree whose /dev is empty -- the base prefix cache is packed with
+    # --exclude=./dev, so a cache-restored build starts with none -- answers
+    # its own `>/dev/null` redirect by CREATING a regular file there, and -e
+    # is then true, so the mknod below is skipped and the placeholder ships.
+    # That mechanism is reproduced locally (`set -e; echo x > dev/null` in a
+    # tree with an empty dev/ yields a 0644 regular file and exit 0); which
+    # stage triggered it in run #125 is not established, and does not have to
+    # be, because the repair below is provenance-independent.
+    # The published lfs-0.57.4-lg3d-x86_64-sysvinit-20261125.iso carries
+    # exactly that: `unsquashfs -ll` on live.squashfs reads
+    #   -rw-r--r-- root/root      0 2026-11-24 23:23 squashfs-root/dev/null
+    # beside five real character devices, so in the live root every
+    # `>/dev/null` copied that file up into the overlay's tmpfs instead of
+    # discarding the write.  Repair, never abort: replace a node of the wrong
+    # type and keep a real character device untouched.
+    if [ -e "$LFS/dev/$node" ] && [ ! -c "$LFS/dev/$node" ]; then
+        echo "[WARN] $LFS/dev/$node is not a character device; replacing it"
+        $SUDO rm -f "$LFS/dev/$node" || true
+    fi
     if [ ! -e "$LFS/dev/$node" ]; then
         $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor"
     fi
@@ -306,6 +326,41 @@ for need in squashfs-root/dev/console squashfs-root/dev/null \
         exit 1
     fi
 done
+# Existence is not a type check, and -ls prints names only.  The loop above
+# passed on the 20261125 image whose /dev/null was a regular 0-byte file, the
+# placeholder a chroot with an empty /dev leaves behind when a script runs
+# `>/dev/null`.  -ll prints the archive's own metadata, which is also the only
+# view that survives an unpack by a non-root user: a plain extraction cannot
+# create device nodes at all, so `test -c` against an unpacked tree proves
+# nothing.  Same two nodes the name check already covers -- this tightens the
+# gate, it does not widen it.
+#
+# It is not a new hostage either.  This script runs under `set -e` and the
+# mknod above is unguarded, so a node that cannot be created already aborts
+# the stage before anything is packed: by the time this gate reads the archive
+# back, every node either is a character device or the stage is long dead.  And
+# an empty -ll listing can only mean the tool itself said nothing -- -ll has
+# shipped in squashfs-tools since 4.0, and this host is on 4.6.1 -- so that
+# case warns and defers to the name gate above rather than refusing to ship an
+# image that gate already accepted.  The `|| true` is what makes that true:
+# under `set -e` a failed command substitution aborts at the assignment, so
+# without it the warning branch below would be unreachable dead code.
+LIVE_NODES=$(unsquashfs -no-progress -ll "$SQUASHFS" 2>/dev/null) || true
+if [ -z "$LIVE_NODES" ]; then
+    echo "[WARNING] unsquashfs -ll listed nothing; skipping the node type check"
+else
+    for need in console null; do
+        if ! printf '%s\n' "$LIVE_NODES" |
+            grep -qE "^c.* squashfs-root/dev/${need}\$"; then
+            echo "[ERROR] $SQUASHFS carries no character device at /dev/${need}."
+            echo '        A regular file there makes every `>/dev/null` in the'
+            echo "        live root copy up into the overlay's tmpfs, and init"
+            echo "        writes its own log to /dev/console before devtmpfs is"
+            echo "        back, so neither may be a placeholder."
+            exit 1
+        fi
+    done
+fi
 # -cat takes paths relative to the image root, unlike the -ls listing above.
 if unsquashfs -no-progress -cat "$SQUASHFS" etc/fstab 2>/dev/null |
     grep -q '^/dev/<'; then

@@ -534,6 +534,230 @@
 
 ### Fixed
 
+- **lg3d Builds #1 lost its ISO to an undiagnosable busybox build and then
+  reported the loss as an `EACCES` on `/etc/audit/plugins.d`**
+  (`final/12-create-initramfs.sh`, `.github/workflows/looking-glass.yml`,
+  `.github/workflows/nightly.yml`, `.github/workflows/weekly-full.yml`,
+  `tests/test_acceptance_shell.py`, `tests/test_release_workflow.py`)
+
+  Project Looking Glass Builds #1 (run 46101872924, 2026-11-28, job
+  `build-profiles (lg3d, sysvinit, x86_64, bios)`) failed after 3h29m34s with
+  one annotation: `EACCES: permission denied, scandir
+  '/tmp/lfs-build/build-release/etc/audit/plugins.d'` from
+  `actions/upload-artifact@v4`.  That error is not the failure; the leg died
+  1h48m23s earlier in the `initramfs` stage.
+
+  - Masking mechanism (measured from the run's own step log, whose `with:`
+    block shows `path: /tmp/lfs-build/build-release/` followed by
+    `/tmp/lfs-build/build-release/.sig`): `- name: Resolve ISO name` sat AFTER
+    the build step and had no condition, so a failed build skipped it and left
+    `steps.iso_name.outputs.iso_name` empty.  The upload step runs
+    `if: always()`, its first path entry collapsed to the bare rootfs
+    directory, and upload-artifact scandir'd the whole tree until it hit the
+    first root-owned 0750 directory `audit-userspace` installs in `blfs/31`.
+  - `Resolve ISO name` now runs BEFORE the build and carries `if: always()` in
+    the three workflows whose upload step also carries `if: always()`
+    (`looking-glass.yml`, `nightly.yml`, `weekly-full.yml`).  The other three
+    that interpolate the same output (`arm64-xfce.yml`, `release.yml`,
+    `xfce-live-boot-iso.yml`) upload on the implicit `success()`, so their
+    upload cannot run after a failed build and they are left alone.
+  - Because the step now precedes a build step that has no `if: always()`, it
+    must never be able to fail or it would cost the leg its ISO: it runs
+    `set +e`, falls back to the `VERSION` file when the `builder` import fails
+    and to `dev` when that is unreadable (the same fallback `_get_version()`
+    uses), and ends every path in `exit 0`.
+  - The real failure was invisible because both `make` invocations in the
+    generated chroot script ended in `>/dev/null 2>&1`.  The whole build now
+    lands in `$LFS/logs/busybox-build.log` -- inside the `logs/` directory the
+    workflow already uploads as `release-logs-*` on failure -- and its last 60
+    lines are echoed into the stage log, so `build.log` alone names the error.
+    The misleading `Check that gcc, make, tar and bzip2 are installed` guess is
+    replaced by a pre-flight that resolves each tool through `PATH` and names
+    the one that is missing.
+  - `final/12` was the only compiling stage that chrooted bare: every other
+    stage that builds inside `$LFS` shares the `mount_chroot_fs` idiom.  The
+    base prefix cache is packed with `--exclude=./dev`, so on a cache-restored
+    build `$LFS/dev` is EMPTY and bash answers the script's redirects by
+    CREATING a regular 0644 file at `$LFS/dev/null`, which then ships inside
+    the rootfs (reproduced locally in a user-namespace chroot).  The stage now
+    binds `/dev`, mounts `proc`/`sys`/`run`/`devpts`, records what it mounted
+    in `BUSYBOX_MOUNTED` and unmounts exactly that on a `trap ... EXIT`, so a
+    mount inherited from another stage survives.
+  - A refused mount warns and continues instead of aborting: the first version
+    of this fix called `mount` bare inside a `case` branch and `set -e` killed
+    the stage with exit 32 and no diagnostics -- measured locally, not
+    reasoned about.
+  - `wget` is bounded.  Its defaults are 20 tries with 900 s timeouts and
+    `-q` hid every retry, and the stage measured 1h48m40s (2026-11-26) and
+    1h48m23s (2026-11-28) with no line saying where the time went.  It now
+    runs `--tries=5 --timeout=120 --waitretry=10`, times the download and the
+    build separately, reuses a tarball already staged in the sibling sources
+    directory, verifies it with `bzip2 -t` (`wget -O` creates the file before
+    it knows whether the body is an archive, so an HTML error page used to
+    pass the `[ -f ]` check and resurface as an opaque tar failure inside the
+    chroot) and deletes a partial download.
+  - One attempt with the pinned CFLAGS, and no speculative dialect override.
+    An earlier revision of this fix retried the chroot build with
+    `-std=gnu17` on the theory that the target's C23 default broke busybox.
+    That theory was then measured, and it is false: busybox 1.36.1, configured
+    exactly as this stage configures it (`defconfig`, `CONFIG_STATIC=y`, the
+    four TC/TUNCTL applets off), compiles on this host under gcc 16.2.1 in its
+    default dialect -- also C23, `__STDC_VERSION__ 202311L`, and a newer and
+    stricter compiler than the target's 15.2.0 -- producing 605 object files
+    with zero compile errors in 19 s on 8 cores.  Re-running with
+    `-std=gnu17` added changed the outcome not at all.  The only local failure
+    is the link step (`cannot find -lm` / `-lresolv`), because the host has no
+    `glibc-static`; the target rootfs does carry `libc.a`, `libm.a`,
+    `libmvec.a` and `libresolv.a`.  The retry could therefore only ever have
+    masked the real error, and it carried a hazard of its own: had the first
+    attempt failed transiently -- a parallel-make race, which AGENTS.md warns
+    about explicitly -- the retry would have shipped a busybox built with
+    CFLAGS nobody pinned, straight into the AVX guard below.  Removed.
+    The probe that originally motivated it still stands and still disproves
+    the old error message: gcc 15.2.0, GNU Make 4.4.1, tar 1.35, bzip2 1.0.8,
+    `/usr/bin/env`, `nproc` and `bash` are all present in the real rootfs, and
+    `gcc -march=x86-64 -mtune=generic -O2 -static` compiles, links and runs a
+    static binary there in 0.067 s -- with `$LFS/dev` empty and no `/proc`.
+  - Not measured, and stated as such: the actual in-chroot compiler error
+    (both failing runs discarded it) and the split of that 1h48m between the
+    download and the build (the stage log carries no per-line timestamps and
+    builder.py dumps it only after the stage ends).  The next run reports
+    both.
+  - Verified locally instead of on a runner: a user-namespace harness ran the
+    REAL `final/12-create-initramfs.sh` against a fake `$LFS` with a stub
+    busybox tree whose `Makefile` could be told to succeed or to fail.  Four
+    scenarios, 41 assertions, all passing at the time -- including the
+    `-std=gnu17` rescue scenario that the measurement above then made
+    meaningless, and which was removed with the retry.  Re-verified after the
+    removal: `bash -n` and `shfmt -s -i 4` clean on all three touched scripts,
+    the `-ll` gate harness below re-run end to end, and the full suite at 1189
+    passed with `builder.py` coverage 100%.  The 41-assertion harness itself
+    was not re-run against the retry-free script; it is a scratch artifact and
+    was deleted, so the retry-free path is covered by the guard tests rather
+    than by that harness.
+  - Guardrails: `TestLookingGlass1InitramfsDiagnosable` pins the captured
+    log, the tool pre-flight, the chroot mounts, the warn-don't-abort rule,
+    the bounded `wget`, and the single-attempt rule (no `-std=gnu17` and no
+    `BUSYBOX_RETRY_LOG` on any executable line) against the Nightly #125 AVX
+    guard; `TestResolveIsoNamePrecedesTheBuild` pins the step order, its
+    `if: always()`, its inability to fail, and that no upload path is ever the
+    bare rootfs directory.
+
+- **The published 20261125 lg3d image shipped `/dev/null` as a regular file,
+  and the gate that was supposed to catch it only checked the name**
+  (`final/15-create-live-system.sh`, `final/14-create-installer.sh`,
+  `tests/test_acceptance_shell.py`)
+
+  Found while cross-checking the `final/12` chroot-mount fix above, and
+  measured from the archive metadata of the published release
+  (`lg3d-nightly-20261125`, `unsquashfs -ll` on `live.squashfs`) rather than
+  from an unpacked tree -- a non-root `unsquashfs` cannot create device nodes
+  at all, so `test -c` on an extraction proves nothing:
+
+  ```
+  crw------- root/root  5,  1 2026-11-25 00:12 squashfs-root/dev/console
+  -rw-r--r-- root/root      0 2026-11-24 23:23 squashfs-root/dev/null
+  crw-rw-rw- root/root  1,  8 2026-11-25 00:12 squashfs-root/dev/random
+  ```
+
+  Five of the six nodes are real; `/dev/null` alone is a 0-byte 0644 file, and
+  its timestamp precedes the five `mknod`s by 49 minutes, i.e. a build stage
+  created it and the packing stage then walked past it.  In the live root
+  every `>/dev/null` copies that file up into the overlay's tmpfs instead of
+  discarding the write.
+
+  - `final/15` (and the identical block in `final/14`) created a node only
+    `if [ ! -e "$LFS/dev/$node" ]`.  `-e` is an existence test, not a node
+    test, so a placeholder left behind by any stage that chroots into a tree
+    with an empty `/dev` -- the base prefix cache is packed
+    `--exclude=./dev` -- suppressed the very `mknod` that would have replaced
+    it.  The loop now removes a node of the wrong type first, warns about it
+    on the console, and leaves a real character device untouched.  The `rm` is
+    `|| true`: under `set -e` a failed removal must not become a new way to
+    lose the image.
+  - The post-pack gate was blind for the same reason: `unsquashfs -ls` prints
+    names only, so `grep -qx squashfs-root/dev/null` is satisfied by a regular
+    file.  Both stages now also read the archive metadata with `-ll` and
+    require `^c` at `/dev/console` and `/dev/null`, naming the node they
+    rejected.
+  - Not a new hostage.  The gate covers the same two nodes the name check
+    already covered, so it cannot fail on anything the old gate accepted
+    unless the node type is wrong; and because `mknod` is unguarded under
+    `set -e`, a repair that cannot create a node aborts the stage before
+    anything is packed, which is what already happens today.
+  - Found by testing the fail-soft claim rather than asserting it: an
+    `unsquashfs -ll` that says nothing at all (unsupported flag, unreadable
+    archive) originally killed the stage anyway, because under `set -e` a
+    failed command substitution aborts at the assignment and the warning
+    branch below it is unreachable dead code.  Measured: exit 1 with no
+    warning printed.  Both stages now end the assignment with `|| true` and
+    warn instead, deferring to the name gate that already ran, so no image
+    that used to ship can stop shipping because of this addition.
+  - Provenance of the placeholder is NOT established and is not claimed here:
+    `final/12` is one demonstrated creator (reproduced locally in a
+    user-namespace chroot, and now fixed by the mount block above), but the
+    exact stage that wrote that file in that run was not measured.  The fix is
+    placed where it does not depend on the answer: at the two stages that pack
+    the image.
+  - Verified locally against real archives: a harness slices the actual node
+    loop and the actual gate out of `final/15` and runs them.  22 assertions,
+    all passing -- the placeholder is replaced with the right major/minor/mode
+    while an existing node is left alone; a healthy `/dev` produces zero
+    `mknod` calls and no warning; the new gate exits 1 on the published
+    20261125 image that the old gate exits 0 on; and it exits 0 on an image
+    built here whose six nodes are genuine character devices (`mksquashfs -p
+    'dev/null c 0666 0 0 1 3'`, no false positive).  `mknod` itself is
+    root-only, so that one call is driven through a recording stub; every
+    other step, including both squashfs gates, is real.
+  - Guardrails: `test_a_wrong_type_dev_node_is_replaced_not_skipped` and
+    `test_the_packed_dev_nodes_are_checked_by_type_not_only_by_name` in
+    `TestLiveIsoCgroupSysinitGuardrails` cover both stages, the latter pinning
+    the `|| true` and the `[ -z "$LIVE_NODES" ]` branch so the hostage cannot
+    come back.  Both were mutation-checked against `HEAD`, where every pattern
+    they assert is absent.  Full suite: 1189 passed, `builder.py` coverage
+    100%.
+
+- **Audit of the two fixes above against the LFS 12.4 and BLFS books, for the
+  sysvinit + BIOS lg3d target** (`final/12-create-initramfs.sh`,
+  `final/14-create-installer.sh`, `final/15-create-live-system.sh`,
+  `tests/test_acceptance_shell.py`)
+
+  Audited rather than assumed, against `docs/books/LFS-BOOK-12.4.pdf` and
+  `docs/books/postlfs/initramfs.html`.  Two defects found in my own
+  uncommitted work, both corrected.
+
+  - The `-std=gnu17` retry was unjustified and is removed; see the measurement
+    above.  This is the audit's main finding: a comment in the tree asserted a
+    compiler-dialect breakage that no measurement supported, and a retry that
+    could have shipped a busybox built with unpinned CFLAGS.
+  - The `-ll` type gate was a hostage on any host whose `unsquashfs` says
+    nothing, and is now fail-soft; see above.
+  - Book conformance of the `final/12` mount block, measured against LFS 12.4
+    7.3.1-7.3.2: `mount --bind /dev $LFS/dev`, `mount -t proc proc`,
+    `mount -t sysfs sysfs` and `mount -t tmpfs tmpfs $LFS/run` all match.
+    Two divergences remain, both repo-wide and both pre-existing rather than
+    introduced here: the `devpts` mount omits the book's `-o gid=5,mode=0620`
+    (35 call sites across `lfs/`, `blfs/` and `final/` all omit it, so
+    `final/12` is consistent with the repository, not with the book), and the
+    book's conditional `/dev/shm` handling is absent.  Neither affects a
+    busybox compile, which needs no pty and no shared memory; both are
+    recorded as deviations rather than silently dropped.
+  - Node modes: BLFS `postlfs/initramfs.html` uses `mknod -m 640 dev/console`
+    and `-m 664 dev/null`, while `final/14`/`final/15` use 600 and 666.  The
+    packing stages follow the kernel's own devtmpfs convention instead,
+    measured on the host as `crw------- /dev/console` and
+    `crw-rw-rw- /dev/null`, which is the right reference for a live rootfs
+    that `switch_root` enters before any boot script runs.  The `NODES` table
+    is untouched by this work.
+  - `dev/*` is not in either `mksquashfs` exclusion list (verified in the
+    invocations, not in comments), so the static nodes really are packed and
+    the type gate really reads them back.
+  - Not established, and not claimed: the actual in-chroot error that killed
+    the 2026-11-28 run, and which stage wrote the 0-byte `/dev/null` in run
+    #125.  Both are now instrumented -- the captured busybox log names the
+    first, and the repair-first node loop makes the second self-healing
+    regardless of its origin.
+
 - **LG3D live ISO hung at runlevel S on an interactive SELinux `/tmp` relabel
   prompt** (`blfs/31-build-selinux.sh`, `tests/test_acceptance_shell.py`)
 

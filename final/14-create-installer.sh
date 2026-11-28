@@ -290,6 +290,16 @@ if mountpoint -q "$LFS/dev"; then
 fi
 $SUDO mkdir -p "$LFS/dev"
 while read -r node type major minor mode; do
+    # `[ ! -e ]` is an existence test, not a node test: a stage that chrooted
+    # into a tree with an empty /dev answers `>/dev/null` by creating a
+    # regular file there, -e is then true and the mknod is skipped.  The
+    # published lfs-0.57.4-lg3d-x86_64-sysvinit-20261125.iso shipped exactly
+    # that placeholder.  Repair, never abort: replace a node of the wrong
+    # type, keep a real character device untouched.  See final/15.
+    if [ -e "$LFS/dev/$node" ] && [ ! -c "$LFS/dev/$node" ]; then
+        echo "[WARN] $LFS/dev/$node is not a character device; replacing it"
+        $SUDO rm -f "$LFS/dev/$node" || true
+    fi
     if [ ! -e "$LFS/dev/$node" ]; then
         $SUDO mknod -m "$mode" "$LFS/dev/$node" "$type" "$major" "$minor"
     fi
@@ -414,6 +424,30 @@ for need in squashfs-root/dev/console squashfs-root/dev/null \
         exit 1
     fi
 done
+# Existence is not a type check, and -ls prints names only: the loop above
+# passed on the 20261125 image whose /dev/null was a regular 0-byte file.
+# -ll reads the archive metadata, the only view that survives a non-root
+# unpack.  Same two nodes, so this tightens the gate without widening it.  An
+# empty listing can only mean the tool said nothing, so that case warns and
+# defers to the name gate above instead of refusing to ship.  See final/15.
+# The `|| true` is required for that: under `set -e` a failed command
+# substitution aborts at the assignment, making the warning branch dead code.
+LIVE_NODES=$(unsquashfs -no-progress -ll "$ISO_ROOT/live.squashfs" 2>/dev/null) || true
+if [ -z "$LIVE_NODES" ]; then
+    echo "[WARNING] unsquashfs -ll listed nothing; skipping the node type check"
+else
+    for need in console null; do
+        if ! printf '%s\n' "$LIVE_NODES" |
+            grep -qE "^c.* squashfs-root/dev/${need}\$"; then
+            echo "[ERROR] The installer squashfs carries no character device at"
+            echo "        /dev/${need}.  A regular file there makes every"
+            echo '        `>/dev/null` in the installed system copy up into the'
+            echo "        overlay, and init writes its log to /dev/console before"
+            echo "        devtmpfs is back, so neither may be a placeholder."
+            exit 1
+        fi
+    done
+fi
 # -cat takes paths relative to the image root, unlike the -ls listing above.
 if unsquashfs -no-progress -cat "$ISO_ROOT/live.squashfs" etc/fstab \
     2>/dev/null | grep -q '^/dev/<'; then
