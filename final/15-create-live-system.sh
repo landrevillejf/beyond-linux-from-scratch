@@ -353,7 +353,7 @@ else
         if ! printf '%s\n' "$LIVE_NODES" |
             grep -qE "^c.* squashfs-root/dev/${need}\$"; then
             echo "[ERROR] $SQUASHFS carries no character device at /dev/${need}."
-            echo '        A regular file there makes every `>/dev/null` in the'
+            echo "        A regular file there makes every >/dev/null in the"
             echo "        live root copy up into the overlay's tmpfs, and init"
             echo "        writes its own log to /dev/console before devtmpfs is"
             echo "        back, so neither may be a placeholder."
