@@ -822,7 +822,17 @@ if $HAVE_SYSTEMD; then
     systemctl enable lightdm.service 2>/dev/null \
         || log_warning "Could not enable lightdm.service via systemctl"
 elif [ "$INIT_SYSTEM" = "sysvinit" ]; then
-    # Create sysvinit service script
+    # Create sysvinit service script.
+    # Two things this used to get wrong, both measured on the published
+    # lfs-0.57.4-lg3d-x86_64-sysvinit-20261125.iso: it execed
+    # start-stop-daemon, which ships with dpkg and is not part of an LFS system
+    # (0 occurrences in the image), and it named /usr/sbin/lightdm while the
+    # package installs to /usr/bin/lightdm.  rc5 ran the launcher, it failed
+    # immediately, and no greeter ever came up.  Resolve the daemon instead of
+    # hard-coding it and start it the way the other sysvinit services here do.
+    # final/14 and final/15 re-apply the same launcher to a tree restored from
+    # the base prefix cache, which still carries the old file; keep the three in
+    # step (tests/test_acceptance_shell.py pins it).
     cat > /etc/init.d/lightdm <<'SYSV'
 #!/bin/sh
 ### BEGIN INIT INFO
@@ -833,13 +843,48 @@ elif [ "$INIT_SYSTEM" = "sysvinit" ]; then
 # Default-Stop:      0 1 2 6
 # Short-Description: Light Display Manager
 ### END INIT INFO
-DAEMON=/usr/sbin/lightdm
+DAEMON=""
+for cand in /usr/bin/lightdm /usr/sbin/lightdm; do
+    if [ -x "$cand" ]; then
+        DAEMON="$cand"
+        break
+    fi
+done
 PIDFILE=/run/lightdm.pid
 case "$1" in
-    start) mkdir -p /run/lightdm; start-stop-daemon -S -b -m -p "$PIDFILE" -x "$DAEMON" ;;
-    stop)  start-stop-daemon -K -p "$PIDFILE" ;;
-    restart) "$0" stop; sleep 1; "$0" start ;;
-    *) echo "Usage: $0 {start|stop|restart}"; exit 1 ;;
+    start)
+        if [ -z "$DAEMON" ]; then
+            echo "lightdm: no daemon in /usr/bin or /usr/sbin" >&2
+            exit 1
+        fi
+        mkdir -p /run/lightdm
+        nohup "$DAEMON" >/var/log/lightdm.log 2>&1 &
+        echo $! >"$PIDFILE"
+        ;;
+    stop)
+        if [ -f "$PIDFILE" ]; then
+            kill "$(cat "$PIDFILE")" 2>/dev/null || true
+            rm -f "$PIDFILE"
+        fi
+        pkill -x lightdm 2>/dev/null || true
+        ;;
+    restart)
+        "$0" stop
+        sleep 1
+        "$0" start
+        ;;
+    status)
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+            echo "lightdm is running."
+        else
+            echo "lightdm is not running."
+            exit 1
+        fi
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
 esac
 SYSV
     chmod 0755 /etc/init.d/lightdm

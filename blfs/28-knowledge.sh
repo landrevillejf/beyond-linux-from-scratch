@@ -136,10 +136,22 @@ done
 # ----------------------------------------------------------------------
 # Dedicated unprivileged user (idempotent)
 # ----------------------------------------------------------------------
-if ! run_chroot 'getent group ollama >/dev/null'; then
+# The probes are looked up by exit status, and their stdout goes to the stage
+# log instead of being discarded through a redirect.  That is not cosmetic:
+# this stage never mounts the chroot virtual filesystems, and in a
+# cache-restored tree $LFS/dev is an empty plain directory (the base prefix is
+# packed with --exclude=./dev), so a `>/dev/null` run INSIDE the chroot made
+# bash create a regular file there.  Nightly #125 shipped exactly that: the
+# published live.squashfs reads
+#   -rw-r--r-- root/root      0 2026-11-24 23:23 squashfs-root/dev/null
+# beside real character devices stamped 00:12, and 23:23 local is 04:23:11 UTC
+# -- this stage's window in build.log (04:23:11.596 to 04:23:11.860), the same
+# second /etc/passwd gained the ollama account.  A regular /dev/null in the live
+# root turns every redirect into an overlay copy-up.
+if ! run_chroot 'getent group ollama'; then
     run_chroot 'groupadd -r ollama'
 fi
-if ! run_chroot 'getent passwd ollama >/dev/null'; then
+if ! run_chroot 'getent passwd ollama'; then
     run_chroot 'useradd -r -g ollama -d /var/lib/ollama -s /bin/false -c "Ollama daemon" ollama'
 fi
 run_privileged mkdir -p "$LFS/var/lib/ollama"

@@ -152,6 +152,19 @@ re-checks the hardening controls on the finished rootfs and turns a missing
 control into a FAIL only when `security.compliance.fail_on_gap` is true (WARN by
 default). See `docs/security-hardening.md` for the control matrix.
 
+`blfs/31` writes the SELinux mode it *resolved*, not the one it was asked for.
+`SELINUX_EFFECTIVE` equals `LFS_CONFIG_SECURITY_SELINUX_MODE` unless the request
+was `enforcing` and no `file_contexts` database is on disk, in which case it
+drops to `permissive` and says so: an enforcing kernel over a rootfs that cannot
+be labeled denies `init`, the display manager and PAM themselves, and the
+published 20261125 image measured exactly that (`unsquashfs -s` printed `Number
+of xattr ids 0`, no `file_contexts` at that path). The stage also recovers the
+compiled `file_contexts` from the refpolicy build tree before deleting it, and
+`/usr/sbin/selinux-firstboot` returns before `load_policy` when `/.live` is
+present -- the read-only lower layer of a live session can never be relabeled.
+The requested mode stays in the config file's comment and `final/16` still
+reports the gap, so the downgrade is auditable rather than silent.
+
 ### `branding/`
 
 Contains branding presets (subdirectories) and a `branding.toml` central config. Branding is applied during the `branding` stage. Configuration is driven from `config/build.conf` under the `branding` key.
@@ -179,6 +192,27 @@ exported `LFS_PROFILE_XORG_ONLY` + `LFS_PROFILE_DISPLAY_MANAGER` flags (a
 `/etc/lightdm/lightdm.conf` -- `user-session=lg3d-iso`, no `session-wrapper`,
 no `autologin-*` keys -- leaving the xfce autologin path byte-identical for
 real desktops; every other `desktop: none` profile still skips the stage.
+
+That greeter configuration is written twice, on purpose. `display-manager` is
+scheduled *before* `build-kernel`, and the base prefix cache is keyed by
+init/arch only and produced with `--profile xfce`, so a lg3d build that
+restores it never runs `blfs/08d` again -- the published 20261125 image shipped
+the cache's xfce `lightdm.conf` (`user-session=xfce`,
+`session-wrapper=/usr/bin/startxfce4`, `autologin-user=lfsuser`) beside a
+rootfs with no xfce at all. `blfs/30-install-lg3d.sh`, which runs after the
+resume point on both paths, therefore rewrites `$LFS/etc/lightdm/lightdm.conf`
+with the same content (`user-session=lg3d-${LG3D_MODE}`) and, for a live
+build, `$LFS/etc/pam.d/lightdm`: the image carries no `/etc/shadow` and
+`pam_unix` refuses a blank password without `nullok`, so the passwordless
+`live` account needs an account-scoped
+`[success=done default=ignore] pam_succeed_if.so user = live quiet` above the
+four `include system-auth` lines `blfs/08d` writes -- it stays a strict
+superset, and `blfs/22` deletes `live` from the installed target. The sysvinit
+`/etc/init.d/lightdm` must also not exec `start-stop-daemon` (a dpkg tool an
+LFS system never ships) nor hard-code `/usr/sbin/lightdm` (LightDM installs to
+`/usr/bin/lightdm`); it resolves the daemon at run time. `final/14` and
+`final/15` re-apply that same launcher to a cached tree, and
+`TestCachedPrefixBootReadinessGuardrails` pins the three copies identical.
 
 A third flag, `lg3d_session`, schedules the conditional `lg3d` stage
 (`blfs/30-install-lg3d.sh`) right after `java-dev`. It installs the upstream
@@ -278,8 +312,9 @@ without credentials off the media (`wheel` matches blfs/22's passwordless-
 Calamares polkit rule); because that account rides into the target inside the
 squashfs, `blfs/22` wires a Calamares `shellprocess` step (before `umount`)
 that runs `userdel -r live` and drops the live-session launchers. The installed
-system inherits blfs/08d's greeter `lightdm.conf` (no autologin, `lg3d-iso`)
-from the squashfs, so it boots to the same login screen.
+system inherits the greeter `lightdm.conf` (no autologin, the selected
+`lg3d-*` session -- from `blfs/30` on a cached build, `blfs/08d` on a cold
+one) from the squashfs, so it boots to the same login screen.
 
 `docs/lfs-x11-contract.md` 3.3 also wants a GLX+DRI3 hardware GL path, so
 `blfs/08b-build-xorg.sh` reads a new `graphics` config section
@@ -496,6 +531,58 @@ because:
   no network access during compilation (only during source downloads),
   and the supply-chain integrity checks (sha256 lockfile, GPG
   signature verification).
+
+**No redirect through an unmounted `/dev`.**  A command string handed to
+`chroot "$LFS"` resolves its redirections against the tree being packed, not
+the host.  The base prefix cache is packed `--exclude=./dev`, so a
+cache-restored build starts with an empty `dev/`, and a `>/dev/null` inside
+such a command makes bash *create a regular file* there -- the probe still
+returns the status it was asked for, and the placeholder then ships inside the
+image, where every live-session redirect copies it up into the overlay instead
+of discarding the write (measured: `blfs/28` did exactly this, and
+`lg3d-nightly-20261125` carries the result).  A stage that bind-mounts `/dev`
+first (`mount_chroot_fs`) is exempt; every other stage reads its probe by exit
+status instead.  `tests/test_acceptance_shell.py`
+(`TestCachedPrefixBootReadinessGuardrails`) sweeps every stage script for the
+pattern and `final/14`/`final/15` repair whatever still slips through: a node
+the tree cannot hold is packed as a squashfs pseudo file (`-p` before the `-e`
+list, with the stale path excluded), which needs no privilege.
+
+**A restored prefix is repaired before it is packed.**  The base prefix cache is
+produced by a different profile and a different uid, so everything it carries is
+suspect on the lg3d path, and the stages that could fix it cheaply (`blfs/08d`)
+run before the resume point.  `final/14` and `final/15` therefore repair the
+tree immediately before `mksquashfs`, from the host side, with the same two
+blocks:
+
+- *Ownership and privilege.*  `looking-glass.yml` restores the cache with
+  `sudo tar --numeric-owner` (uids and setuid bits preserved) and then
+  `sudo chown -R "$(id -u lfs)"`, and `chown` clears `S_ISUID`/`S_ISGID`.  The
+  published image measured 1094 uid-1002 files against 566 root-owned ones in
+  `/usr/bin` and `/usr/sbin`, `/etc/passwd` itself uid 1002, and
+  `su`/`passwd`/`pkexec`/`unix_chkpwd` plain 0755.  The sweep resets to root
+  only entries still carrying `BUILD_UID`, prunes exactly the directories the
+  pack excludes (they never ride into the image and the build is still writing
+  in them), restores the homes read back from the image's own `/etc/passwd`, and
+  re-applies the setuid bits the packages install that way.  It is keyed on
+  `BUILD_UID != 0`, so a privileged build walks and changes nothing.
+- *Dangling PAM rules.*  Linux-PAM turns a dlopen failure inside a `required` or
+  `requisite` rule into `PAM_MODULE_UNKNOWN` and fails the whole stack, so a rule
+  naming a module the image does not ship locks the user out of anything that
+  `include`s it.  Any such rule is downgraded to `optional` -- which PAM skips
+  while running the rest of the stack -- and `use_authtok` is dropped from the
+  password facility, because `pam_unix` only accepts it once an earlier module
+  stored a token.  It *downgrades, never deletes*: a rule for a module that is
+  present stays exactly as the stage wrote it.  The `s` delimiter has to be `#`
+  rather than `|`, because the pattern's own `([[:space:]]|$)` alternation closes
+  a `|`-delimited command and sed then rewrites nothing while exiting 0.
+
+Nothing in either block may abort the stage: every write is guarded, every
+external command ends in `|| true` or a warning, and `TestCachedPrefixBootReadinessGuardrails`
+executes both shipped blocks over synthetic trees under `bash -e` and
+`set -euo pipefail` and requires them to reach the pack.  Fixing the workflow
+line instead (dropping the `-R`) was rejected: it would put every profile that
+restores the same cache at risk to repair one.
 
 ---
 

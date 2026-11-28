@@ -361,6 +361,64 @@ Exec=/opt/lg3d/run-lg3d.sh
 Type=Application
 EOF
 
+# --- Greeter handoff -------------------------------------------------------
+# blfs/08d writes this file, but it is scheduled BEFORE build-kernel, and the
+# base prefix cache is keyed by init/arch only and produced with --profile xfce:
+# a lg3d build that restores it never runs 08d, so the xfce configuration rides
+# into the image.  Nightly #125 shipped exactly that (lightdm.conf mtime 12:51,
+# the lg3d xsessions 22:21 -- the two sides of the resume point): the packed
+# live.squashfs has no xfce.desktop and no /usr/bin/startxfce4, so the xfce
+# autologin died on arrival and the five lg3d entries were never offered.
+# This stage runs after the resume point on the cold and the cached path
+# alike, so the correction belongs here.  Same content 08d writes for an
+# xorg_only + display_manager profile, which makes the pair idempotent.
+if [ "$DM_OWNS_DISPLAY" = "true" ]; then
+    run_privileged mkdir -p "$LFS/etc/lightdm" ||
+        log_warning "Could not create $LFS/etc/lightdm"
+    if ! run_privileged tee "$LFS/etc/lightdm/lightdm.conf" >/dev/null <<LDMCONF
+[LightDM]
+run-directory=/run/lightdm
+
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=lg3d-${LG3D_MODE}
+LDMCONF
+    then
+        log_warning "Could not write $LFS/etc/lightdm/lightdm.conf"
+    else
+        run_privileged chmod 0644 "$LFS/etc/lightdm/lightdm.conf" 2>/dev/null ||
+            true
+        log_info "lightdm.conf: greeter only, default session lg3d-${LG3D_MODE}"
+    fi
+fi
+
+# --- Live media authentication ---------------------------------------------
+# The live `live` account is created with no password (passwd -d above), but the
+# image ships no /etc/shadow at all -- every field lives in /etc/passwd, where
+# live is the empty string -- and /etc/pam.d/lightdm chains to system-auth,
+# whose single rule is `auth required pam_unix.so`.  pam_unix(8): "The default
+# action of this module is to not permit the user access to a service if their
+# official password is blank"; no nullok appears anywhere in this repository.
+# So the greeter blfs/08d promises, and the user it promises the operator,
+# cannot actually log in.  The exemption is scoped to that one account: every
+# other user still goes through system-auth, and blfs/22's shellprocess deletes
+# `live` on the installed target, which leaves the rule inert there.
+if [ "$LIVE_SYSTEM" = "true" ] && [ "$DM_OWNS_DISPLAY" = "true" ]; then
+    if ! run_privileged tee "$LFS/etc/pam.d/lightdm" >/dev/null <<PAMCONF
+auth        [success=done default=ignore] pam_succeed_if.so user = live quiet
+auth        include     system-auth
+account     include     system-auth
+password    include     system-auth
+session     include     system-auth
+PAMCONF
+    then
+        log_warning "Could not write $LFS/etc/pam.d/lightdm"
+    else
+        run_privileged chmod 0644 "$LFS/etc/pam.d/lightdm" 2>/dev/null || true
+        log_info "pam.d/lightdm: the live account authenticates without a password"
+    fi
+fi
+
 run_privileged tee "$LFS/install-lg3d.sh" >/dev/null <<'INNEREOF'
 #!/bin/bash
 set -euo pipefail
@@ -410,6 +468,56 @@ fi
 
 # Convenience launcher on PATH.
 ln -sf /opt/lg3d/run-lg3d.sh /usr/bin/lg3d
+
+# The JDK must be reachable without a login shell.  run-lg3d.sh resolves the
+# toolchain in four steps -- an inherited JAVA_HOME, a pinned developer home
+# path (/home/fedora/.jdks/jdk-21.0.12.1+1), the macOS /usr/libexec/java_home,
+# then `command -v java' -- and a display-manager session runs the chosen
+# .desktop Exec with the greeter's environment, so /etc/profile.d/java.sh (the
+# only thing that exports JAVA_HOME and prepends the JDK to PATH here) is never
+# sourced.  Measured on the published lg3d-nightly-20261125 image, as numeric
+# ids (an unsquashfs listing run in a container with no uid >= 1000, because on
+# a real host the ids resolve to unrelated account names): /usr/bin/java and
+# /usr/bin/javac appear 0 times among the 125641 entries, /usr/libexec/java_home
+# 0 times, /home/fedora 0 times -- all four probes failed and the session died
+# on "ERROR: no JDK 21 found" before it ever reached gradle.  The JDK itself is
+# in the image at /usr/lib/java/jdk (root/root 0755, with javac), so one pair of
+# symlinks on the default PATH makes the fourth probe resolve: the script reads
+# java.home back from `java -XshowSettings:properties' and exports JAVA_HOME
+# from it, which is also what ./gradlew then uses.
+if [ -x /usr/lib/java/jdk/bin/java ]; then
+    ln -sf /usr/lib/java/jdk/bin/java /usr/bin/java
+    ln -sf /usr/lib/java/jdk/bin/javac /usr/bin/javac
+    log_info "/usr/bin/java -> /usr/lib/java/jdk/bin/java"
+else
+    log_warning "/usr/lib/java/jdk/bin/java absent; the lg3d session has no JVM on PATH"
+fi
+
+# The session user must also be able to build in the tree.  lfs-x11-contract.md
+# 3.6 launches lg3d through ./gradlew, which writes .gradle/ and build/ under
+# /opt/lg3d, and the archive shows that tree as root/root 0755 (0 directories
+# writable by other anywhere under it) -- the live account is uid 1001 gid 1001
+# and is in no group that could write there, so the wrapper fails on
+# "Permission denied" as soon as it starts.  Nothing can be run in place
+# instead: the image holds no compiled output, only the 90 files of
+# lg3d-core/build-tools/, which come from the source archive.
+# The tree is handed to wheel, not made world-writable: the live account is
+# already in wheel (create_live_user below) and Calamares puts the first
+# installed user in it, so one set of bits serves the media and the target,
+# while a non-admin still cannot write a program every user runs.  The setgid
+# bit on the directories keeps that inheritance for whatever the launch builds.
+# This runs before final/14 and final/15 pack, and their ownership sweep only
+# re-chowns entries whose uid is still the build uid -- /opt/lg3d is uid 0 here,
+# so nothing undoes it.
+if getent group wheel >/dev/null; then
+    chgrp -R wheel /opt/lg3d ||
+        log_warning "could not chgrp /opt/lg3d to wheel; the session cannot build there"
+    chmod -R g+w /opt/lg3d || true
+    find /opt/lg3d -type d -exec chmod g+s {} + || true
+    log_info "/opt/lg3d is group-writable by wheel (setgid on directories)"
+else
+    log_warning "no wheel group in the image; /opt/lg3d stays root-owned and unwritable by the session"
+fi
 
     [ -x /usr/bin/xinit ] || \
     log_warning "/usr/bin/xinit missing; the lg3d session unit needs it (xorg stage)"

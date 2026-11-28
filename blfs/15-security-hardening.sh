@@ -168,11 +168,33 @@ enforcing = 1
 retry = 3
 PWQUALITY
 
-write_file /etc/pam.d/system-password 0644 <<'PAMPW'
+# The quality rule is written only when the module is in the image.
+# libpwquality is in packages/sources.list (libpwquality-1.4.5.tar.bz2) and no
+# stage builds it, so the module never lands -- measured on the published
+# lg3d-nightly-20261125 image, pam_pwquality.so appears 0 times among the
+# 125641 entries while /etc/pam.d/system-password carries
+# `password requisite pam_pwquality.so`.  A requisite rule for a module PAM
+# cannot load returns PAM_MODULE_UNKNOWN and aborts the stack, so every
+# password change -- including the first-boot one blfs/17 asks for -- failed
+# before it reached pam_unix.  /etc/security/pwquality.conf above is still
+# written, so the policy is ready the moment libpwquality gets built.
+if [ -e "$LFS/usr/lib/security/pam_pwquality.so" ] ||
+    [ -e "$LFS/lib/security/pam_pwquality.so" ]; then
+    PASSWORD_QUALITY=enforced
+    write_file /etc/pam.d/system-password 0644 <<'PAMPW'
 # Password stack: enforce quality + sha512 with rounds
 password  requisite  pam_pwquality.so
 password  required   pam_unix.so sha512 shadow use_authtok rounds=65536
 PAMPW
+else
+    PASSWORD_QUALITY="not enforced (module absent)"
+    log_warning "pam_pwquality.so is not installed (libpwquality is downloaded but no stage builds it)"
+    log_warning "  writing system-password without it: password quality is NOT enforced, but passwd works"
+    write_file /etc/pam.d/system-password 0644 <<'PAMPW'
+# Password stack: sha512 with rounds (no pwquality module in this image)
+password  required   pam_unix.so sha512 shadow rounds=65536
+PAMPW
+fi
 
 # ---------------------------------------------------------------------------
 # 3. Login / shell hardening
@@ -701,7 +723,7 @@ fi
 
 log_success "Security hardening applied:"
 log_success "  - sysctl kernel/network hardening      (/etc/sysctl.d/99-security.conf)"
-log_success "  - PAM faillock + pwquality + sha512    (/etc/security/*, /etc/pam.d/system-password)"
+log_success "  - PAM faillock + sha512, pwquality ${PASSWORD_QUALITY} (/etc/security/*, /etc/pam.d/system-password)"
 log_success "  - login limits, umask 027, TMOUT       (/etc/security/limits.d, /etc/profile.d)"
 log_success "  - kernel module blacklist              (/etc/modprobe.d/hardening-blacklist.conf)"
 log_success "  - SSH daemon hardening                 (/etc/ssh/sshd_config.d/99-hardening.conf)"

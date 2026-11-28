@@ -261,6 +261,29 @@ build_libselinux() {
     # pcre2 is in LFS core; USE_PCRE2 avoids the deprecated pcre1 path.
     se_make USE_PCRE2=y all
     se_install
+    # pam_selinux is NOT part of libselinux's top-level install: the module is
+    # built by its own `pam` subdirectory, so `make install` above leaves
+    # /usr/lib/security without it.  Build and place it here, tolerantly: the
+    # PAM append further down only runs when the file really landed.  The
+    # published lg3d-nightly-20261125 image is what this closes -- pam_selinux.so
+    # appears 0 times among its 125641 entries while /etc/pam.d/system-auth
+    # carries `session required pam_selinux.so`, and /etc/pam.d/lightdm does
+    # `session include system-auth`, so pam_open_session failed for every user
+    # and no graphical login could ever complete.
+    if [ -d pam ]; then
+        make -C pam PREFIX=/usr LIBDIR=/usr/lib -j"$JOBS" ||
+            log_warning "pam_selinux could not be built; the login context will stay unset"
+        if [ -f pam/pam_selinux.so ]; then
+            install -d /usr/lib/security 2>/dev/null || true
+            if install -m 0755 pam/pam_selinux.so /usr/lib/security/ 2>/dev/null; then
+                log_success "pam_selinux.so installed in /usr/lib/security"
+            else
+                log_warning "pam_selinux.so could not be placed in /usr/lib/security"
+            fi
+        fi
+    else
+        log_warning "this libselinux tree has no pam subdirectory; skipping pam_selinux"
+    fi
     /sbin/ldconfig 2>/dev/null || true
     popd >/dev/null; rm -rf "$dir"
 }
@@ -388,6 +411,30 @@ build_refpolicy() {
     make conf
     make -j"$JOBS"
     make install
+    # The labeling database, not just the policy.  setfiles, restorecon and
+    # fixfiles all read /etc/selinux/<type>/contexts/files/file_contexts, and
+    # refpolicy only installs it when its own filecontext target ran; when it
+    # did not, the tree is left with file_contexts.subs_dist and media and no
+    # database -- which is exactly what the published lg3d image measures (0
+    # hits for file_contexts proper among 125641 entries).  Nothing can then
+    # label a single file, so an enforcing boot has no path that is not
+    # unlabeled_t.  Take the compiled copy out of the build tree before the
+    # rm below; the mode gate further down handles the case where even this
+    # finds nothing.
+    if [ ! -f "/etc/selinux/${SELINUX_TYPE:-targeted}/contexts/files/file_contexts" ]; then
+        for fc in build/"${SELINUX_TYPE:-targeted}"/file_contexts \
+            build/file_contexts "${SELINUX_TYPE:-targeted}"/file_contexts; do
+            [ -f "$fc" ] || continue
+            if install -d "/etc/selinux/${SELINUX_TYPE:-targeted}/contexts/files" 2>/dev/null &&
+                install -m 0644 "$fc" \
+                    "/etc/selinux/${SELINUX_TYPE:-targeted}/contexts/files/file_contexts" 2>/dev/null; then
+                log_success "file_contexts installed from $fc"
+            else
+                log_warning "found $fc but could not install it as file_contexts"
+            fi
+            break
+        done
+    fi
     popd >/dev/null; rm -rf "$dir"
 }
 
@@ -417,10 +464,25 @@ run_build required refpolicy build_refpolicy
 # unnecessary: the kernel auto-mounts selinuxfs at /sys/fs/selinux on the real
 # first boot, and selinux-firstboot below re-attempts a guarded mount.
 mkdir -p /etc/selinux /var/log/audit
+# Enforcing needs a way to label the rootfs.  The stage's own comment below
+# says it plainly -- "Without this an enforcing boot bricks the system" -- and
+# the two halves of that precondition are both measurable here: the labeling
+# database that restorecon reads, and the mode written to /etc/selinux/config.
+# Downgrade only when the database is genuinely absent: a policy that cannot
+# label is a policy that denies, and a permissive boot with a logged gap is a
+# system an operator can still use and fix.
+SELINUX_EFFECTIVE="$SELINUX_MODE"
+if [ "$SELINUX_MODE" = enforcing ] &&
+    [ ! -f "/etc/selinux/${SELINUX_TYPE:-targeted}/contexts/files/file_contexts" ]; then
+    log_warning "No file_contexts database under /etc/selinux/${SELINUX_TYPE:-targeted}"
+    log_warning "  The rootfs cannot be labeled, so an enforcing boot would deny every path"
+    log_warning "Writing SELINUX=permissive instead; final/16 reports this as a compliance gap"
+    SELINUX_EFFECTIVE=permissive
+fi
 cat >/etc/selinux/config <<SECONF
 # SELinux configuration - managed by blfs/31-build-selinux.sh
-# mode=${SELINUX_MODE} type=${SELINUX_TYPE}
-SELINUX=${SELINUX_MODE}
+# mode=${SELINUX_MODE} type=${SELINUX_TYPE} effective=${SELINUX_EFFECTIVE}
+SELINUX=${SELINUX_EFFECTIVE}
 SELINUXTYPE=${SELINUX_TYPE}
 SECONF
 chmod 0644 /etc/selinux/config
@@ -449,6 +511,18 @@ if [ -f /.autorelabel ]; then
     # relabel entirely on live media.
     if [ -d /.live ]; then
         rm -f /.autorelabel 2>/dev/null || true
+        # And do not load it either.  The comment above assumes the squashfs
+        # lower is labeled at build time; it is not.  The packed live rootfs
+        # carries no xattr at all (unsquashfs -s on the published image prints
+        # "Number of xattr ids 0"), so the moment a policy is loaded every file
+        # is unlabeled_t and an enforcing kernel denies the boot path itself --
+        # init, the display manager, PAM, everything.  The media cannot fix
+        # that: the lower layer is read-only and the relabel is skipped above.
+        # Leaving the LSM uninitialised is the only state in which the live
+        # session works, and it costs nothing on the target, which boots its
+        # own /.autorelabel path.  The installed system still gets SELinux.
+        echo "Live media: unlabeled squashfs, skipping policy load (SELinux stays off for this session)"
+        exit 0
     else
         rm -f /.autorelabel
         # fixfiles' relabel() prompts "Do you wish to clean out the /tmp
@@ -472,15 +546,26 @@ FIRSTBOOT
 chmod 0755 /usr/sbin/selinux-firstboot
 
 # pam_selinux: set the login context.  Appended to the auth stacks that
-# exist so a missing PAM file never aborts the stage.
-for pamfile in /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth; do
-    if [ -f "$pamfile" ] && ! grep -q pam_selinux.so "$pamfile"; then
-        {
-            echo "session  required  pam_selinux.so  close"
-            echo "session  required  pam_selinux.so  open"
-        } >>"$pamfile"
-    fi
-done
+# exist so a missing PAM file never aborts the stage.  Only when the module is
+# actually on disk: a `session required' rule naming a module the image does
+# not have makes pam_open_session return PAM_MODULE_UNKNOWN, which fails every
+# stack that includes system-auth -- including /etc/pam.d/lightdm, so the
+# greeter would authenticate and then refuse to start the session.  The
+# published lg3d image measured exactly that (module absent, two required
+# rules present), and the skip below is what keeps it from happening again if
+# libselinux's pam build is ever unavailable.
+if [ -f /usr/lib/security/pam_selinux.so ] || [ -f /lib/security/pam_selinux.so ]; then
+    for pamfile in /etc/pam.d/login /etc/pam.d/sshd /etc/pam.d/system-auth; do
+        if [ -f "$pamfile" ] && ! grep -q pam_selinux.so "$pamfile"; then
+            {
+                echo "session  required  pam_selinux.so  close"
+                echo "session  required  pam_selinux.so  open"
+            } >>"$pamfile"
+        fi
+    done
+else
+    log_warning "pam_selinux.so is not installed; leaving the PAM stacks without a login context"
+fi
 
 log_success "SELinux userspace and $SELINUX_TYPE policy installed"
 INNEREOF

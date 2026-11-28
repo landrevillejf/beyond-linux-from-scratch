@@ -534,6 +534,199 @@
 
 ### Fixed
 
+- **The 20261125 lg3d image had a display manager that could not start, an
+  account that could not log in, and 1094 files owned by a user who does not
+  exist** (`final/15-create-live-system.sh`, `final/14-create-installer.sh`,
+  `blfs/08d-build-display-manager.sh`, `blfs/15-security-hardening.sh`,
+  `blfs/28-knowledge.sh`, `blfs/30-install-lg3d.sh`, `blfs/31-build-selinux.sh`,
+  `AGENTS.md`, `tests/test_acceptance_shell.py`)
+
+  Continues the audit of the same artifact -- `unsquashfs` over the published
+  `live.squashfs` of `lg3d-nightly-20261125` (1464352768 bytes, 125641
+  entries).  The `/dev/null` fix below is what lets the image reach a login
+  screen; nine more defects were then measured on the same archive -- the
+  launcher, the greeter configuration the cache left behind, the account, the
+  ownership, the setuid bits, the JVM, the writable build tree, the two dangling
+  PAM rules, the SELinux mode -- and most of them are created by the base prefix
+  cache rather than by any stage, which is why every build that restored the
+  cache shipped them.  All of them are listed as numeric ids: `unsquashfs -ll`
+  resolves uids through the passwd of the host running it, and on the Fedora box
+  that produced this listing uid 1001 and 1002 are unrelated accounts, so the
+  names it prints mean nothing.
+
+  - **No display manager could start.**  The image's `/etc/init.d/lightdm`
+    execs `start-stop-daemon -x /usr/sbin/lightdm`.  Neither half exists:
+    `start-stop-daemon` appears 0 times among the 125641 entries -- it ships
+    with dpkg, and this is an LFS system -- and the package installs
+    `/usr/bin/lightdm`, while `/usr/sbin/lightdm` is absent from the image.
+    rc5 ran a launcher that failed at once, so the greeter `blfs/08d` and
+    `blfs/30` exist to configure never appeared.  `blfs/08d` now writes a
+    launcher that resolves the daemon from `/usr/bin` then `/usr/sbin` and
+    starts it with `nohup` and a pidfile, as the other sysvinit services here
+    do, and refuses with a message when no daemon is installed at all.
+  - **`blfs/08d` sits before the resume point.**  `BUILD_STAGES` schedules
+    `display-manager` before `build-kernel`, and the base prefix cache is
+    keyed by init/arch only and produced with `--profile xfce`, so a lg3d
+    build that restores it never re-runs that stage.  The published image
+    proves it: `/etc/lightdm/lightdm.conf` is the xfce variant
+    (`user-session=xfce`, `session-wrapper=/usr/bin/startxfce4`,
+    `autologin-user=lfsuser`) in a rootfs that ships no `xfce.desktop` and no
+    `/usr/bin/startxfce4`, and its mtime (12:51) precedes the five
+    `lg3d-*.desktop` entries (22:21) by 9h30m -- the two sides of the resume
+    point.  `blfs/30`, which runs after it on the cold and the cached path
+    alike, now rewrites that file with the content `blfs/08d` writes for an
+    `xorg_only` profile, so both paths converge instead of one inheriting a
+    session the image cannot start.
+  - **No account could authenticate.**  The image ships no `/etc/shadow` at
+    all, the `live` account `blfs/30` creates is deliberately passwordless,
+    and `/etc/pam.d/lightdm` chains to `system-auth`, whose one rule is
+    `pam_unix.so` -- and `pam_unix(8)` does not permit a blank official
+    password unless the rule says `nullok`, which appears nowhere in this
+    repository.  `blfs/30` now writes
+    `[success=done default=ignore] pam_succeed_if.so user = live quiet` above
+    the four `include system-auth` lines, so only that account is exempt; the
+    file stays a strict superset of `blfs/08d`'s, and `blfs/22`'s shellprocess
+    deletes `live` from the installed target, which leaves the rule inert
+    there.
+  - **Ownership and every setuid bit were gone.**  Of the 1660 files directly
+    under `/usr/bin` and `/usr/sbin`, the image measures 1094 owned by uid 1002
+    against 566 owned by root -- uid 1002 is the build user, who has no account
+    in the image -- `/etc/passwd` itself is uid 1002, and
+    `/usr/bin/{su,passwd,pkexec}` with `/usr/sbin/unix_chkpwd` are plain 0755.
+    The cause is in the pipeline, not in a stage: `looking-glass.yml` extracts
+    the cache with `sudo tar --numeric-owner`, which preserves uid and setuid,
+    and then runs `sudo chown -R "$(id -u lfs)"` over the tree, and `chown`
+    clears `S_ISUID`/`S_ISGID`.  `/usr/bin/sudo` is absent, so
+    `pkexec calamares` -- the only route `blfs/22` wires to the installer --
+    could not escalate either.
+    That workflow line is deliberately left alone: dropping the `-R` risks
+    every profile that restores the same cache, so the repair is additive and
+    lives in the two stages that pack.  It resets to root only the paths still
+    carrying the build uid, and prunes exactly the scaffolding the pack
+    excludes -- those directories never ride into the image and the build still
+    writes in them.  It then restores the setuid bits the packages install that
+    way (shadow, polkit, sudo, PAM's `unix_chkpwd`, ntfs-3g), the account homes
+    read back from the image's own `/etc/passwd`, and the lightdm state
+    directories.  `Xorg` is not on that list: the display manager already
+    starts it as root, so making it setuid would only widen the surface.
+    The provenance is the four surviving setuid bits themselves -- `ksu` (4755),
+    `ssh-keysign` (4711), `mount.nfs` (4711) and `suexec` (4755), all
+    `root/root` and all stamped 2026-11-25, the day the stages ran -- against
+    `su`/`passwd`/`pkexec`/`unix_chkpwd` stamped 2026-11-24 16:17 and 17:50, the
+    hour the prefix was restored.  The damage is the cache's, and it is the ones
+    a stage installed afterwards that kept their privilege.
+  - **The session had no JVM on its PATH.**  `/usr/share/xsessions/lg3d-iso.desktop`
+    runs `/opt/lg3d/run-lg3d.sh --iso -x`, and that script resolves the toolchain in
+    four steps -- an inherited `JAVA_HOME`, `/home/fedora/.jdks/jdk-21.0.12.1+1`, the
+    macOS `/usr/libexec/java_home`, then `command -v java`.  Read out of the same
+    listing, `/usr/bin/java`, `/usr/bin/javac`, `/usr/libexec/java_home` and
+    `/home/fedora` appear 0 times, and a display-manager session runs the chosen Exec
+    with the greeter's environment rather than a login shell, so
+    `/etc/profile.d/java.sh` -- the only thing exporting `JAVA_HOME` here -- is never
+    sourced.  The session died on `ERROR: no JDK 21 found` before gradle was reached,
+    while the JDK sat in the image at `/usr/lib/java/jdk/bin/java` (`root/root` 0755,
+    stamped 2025-10-22 with the archive).  `blfs/30` now links that pair into
+    `/usr/bin/{java,javac}` inside the chroot -- which runs after the resume point on
+    both paths -- and warns instead of dying when a tree has no JDK at all.
+  - **The session could not write the tree it builds in.**  `run-lg3d.sh` ends with
+    `exec ./gradlew :lg3d-core:run`, which writes `.gradle/` and `build/` under
+    `/opt/lg3d` -- measured `drwxr-xr-x root/root`, with `lg3d-core` `drwxrwxr-x
+    root/root` (group root, which `live`, uid/gid 1001, is not in) and no directory
+    under it writable by other.  Nothing can be run in place instead: the image holds
+    no compiled output, only the 90 files of `lg3d-core/build-tools/` that come from
+    the source archive.  `blfs/30` now hands the tree to `wheel` -- the group
+    `create_live_user` gives `live` and `blfs/22`'s `users.conf` gives the first
+    installed user, so one set of bits serves the media and the target -- with `g+w`
+    and setgid on the directories, rather than making a tree every user runs from
+    world-writable.  What is deliberately *not* changed: the first launch still needs
+    network, because the contract mandates `./gradlew`, the wrapper's `distributionUrl`
+    points at `gradle-8.14-bin.zip`, and neither that distribution nor a `~/.gradle`
+    cache is in the image (0 hits each).  Prewarming either would break the
+    offline-source policy or push the ISO past the 2 147 483 648-byte ceiling GitHub's
+    release API enforces per asset, so it is recorded as a limitation.
+  - **Two PAM rules named modules the image does not ship.**  Linux-PAM turns a dlopen
+    failure inside a `required` or `requisite` rule into `PAM_MODULE_UNKNOWN` and fails
+    the whole stack.  `/etc/pam.d` references 14 modules in the published image and two
+    are absent: `pam_selinux.so`, twice as `session required` in `system-auth` -- which
+    `/etc/pam.d/lightdm` pulls with `session include system-auth`, so the greeter
+    authenticates and then cannot open the session -- and `pam_pwquality.so` as
+    `password requisite` in `system-password`, libpwquality being downloaded and built
+    by no stage, so every password change including the one `blfs/17` asks for on first
+    boot failed before `pam_unix` was reached.  Fixed at both ends.  `blfs/31` builds
+    `pam_selinux.so` from libselinux's own `pam` subdirectory and appends the rules only
+    when the module is on disk; `blfs/15` writes a pwquality-free `system-password`
+    otherwise, keeping `sha512` and the rounds and dropping `use_authtok` (which
+    `pam_unix` only accepts once a module before it stored a token), and records
+    `pwquality not enforced` in its own summary instead of claiming the control.  Both
+    packing stages then run a last-line repair over `/etc/pam.d` before the squashfs --
+    the restored prefix carries the old files on a cached build -- downgrading any
+    `required`/`requisite` rule naming a module absent from `usr/lib/security`,
+    `lib/security` or `usr/lib64/security` to `optional`, which PAM skips while running
+    the rest of the stack, and warning with the module's name.  Nothing in it can abort:
+    every write is guarded, and the rule is built with `#` as the `s` delimiter because a
+    `|`-delimited one reads the `([[:space:]]|$)` alternation as its own closing
+    delimiter and silently rewrites nothing.
+  - **SELinux was configured enforcing over an unlabeled rootfs.**  `config/kernel-config:214`
+    sets `CONFIG_SECURITY_SELINUX=y`, `/etc/selinux/config` said `SELINUX=enforcing`, and
+    `rcS.d/S02selinux` runs `selinux-firstboot` -- while the image ships no `file_contexts`
+    database (0 entries at that path, only `file_contexts.subs_dist` and `media`) and
+    `unsquashfs -s` prints `Number of xattr ids 0`, so not one packed file carries a
+    label.  Loading a policy over that makes every path `unlabeled_t`, and an enforcing
+    kernel then denies init, the display manager and PAM themselves -- the outcome this
+    stage's own comment already names ("Without this an enforcing boot bricks the
+    system").  `blfs/31` now takes the compiled `file_contexts` out of the refpolicy
+    build tree before deleting it, writes `SELINUX=permissive` when the database is still
+    missing (keeping the requested mode in the file's comment, and `final/16` section 13
+    still reports the gap through `compliance_gap`, a WARN, so no image is lost to it),
+    and `selinux-firstboot` returns before `load_policy` when `/.live` is present -- the
+    marker `final/12` drops into `sysroot` before `switch_root` -- because the read-only
+    lower layer of a live session can never be relabeled.  The installed target keeps its
+    own `/.autorelabel` path and still gets SELinux.
+  - **The creator of the placeholder is now named.**  The entry below left
+    provenance open.  `blfs/28` is it: its two probes ran
+    `getent ... >/dev/null` inside the chrooted command string, and that stage
+    mounts no virtual filesystem, so bash created the file in the empty `dev/`
+    the cache had left.  The timestamps close the loop -- the placeholder is
+    stamped 2026-11-24 23:23 local, `build.log` puts the `knowledge` stage at
+    04:23:11.596-04:23:11.860 UTC, the same second `/etc/passwd` gained the
+    `ollama` account.  The probes now read their exit status instead of
+    throwing stdout away, and a guard forbids any stage whose chroot does not
+    bind `/dev` from writing to `/dev/null` inside it.
+  - **A node the tree cannot hold is now made in the archive.**  `mknod` needs
+    privilege the runner may not have, and the cached `dev/` may not be
+    writable, so the loop falls back to squashfs `-p`, which needs neither.
+    Measured unprivileged, over a `dev/` that is `0555` with a stale regular
+    `dev/null`: `-p "dev/null c 666 0 0 1 3" -wildcards -e "dev/null"` packs
+    `crw-rw-rw- root/root  1, 3 squashfs-root/dev/null`.  The `-e` is
+    load-bearing -- without it mksquashfs says `Pseudo file "dev/null" exists
+    in source filesystem "lfs/dev/null".  Ignoring, exclude it (-e/-ef) to
+    override.` and ships the placeholder -- and so is the position, because
+    `-e` takes the rest of the command line as patterns: a `-p` written after
+    that list lands nothing at all, which is worse than the placeholder.  The
+    same run is what required the `|| true` on `mknod`: under `set -e` a
+    refused one aborted the whole stage.
+  - Guardrails: `TestCachedPrefixBootReadinessGuardrails` (17 tests).  Three of
+    them execute the shipped code -- the node loop packs a real archive that is
+    read back, with the `-e`-less control pack asserted to keep the
+    placeholder; the repair block of both packing stages runs under `bash -e`
+    with `SUDO` empty over a tree it cannot fully change, and must reach the
+    pack; and the PAM block of both runs under `set -euo pipefail` over a
+    synthetic `/etc/pam.d`, where the dangling module must come back
+    `optional`, an installed one must not be touched, `use_authtok` must go
+    with it, and the block must return.  The rest pin the three launcher
+    here-documents byte for byte from `PIDFILE` to `esac`, the two PAM repairs
+    against each other, the `blfs/30` greeter, PAM, JVM and `/opt/lg3d`
+    rewrites, the `blfs/31` mode gate and live skip, the `blfs/15` pwquality
+    gate, and sweep every stage script for a chroot probe that writes through an
+    unmounted `/dev`.  Mutation-checked: dropping the `|| true` from `mknod`
+    and moving `"${NODE_PSEUDO[@]}"` behind the `-e` list both turn the
+    behavioural test red (it exits 1), and the PAM rule was first written with
+    `|` as the `s` delimiter, which the behavioural test caught -- it downgraded
+    nothing and still exited 0.  Full suite: 1206 passed, 22 skipped,
+    `builder.py` coverage 100%; `shfmt -s -i 4` clean and `shellcheck` 0.11.0 at
+    `-S warning` with the CI exclusion list reporting nothing on all seven
+    scripts.
+
 - **lg3d Builds #1 lost its ISO to an undiagnosable busybox build and then
   reported the loss as an `EACCES` on `/etc/audit/plugins.d`**
   (`final/12-create-initramfs.sh`, `.github/workflows/looking-glass.yml`,
@@ -682,9 +875,13 @@
     rejected.
   - Not a new hostage.  The gate covers the same two nodes the name check
     already covered, so it cannot fail on anything the old gate accepted
-    unless the node type is wrong; and because `mknod` is unguarded under
-    `set -e`, a repair that cannot create a node aborts the stage before
-    anything is packed, which is what already happens today.
+    unless the node type is wrong.  The reason first written here -- that an
+    unguarded `mknod` already aborts the stage, so the gate can never fire on
+    a build that produced an image -- has since been falsified by the archive
+    fallback: `mknod` is now `|| true`, precisely because a refused one must
+    not cost the build, and the node comes from `-p` instead.  The gate is
+    safe for a better reason: every node it names is either repaired on disk
+    or packed as a pseudo file, and the stage says so first.
   - Found by testing the fail-soft claim rather than asserting it: an
     `unsquashfs -ll` that says nothing at all (unsupported flag, unreadable
     archive) originally killed the stage anyway, because under `set -e` a
@@ -693,12 +890,13 @@
     warning printed.  Both stages now end the assignment with `|| true` and
     warn instead, deferring to the name gate that already ran, so no image
     that used to ship can stop shipping because of this addition.
-  - Provenance of the placeholder is NOT established and is not claimed here:
-    `final/12` is one demonstrated creator (reproduced locally in a
-    user-namespace chroot, and now fixed by the mount block above), but the
-    exact stage that wrote that file in that run was not measured.  The fix is
-    placed where it does not depend on the answer: at the two stages that pack
-    the image.
+  - Provenance of the placeholder was NOT established when this was written,
+    and is not claimed here: `final/12` is one demonstrated creator
+    (reproduced locally in a user-namespace chroot, and now fixed by the mount
+    block above).  The fix was placed where it does not depend on the answer:
+    at the two stages that pack the image.  The answer came later, from the
+    archive timestamps and `build.log` -- `blfs/28` -- and that stage is now
+    fixed at the source too; see the entry at the top of this section.
   - Verified locally against real archives: a harness slices the actual node
     loop and the actual gate out of `final/15` and runs them.  22 assertions,
     all passing -- the placeholder is replaced with the right major/minor/mode
