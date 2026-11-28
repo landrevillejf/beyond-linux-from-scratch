@@ -375,7 +375,7 @@ EOF
 if [ "$DM_OWNS_DISPLAY" = "true" ]; then
     run_privileged mkdir -p "$LFS/etc/lightdm" ||
         log_warning "Could not create $LFS/etc/lightdm"
-    if ! run_privileged tee "$LFS/etc/lightdm/lightdm.conf" >/dev/null <<LDMCONF
+    if ! run_privileged tee "$LFS/etc/lightdm/lightdm.conf" >/dev/null <<LDMCONF; then
 [LightDM]
 run-directory=/run/lightdm
 
@@ -383,7 +383,6 @@ run-directory=/run/lightdm
 greeter-session=lightdm-gtk-greeter
 user-session=lg3d-${LG3D_MODE}
 LDMCONF
-    then
         log_warning "Could not write $LFS/etc/lightdm/lightdm.conf"
     else
         run_privileged chmod 0644 "$LFS/etc/lightdm/lightdm.conf" 2>/dev/null ||
@@ -404,14 +403,13 @@ fi
 # other user still goes through system-auth, and blfs/22's shellprocess deletes
 # `live` on the installed target, which leaves the rule inert there.
 if [ "$LIVE_SYSTEM" = "true" ] && [ "$DM_OWNS_DISPLAY" = "true" ]; then
-    if ! run_privileged tee "$LFS/etc/pam.d/lightdm" >/dev/null <<PAMCONF
+    if ! run_privileged tee "$LFS/etc/pam.d/lightdm" >/dev/null <<PAMCONF; then
 auth        [success=done default=ignore] pam_succeed_if.so user = live quiet
 auth        include     system-auth
 account     include     system-auth
 password    include     system-auth
 session     include     system-auth
 PAMCONF
-    then
         log_warning "Could not write $LFS/etc/pam.d/lightdm"
     else
         run_privileged chmod 0644 "$LFS/etc/pam.d/lightdm" 2>/dev/null || true
