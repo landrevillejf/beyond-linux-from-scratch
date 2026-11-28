@@ -419,7 +419,7 @@ if [ -n "$LIGHTDM_BIN" ] && [ -f "$LIGHTDM_INIT" ] &&
     grep -q start-stop-daemon "$LIGHTDM_INIT"; then
     echo "[WARN] $LIGHTDM_INIT execs start-stop-daemon, which no LFS system"
     echo "       ships; replacing it with a plain launcher for $LIGHTDM_BIN"
-    if $SUDO tee "$LIGHTDM_INIT" >/dev/null <<'LDMINIT'
+    if $SUDO tee "$LIGHTDM_INIT" >/dev/null <<'LDMINIT'; then
 #!/bin/sh
 ### BEGIN INIT INFO
 # Provides:          lightdm
@@ -475,7 +475,6 @@ case "$1" in
         ;;
 esac
 LDMINIT
-    then
         $SUDO chmod 0755 "$LIGHTDM_INIT" 2>/dev/null || true
     else
         echo "[WARNING] Could not rewrite $LIGHTDM_INIT; rc5 will not start a"
